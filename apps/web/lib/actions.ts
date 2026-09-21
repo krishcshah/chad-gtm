@@ -21,6 +21,7 @@ import {
   workspaceSettingsSchema,
 } from "@smartreach/validation";
 import { normalizeEmail, nowIso } from "@smartreach/shared";
+import { campaignStartPostalError } from "./campaign-start-guard";
 import { getDb } from "./db";
 import { requireUser } from "./session";
 
@@ -488,6 +489,20 @@ export async function deleteTemplate(templateId: string): Promise<ActionResult> 
 
 /* ═══ CAMPAIGNS ═══ */
 
+/** Live start/resume must not flip a campaign to running when CAN-SPAM postal is blank. */
+async function workspacePostalStartBlock(
+  db: ReturnType<typeof getDb>,
+  userId: string,
+): Promise<ActionResult | null> {
+  const [row] = await db
+    .select({ postalAddress: schema.workspaceSettings.postalAddress })
+    .from(schema.workspaceSettings)
+    .where(eq(schema.workspaceSettings.userId, userId))
+    .limit(1);
+  const error = campaignStartPostalError(row?.postalAddress);
+  return error ? { ok: false, error } : null;
+}
+
 export async function createCampaign(input: unknown): Promise<ActionResult<{ id: string }>> {
   const user = await requireUser();
   const parsed = campaignCreateSchema.safeParse(input);
@@ -496,6 +511,14 @@ export async function createCampaign(input: unknown): Promise<ActionResult<{ id:
   const db = getDb();
 
   try {
+    // Create & Start sets status running in the insert. Refuse first so we
+    // never persist a running campaign that the engine will silently skip.
+    // Scheduled creates stay allowed; the scheduler still hard-fails enqueue.
+    if (d.startMode === "now") {
+      const blocked = await workspacePostalStartBlock(db, user.id);
+      if (blocked) return blocked;
+    }
+
     const [campaign] = await db
       .insert(campaigns)
       .values({
@@ -627,6 +650,8 @@ export async function campaignAction(
     switch (action) {
       case "start":
       case "resume": {
+        const blocked = await workspacePostalStartBlock(db, user.id);
+        if (blocked) return blocked;
         // Duplicate/draft campaigns had no lead snapshot — without this the
         // engine sees 0 queued leads and immediately completes.
         await ensureCampaignLeadSnapshot(db, campaignId, c.leadListId);
