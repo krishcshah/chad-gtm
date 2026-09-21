@@ -40,7 +40,9 @@ export async function getDashboardStats(userId: string) {
       .where(and(eq(campaigns.userId, userId), isNull(campaigns.deletedAt))),
     db
       .select({
-        queuedToday: count(sql`case when ${usageCounters.entityType} = 'sender' then ${usageCounters.count} end`),
+        // SUM of campaign counters — COUNT() was wrong (row count ≠ sends) and
+        // was incorrectly folded into "Queued today".
+        sentToday: sql<number>`coalesce(sum(case when ${usageCounters.entityType} = 'campaign' then ${usageCounters.count} else 0 end), 0)`,
       })
       .from(usageCounters)
       .where(and(eq(usageCounters.userId, userId), eq(usageCounters.date, t))),
@@ -70,11 +72,14 @@ export async function getDashboardStats(userId: string) {
       .where(eq(replies.userId, userId)),
   ]);
 
+  // usageRows.sentToday cross-checks job-row sent count (both should agree after recordSend).
+  const sentFromJobs = Number(jobsToday?.sent ?? 0);
+  const sentFromUsage = Number(usageRows?.sentToday ?? 0);
   return {
     activeCampaigns: Number(campaignRows?.active ?? 0),
     scheduledCampaigns: Number(campaignRows?.scheduled ?? 0),
-    emailsQueuedToday: Number(jobsToday?.queued ?? 0) + Number(usageRows?.queuedToday ?? 0),
-    emailsSentToday: Number(jobsToday?.sent ?? 0),
+    emailsQueuedToday: Number(jobsToday?.queued ?? 0),
+    emailsSentToday: Math.max(sentFromJobs, sentFromUsage),
     failedToday: Number(jobsToday?.failed ?? 0),
     totalLeads: Number(leadRows?.total ?? 0),
     replyCount: Number(replyRows?.total ?? 0),
