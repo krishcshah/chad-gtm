@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CAMPAIGN_POSTAL_REQUIRED_ERROR } from "../campaign-start-guard";
 import {
   getCampaignWizardStateForUser,
   publishCampaignForUser,
@@ -398,14 +397,23 @@ describe("publishCampaignForUser", () => {
     sendingTimezone: "UTC",
   };
 
-  it("fails without postal when startMode is now", async () => {
+  it("publish/start with empty postal succeeds (no CAMPAIGN_POSTAL_REQUIRED_ERROR)", async () => {
+    store.leads.push(
+      { id: "lead-1", listId: "list-1", status: "pending", deletedAt: null },
+      { id: "lead-2", listId: "list-1", status: "pending", deletedAt: null },
+    );
     const result = await publishCampaignForUser(createStoreDb() as never, "user-1", full, null);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toBe(CAMPAIGN_POSTAL_REQUIRED_ERROR);
-    expect(store.campaigns).toHaveLength(0);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const row = store.campaigns[0];
+    expect(row.status).toBe("running");
+    expect(row.leadListId).toBe("list-1");
+    expect(row.wizardStep).toBeNull();
+    expect(store.campaignSenders).toEqual([{ campaignId: row.id, senderId: "s1" }]);
+    expect(store.campaignLeads).toHaveLength(2);
   });
 
-  it("with postal leaves draft status behind and creates campaign_leads", async () => {
+  it("with postal still publishes and creates campaign_leads", async () => {
     store.leads.push(
       { id: "lead-1", listId: "list-1", status: "pending", deletedAt: null },
       { id: "lead-2", listId: "list-1", status: "pending", deletedAt: null },

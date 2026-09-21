@@ -271,11 +271,8 @@ export type SuppressionCreateInput = z.infer<typeof suppressionCreateSchema>;
 
 export const workspaceSettingsSchema = z.object({
   companyName: z.string().trim().max(200).default(""),
-  postalAddress: z
-    .string()
-    .trim()
-    .min(8, "Enter a physical postal address for CAN-SPAM compliance")
-    .max(1000),
+  /** Optional storage only — not required to start/send campaigns. */
+  postalAddress: z.string().trim().max(1000).default(""),
   unsubscribeBaseUrl: z
     .string()
     .trim()

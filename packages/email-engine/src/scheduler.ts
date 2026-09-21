@@ -15,8 +15,6 @@
 import {
   buildUnsubscribeUrl,
   createUnsubscribeToken,
-  ensurePostalFooter,
-  ensureUnsubscribeFooter,
   matchesSuppression,
   renderTemplate,
   schema,
@@ -121,33 +119,22 @@ export async function scheduleCampaign(
     return { enqueued: 0, note: "missing-list-or-template" };
   }
 
-  // F16/F17: workspace postal + unsub base (load before claim so live missing
-  // postal never leaves leads stuck in "scheduled").
+  // Optional unsub base for {{unsubscribe_url}} template var resolution only.
+  // Postal is optional — never skip enqueue when blank; never auto-append footers.
   const settingsRows: any[] = await db
     .select()
     .from(schema.workspaceSettings)
     .where(eq(schema.workspaceSettings.userId, campaign.userId))
     .limit(1);
   const settings = settingsRows[0] as
-    | { postalAddress?: string; companyName?: string; unsubscribeBaseUrl?: string }
+    | { unsubscribeBaseUrl?: string }
     | undefined;
-  const postalAddress = (settings?.postalAddress ?? "").trim();
-  const companyName = (settings?.companyName ?? "").trim();
   const unsubBase =
     (settings?.unsubscribeBaseUrl ?? "").trim() ||
     process.env.BETTER_AUTH_URL ||
     process.env.APP_URL ||
     "http://localhost:3000";
   const dryRun = isEngineDryRun();
-  // F17 / CAN-SPAM: live sends hard-require a postal address; dry-run may warn.
-  if (!postalAddress) {
-    if (!dryRun) {
-      return { enqueued: 0, note: "postal-address-required" };
-    }
-    console.warn(
-      `[scheduler] campaign ${campaign.id}: postal address empty — dry-run continuing without F17 footer`,
-    );
-  }
 
   // Skip leads that already replied anywhere in this campaign (stopOnReply)
   // and any campaign_leads already scheduled/sent — atomic claim does the rest.
@@ -293,7 +280,10 @@ export async function scheduleCampaign(
       continue;
     }
 
-    const vars = leadVars(lead);
+    // Resolve {{unsubscribe_url}} only when the template references it — do not auto-inject.
+    const unsubToken = createUnsubscribeToken(campaign.userId, lead.email);
+    const unsubUrl = buildUnsubscribeUrl(unsubBase, unsubToken);
+    const vars = { ...leadVars(lead), unsubscribe_url: unsubUrl };
     const subject = renderTemplate(tpl.subject, vars);
     let bodyText =
       tpl.format === "text"
@@ -303,15 +293,6 @@ export async function scheduleCampaign(
       tpl.format === "html"
         ? appendSignature(renderTemplate(tpl.bodyHtml, vars), pick.sender)
         : renderTemplate(tpl.bodyHtml, vars);
-
-    const unsubToken = createUnsubscribeToken(campaign.userId, lead.email);
-    const unsubUrl = buildUnsubscribeUrl(unsubBase, unsubToken);
-    bodyText = ensureUnsubscribeFooter(bodyText, { unsubUrl, asHtml: false });
-    bodyHtml = ensureUnsubscribeFooter(bodyHtml || bodyText, { unsubUrl, asHtml: true });
-    if (postalAddress) {
-      bodyText = ensurePostalFooter(bodyText, { postalAddress, companyName, asHtml: false });
-      bodyHtml = ensurePostalFooter(bodyHtml, { postalAddress, companyName, asHtml: true });
-    }
 
     await db.insert(schema.emailJobs).values({
       id: crypto.randomUUID(),

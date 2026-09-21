@@ -11,7 +11,6 @@ import {
   type CampaignPublishInput,
 } from "@smartreach/validation";
 import { nowIso } from "@smartreach/shared";
-import { campaignStartPostalError } from "./campaign-start-guard";
 import { formatZodActionError } from "./zod-action-error";
 
 const { campaigns, campaignSenders, campaignLeads, leads } = schema;
@@ -225,17 +224,13 @@ export async function publishCampaignForUser(
   db: Db,
   userId: string,
   input: unknown,
-  postalAddress: string | null | undefined,
+  _postalAddress?: string | null,
 ): Promise<DraftActionResult<{ id: string }>> {
   const parsed = campaignPublishSchema.safeParse(input);
   if (!parsed.success) return zodFail(parsed.error);
   const d = parsed.data as CampaignPublishInput;
 
-  if (d.startMode === "now") {
-    const postalErr = campaignStartPostalError(postalAddress);
-    if (postalErr) return { ok: false, error: postalErr };
-  }
-
+  // Postal is optional — no start/publish gate.
   const status = d.startMode === "now" ? "running" : "scheduled";
   const scheduledAt = d.startMode === "later" ? d.scheduledAt : null;
   const startedAt = d.startMode === "now" ? nowIso() : null;

@@ -7,12 +7,6 @@
  * backoff, and recovers jobs stuck in "processing" after a crash.
  */
 import {
-  buildUnsubscribeApiUrl,
-  buildUnsubscribeUrl,
-  createUnsubscribeToken,
-  ensurePostalFooter,
-  ensureUnsubscribeFooter,
-  listUnsubscribeHeaders,
   matchesSuppression,
   schema,
 } from "@smartreach/database";
@@ -136,72 +130,11 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
   }
 
   try {
-    // F16/F17: ensure List-Unsubscribe + postal footer even if job was enqueued earlier
-    const settingsRows: any[] = await db
-      .select()
-      .from(schema.workspaceSettings)
-      .where(eq(schema.workspaceSettings.userId, campaign.userId))
-      .limit(1);
-    const settings = settingsRows[0] as
-      | { postalAddress?: string; companyName?: string; unsubscribeBaseUrl?: string }
-      | undefined;
-    const unsubBase =
-      (settings?.unsubscribeBaseUrl ?? "").trim() ||
-      process.env.BETTER_AUTH_URL ||
-      process.env.APP_URL ||
-      "http://localhost:3000";
-    const token = createUnsubscribeToken(campaign.userId, job.toEmail);
-    const unsubUrl = buildUnsubscribeUrl(unsubBase, token);
-    const headers = listUnsubscribeHeaders(buildUnsubscribeApiUrl(unsubBase, token));
-    let textBody = ensureUnsubscribeFooter(job.bodyText || "", { unsubUrl, asHtml: false });
-    let htmlBody = ensureUnsubscribeFooter(job.bodyHtml || job.bodyText || "", {
-      unsubUrl,
-      asHtml: true,
-    });
-    const postal = (settings?.postalAddress ?? "").trim();
+    // Send bodies as enqueued — no auto postal/unsub footer or List-Unsubscribe header.
+    // {{unsubscribe_url}} is resolved at schedule time when the template includes it.
+    const textBody = job.bodyText || "";
+    const htmlBody = job.bodyHtml || job.bodyText || "";
     const dryRun = isEngineDryRun();
-    // F17: live hard-fail if postal missing (defense in depth vs stale queued jobs).
-    if (!postal && !dryRun) {
-      const msg = "postal-address-required (set Settings → Compliance)";
-      await db
-        .update(schema.emailJobs)
-        .set({
-          status: "failed",
-          lastError: msg,
-          processingAt: null,
-          updatedAt: nowS,
-        })
-        .where(eq(schema.emailJobs.id, job.id));
-      await db
-        .update(schema.campaignLeads)
-        .set({ status: "failed", lastError: msg, updatedAt: nowS })
-        .where(eq(schema.campaignLeads.id, job.campaignLeadId));
-      await db.insert(schema.activityLogs).values({
-        id: crypto.randomUUID(),
-        userId: campaign.userId,
-        type: "email_failed",
-        message: `Blocked send to ${job.toEmail}: ${msg}`,
-        campaignId: campaign.id,
-      });
-      return "failed";
-    }
-    if (!postal && dryRun) {
-      console.warn(
-        `[processor] job ${job.id}: postal address empty — dry-run continuing without F17 footer`,
-      );
-    }
-    if (postal) {
-      textBody = ensurePostalFooter(textBody, {
-        postalAddress: postal,
-        companyName: settings?.companyName ?? "",
-        asHtml: false,
-      });
-      htmlBody = ensurePostalFooter(htmlBody, {
-        postalAddress: postal,
-        companyName: settings?.companyName ?? "",
-        asHtml: true,
-      });
-    }
 
     // Dry-run: prove enqueue→process path without live SMTP
     if (dryRun) {
@@ -250,10 +183,6 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
         subject: job.subject,
         text: textBody || undefined,
         html: htmlBody || undefined,
-        headers,
-        list: {
-          unsubscribe: { url: unsubUrl, comment: "Unsubscribe" },
-        },
       });
     } finally {
       transporter.close();
