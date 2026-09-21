@@ -59,8 +59,8 @@ export const DEFAULTS = {
   maxDelaySec: 240,
   dailyCampaignLimit: 100,
   maxEmailsPerSenderPerDay: 50,
-  sendingWindowStart: "00:00",
-  sendingWindowEnd: "00:00", // all-day (start===end)
+  sendingWindowStart: "09:00",
+  sendingWindowEnd: "17:00",
   sendingTimezone: "UTC",
   retryCount: 3,
   /** Sender */

@@ -58,8 +58,8 @@ export function CampaignWizard({
   const [scheduledAt, setScheduledAt] = useState("");
   const [businessDaysOnly, setBusinessDaysOnly] = useState(false);
   const [sendingTimezone, setSendingTimezone] = useState("UTC");
-  const [windowStart, setWindowStart] = useState("00:00");
-  const [windowEnd, setWindowEnd] = useState("00:00");
+  const [windowStart, setWindowStart] = useState("09:00");
+  const [windowEnd, setWindowEnd] = useState("17:00");
   const [dailyLimit, setDailyLimit] = useState(500);
   const [minDelay, setMinDelay] = useState(90);
   const [maxDelay, setMaxDelay] = useState(240);
