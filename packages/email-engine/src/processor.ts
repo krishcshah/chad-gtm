@@ -21,6 +21,7 @@ import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import type { EngineDb, JobRow, SenderRow } from "./db-port";
 import { makeTransport } from "./mailer";
 import { noteHourlySend, recordSend } from "./rotation";
+import { isEngineDryRun, workerOwnsJob } from "./queue-mode";
 
 const BATCH = Number(process.env.ENGINE_BATCH_SIZE ?? 25);
 const STUCK_AFTER_MS = 3 * 60_000;
@@ -35,14 +36,23 @@ export interface ProcessResult {
 
 /** Claim due jobs: conditional CAS update makes it safe across overlapping workers. */
 export async function claimDueJobs(db: EngineDb, now = new Date(), limit = BATCH): Promise<JobRow[]> {
+  const dryRun = isEngineDryRun();
   const due: JobRow[] = await db
     .select()
     .from(schema.emailJobs)
-    .where(and(eq(schema.emailJobs.status, "pending"), lte(schema.emailJobs.scheduledFor, now.toISOString())))
+    .where(
+      and(
+        eq(schema.emailJobs.status, "pending"),
+        lte(schema.emailJobs.scheduledFor, now.toISOString()),
+        eq(schema.emailJobs.dryRun, dryRun),
+      ),
+    )
     .orderBy(asc(schema.emailJobs.scheduledFor))
     .limit(limit);
+  // Belt-and-suspenders: never claim the other mode even if SQL filter is absent (tests / old DBs).
+  const owned = due.filter((j) => workerOwnsJob(Boolean(j.dryRun), dryRun));
   const claimed: JobRow[] = [];
-  for (const job of due) {
+  for (const job of owned) {
     const res: { id: string }[] = await db
       .update(schema.emailJobs)
       .set({ status: "processing", processingAt: now.toISOString(), updatedAt: now.toISOString() })
@@ -55,11 +65,18 @@ export async function claimDueJobs(db: EngineDb, now = new Date(), limit = BATCH
 
 /** Re-queue jobs that have been "processing" for too long (worker died mid-send). */
 export async function recoverStuckJobs(db: EngineDb, now = new Date()): Promise<number> {
+  const dryRun = isEngineDryRun();
   const cutoff = new Date(now.getTime() - STUCK_AFTER_MS).toISOString();
   const stuck: { id: string }[] = await db
     .select({ id: schema.emailJobs.id })
     .from(schema.emailJobs)
-    .where(and(eq(schema.emailJobs.status, "processing"), lte(schema.emailJobs.processingAt, cutoff)))
+    .where(
+      and(
+        eq(schema.emailJobs.status, "processing"),
+        lte(schema.emailJobs.processingAt, cutoff),
+        eq(schema.emailJobs.dryRun, dryRun),
+      ),
+    )
     .limit(200);
   for (const s of stuck) {
     await db
@@ -156,7 +173,7 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
     }
 
     // Dry-run: prove enqueue→process path without live SMTP
-    if (process.env.ENGINE_DRY_RUN === "1" || process.env.ENGINE_DRY_RUN === "true") {
+    if (isEngineDryRun()) {
       const nowDry = new Date().toISOString();
       await db
         .update(schema.emailJobs)

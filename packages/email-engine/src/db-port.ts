@@ -78,4 +78,5 @@ export interface JobRow {
   messageId: string | null;
   sentAt: string | null;
   processingAt: string | null;
+  dryRun: boolean;
 }

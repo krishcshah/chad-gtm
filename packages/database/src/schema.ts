@@ -312,15 +312,17 @@ export const emailJobs = pgTable(
     messageId: text("message_id"),
     sentAt: text("sent_at"),
     processingAt: text("processing_at"), // stuck-job recovery marker
+    /** When true, only ENGINE_DRY_RUN workers may claim/process this job. */
+    dryRun: boolean("dry_run").notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
     uniqueIndex("email_jobs_campaign_lead_unique").on(t.campaignLeadId),
-    index("email_jobs_poll_idx").on(t.status, t.scheduledFor),
+    index("email_jobs_poll_idx").on(t.status, t.scheduledFor, t.dryRun),
     index("email_jobs_sender_idx").on(t.senderId, t.status),
     index("email_jobs_campaign_idx").on(t.campaignId, t.status),
-    index("email_jobs_recovery_idx").on(t.status, t.processingAt),
+    index("email_jobs_recovery_idx").on(t.status, t.processingAt, t.dryRun),
   ],
 );
 

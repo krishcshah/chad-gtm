@@ -37,6 +37,7 @@ import {
   pickSenderIndex,
   takeHourlySnapshot,
 } from "./rotation";
+import { isEngineDryRun } from "./queue-mode";
 
 const BATCH_SIZE = Number(process.env.ENGINE_BATCH_SIZE ?? 25);
 const RESCHEDULE_PAD_MIN = 5;
@@ -312,6 +313,7 @@ export async function scheduleCampaign(
       scheduledFor: scheduleAt.toISOString(),
       attempts: 0,
       maxAttempts: campaign.retryFailed ? campaign.retryCount : 1,
+      dryRun: isEngineDryRun(),
     });
     await db
       .update(schema.campaignLeads)

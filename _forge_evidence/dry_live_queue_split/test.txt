@@ -1,0 +1,14 @@
+
+> @smartreach/email-engine@0.1.0 test
+> vitest run
+
+
+ RUN  v3.2.7 /workspace/work/smart-reach/wt-forge/packages/email-engine
+
+ ✓ src/__tests__/engine.test.ts (13 tests) 17ms
+
+ Test Files  1 passed (1)
+      Tests  13 passed (13)
+   Start at  21:29:39
+   Duration  584ms (transform 143ms, setup 0ms, collect 323ms, tests 17ms, environment 0ms, prepare 56ms)
+
