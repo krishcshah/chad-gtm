@@ -184,7 +184,15 @@ export async function scheduleCampaign(
     .where(eq(schema.emailTemplates.id, campaign.templateId))
     .limit(1);
   const tpl = tplRows[0];
-  if (!tpl) return { enqueued: 0, note: "template-missing" };
+  if (!tpl) {
+    // Unclaim so the next tick can retry once a template exists — do not leave
+    // campaign_leads stuck in "scheduled" with no email_jobs.
+    await db
+      .update(schema.campaignLeads)
+      .set({ status: "queued", updatedAt: nowIsoS })
+      .where(inArray(schema.campaignLeads.id, claimed.map((c) => c.id)));
+    return { enqueued: 0, note: "template-missing" };
+  }
 
   // F15: load suppressions for this workspace (emails + domains)
   const suppressionRows: { value: string }[] = await db
@@ -220,6 +228,10 @@ export async function scheduleCampaign(
   let cursor = campaign.lastSenderIdx;
   let scheduleAt = new Date(now.getTime() + randomBetween(0, 5) * 1000);
   let enqueued = 0;
+  // Track rows we finished (enqueued or cancelled) so senders-exhausted
+  // unclaim does not reset already-handled leads (slice(enqueued) was wrong
+  // when suppressions/missing leads appeared mid-batch).
+  const handledIds = new Set<string>();
 
   for (const cl of claimedRows) {
     const pick = pickSenderIndex(
@@ -230,8 +242,8 @@ export async function scheduleCampaign(
       campaign.maxEmailsPerSenderPerDay,
     );
     if (!pick) {
-      // Every sender exhausted → unclaim the rest, park the campaign briefly.
-      const remainingIds = claimedRows.slice(enqueued).map((r) => r.id);
+      // Every sender exhausted → unclaim only untouched rows, park briefly.
+      const remainingIds = claimedRows.filter((r) => !handledIds.has(r.id)).map((r) => r.id);
       if (remainingIds.length > 0) {
         await db
           .update(schema.campaignLeads)
@@ -247,7 +259,14 @@ export async function scheduleCampaign(
     }
 
     const lead = leadById.get(cl.leadId);
-    if (!lead) continue;
+    if (!lead) {
+      await db
+        .update(schema.campaignLeads)
+        .set({ status: "cancelled", lastError: "lead-missing", updatedAt: nowIsoS })
+        .where(eq(schema.campaignLeads.id, cl.id));
+      handledIds.add(cl.id);
+      continue;
+    }
 
     // F15: skip suppressed emails/domains — cancel campaign_lead, do not enqueue
     if (matchesSuppression(lead.email, suppressedValues)) {
@@ -255,6 +274,7 @@ export async function scheduleCampaign(
         .update(schema.campaignLeads)
         .set({ status: "cancelled", lastError: "suppressed", updatedAt: nowIsoS })
         .where(eq(schema.campaignLeads.id, cl.id));
+      handledIds.add(cl.id);
       continue;
     }
 
@@ -309,11 +329,10 @@ export async function scheduleCampaign(
       scheduleAt,
       randomBetween(campaign.minDelaySec, campaign.maxDelaySec),
     );
-    if (--budget <= 0) break;
+    handledIds.add(cl.id);
     enqueued++;
+    if (--budget <= 0) break;
   }
-  enqueued = Math.max(enqueued, 0) + (budget >= 0 ? 1 : 0); // count the one inserted before budget check
-  enqueued = Math.min(enqueued, claimedRows.length);
 
   await db
     .update(schema.campaigns)
