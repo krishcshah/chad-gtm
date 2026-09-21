@@ -146,6 +146,12 @@ export type SendTestEmailInput = z.infer<typeof sendTestEmailSchema>;
 
 /* ─── Campaigns ────────────────────────────────────────────────────────── */
 
+/** Chrome `<input type="time">` emits `HH:MM:SS`; the engine stores `HH:MM`. */
+const hhmm = z
+  .string()
+  .transform((s) => s.trim().slice(0, 5))
+  .pipe(z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM"));
+
 export const campaignCreateSchema = z
   .object({
     name: z.string().trim().min(1, "Give the campaign a name").max(140),
@@ -159,14 +165,8 @@ export const campaignCreateSchema = z
       .string()
       .refine((v) => (TIMEZONES as readonly string[]).includes(v), "Unknown timezone")
       .default(DEFAULTS.sendingTimezone),
-    sendingWindowStart: z
-      .string()
-      .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM")
-      .default(DEFAULTS.sendingWindowStart),
-    sendingWindowEnd: z
-      .string()
-      .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM")
-      .default(DEFAULTS.sendingWindowEnd),
+    sendingWindowStart: hhmm.default(DEFAULTS.sendingWindowStart),
+    sendingWindowEnd: hhmm.default(DEFAULTS.sendingWindowEnd),
     dailyLimit: z.coerce.number().int().min(1).max(100_000).default(DEFAULTS.dailyCampaignLimit),
     minDelaySec: z.coerce.number().int().min(5).max(86_400).default(DEFAULTS.minDelaySec),
     maxDelaySec: z.coerce.number().int().min(5).max(86_400).default(DEFAULTS.maxDelaySec),
