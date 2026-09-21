@@ -1,0 +1,19 @@
+{
+  "at": "2026-09-21T21:24:30.998Z",
+  "date": "2026-09-21",
+  "before_bug": {
+    "emailsQueuedToday": 7,
+    "emailsSentToday": 7,
+    "note": "queued included COUNT(sender usage rows)=sent volume"
+  },
+  "after_fix": {
+    "emailsQueuedToday": 0,
+    "emailsSentToday": 7
+  },
+  "raw": {
+    "buggy_count_rows": 7,
+    "sum_campaign_sent": 7,
+    "sent": 7,
+    "queued": 0
+  }
+}
