@@ -40,8 +40,19 @@ export const leadImportSchema = z.object({
   rows: z.array(z.record(z.string(), z.string())).min(1, "CSV has no rows").max(50_000),
 });
 
-export const leadUpdateSchema = z.object({
-  email: z.string().trim().email().optional(),
+const customFieldKeySchema = z.string().trim().min(1).max(64);
+const customFieldsSchema = z
+  .record(customFieldKeySchema, z.string().max(2000))
+  .refine((o) => Object.keys(o).length <= 50, "Too many custom fields");
+
+/** Patch map: string upserts; null deletes the key on merge. */
+const customFieldsPatchSchema = z
+  .record(customFieldKeySchema, z.string().max(2000).nullable())
+  .refine((o) => Object.keys(o).length <= 50, "Too many custom fields");
+
+export const leadCreateSchema = z.object({
+  listId: z.string().min(1),
+  email: z.string().trim().email("Enter a valid email").max(255),
   firstName: z.string().trim().max(120).nullish(),
   lastName: z.string().trim().max(120).nullish(),
   company: z.string().trim().max(160).nullish(),
@@ -52,7 +63,25 @@ export const leadUpdateSchema = z.object({
   phone: z.string().trim().max(60).nullish(),
   industry: z.string().trim().max(120).nullish(),
   tags: z.array(z.string()).optional(),
+  customFields: customFieldsSchema.optional(),
 });
+export type LeadCreateInput = z.infer<typeof leadCreateSchema>;
+
+export const leadUpdateSchema = z.object({
+  email: z.string().trim().email("Enter a valid email").max(255).optional(),
+  firstName: z.string().trim().max(120).nullish(),
+  lastName: z.string().trim().max(120).nullish(),
+  company: z.string().trim().max(160).nullish(),
+  website: z.string().trim().max(255).nullish(),
+  linkedin: z.string().trim().max(255).nullish(),
+  jobTitle: z.string().trim().max(120).nullish(),
+  location: z.string().trim().max(160).nullish(),
+  phone: z.string().trim().max(60).nullish(),
+  industry: z.string().trim().max(120).nullish(),
+  tags: z.array(z.string()).optional(),
+  customFields: customFieldsPatchSchema.optional(),
+});
+export type LeadUpdateInput = z.infer<typeof leadUpdateSchema>;
 
 export const leadListQuerySchema = z.object({
   cursor: z.string().optional(),

@@ -12,13 +12,13 @@ import {
 import {
   leadImportSchema,
   leadListCreateSchema,
-  leadUpdateSchema,
   senderCreateSchema,
   senderCsvRowSchema,
   suppressionCreateSchema,
   templateSchema,
   workspaceSettingsSchema,
 } from "@smartreach/validation";
+import { createLeadForUser, updateLeadForUser } from "./leads";
 import { normalizeEmail, nowIso } from "@smartreach/shared";
 import {
   ensureCampaignLeadSnapshot,
@@ -241,21 +241,18 @@ export async function fetchLeadsPage(params: {
   return { items: JSON.parse(JSON.stringify(items)), nextCursor };
 }
 
+export async function createLead(input: unknown): Promise<ActionResult<{ id: string }>> {
+  const user = await requireUser();
+  const result = await createLeadForUser(getDb(), user.id, input);
+  if (result.ok) revalidatePath("/leads");
+  return result;
+}
+
 export async function updateLead(leadId: string, input: unknown): Promise<ActionResult> {
   const user = await requireUser();
-  const parsed = leadUpdateSchema.safeParse(input);
-  if (!parsed.success) return zodFail(parsed.error);
-  const db = getDb();
-  try {
-    await db
-      .update(leads)
-      .set({ ...parsed.data, updatedAt: nowIso() })
-      .where(and(eq(leads.id, leadId), eq(leads.userId, user.id)));
-    revalidatePath("/leads");
-    return { ok: true, message: "Lead updated" };
-  } catch (e) {
-    return err(e);
-  }
+  const result = await updateLeadForUser(getDb(), user.id, leadId, input);
+  if (result.ok) revalidatePath("/leads");
+  return result;
 }
 
 export async function bulkDeleteLeads(ids: string[]): Promise<ActionResult> {
