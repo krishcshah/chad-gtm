@@ -138,16 +138,23 @@ export function CampaignWizard({
 
   const next = () => {
     setError(null);
+    setFieldErrors({});
     if (!stepValid(step)) { setStepHint(STEP_HINT[step] ?? "Complete this step to continue."); return; }
     setStepHint(null);
     setStep((s) => Math.min(6, s + 1));
   };
-  const back = () => { setError(null); setStepHint(null); setStep((s) => Math.max(1, s - 1)); };
+  const back = () => {
+    setError(null);
+    setStepHint(null);
+    setFieldErrors({});
+    setStep((s) => Math.max(1, s - 1));
+  };
 
   const submit = () =>
     start(async () => {
       setError(null);
       setStepHint(null);
+      setFieldErrors({});
       const sendingWindowStart = normalizeHhMm(windowStart);
       const sendingWindowEnd = normalizeHhMm(windowEnd);
       if (sendingWindowStart !== windowStart) setWindowStart(sendingWindowStart);
@@ -207,7 +214,7 @@ export function CampaignWizard({
             <li key={s.id} className="flex items-center gap-1.5 sm:gap-2">
               <button
                 type="button"
-                onClick={() => { if (s.id < step) { setStepHint(null); setError(null); setStep(s.id); } }}
+                onClick={() => { if (s.id < step) { setStepHint(null); setError(null); setFieldErrors({}); setStep(s.id); } }}
                 disabled={s.id > step}
                 aria-current={s.id === step ? "step" : undefined}
                 aria-invalid={stepHasError(s.id) || undefined}
