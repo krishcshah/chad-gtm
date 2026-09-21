@@ -26,6 +26,7 @@ export default async function AnalyticsPage() {
     { label: "Emails sent today", value: stats.emailsSentToday },
     { label: "Queued today", value: stats.emailsQueuedToday },
     { label: "Failed today", value: stats.failedToday },
+    { label: "Bounced today", value: stats.bouncedToday },
     { label: "Total replies", value: stats.replyCount },
     { label: "Total leads", value: stats.totalLeads },
     { label: "Senders", value: `${stats.senderActive}/${stats.senderTotal}` },

@@ -18,6 +18,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
   const sent = Number(c.stats?.sent ?? 0);
   const replied = Number(c.stats?.replied ?? 0);
   const failed = Number(c.stats?.failed ?? 0);
+  const bounced = Number(c.stats?.bounced ?? 0);
   const pct = total > 0 ? Math.round((sent / total) * 100) : 0;
 
   const replyRate = sent > 0 ? `${((replied / sent) * 100).toFixed(1)}%` : "—";
@@ -27,6 +28,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
     { label: "Replies", value: replied },
     { label: "Reply rate", value: replyRate },
     { label: "Failed", value: failed },
+    { label: "Bounced", value: bounced },
   ];
 
   return (
@@ -64,7 +66,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
       </Card>
 
       {/* Stats */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {stats.map((s) => (
           <Card key={s.label}>
             <CardContent className="p-5">

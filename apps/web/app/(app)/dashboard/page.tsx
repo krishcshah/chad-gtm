@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Activity, AlertCircle, CheckCircle2, Inbox, Mail, Rocket, Timer, TrendingUp, Users } from "lucide-react";
+import { Activity, AlertCircle, CheckCircle2, Inbox, Mail, Rocket, Timer, TrendingUp, Users, Ban } from "lucide-react";
 import Link from "next/link";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, Progress, statusVariant } from "@smartreach/ui";
 import { requireUser } from "@/lib/session";
@@ -48,7 +48,7 @@ export default async function DashboardPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Stat label="Active campaigns" value={stats.activeCampaigns} icon={TrendingUp} />
         <Stat label="Emails sent today" value={stats.emailsSentToday} icon={CheckCircle2} />
         <Stat label="Queued today" value={stats.emailsQueuedToday} icon={Timer} />
@@ -61,6 +61,12 @@ export default async function DashboardPage() {
           value={stats.failedToday}
           icon={AlertCircle}
           hint={stats.failedToday > 0 ? "Needs attention" : "All clear"}
+        />
+        <Stat
+          label="Bounced today"
+          value={stats.bouncedToday}
+          icon={Ban}
+          hint={stats.bouncedToday > 0 ? "Permanent SMTP fails" : "None"}
         />
       </div>
 

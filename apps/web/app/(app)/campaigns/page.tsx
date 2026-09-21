@@ -49,6 +49,7 @@ export default async function CampaignsPage() {
                 <th className="px-4 py-3 font-medium">Progress</th>
                 <th className="px-4 py-3 font-medium text-right">Replies</th>
                 <th className="px-4 py-3 font-medium text-right">Failed</th>
+                <th className="px-4 py-3 font-medium text-right">Bounced</th>
                 <th className="px-4 py-3 font-medium">Created</th>
                 <th className="px-4 py-3" />
               </tr>
@@ -79,6 +80,7 @@ export default async function CampaignsPage() {
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">{c.replied}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{c.failed}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{c.bounced}</td>
                     <td className="px-4 py-3 text-muted-foreground">{formatDate(c.createdAt)}</td>
                     <td className="px-4 py-3 text-right">
                       <CampaignActions id={c.id} status={c.status} />

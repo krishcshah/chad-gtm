@@ -62,6 +62,12 @@ export function ComplianceForms({
               rows={3}
               required
             />
+            {!settings.postalAddress.trim() ? (
+              <p className="text-sm text-destructive">
+                Required for live sends (CAN-SPAM / F17). Empty address blocks enqueue and SMTP.
+                Dry-run may still proceed with a warning.
+              </p>
+            ) : null}
           </div>
           <div className="space-y-2">
             <Label htmlFor="unsubscribeBaseUrl">Unsubscribe base URL (optional)</Label>

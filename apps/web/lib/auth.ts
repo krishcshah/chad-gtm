@@ -4,6 +4,7 @@ import { nextCookies } from "better-auth/next-js";
 import { schema } from "@smartreach/database";
 import { getDb } from "./db";
 import { env } from "./env";
+import { resolveTrustedOrigins } from "./auth-trusted-origins";
 
 /**
  * Better Auth — email/password sessions. The adapter points at the same Neon
@@ -18,6 +19,17 @@ const authSchema = {
   account: schema.accounts,
   verification: schema.verifications,
 };
+
+/** APP_URL + BETTER_AUTH_URL (+ optional CSV), with localhost↔127.0.0.1 twins. */
+const trustedOrigins = resolveTrustedOrigins({
+  appUrl: env.APP_URL,
+  betterAuthUrl: env.BETTER_AUTH_URL,
+  extraCsv: process.env.BETTER_AUTH_TRUSTED_ORIGINS,
+  // Dev/test always accept both loopback hosts so smoke/curl on 127.0.0.1 works
+  // even when APP_URL defaults to http://localhost:3000. Production only trusts
+  // configured URLs (and their loopback twin if the configured host is loopback).
+  includeDevLoopback: env.NODE_ENV !== "production",
+});
 
 export const auth = betterAuth({
   appName: "SmartReach",
@@ -46,7 +58,7 @@ export const auth = betterAuth({
     },
   },
   plugins: [nextCookies()],
-  trustedOrigins: [env.APP_URL],
+  trustedOrigins,
 });
 
 export type Session = typeof auth.$Infer.Session;

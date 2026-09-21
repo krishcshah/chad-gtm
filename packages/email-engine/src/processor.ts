@@ -159,6 +159,37 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
       asHtml: true,
     });
     const postal = (settings?.postalAddress ?? "").trim();
+    const dryRun = isEngineDryRun();
+    // F17: live hard-fail if postal missing (defense in depth vs stale queued jobs).
+    if (!postal && !dryRun) {
+      const msg = "postal-address-required (set Settings → Compliance)";
+      await db
+        .update(schema.emailJobs)
+        .set({
+          status: "failed",
+          lastError: msg,
+          processingAt: null,
+          updatedAt: nowS,
+        })
+        .where(eq(schema.emailJobs.id, job.id));
+      await db
+        .update(schema.campaignLeads)
+        .set({ status: "failed", lastError: msg, updatedAt: nowS })
+        .where(eq(schema.campaignLeads.id, job.campaignLeadId));
+      await db.insert(schema.activityLogs).values({
+        id: crypto.randomUUID(),
+        userId: campaign.userId,
+        type: "email_failed",
+        message: `Blocked send to ${job.toEmail}: ${msg}`,
+        campaignId: campaign.id,
+      });
+      return "failed";
+    }
+    if (!postal && dryRun) {
+      console.warn(
+        `[processor] job ${job.id}: postal address empty — dry-run continuing without F17 footer`,
+      );
+    }
     if (postal) {
       textBody = ensurePostalFooter(textBody, {
         postalAddress: postal,
@@ -173,7 +204,7 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
     }
 
     // Dry-run: prove enqueue→process path without live SMTP
-    if (isEngineDryRun()) {
+    if (dryRun) {
       const nowDry = new Date().toISOString();
       await db
         .update(schema.emailJobs)

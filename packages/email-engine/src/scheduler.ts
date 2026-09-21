@@ -117,6 +117,34 @@ export async function scheduleCampaign(
   const activeSenders = senders.filter((s) => s.status !== "paused");
   if (activeSenders.length === 0) return { enqueued: 0, note: "all-paused" };
 
+  // F16/F17: workspace postal + unsub base (load before claim so live missing
+  // postal never leaves leads stuck in "scheduled").
+  const settingsRows: any[] = await db
+    .select()
+    .from(schema.workspaceSettings)
+    .where(eq(schema.workspaceSettings.userId, campaign.userId))
+    .limit(1);
+  const settings = settingsRows[0] as
+    | { postalAddress?: string; companyName?: string; unsubscribeBaseUrl?: string }
+    | undefined;
+  const postalAddress = (settings?.postalAddress ?? "").trim();
+  const companyName = (settings?.companyName ?? "").trim();
+  const unsubBase =
+    (settings?.unsubscribeBaseUrl ?? "").trim() ||
+    process.env.BETTER_AUTH_URL ||
+    process.env.APP_URL ||
+    "http://localhost:3000";
+  const dryRun = isEngineDryRun();
+  // F17 / CAN-SPAM: live sends hard-require a postal address; dry-run may warn.
+  if (!postalAddress) {
+    if (!dryRun) {
+      return { enqueued: 0, note: "postal-address-required" };
+    }
+    console.warn(
+      `[scheduler] campaign ${campaign.id}: postal address empty — dry-run continuing without F17 footer`,
+    );
+  }
+
   // Skip leads that already replied anywhere in this campaign (stopOnReply)
   // and any campaign_leads already scheduled/sent — atomic claim does the rest.
   const claimable: { id: string; leadId: string }[] = await db
@@ -201,24 +229,6 @@ export async function scheduleCampaign(
     .from(schema.suppressions)
     .where(eq(schema.suppressions.userId, campaign.userId));
   const suppressedValues = suppressionRows.map((r) => r.value);
-
-  // F16/F17: workspace postal address + unsub base
-  const settingsRows: any[] = await db
-    .select()
-    .from(schema.workspaceSettings)
-    .where(eq(schema.workspaceSettings.userId, campaign.userId))
-    .limit(1);
-  const settings = settingsRows[0] as
-    | { postalAddress?: string; companyName?: string; unsubscribeBaseUrl?: string }
-    | undefined;
-  const postalAddress = (settings?.postalAddress ?? "").trim();
-  const companyName = (settings?.companyName ?? "").trim();
-  const unsubBase =
-    (settings?.unsubscribeBaseUrl ?? "").trim() ||
-    process.env.BETTER_AUTH_URL ||
-    process.env.APP_URL ||
-    "http://localhost:3000";
-
 
   // Sender availability
   const daily = await loadDailyUsage(db, activeSenders.map((s) => s.id));
@@ -313,7 +323,7 @@ export async function scheduleCampaign(
       scheduledFor: scheduleAt.toISOString(),
       attempts: 0,
       maxAttempts: campaign.retryFailed ? campaign.retryCount : 1,
-      dryRun: isEngineDryRun(),
+      dryRun,
     });
     await db
       .update(schema.campaignLeads)
