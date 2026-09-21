@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/session";
 import { listLeadLists, listSenders, listTemplates } from "@/lib/queries";
+import { PageHeader } from "@smartreach/ui";
 import { CampaignWizard } from "./campaign-wizard";
 
 export const dynamic = "force-dynamic";
@@ -13,11 +14,11 @@ export default async function NewCampaignPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-3xl p-6 lg:p-10">
-      <h1 className="text-2xl font-semibold tracking-tight">Create Campaign</h1>
-      <p className="mb-8 mt-1 text-sm text-muted-foreground">
-        Six quick steps. Intelligent defaults already filled in.
-      </p>
+    <div className="mx-auto max-w-3xl space-y-8 p-6 lg:p-10">
+      <PageHeader
+        title="Create campaign"
+        description="Six quick steps. Sending window defaults to all day so night runs are not blocked."
+      />
       <CampaignWizard
         leadLists={lists.map((l) => ({ id: l.id, name: l.name, leadCount: Number(l.leadCount) }))}
         senders={senders

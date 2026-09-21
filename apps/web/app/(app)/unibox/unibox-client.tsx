@@ -67,8 +67,8 @@ export function UniboxClient({ initial }: { initial: ReplyRow[] }) {
       </header>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(240px,320px)_1fr] overflow-hidden rounded-xl border bg-card">
-        {/* left: list */}
-        <div className="min-h-0 overflow-y-auto border-r border-border/60">
+        {/* left: list — full width on mobile when no thread open */}
+        <div className={`min-h-0 overflow-y-auto border-r border-border/60 ${activeId ? "hidden md:block" : "block"}`}>
           {initial.length === 0 && (
             <EmptyState
               icon={Inbox}
@@ -95,8 +95,8 @@ export function UniboxClient({ initial }: { initial: ReplyRow[] }) {
           })}
         </div>
 
-        {/* right: thread */}
-        <div className="flex min-h-0 flex-col bg-card/40">
+        {/* right: thread — full screen on mobile when a conversation is open */}
+        <div className={`flex min-h-0 flex-col bg-card/40 ${activeId ? "flex" : "hidden md:flex"}`}>
           {activeId ? (
             (() => {
               const r = initial.find((x) => x.id === activeId)!;
@@ -111,7 +111,7 @@ export function UniboxClient({ initial }: { initial: ReplyRow[] }) {
                       </p>
                       {r.campaignName && <span className="mt-2 inline-block rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">{r.campaignName}</span>}
                     </div>
-                    <button type="button" aria-label="Close" onClick={() => setActiveId(null)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent"><X className="size-4" /></button>
+                    <button type="button" aria-label="Back to conversations" onClick={() => setActiveId(null)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent md:aria-[label]:content-auto"><X className="size-4" /></button>
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
                     <EmailBody html={r.bodyText || r.snippet || ""} />

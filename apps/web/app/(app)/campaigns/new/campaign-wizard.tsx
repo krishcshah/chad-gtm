@@ -2,12 +2,15 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, Clock, Rocket } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, ArrowRight, Check, Clock, FileText, Mail, Rocket, Users } from "lucide-react";
 import { TIMEZONES } from "@smartreach/shared";
 import {
   Button,
+  EmptyState,
   Input,
   Label,
+  Progress,
   Select,
   SelectContent,
   SelectItem,
@@ -44,6 +47,7 @@ export function CampaignWizard({
   const [pending, start] = useTransition();
   const [step, setStep] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  const [stepHint, setStepHint] = useState<string | null>(null);
 
   // Form state
   const [name, setName] = useState("");
@@ -87,8 +91,24 @@ export function CampaignWizard({
     }
   };
 
-  const next = () => { setError(null); if (stepValid(step)) setStep((s) => Math.min(6, s + 1)); };
-  const back = () => { setError(null); setStep((s) => Math.max(1, s - 1)); };
+  const STEP_HINT: Record<number, string> = {
+    1: "Enter a campaign name to continue.",
+    2: "Select a lead list to continue.",
+    3: "Select at least one sender account.",
+    4: "Select an email template.",
+    5: "Pick a start date and time, or choose Start immediately.",
+    6: "Max delay must be ≥ min delay.",
+  };
+
+  const progressPct = Math.round(((step - 1) / (STEPS.length - 1)) * 100);
+
+  const next = () => {
+    setError(null);
+    if (!stepValid(step)) { setStepHint(STEP_HINT[step] ?? "Complete this step to continue."); return; }
+    setStepHint(null);
+    setStep((s) => Math.min(6, s + 1));
+  };
+  const back = () => { setError(null); setStepHint(null); setStep((s) => Math.max(1, s - 1)); };
 
   const submit = () =>
     start(async () => {
@@ -120,34 +140,43 @@ export function CampaignWizard({
     });
 
   return (
-    <div>
-      {/* Step indicator */}
-      <ol className="mb-8 flex items-center gap-2">
-        {STEPS.map((s, i) => (
-          <li key={s.id} className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => s.id < step && setStep(s.id)}
-              className={cn(
-                "flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium transition-colors",
-                s.id === step
-                  ? "bg-primary text-primary-foreground"
-                  : s.id < step
-                    ? "bg-success/20 text-success-foreground"
-                    : "bg-muted text-muted-foreground",
-              )}
-            >
-              {s.id < step ? <Check className="h-3.5 w-3.5" /> : s.id}
-            </button>
-            <span className={cn("hidden text-xs sm:block", s.id === step ? "text-foreground" : "text-muted-foreground")}>
-              {s.label}
-            </span>
-            {i < STEPS.length - 1 && <span className="mx-1 h-px w-6 bg-border" />}
-          </li>
-        ))}
-      </ol>
+    <div className="space-y-6">
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+          <span>Step {step} of {STEPS.length}<span className="hidden sm:inline"> · {STEPS[step - 1]?.label}</span></span>
+          <span className="tabular-nums">{progressPct}%</span>
+        </div>
+        <Progress value={progressPct} className="h-1.5" aria-label={`Campaign wizard ${progressPct}% complete`} />
+        <ol className="flex flex-wrap items-center gap-y-2" aria-label="Campaign wizard steps">
+          {STEPS.map((s, i) => (
+            <li key={s.id} className="flex items-center gap-1.5 sm:gap-2">
+              <button
+                type="button"
+                onClick={() => { if (s.id < step) { setStepHint(null); setError(null); setStep(s.id); } }}
+                disabled={s.id > step}
+                aria-current={s.id === step ? "step" : undefined}
+                className={cn(
+                  "flex size-7 items-center justify-center rounded-full text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  s.id === step
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : s.id < step
+                      ? "bg-success/20 text-success-foreground hover:bg-success/30"
+                      : "bg-muted text-muted-foreground",
+                  s.id > step && "cursor-not-allowed opacity-60",
+                )}
+              >
+                {s.id < step ? <Check className="size-3.5" aria-hidden /> : s.id}
+              </button>
+              <span className={cn("hidden text-xs sm:inline", s.id === step ? "font-medium text-foreground" : "text-muted-foreground")}>
+                {s.label}
+              </span>
+              {i < STEPS.length - 1 && <span className="mx-1.5 hidden h-px w-4 bg-border sm:mx-2 sm:inline-block sm:w-6" aria-hidden />}
+            </li>
+          ))}
+        </ol>
+      </div>
 
-      <div className="rounded-xl border bg-card p-6 shadow-sm">
+      <div className="rounded-xl border border-border/80 bg-card p-5 shadow-sm sm:p-6">
         {step === 1 && (
           <div className="space-y-4">
             <div>
@@ -170,9 +199,17 @@ export function CampaignWizard({
               <p className="text-sm text-muted-foreground">Pending leads from this list will be queued.</p>
             </div>
             {leadLists.length === 0 ? (
-              <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                No lead lists yet. Import a CSV first from the Leads page.
-              </p>
+              <EmptyState
+                icon={Users}
+                title="No lead lists yet"
+                description="Import a CSV of prospects first, then return here to launch your campaign."
+                className="py-10"
+                action={
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href="/leads/import">Import leads</Link>
+                  </Button>
+                }
+              />
             ) : (
               <div className="space-y-2">
                 {leadLists.map((l) => (
@@ -199,9 +236,17 @@ export function CampaignWizard({
               </p>
             </div>
             {senders.length === 0 ? (
-              <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                No sender accounts. Add one from the Senders page (single or bulk CSV).
-              </p>
+              <EmptyState
+                icon={Mail}
+                title="No sender accounts"
+                description="Connect at least one mailbox (single or bulk CSV) before you can send."
+                className="py-10"
+                action={
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href="/senders/new">Add sender</Link>
+                  </Button>
+                }
+              />
             ) : (
               <div className="space-y-2">
                 <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-2.5">
@@ -246,9 +291,17 @@ export function CampaignWizard({
               <p className="text-sm text-muted-foreground">Preview shown on the right once selected.</p>
             </div>
             {templates.length === 0 ? (
-              <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                No templates. Create one from the Templates page.
-              </p>
+              <EmptyState
+                icon={FileText}
+                title="No templates yet"
+                description="Create a template with your outreach copy, then pick it here."
+                className="py-10"
+                action={
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href="/templates/new">Create template</Link>
+                  </Button>
+                }
+              />
             ) : (
               <>
                 <div className="space-y-2">
@@ -366,24 +419,24 @@ export function CampaignWizard({
         )}
       </div>
 
-      {error && (
-        <p className="mt-4 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
-          {error}
+      {(stepHint || error) && (
+        <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+          {error ?? stepHint}
         </p>
       )}
 
-      <div className="mt-6 flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <Button variant="ghost" onClick={back} disabled={step === 1 || pending}>
-          <ArrowLeft className="h-4 w-4" /> Back
+          <ArrowLeft className="size-4" aria-hidden /> Back
         </Button>
         {step < 6 ? (
-          <Button onClick={next} disabled={!stepValid(step) || pending}>
-            Next <ArrowRight className="h-4 w-4" />
+          <Button onClick={next} disabled={pending}>
+            Next <ArrowRight className="size-4" aria-hidden />
           </Button>
         ) : (
           <Button onClick={submit} disabled={pending || !stepValid(6)}>
             {pending ? "Creating…" : startMode === "now" ? "Create & Start" : "Create & Schedule"}
-            <Rocket className="h-4 w-4" />
+            <Rocket className="size-4" aria-hidden />
           </Button>
         )}
       </div>
