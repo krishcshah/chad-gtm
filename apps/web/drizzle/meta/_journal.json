@@ -8,6 +8,13 @@
       "when": 1785617501251,
       "tag": "0000_cool_morg",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790024781214,
+      "tag": "0001_rich_odin",
+      "breakpoints": true
     }
   ]
 }

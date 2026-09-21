@@ -12,7 +12,15 @@
  * stuck-job recovery) picks them up. Emails are NEVER sent from HTTP
  * requests; they only flow through email_jobs → processor.
  */
-import { renderTemplate, schema } from "@smartreach/database";
+import {
+  buildUnsubscribeUrl,
+  createUnsubscribeToken,
+  ensurePostalFooter,
+  ensureUnsubscribeFooter,
+  matchesSuppression,
+  renderTemplate,
+  schema,
+} from "@smartreach/database";
 import {
   addSeconds,
   isBusinessDay,
@@ -178,6 +186,31 @@ export async function scheduleCampaign(
   const tpl = tplRows[0];
   if (!tpl) return { enqueued: 0, note: "template-missing" };
 
+  // F15: load suppressions for this workspace (emails + domains)
+  const suppressionRows: { value: string }[] = await db
+    .select({ value: schema.suppressions.value })
+    .from(schema.suppressions)
+    .where(eq(schema.suppressions.userId, campaign.userId));
+  const suppressedValues = suppressionRows.map((r) => r.value);
+
+  // F16/F17: workspace postal address + unsub base
+  const settingsRows: any[] = await db
+    .select()
+    .from(schema.workspaceSettings)
+    .where(eq(schema.workspaceSettings.userId, campaign.userId))
+    .limit(1);
+  const settings = settingsRows[0] as
+    | { postalAddress?: string; companyName?: string; unsubscribeBaseUrl?: string }
+    | undefined;
+  const postalAddress = (settings?.postalAddress ?? "").trim();
+  const companyName = (settings?.companyName ?? "").trim();
+  const unsubBase =
+    (settings?.unsubscribeBaseUrl ?? "").trim() ||
+    process.env.BETTER_AUTH_URL ||
+    process.env.APP_URL ||
+    "http://localhost:3000";
+
+
   // Sender availability
   const daily = await loadDailyUsage(db, activeSenders.map((s) => s.id));
   const hourly = takeHourlySnapshot();
@@ -215,10 +248,35 @@ export async function scheduleCampaign(
 
     const lead = leadById.get(cl.leadId);
     if (!lead) continue;
+
+    // F15: skip suppressed emails/domains — cancel campaign_lead, do not enqueue
+    if (matchesSuppression(lead.email, suppressedValues)) {
+      await db
+        .update(schema.campaignLeads)
+        .set({ status: "cancelled", lastError: "suppressed", updatedAt: nowIsoS })
+        .where(eq(schema.campaignLeads.id, cl.id));
+      continue;
+    }
+
     const vars = leadVars(lead);
     const subject = renderTemplate(tpl.subject, vars);
-    const bodyText = tpl.format === "text" ? appendSignature(renderTemplate(tpl.bodyText, vars), pick.sender) : renderTemplate(tpl.bodyText, vars);
-    const bodyHtml = tpl.format === "html" ? appendSignature(renderTemplate(tpl.bodyHtml, vars), pick.sender) : renderTemplate(tpl.bodyHtml, vars);
+    let bodyText =
+      tpl.format === "text"
+        ? appendSignature(renderTemplate(tpl.bodyText, vars), pick.sender)
+        : renderTemplate(tpl.bodyText, vars);
+    let bodyHtml =
+      tpl.format === "html"
+        ? appendSignature(renderTemplate(tpl.bodyHtml, vars), pick.sender)
+        : renderTemplate(tpl.bodyHtml, vars);
+
+    const unsubToken = createUnsubscribeToken(campaign.userId, lead.email);
+    const unsubUrl = buildUnsubscribeUrl(unsubBase, unsubToken);
+    bodyText = ensureUnsubscribeFooter(bodyText, { unsubUrl, asHtml: false });
+    bodyHtml = ensureUnsubscribeFooter(bodyHtml || bodyText, { unsubUrl, asHtml: true });
+    if (postalAddress) {
+      bodyText = ensurePostalFooter(bodyText, { postalAddress, companyName, asHtml: false });
+      bodyHtml = ensurePostalFooter(bodyHtml, { postalAddress, companyName, asHtml: true });
+    }
 
     await db.insert(schema.emailJobs).values({
       id: crypto.randomUUID(),

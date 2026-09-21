@@ -6,7 +6,16 @@
  * the assigned sender, records usage counters, handles automatic retries with
  * backoff, and recovers jobs stuck in "processing" after a crash.
  */
-import { decryptSecret, schema } from "@smartreach/database";
+import {
+  buildUnsubscribeApiUrl,
+  buildUnsubscribeUrl,
+  createUnsubscribeToken,
+  ensurePostalFooter,
+  ensureUnsubscribeFooter,
+  listUnsubscribeHeaders,
+  matchesSuppression,
+  schema,
+} from "@smartreach/database";
 import { addSeconds, nowIso, randomBetween } from "@smartreach/shared";
 import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import type { EngineDb, JobRow, SenderRow } from "./db-port";
@@ -89,6 +98,17 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
     await cancelJobChain(db, job, "lead-no-longer-sendable");
     return "skipped";
   }
+
+  // F15: re-check suppression at send time
+  const suppressionRows: { value: string }[] = await db
+    .select({ value: schema.suppressions.value })
+    .from(schema.suppressions)
+    .where(eq(schema.suppressions.userId, campaign.userId));
+  if (matchesSuppression(job.toEmail, suppressionRows.map((r) => r.value))) {
+    await cancelJobChain(db, job, "suppressed");
+    return "skipped";
+  }
+
   // Sender died since scheduling → requeue for the scheduler to reassign
   if (!sender || sender.status !== "active") {
     await db
@@ -99,6 +119,78 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
   }
 
   try {
+    // F16/F17: ensure List-Unsubscribe + postal footer even if job was enqueued earlier
+    const settingsRows: any[] = await db
+      .select()
+      .from(schema.workspaceSettings)
+      .where(eq(schema.workspaceSettings.userId, campaign.userId))
+      .limit(1);
+    const settings = settingsRows[0] as
+      | { postalAddress?: string; companyName?: string; unsubscribeBaseUrl?: string }
+      | undefined;
+    const unsubBase =
+      (settings?.unsubscribeBaseUrl ?? "").trim() ||
+      process.env.BETTER_AUTH_URL ||
+      process.env.APP_URL ||
+      "http://localhost:3000";
+    const token = createUnsubscribeToken(campaign.userId, job.toEmail);
+    const unsubUrl = buildUnsubscribeUrl(unsubBase, token);
+    const headers = listUnsubscribeHeaders(buildUnsubscribeApiUrl(unsubBase, token));
+    let textBody = ensureUnsubscribeFooter(job.bodyText || "", { unsubUrl, asHtml: false });
+    let htmlBody = ensureUnsubscribeFooter(job.bodyHtml || job.bodyText || "", {
+      unsubUrl,
+      asHtml: true,
+    });
+    const postal = (settings?.postalAddress ?? "").trim();
+    if (postal) {
+      textBody = ensurePostalFooter(textBody, {
+        postalAddress: postal,
+        companyName: settings?.companyName ?? "",
+        asHtml: false,
+      });
+      htmlBody = ensurePostalFooter(htmlBody, {
+        postalAddress: postal,
+        companyName: settings?.companyName ?? "",
+        asHtml: true,
+      });
+    }
+
+    // Dry-run: prove enqueue→process path without live SMTP
+    if (process.env.ENGINE_DRY_RUN === "1" || process.env.ENGINE_DRY_RUN === "true") {
+      const nowDry = new Date().toISOString();
+      await db
+        .update(schema.emailJobs)
+        .set({
+          status: "sent",
+          messageId: `dry-run-${job.id}`,
+          sentAt: nowDry,
+          processingAt: null,
+          lastError: null,
+          bodyText: textBody,
+          bodyHtml: htmlBody,
+          updatedAt: nowDry,
+        })
+        .where(eq(schema.emailJobs.id, job.id));
+      await db
+        .update(schema.campaignLeads)
+        .set({
+          status: "sent",
+          sentAt: nowDry,
+          attempts: sql`${schema.campaignLeads.attempts} + 1`,
+          lastError: null,
+          updatedAt: nowDry,
+        })
+        .where(eq(schema.campaignLeads.id, job.campaignLeadId));
+      await db
+        .update(schema.leads)
+        .set({ status: "sent", updatedAt: nowDry })
+        .where(eq(schema.leads.id, job.leadId));
+      await recordSend(db, { userId: campaign.userId, entityType: "sender", entityId: sender.id });
+      await recordSend(db, { userId: campaign.userId, entityType: "campaign", entityId: campaign.id });
+      noteHourlySend(sender.id);
+      return "sent";
+    }
+
     const transporter = makeTransport(sender);
     const from = sender.fromName ? `"${sender.fromName.replace(/"/g, "")}" <${sender.email}>` : sender.email;
     let info;
@@ -108,8 +200,12 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
         to: job.toEmail,
         replyTo: sender.replyTo || undefined,
         subject: job.subject,
-        text: job.bodyText || undefined,
-        html: job.bodyHtml || undefined,
+        text: textBody || undefined,
+        html: htmlBody || undefined,
+        headers,
+        list: {
+          unsubscribe: { url: unsubUrl, comment: "Unsubscribe" },
+        },
       });
     } finally {
       transporter.close();

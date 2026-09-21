@@ -201,3 +201,33 @@ export const idParamSchema = z.object({ id: z.string().min(1) });
 export const bulkIdsSchema = z.object({
   ids: z.array(z.string().min(1)).min(1).max(10_000),
 });
+
+/* ─── Compliance (F15–F17) ─────────────────────────────────────────────── */
+
+export const suppressionCreateSchema = z.object({
+  value: z
+    .string()
+    .trim()
+    .min(1, "Email or @domain required")
+    .max(255)
+    .transform((v) => v.toLowerCase()),
+  kind: z.enum(["email", "domain"]).optional(),
+  reason: z.string().trim().max(500).default(""),
+});
+export type SuppressionCreateInput = z.infer<typeof suppressionCreateSchema>;
+
+export const workspaceSettingsSchema = z.object({
+  companyName: z.string().trim().max(200).default(""),
+  postalAddress: z
+    .string()
+    .trim()
+    .min(8, "Enter a physical postal address for CAN-SPAM compliance")
+    .max(1000),
+  unsubscribeBaseUrl: z
+    .string()
+    .trim()
+    .url("Enter a valid base URL")
+    .or(z.literal(""))
+    .default(""),
+});
+export type WorkspaceSettingsInput = z.infer<typeof workspaceSettingsSchema>;

@@ -16,7 +16,8 @@
     "db:generate": "npm run db:generate --workspace @smartreach/web",
     "db:migrate": "npm run db:migrate --workspace @smartreach/web",
     "db:seed": "npm run db:seed --workspace @smartreach/web",
-    "engine": "npm run start --workspace @smartreach/email-engine"
+    "engine": "npm run start --workspace @smartreach/email-engine",
+    "lint": "npm run typecheck"
   },
   "engines": {
     "node": ">=20",
@@ -26,6 +27,6 @@
     "drizzle-orm": "^0.45.2"
   },
   "overrides": {
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "0.45.2"
   }
 }

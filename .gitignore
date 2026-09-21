@@ -32,3 +32,5 @@ npm-debug.log*
 .vercel
 .wrangler
 coverage/
+_forge_evidence/*.txt
+!_forge_evidence/MUST_INVENTORY.md

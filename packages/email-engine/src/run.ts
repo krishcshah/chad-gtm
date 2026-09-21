@@ -5,9 +5,7 @@
 import { config } from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
-import { schema } from "@smartreach/database";
+import { createDb } from "@smartreach/database/connection";
 import { startWorkerLoop } from "./worker";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -22,7 +20,7 @@ if (!url) {
   process.exit(1);
 }
 
-const db = drizzle(neon(url), { schema });
+const { db } = createDb(url);
 const intervalMs = Number(process.env.ENGINE_INTERVAL_MS ?? 30_000);
 const syncMs = Number(process.env.ENGINE_SYNC_MS ?? 120_000);
 

@@ -23,12 +23,14 @@
     "@smartreach/database": "*",
     "@smartreach/shared": "*",
     "dotenv": "^16.4.7",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "0.45.2",
     "imapflow": "^1.0.191",
-    "nodemailer": "^7.0.3"
+    "nodemailer": "^7.0.3",
+    "pg": "^8.23.0"
   },
   "devDependencies": {
     "@types/nodemailer": "^6.4.20",
+    "@types/pg": "^8.23.1",
     "tsx": "^4.19.2",
     "typescript": "^5.8.3",
     "vitest": "^3.2.1"

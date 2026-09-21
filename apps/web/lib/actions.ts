@@ -2,7 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { schema, encryptSecret } from "@smartreach/database";
+import {
+  schema,
+  encryptSecret,
+  domainSuppressionValue,
+  normalizeEmail as normalizeEmailStrict,
+  verifyUnsubscribeToken,
+} from "@smartreach/database";
 import {
   campaignCreateSchema,
   leadImportSchema,
@@ -10,7 +16,9 @@ import {
   leadUpdateSchema,
   senderCreateSchema,
   senderCsvRowSchema,
+  suppressionCreateSchema,
   templateSchema,
+  workspaceSettingsSchema,
 } from "@smartreach/validation";
 import { normalizeEmail, nowIso } from "@smartreach/shared";
 import { getDb } from "./db";
@@ -748,4 +756,125 @@ export async function sendTestEmail(): Promise<ActionResult> {
     message:
       "Test send queued. The background engine will deliver it via the selected sender. Check Activity in a few seconds.",
   };
+}
+
+/* ═══ COMPLIANCE: suppressions + workspace settings (F15–F17) ═══ */
+
+export async function upsertWorkspaceSettings(input: unknown): Promise<ActionResult> {
+  const user = await requireUser();
+  const parsed = workspaceSettingsSchema.safeParse(input);
+  if (!parsed.success) return zodFail(parsed.error);
+  const db = getDb();
+  const d = parsed.data;
+  try {
+    await db
+      .insert(schema.workspaceSettings)
+      .values({
+        userId: user.id,
+        companyName: d.companyName,
+        postalAddress: d.postalAddress,
+        unsubscribeBaseUrl: d.unsubscribeBaseUrl || "",
+      })
+      .onConflictDoUpdate({
+        target: schema.workspaceSettings.userId,
+        set: {
+          companyName: d.companyName,
+          postalAddress: d.postalAddress,
+          unsubscribeBaseUrl: d.unsubscribeBaseUrl || "",
+          updatedAt: nowIso(),
+        },
+      });
+    revalidatePath("/settings");
+    return { ok: true, message: "Compliance settings saved" };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+export async function addSuppression(input: unknown): Promise<ActionResult<{ id: string }>> {
+  const user = await requireUser();
+  const parsed = suppressionCreateSchema.safeParse(input);
+  if (!parsed.success) return zodFail(parsed.error);
+  let value = parsed.data.value;
+  let kind = parsed.data.kind;
+  if (!kind) {
+    kind = value.startsWith("@") ? "domain" : "email";
+  }
+  if (kind === "domain") {
+    value = domainSuppressionValue(value.replace(/^@/, ""));
+    if (!value) return { ok: false, error: "Invalid domain" };
+  } else {
+    value = normalizeEmailStrict(value);
+    if (!value.includes("@")) return { ok: false, error: "Invalid email" };
+  }
+  const db = getDb();
+  try {
+    const [row] = await db
+      .insert(schema.suppressions)
+      .values({
+        userId: user.id,
+        value,
+        kind,
+        reason: parsed.data.reason || "",
+        source: "manual",
+      })
+      .onConflictDoNothing()
+      .returning({ id: schema.suppressions.id });
+    if (!row) {
+      // already exists — fetch id
+      const [existing] = await db
+        .select({ id: schema.suppressions.id })
+        .from(schema.suppressions)
+        .where(and(eq(schema.suppressions.userId, user.id), eq(schema.suppressions.value, value)))
+        .limit(1);
+      revalidatePath("/settings");
+      return { ok: true, data: { id: existing?.id ?? "" }, message: "Already on suppression list" };
+    }
+    await logActivity(user.id, "suppression.added", `Suppressed ${value}`);
+    revalidatePath("/settings");
+    return { ok: true, data: { id: row.id }, message: "Added to suppression list" };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+export async function removeSuppression(id: string): Promise<ActionResult> {
+  const user = await requireUser();
+  const db = getDb();
+  try {
+    await db
+      .delete(schema.suppressions)
+      .where(and(eq(schema.suppressions.id, id), eq(schema.suppressions.userId, user.id)));
+    revalidatePath("/settings");
+    return { ok: true, message: "Removed from suppression list" };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+/** Public unsubscribe — no session required. Prefer immediate suppression. */
+export async function processUnsubscribe(token: string): Promise<ActionResult<{ email: string }>> {
+  const verified = verifyUnsubscribeToken(token);
+  if (!verified.ok) return { ok: false, error: verified.error };
+  const db = getDb();
+  try {
+    await db
+      .insert(schema.suppressions)
+      .values({
+        userId: verified.userId,
+        value: verified.email,
+        kind: "email",
+        reason: "One-click unsubscribe",
+        source: "unsubscribe",
+      })
+      .onConflictDoNothing();
+    await logActivity(
+      verified.userId,
+      "suppression.unsubscribe",
+      `Unsubscribed ${verified.email}`,
+    );
+    return { ok: true, data: { email: verified.email }, message: "You have been unsubscribed" };
+  } catch (e) {
+    return err(e);
+  }
 }

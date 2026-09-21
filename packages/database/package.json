@@ -9,17 +9,21 @@
     "./schema/auth": "./src/schema-auth.ts",
     "./crypto": "./src/crypto.ts",
     "./template": "./src/template.ts",
-    "./connection": "./src/connection.ts"
+    "./connection": "./src/connection.ts",
+    "./compliance": "./src/compliance.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "@smartreach/shared": "*",
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "0.45.2",
+    "pg": "^8.23.0"
   },
   "devDependencies": {
+    "@types/pg": "^8.23.1",
     "typescript": "^5.8.3",
     "vitest": "^3.2.1"
   }

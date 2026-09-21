@@ -1,19 +1,37 @@
 import { requireUser } from "@/lib/session";
+import { getDb } from "@/lib/db";
+import { schema } from "@smartreach/database";
 import { APP_NAME } from "@smartreach/shared";
 import { Avatar, AvatarFallback, Card, CardContent, Separator } from "@smartreach/ui";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { eq, desc } from "drizzle-orm";
+import { ComplianceForms } from "./compliance-forms";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const user = await requireUser();
   const initial = (user.name ?? user.email ?? "U").slice(0, 1).toUpperCase();
+  const db = getDb();
+  const [settings] = await db
+    .select()
+    .from(schema.workspaceSettings)
+    .where(eq(schema.workspaceSettings.userId, user.id))
+    .limit(1);
+  const suppressions = await db
+    .select()
+    .from(schema.suppressions)
+    .where(eq(schema.suppressions.userId, user.id))
+    .orderBy(desc(schema.suppressions.createdAt))
+    .limit(200);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-6 lg:p-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Account, appearance, and sending engine.</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Account, compliance, appearance, and sending engine.
+        </p>
       </div>
 
       <Card>
@@ -39,6 +57,21 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
+      <ComplianceForms
+        initialSettings={{
+          companyName: settings?.companyName ?? "",
+          postalAddress: settings?.postalAddress ?? "",
+          unsubscribeBaseUrl: settings?.unsubscribeBaseUrl ?? "",
+        }}
+        suppressions={suppressions.map((s: { id: string; value: string; kind: string; reason: string; source: string }) => ({
+          id: s.id,
+          value: s.value,
+          kind: s.kind,
+          reason: s.reason,
+          source: s.source,
+        }))}
+      />
+
       <Card>
         <CardContent className="p-6">
           <h2 className="font-medium">Sending engine</h2>
@@ -61,14 +94,14 @@ export default async function SettingsPage() {
             ))}
           </dl>
           <p className="mt-4 text-xs text-muted-foreground">
-            Set <code className="font-mono">ENGINE_SECRET</code> and wire the Cloudflare Cron worker to enqueue
-            jobs; the same codebase runs locally with <code className="font-mono">npm run worker</code>.
+            Run locally with <code className="font-mono">npm run engine</code>. Set{" "}
+            <code className="font-mono">ENGINE_DRY_RUN=1</code> to process jobs without SMTP.
           </p>
         </CardContent>
       </Card>
 
       <p className="text-center text-xs text-muted-foreground">
-        {APP_NAME} · Everything you need. Nothing you don't.
+        {APP_NAME} · Everything you need. Nothing you don&apos;t.
       </p>
     </div>
   );

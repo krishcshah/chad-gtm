@@ -393,5 +393,47 @@ export const activityLogs = pgTable(
   (t) => [index("activity_logs_user_idx").on(t.userId, t.createdAt)],
 );
 
+
+/* ─── Suppressions / block list (F15) ──────────────────────────────────── */
+
+export const suppressions = pgTable(
+  "suppressions",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Lowercased email OR leading-@ domain like "@example.com". */
+    value: text("value").notNull(),
+    kind: text("kind", { enum: ["email", "domain"] }).notNull().default("email"),
+    reason: text("reason").notNull().default(""),
+    source: text("source", {
+      enum: ["manual", "unsubscribe", "bounce", "complaint", "import"],
+    })
+      .notNull()
+      .default("manual"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("suppressions_user_value_unique").on(t.userId, t.value),
+    index("suppressions_user_idx").on(t.userId),
+    index("suppressions_value_idx").on(t.value),
+  ],
+);
+
+/* ─── Workspace settings (F16/F17 compliance) ──────────────────────────── */
+
+export const workspaceSettings = pgTable("workspace_settings", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  companyName: text("company_name").notNull().default(""),
+  /** Physical postal address required by CAN-SPAM on commercial mail. */
+  postalAddress: text("postal_address").notNull().default(""),
+  unsubscribeBaseUrl: text("unsubscribe_base_url").notNull().default(""),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
 /* ─── Re-export auth tables so drizzle sees the whole graph ────────────── */
 export * from "./schema-auth";
