@@ -212,16 +212,31 @@ export function CampaignWizard({
               />
             ) : (
               <div className="space-y-2">
-                {leadLists.map((l) => (
-                  <button key={l.id} type="button" onClick={() => setLeadListId(l.id)}
-                    className={cn(
-                      "flex w-full items-center justify-between rounded-lg border p-4 text-left transition-colors",
-                      leadListId === l.id ? "border-primary bg-primary/5" : "hover:bg-accent/50",
-                    )}>
-                    <span className="font-medium">{l.name}</span>
-                    <span className="text-xs text-muted-foreground">{l.leadCount} leads</span>
-                  </button>
-                ))}
+                {leadLists.map((l) => {
+                  const selected = leadListId === l.id;
+                  return (
+                    <button
+                      key={l.id}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setLeadListId(l.id)}
+                      className={cn(
+                        "flex w-full items-center justify-between rounded-lg p-4 text-left transition-colors",
+                        selected
+                          ? "border-2 border-primary bg-primary/10 ring-2 ring-primary/20"
+                          : "border hover:bg-accent/50",
+                      )}
+                    >
+                      <span className="flex min-w-0 items-center gap-2 font-medium">
+                        {selected ? (
+                          <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                        ) : null}
+                        <span className="truncate">{l.name}</span>
+                      </span>
+                      <span className="shrink-0 text-xs text-muted-foreground">{l.leadCount} leads</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
