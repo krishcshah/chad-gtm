@@ -1,14 +1,12 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { getCampaign } from "@/lib/queries";
-import { Badge, Card, CardContent, Progress, cn } from "@smartreach/ui";
+import { Badge, Card, CardContent, Progress, statusVariant } from "@smartreach/ui";
 import { formatDate } from "@smartreach/shared";
 import { CampaignActions } from "../campaign-actions";
 
 export const dynamic = "force-dynamic";
 
-const statusVariant = (s: string) =>
-  s === "running" ? "default" : s === "paused" ? "outline" : "secondary";
 
 export default async function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -30,12 +28,12 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
   ];
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="page-stack">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-semibold tracking-tight">{c.name}</h1>
-            <Badge variant={statusVariant(c.status)} className={cn(c.status === "running" && "bg-emerald-600 hover:bg-emerald-600")}>
+            <Badge variant={statusVariant(c.status)} dot={c.status === "running"}>
               {c.status}
             </Badge>
           </div>

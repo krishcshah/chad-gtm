@@ -1,5 +1,6 @@
 @import "tailwindcss";
 
+/* ─── Design tokens → Tailwind theme ─────────────────────────────────────── */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -16,15 +17,39 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --text-xs: var(--text-xs);
+  --text-sm: var(--text-sm);
+  --text-base: var(--text-base);
+  --text-lg: var(--text-lg);
+  --text-xl: var(--text-xl);
+  --text-2xl: var(--text-2xl);
+  --spacing-page: var(--space-page);
+  --spacing-section: var(--space-section);
 }
 
 /* SmartReach design tokens — Linear-inspired indigo on near-black */
 :root {
+  /* Colour */
   --background: oklch(0.985 0.001 260);
   --foreground: oklch(0.21 0.02 262);
   --card: oklch(1 0 0);
@@ -36,13 +61,45 @@
   --secondary: oklch(0.95 0.005 260);
   --secondary-foreground: oklch(0.3 0.02 262);
   --muted: oklch(0.955 0.004 260);
-  --muted-foreground: oklch(0.5 0.015 262);
+  --muted-foreground: oklch(0.45 0.015 262);
   --accent: oklch(0.94 0.02 278);
   --accent-foreground: oklch(0.3 0.04 278);
-  --destructive: oklch(0.58 0.22 27);
+  --destructive: oklch(0.55 0.22 27);
+  --destructive-foreground: oklch(0.55 0.22 27);
+  --success: oklch(0.52 0.14 155);
+  --success-foreground: oklch(0.4 0.12 155);
+  --warning: oklch(0.68 0.14 75);
+  --warning-foreground: oklch(0.45 0.12 65);
+  --info: oklch(0.55 0.12 240);
+  --info-foreground: oklch(0.42 0.12 240);
   --border: oklch(0.905 0.005 260);
   --input: oklch(0.905 0.005 260);
   --ring: oklch(0.51 0.19 277);
+
+  /* Radius */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.75rem;
+
+  /* Shadow */
+  --shadow-xs: 0 1px 2px color-mix(in oklch, var(--foreground) 6%, transparent);
+  --shadow-sm: 0 1px 3px color-mix(in oklch, var(--foreground) 8%, transparent), 0 1px 2px color-mix(in oklch, var(--foreground) 4%, transparent);
+  --shadow-md: 0 4px 12px color-mix(in oklch, var(--foreground) 8%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in oklch, var(--foreground) 12%, transparent);
+  --shadow-primary: 0 1px 2px color-mix(in oklch, var(--primary) 25%, transparent);
+
+  /* Type scale */
+  --text-xs: 0.6875rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-lg: 1.0625rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+
+  /* Spacing */
+  --space-page: 1.5rem;
+  --space-section: 1.5rem;
 }
 
 .dark {
@@ -60,10 +117,23 @@
   --muted-foreground: oklch(0.63 0.015 266);
   --accent: oklch(0.27 0.03 278);
   --accent-foreground: oklch(0.93 0.015 272);
-  --destructive: oklch(0.6 0.2 25);
+  --destructive: oklch(0.68 0.18 25);
+  --destructive-foreground: oklch(0.78 0.14 25);
+  --success: oklch(0.7 0.14 155);
+  --success-foreground: oklch(0.78 0.12 155);
+  --warning: oklch(0.78 0.14 75);
+  --warning-foreground: oklch(0.82 0.12 75);
+  --info: oklch(0.72 0.12 240);
+  --info-foreground: oklch(0.78 0.1 240);
   --border: oklch(0.27 0.012 268);
   --input: oklch(0.27 0.012 268);
   --ring: oklch(0.65 0.18 277);
+
+  --shadow-xs: 0 1px 2px color-mix(in oklch, black 35%, transparent);
+  --shadow-sm: 0 1px 3px color-mix(in oklch, black 40%, transparent);
+  --shadow-md: 0 4px 12px color-mix(in oklch, black 45%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in oklch, black 50%, transparent);
+  --shadow-primary: 0 0 12px color-mix(in oklch, var(--primary) 35%, transparent);
 }
 
 * {
@@ -79,12 +149,29 @@ body {
   background-color: var(--background);
   color: var(--foreground);
   letter-spacing: -0.011em;
+  font-size: var(--text-base);
+  line-height: 1.5;
+}
+
+/* Keyboard focus — WCAG AA visible ring on interactive controls */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
 }
 
 .app-shell {
   background:
     radial-gradient(ellipse 80% 50% at 50% -20%, color-mix(in oklch, var(--primary) 8%, transparent), transparent),
     var(--background);
+}
+
+.page-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-section);
 }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -129,9 +216,7 @@ body {
   tab-size: 2;
 }
 
-/* ================= SmartReach Switch (plain CSS, theme-independent) ================= */
-/* Used by every "switch" toggle — business days, stop-on-reply, retry, etc.
-   Pure CSS so it does NOT depend on Tailwind generating utilities. */
+/* ================= SmartReach Switch (token-driven) ================= */
 .sr-switch {
   position: relative;
   display: inline-flex;
@@ -150,7 +235,7 @@ body {
 }
 .sr-switch:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px color-mix(in oklch, var(--ring) 50%, transparent);
 }
 .sr-switch[data-disabled] {
   opacity: 0.5;
@@ -160,14 +245,10 @@ body {
   background: var(--muted);
   border-color: var(--border);
 }
-.dark .sr-switch[data-state="unchecked"] {
-  background: #3f3f46;
-  border-color: #52525b;
-}
 .sr-switch[data-state="checked"] {
   background: var(--primary);
   border-color: var(--primary);
-  box-shadow: 0 0 12px rgba(99, 102, 241, 0.45);
+  box-shadow: var(--shadow-primary);
 }
 .sr-switch-thumb {
   display: block;
@@ -175,15 +256,16 @@ body {
   height: 18px;
   margin-left: 2px;
   border-radius: 50%;
-  background: #ffffff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
   transform: translateX(0);
   transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
 }
 .dark .sr-switch-thumb {
-  background: #f4f4f5;
+  background: var(--foreground);
 }
 .sr-switch[data-state="checked"] .sr-switch-thumb {
   transform: translateX(20px);
+  background: var(--primary-foreground);
 }

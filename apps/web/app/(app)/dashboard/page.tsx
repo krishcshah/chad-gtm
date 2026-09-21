@@ -1,34 +1,26 @@
+import type { LucideIcon } from "lucide-react";
 import { Activity, AlertCircle, CheckCircle2, Inbox, Mail, Rocket, Timer, TrendingUp, Users } from "lucide-react";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle, Progress, Badge } from "@smartreach/ui";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, Progress, statusVariant } from "@smartreach/ui";
 import { requireUser } from "@/lib/session";
 import { getActiveCampaigns, getDashboardStats, getRecentActivity } from "@/lib/queries";
 
 export const metadata = { title: "Dashboard" };
 
-function Stat({ label, value, icon: Icon, hint }: { label: string; value: string | number; icon: any; hint?: string }) {
+function Stat({ label, value, icon: Icon, hint }: { label: string; value: string | number; icon: LucideIcon; hint?: string }) {
   return (
     <Card>
       <CardContent className="p-4">
         <div className="flex items-center justify-between">
           <p className="text-[13px] text-muted-foreground">{label}</p>
-          <Icon className="size-4 text-muted-foreground/60" />
+          <Icon className="size-4 text-muted-foreground/60" aria-hidden />
         </div>
-        <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
+        <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
         {hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>}
       </CardContent>
     </Card>
   );
 }
-
-const statusColor: Record<string, string> = {
-  running: "bg-emerald-500/15 text-emerald-400",
-  scheduled: "bg-sky-500/15 text-sky-400",
-  paused: "bg-amber-500/15 text-amber-400",
-  draft: "bg-muted text-muted-foreground",
-  completed: "bg-primary/15 text-primary",
-  archived: "bg-muted text-muted-foreground",
-};
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -41,18 +33,17 @@ export default async function DashboardPage() {
   const firstName = user.name?.split(" ")[0] ?? "there";
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="page-stack">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Good to see you, {firstName}</h1>
-          <p className="text-[13px] text-muted-foreground">Here's what's happening across your campaigns.</p>
+          <p className="text-[13px] text-muted-foreground">Here&apos;s what&apos;s happening across your campaigns.</p>
         </div>
-        <Link
-          href="/campaigns/new"
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-[13px] font-medium text-primary-foreground shadow-sm shadow-primary/25 hover:bg-primary/90 transition-colors"
-        >
-          <Rocket className="size-3.5" /> New campaign
-        </Link>
+        <Button size="sm" asChild>
+          <Link href="/campaigns/new">
+            <Rocket className="size-3.5" /> New campaign
+          </Link>
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -79,7 +70,17 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-2.5">
             {activeCampaigns.length === 0 ? (
-              <EmptyCampaigns />
+              <EmptyState
+                icon={Rocket}
+                title="No active campaigns"
+                description="Launch your first campaign in under a minute."
+                className="py-12"
+                action={
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href="/campaigns/new">Create campaign</Link>
+                  </Button>
+                }
+              />
             ) : (
               activeCampaigns.map((c) => {
                 const total = Number(c.total || 0);
@@ -89,12 +90,12 @@ export default async function DashboardPage() {
                   <Link
                     key={c.id}
                     href={`/campaigns/${c.id}`}
-                    className="flex items-center gap-4 rounded-xl border border-border/60 p-3.5 transition-colors hover:bg-accent/40"
+                    className="flex items-center gap-4 rounded-xl border border-border/60 p-3.5 transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <p className="truncate text-[13px] font-medium">{c.name}</p>
-                        <Badge className={statusColor[c.status] ?? ""}>{c.status}</Badge>
+                        <Badge variant={statusVariant(c.status)}>{c.status}</Badge>
                       </div>
                       <div className="mt-2 flex items-center gap-3">
                         <Progress value={pct} className="h-1.5 flex-1" />
@@ -104,7 +105,7 @@ export default async function DashboardPage() {
                       </div>
                     </div>
                     {Number(c.replied) > 0 && (
-                      <Badge className="bg-emerald-500/15 text-emerald-400">{Number(c.replied)} replies</Badge>
+                      <Badge variant="success">{Number(c.replied)} replies</Badge>
                     )}
                   </Link>
                 );
@@ -116,12 +117,17 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-[15px]">
-              <Activity className="size-4 text-primary" /> Recent activity
+              <Activity className="size-4 text-primary" aria-hidden /> Recent activity
             </CardTitle>
           </CardHeader>
           <CardContent>
             {activity.length === 0 ? (
-              <p className="py-8 text-center text-[13px] text-muted-foreground">No activity yet</p>
+              <EmptyState
+                icon={Activity}
+                title="No activity yet"
+                description="Sends, replies, and campaign changes will show up here."
+                className="border-0 bg-transparent py-8"
+              />
             ) : (
               <div className="space-y-0">
                 {activity.slice(0, 12).map((a) => (
@@ -139,19 +145,6 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div>
-    </div>
-  );
-}
-
-function EmptyCampaigns() {
-  return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-12">
-      <Rocket className="mb-3 size-8 text-muted-foreground/40" />
-      <p className="text-sm font-medium">No active campaigns</p>
-      <p className="mb-4 text-[13px] text-muted-foreground">Launch your first campaign in under a minute</p>
-      <Link href="/campaigns/new" className="text-[13px] font-medium text-primary hover:underline">
-        Create campaign →
-      </Link>
     </div>
   );
 }

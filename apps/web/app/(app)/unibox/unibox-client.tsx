@@ -4,7 +4,7 @@ import { Inbox, Mail, MailOpen, SendHorizonal, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Button, Textarea } from "@smartreach/ui";
+import { Button, EmptyState, Textarea } from "@smartreach/ui";
 import { sendUniboxReply } from "@/lib/actions";
 
 interface ReplyRow {
@@ -60,28 +60,35 @@ export function UniboxClient({ initial }: { initial: ReplyRow[] }) {
     <div className="unibox-root flex h-dvh flex-col lg:-ml-60 lg:pl-60">
       <header className="flex items-center justify-between pb-3">
         <h1 className="flex items-center gap-2 text-lg font-semibold">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400"><Inbox className="size-4" /></span>
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary"><Inbox className="size-4" aria-hidden /></span>
           Unibox
         </h1>
         <span className="rounded-md border px-2 py-1 text-[11px] text-muted-foreground">{unread} unread</span>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[320px_1fr] overflow-hidden rounded-xl border bg-card">
+      <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(240px,320px)_1fr] overflow-hidden rounded-xl border bg-card">
         {/* left: list */}
         <div className="min-h-0 overflow-y-auto border-r border-border/60">
-          {initial.length === 0 && <p className="p-6 text-sm text-muted-foreground">No replies yet.</p>}
+          {initial.length === 0 && (
+            <EmptyState
+              icon={Inbox}
+              title="No replies yet"
+              description="When prospects reply to your campaigns, conversations appear here in Unibox."
+              className="m-4 border-0 bg-transparent py-10"
+            />
+          )}
           {initial.map((r) => {
             const name = r.fromName || r.fromEmail.split("@")[0];
             const isUnread = !r.readAt;
             const isActive = activeId === r.id;
             return (
               <button key={r.id} type="button" onClick={() => setActiveId(r.id)}
-                className={`flex w-full flex-col gap-0.5 border-b border-border/50 px-4 py-3 text-left transition-colors ${isActive ? "bg-accent/60" : "hover:bg-accent/30"} ${isUnread ? "bg-indigo-500/[0.04]" : ""}`}>
+                className={`flex w-full flex-col gap-0.5 border-b border-border/50 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${isActive ? "bg-accent/60" : "hover:bg-accent/30"} ${isUnread ? "bg-primary/[0.04]" : ""}`}>
                 <span className="flex items-center justify-between gap-2">
                   <span className={`truncate text-[13px] ${isUnread ? "font-semibold" : "font-medium"}`}>{name}</span>
                   <span className="shrink-0 text-[11px] text-muted-foreground">{r.receivedAt ? formatDistanceToNow(new Date(r.receivedAt), { addSuffix: true }) : ""}</span>
                 </span>
-                <span className ={`truncate text-xs ${isUnread ? "text-foreground" : "text-muted-foreground"}`}>{r.subject || "(no subject)"}</span>
+                <span className={`truncate text-xs ${isUnread ? "text-foreground" : "text-muted-foreground"}`}>{r.subject || "(no subject)"}</span>
                 <span className="line-clamp-1 text-[11px] text-muted-foreground/80">{r.snippet || r.bodyText}</span>
               </button>
             );
@@ -102,7 +109,7 @@ export function UniboxClient({ initial }: { initial: ReplyRow[] }) {
                       <p className="mt-0.5 text-xs text-muted-foreground">
                         From {name} {"<"}{r.fromEmail}{">"} → {r.senderEmail ?? ""} · {r.receivedAt ? new Date(r.receivedAt).toLocaleString() : ""}
                       </p>
-                      {r.campaignName && <span className="mt-2 inline-block rounded-md bg-indigo-500/10 px-2 py-0.5 text-[11px] font-medium text-indigo-300">{r.campaignName}</span>}
+                      {r.campaignName && <span className="mt-2 inline-block rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">{r.campaignName}</span>}
                     </div>
                     <button type="button" aria-label="Close" onClick={() => setActiveId(null)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent"><X className="size-4" /></button>
                   </div>

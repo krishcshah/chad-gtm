@@ -86,7 +86,7 @@ export function ComplianceForms({
           >
             Save compliance settings
           </Button>
-          {msg ? <p className="text-sm text-emerald-600">{msg}</p> : null}
+          {msg ? <p className="text-sm text-success-foreground">{msg}</p> : null}
           {err ? <p className="text-sm text-destructive">{err}</p> : null}
         </CardContent>
       </Card>

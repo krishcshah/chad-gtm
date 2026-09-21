@@ -133,7 +133,7 @@ export function CampaignWizard({
                 s.id === step
                   ? "bg-primary text-primary-foreground"
                   : s.id < step
-                    ? "bg-emerald-600/20 text-emerald-500"
+                    ? "bg-success/20 text-success-foreground"
                     : "bg-muted text-muted-foreground",
               )}
             >

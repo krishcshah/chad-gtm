@@ -147,7 +147,7 @@ export function LeadImport({ lists }: { lists: { id: string; name: string }[] })
     <div className="space-y-6">
       <div className="flex items-center gap-2 text-sm">
         <button type="button" onClick={() => setStep(1)} className={cn("flex items-center gap-2", step === 1 ? "text-foreground" : "text-muted-foreground")}>
-          <span className={cn("flex h-6 w-6 items-center justify-center rounded-full text-xs", step === 1 ? "bg-primary text-primary-foreground" : "bg-emerald-600/20 text-emerald-500")}>1</span>
+          <span className={cn("flex h-6 w-6 items-center justify-center rounded-full text-xs", step === 1 ? "bg-primary text-primary-foreground" : "bg-success/20 text-success-foreground")}>1</span>
           Preview
         </button>
         <span className="h-px w-8 bg-border" />
@@ -271,7 +271,7 @@ export function LeadImport({ lists }: { lists: { id: string; name: string }[] })
 
           {result && (
             <div className="flex flex-wrap gap-4 rounded-xl border bg-muted/30 p-4 text-sm">
-              <span className="text-emerald-500 font-medium">{result.imported} imported</span>
+              <span className="text-success-foreground font-medium">{result.imported} imported</span>
               <span className="text-amber-500">{result.skipped} duplicates skipped</span>
               <span className="text-destructive">{result.invalid} invalid emails</span>
             </div>

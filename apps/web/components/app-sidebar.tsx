@@ -46,7 +46,7 @@ export function AppSidebar({ user }: { user: { name?: string | null; email?: str
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors",
+                  "flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   active
                     ? "bg-accent text-accent-foreground"
                     : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
@@ -60,7 +60,7 @@ export function AppSidebar({ user }: { user: { name?: string | null; email?: str
           })}
         </nav>
         <div className="border-t border-border/60 p-3 flex items-center gap-2.5">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/30 to-sky-500/30 text-xs font-semibold text-primary">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/30 to-info/30 text-xs font-semibold text-primary">
             {(user.name ?? user.email ?? "U").slice(0, 1).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
@@ -75,7 +75,7 @@ export function AppSidebar({ user }: { user: { name?: string | null; email?: str
               await authClient.signOut();
               router.push("/");
             }}
-            className="flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+            className="flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <LogOut className="size-4" />
           </button>
@@ -91,7 +91,7 @@ export function AppSidebar({ user }: { user: { name?: string | null; email?: str
               href={item.href}
               aria-label={item.label}
               className={cn(
-                "flex size-9 items-center justify-center rounded-lg transition-colors",
+                "flex size-9 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 pathname.startsWith(item.href) ? "bg-accent text-accent-foreground" : "text-muted-foreground"
               )}
             >

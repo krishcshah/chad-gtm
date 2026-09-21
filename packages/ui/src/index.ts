@@ -21,3 +21,5 @@ export * from "./progress";
 export * from "./popover";
 export * from "./alert";
 export * from "./empty-state";
+export * from "./page-header";
+export * from "./state-panel";

@@ -9,10 +9,10 @@ const badgeVariants = cva(
       variant: {
         default: "border-transparent bg-primary/15 text-primary",
         secondary: "border-border/60 bg-secondary/70 text-secondary-foreground",
-        success: "border-emerald-500/25 bg-emerald-500/12 text-emerald-400",
-        warning: "border-amber-500/25 bg-amber-500/12 text-amber-400",
-        destructive: "border-red-500/25 bg-red-500/12 text-red-400",
-        info: "border-sky-500/25 bg-sky-500/12 text-sky-400",
+        success: "border-success/25 bg-success/12 text-success-foreground",
+        warning: "border-warning/25 bg-warning/12 text-warning-foreground",
+        destructive: "border-destructive/25 bg-destructive/12 text-destructive",
+        info: "border-info/25 bg-info/12 text-info-foreground",
         outline: "border-border text-muted-foreground",
       },
     },
@@ -27,7 +27,7 @@ export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement>, Varian
 export function Badge({ className, variant, dot, children, ...props }: BadgeProps) {
   return (
     <div className={cn(badgeVariants({ variant }), className)} {...props}>
-      {dot && <span className="size-1.5 rounded-full bg-current" />}
+      {dot && <span className="size-1.5 rounded-full bg-current" aria-hidden />}
       {children}
     </div>
   );
@@ -41,6 +41,7 @@ export function statusVariant(status: string): BadgeProps["variant"] {
     case "sent":
     case "completed":
     case "ok":
+    case "replied":
       return "success";
     case "scheduled":
     case "queued":
@@ -51,8 +52,6 @@ export function statusVariant(status: string): BadgeProps["variant"] {
     case "draft":
     case "untested":
       return "secondary";
-    case "replied":
-      return "default";
     case "failed":
     case "bounced":
       return "destructive";
