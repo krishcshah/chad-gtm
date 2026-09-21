@@ -20,10 +20,11 @@ const envSchema = z.object({
 const parsed = envSchema.safeParse(process.env);
 
 /**
- * `next build` (production) statically evaluates pages without a live DB, and
- * page-data collection may run in a worker without client env. Never throw at
- * module import — fall back to safe placeholders. Real deployments set the env
- * vars, so `safeParse` succeeds and none of this matters at runtime.
+ * `next build` evaluates modules without live secrets (`NEXT_PHASE` or the
+ * npm `build` lifecycle). Placeholder fallback is allowed only then so the
+ * build can finish. At production runtime a failed parse must throw: silently
+ * substituting a localhost/placeholder `DATABASE_URL` masks real credential
+ * failures as empty HTTP 500s.
  */
 const isBuildPhase =
   process.env.NEXT_PHASE === "phase-production-build" ||
@@ -43,11 +44,9 @@ export const env = parsed.success
   ? parsed.data
   : (() => {
       if (process.env.NODE_ENV === "production" && !isBuildPhase) {
-        console.warn(
-          "⚠️  Missing/invalid environment variables:",
-          parsed.error.flatten().fieldErrors,
-          "— falling back to placeholders. Set them in your hosting dashboard.",
-        );
+        const fieldErrors = parsed.error.flatten().fieldErrors;
+        console.error("Invalid production environment variables:", fieldErrors);
+        throw parsed.error;
       }
       return devFallback();
     })();
