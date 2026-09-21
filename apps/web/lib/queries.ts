@@ -1,5 +1,6 @@
 import { and, count, desc, eq, gte, isNull, sql, inArray } from "drizzle-orm";
 import { schema } from "@smartreach/database";
+import { campaignStartPostalError } from "./campaign-start-guard";
 import { getDb } from "./db";
 
 const {
@@ -327,6 +328,16 @@ export async function getCampaign(userId: string, id: string) {
       : { total: 0, sent: 0, replied: 0, failed: 0, bounced: 0 },
     senders,
   };
+}
+
+export async function hasWorkspacePostalAddress(userId: string): Promise<boolean> {
+  const db = getDb();
+  const [row] = await db
+    .select({ postalAddress: schema.workspaceSettings.postalAddress })
+    .from(schema.workspaceSettings)
+    .where(eq(schema.workspaceSettings.userId, userId))
+    .limit(1);
+  return campaignStartPostalError(row?.postalAddress) === null;
 }
 
 export async function listReplies(userId: string, limit = 50) {

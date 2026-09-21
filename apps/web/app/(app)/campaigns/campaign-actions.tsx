@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@smartreach/ui";
 import { campaignAction } from "@/lib/actions";
+import { isPostalComplianceError } from "@/lib/campaign-wizard-errors";
 
 export function CampaignActions({ id, status }: { id: string; status: string }) {
   const [pending, start] = useTransition();
@@ -24,6 +25,10 @@ export function CampaignActions({ id, status }: { id: string; status: string }) 
       if (res.ok) {
         toast.success(res.message ?? "Done");
         if (action === "duplicate") router.refresh();
+      } else if (isPostalComplianceError(res.error, res.fieldErrors)) {
+        toast.error(res.error, {
+          action: { label: "Settings", onClick: () => router.push("/settings") },
+        });
       } else toast.error(res.error);
     });
 

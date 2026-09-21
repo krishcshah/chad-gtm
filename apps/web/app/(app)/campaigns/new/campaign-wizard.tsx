@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Check, Clock, FileText, Mail, Rocket, Users } from "lucide-react";
@@ -20,6 +20,15 @@ import {
   cn,
 } from "@smartreach/ui";
 import { createCampaign } from "@/lib/actions";
+import { CAMPAIGN_POSTAL_REQUIRED_ERROR } from "@/lib/campaign-start-guard";
+import {
+  CAMPAIGN_FIELD_CONTROL_ID,
+  CAMPAIGN_FIELD_STEP,
+  firstFailingCampaignField,
+  firstFailingCampaignStep,
+  isPostalComplianceError,
+} from "@/lib/campaign-wizard-errors";
+import { normalizeHhMm } from "@/lib/hhmm";
 
 interface LeadListOpt { id: string; name: string; leadCount: number }
 interface SenderOpt { id: string; senderName: string; email: string; status: string; dailyLimit: number; usedToday: number }
@@ -34,20 +43,27 @@ const STEPS = [
   { id: 6, label: "Settings" },
 ];
 
+const INVALID = "border-destructive ring-2 ring-destructive/40";
+
 export function CampaignWizard({
   leadLists,
   senders,
   templates,
+  hasPostalAddress,
 }: {
   leadLists: LeadListOpt[];
   senders: SenderOpt[];
   templates: TemplateOpt[];
+  /** False when workspace postal is blank — Create & Start is blocked (CAN-SPAM). */
+  hasPostalAddress: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [step, setStep] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [stepHint, setStepHint] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+  const focusId = useRef<string | null>(null);
 
   // Form state
   const [name, setName] = useState("");
@@ -79,6 +95,22 @@ export function CampaignWizard({
   const selectedTemplate = useMemo(() => templates.find((t) => t.id === templateId), [templates, templateId]);
   const listLeadCount = leadLists.find((l) => l.id === leadListId)?.leadCount ?? 0;
 
+  const fieldMessage = (key: string) => fieldErrors[key]?.[0];
+  const clearField = (key: string) =>
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+
+  useEffect(() => {
+    const id = focusId.current;
+    if (!id) return;
+    focusId.current = null;
+    document.getElementById(id)?.focus();
+  }, [step, fieldErrors, error]);
+
   const stepValid = (s: number): boolean => {
     switch (s) {
       case 1: return name.trim().length > 0;
@@ -101,6 +133,8 @@ export function CampaignWizard({
   };
 
   const progressPct = Math.round(((step - 1) / (STEPS.length - 1)) * 100);
+  const stepHasError = (id: number) =>
+    Object.keys(fieldErrors).some((key) => !!fieldErrors[key]?.length && CAMPAIGN_FIELD_STEP[key] === id);
 
   const next = () => {
     setError(null);
@@ -113,6 +147,11 @@ export function CampaignWizard({
   const submit = () =>
     start(async () => {
       setError(null);
+      setStepHint(null);
+      const sendingWindowStart = normalizeHhMm(windowStart);
+      const sendingWindowEnd = normalizeHhMm(windowEnd);
+      if (sendingWindowStart !== windowStart) setWindowStart(sendingWindowStart);
+      if (sendingWindowEnd !== windowEnd) setWindowEnd(sendingWindowEnd);
       const res = await createCampaign({
         name: name.trim(),
         leadListId,
@@ -122,8 +161,8 @@ export function CampaignWizard({
         scheduledAt: startMode === "later" && scheduledAt ? new Date(scheduledAt).toISOString() : null,
         businessDaysOnly,
         sendingTimezone,
-        sendingWindowStart: windowStart,
-        sendingWindowEnd: windowEnd,
+        sendingWindowStart,
+        sendingWindowEnd,
         dailyLimit: Number(dailyLimit),
         minDelaySec: Number(minDelay),
         maxDelaySec: Number(maxDelay),
@@ -134,10 +173,26 @@ export function CampaignWizard({
       });
       if (res.ok && res.data?.id) {
         router.push(`/campaigns/${res.data.id}`);
-      } else {
-        setError(res.ok ? "Unknown error" : res.error);
+        return;
       }
+      const message = res.ok ? "Unknown error" : res.error;
+      const fe = res.ok ? {} : (res.fieldErrors ?? {});
+      setFieldErrors(fe);
+      setError(message);
+      const postal = isPostalComplianceError(message, fe);
+      const jump = firstFailingCampaignStep(fe) ?? (postal ? 6 : null);
+      if (jump) setStep(jump);
+      const field = firstFailingCampaignField(fe);
+      focusId.current = field
+        ? (CAMPAIGN_FIELD_CONTROL_ID[field] ?? null)
+        : postal
+          ? "postal-required-alert"
+          : null;
     });
+
+  const postalBanner =
+    (error && isPostalComplianceError(error, fieldErrors) ? error : null) ??
+    (step === 6 && startMode === "now" && !hasPostalAddress ? CAMPAIGN_POSTAL_REQUIRED_ERROR : null);
 
   return (
     <div className="space-y-6">
@@ -155,6 +210,7 @@ export function CampaignWizard({
                 onClick={() => { if (s.id < step) { setStepHint(null); setError(null); setStep(s.id); } }}
                 disabled={s.id > step}
                 aria-current={s.id === step ? "step" : undefined}
+                aria-invalid={stepHasError(s.id) || undefined}
                 className={cn(
                   "flex size-7 items-center justify-center rounded-full text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   s.id === step
@@ -163,6 +219,7 @@ export function CampaignWizard({
                       ? "bg-success/20 text-success-foreground hover:bg-success/30"
                       : "bg-muted text-muted-foreground",
                   s.id > step && "cursor-not-allowed opacity-60",
+                  stepHasError(s.id) && "ring-2 ring-destructive/60",
                 )}
               >
                 {s.id < step ? <Check className="size-3.5" aria-hidden /> : s.id}
@@ -185,9 +242,18 @@ export function CampaignWizard({
             </div>
             <div className="space-y-2">
               <Label htmlFor="c-name">Campaign name</Label>
-              <Input id="c-name" autoFocus value={name} onChange={(e) => setName(e.target.value)}
+              <Input
+                id="c-name"
+                autoFocus
+                value={name}
+                aria-invalid={!!fieldMessage("name")}
+                aria-describedby={fieldMessage("name") ? "err-name" : undefined}
+                className={fieldMessage("name") ? INVALID : undefined}
+                onChange={(e) => { setName(e.target.value); clearField("name"); }}
                 onKeyDown={(e) => e.key === "Enter" && next()}
-                placeholder="e.g. Q1 SaaS founders — US" />
+                placeholder="e.g. Q1 SaaS founders — US"
+              />
+              {fieldMessage("name") ? <p id="err-name" className="text-sm text-destructive">{fieldMessage("name")}</p> : null}
             </div>
           </div>
         )}
@@ -211,7 +277,15 @@ export function CampaignWizard({
                 }
               />
             ) : (
-              <div className="space-y-2">
+              <div
+                id="lead-list-group"
+                tabIndex={-1}
+                role="group"
+                aria-label="Lead lists"
+                aria-invalid={!!fieldMessage("leadListId") || undefined}
+                aria-describedby={fieldMessage("leadListId") ? "err-leadListId" : undefined}
+                className={cn("space-y-2 rounded-lg outline-none", fieldMessage("leadListId") && "ring-2 ring-destructive/40")}
+              >
                 {leadLists.map((l) => {
                   const selected = leadListId === l.id;
                   return (
@@ -219,12 +293,13 @@ export function CampaignWizard({
                       key={l.id}
                       type="button"
                       aria-pressed={selected}
-                      onClick={() => setLeadListId(l.id)}
+                      onClick={() => { setLeadListId(l.id); clearField("leadListId"); }}
                       className={cn(
                         "flex w-full items-center justify-between rounded-lg p-4 text-left transition-colors",
                         selected
                           ? "border-2 border-primary bg-primary/10 ring-2 ring-primary/20"
                           : "border hover:bg-accent/50",
+                        fieldMessage("leadListId") && !selected && "border-destructive",
                       )}
                     >
                       <span className="flex min-w-0 items-center gap-2 font-medium">
@@ -237,6 +312,9 @@ export function CampaignWizard({
                     </button>
                   );
                 })}
+                {fieldMessage("leadListId") ? (
+                  <p id="err-leadListId" className="text-sm text-destructive">{fieldMessage("leadListId")}</p>
+                ) : null}
               </div>
             )}
           </div>
@@ -263,16 +341,25 @@ export function CampaignWizard({
                 }
               />
             ) : (
-              <div className="space-y-2">
+              <div
+                id="sender-group"
+                tabIndex={-1}
+                role="group"
+                aria-label="Sender accounts"
+                aria-invalid={!!fieldMessage("senderIds") || undefined}
+                aria-describedby={fieldMessage("senderIds") ? "err-senderIds" : undefined}
+                className={cn("space-y-2 rounded-lg outline-none", fieldMessage("senderIds") && "ring-2 ring-destructive/40")}
+              >
                 <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-2.5">
                   <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium">
                     <input
                       type="checkbox"
                       className="h-4 w-4 accent-primary"
                       checked={senders.length > 0 && senderIds.size === senders.length}
-                      onChange={(e) =>
-                        setSenderIds(e.target.checked ? new Set(senders.map((s) => s.id)) : new Set())
-                      }
+                      onChange={(e) => {
+                        setSenderIds(e.target.checked ? new Set(senders.map((s) => s.id)) : new Set());
+                        clearField("senderIds");
+                      }}
                     />
                     Select all
                   </label>
@@ -286,7 +373,7 @@ export function CampaignWizard({
                       "flex cursor-pointer items-center gap-3 rounded-lg border p-4 transition-colors",
                       senderIds.has(s.id) ? "border-primary bg-primary/5" : "hover:bg-accent/50",
                     )}>
-                    <input type="checkbox" className="h-4 w-4 accent-primary" checked={senderIds.has(s.id)} onChange={() => toggleSender(s.id)} />
+                    <input type="checkbox" className="h-4 w-4 accent-primary" checked={senderIds.has(s.id)} onChange={() => { toggleSender(s.id); clearField("senderIds"); }} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">{s.senderName} <span className="font-normal text-muted-foreground">· {s.email}</span></p>
                       <p className="text-xs text-muted-foreground">{s.usedToday}/{s.dailyLimit} used today · {s.status}</p>
@@ -294,6 +381,9 @@ export function CampaignWizard({
                   </label>
                 ))}
                 <p className="pt-1 text-xs text-muted-foreground">{senderIds.size} selected</p>
+                {fieldMessage("senderIds") ? (
+                  <p id="err-senderIds" className="text-sm text-destructive">{fieldMessage("senderIds")}</p>
+                ) : null}
               </div>
             )}
           </div>
@@ -319,17 +409,29 @@ export function CampaignWizard({
               />
             ) : (
               <>
-                <div className="space-y-2">
+                <div
+                  id="template-group"
+                  tabIndex={-1}
+                  role="group"
+                  aria-label="Email templates"
+                  aria-invalid={!!fieldMessage("templateId") || undefined}
+                  aria-describedby={fieldMessage("templateId") ? "err-templateId" : undefined}
+                  className={cn("space-y-2 rounded-lg outline-none", fieldMessage("templateId") && "ring-2 ring-destructive/40")}
+                >
                   {templates.map((t) => (
-                    <button key={t.id} type="button" onClick={() => setTemplateId(t.id)}
+                    <button key={t.id} type="button" onClick={() => { setTemplateId(t.id); clearField("templateId"); }}
                       className={cn(
                         "flex w-full flex-col rounded-lg border p-4 text-left transition-colors",
                         templateId === t.id ? "border-primary bg-primary/5" : "hover:bg-accent/50",
+                        fieldMessage("templateId") && templateId !== t.id && "border-destructive",
                       )}>
                       <span className="font-medium">{t.name}</span>
                       <span className="truncate text-xs text-muted-foreground">{t.subject}</span>
                     </button>
                   ))}
+                  {fieldMessage("templateId") ? (
+                    <p id="err-templateId" className="text-sm text-destructive">{fieldMessage("templateId")}</p>
+                  ) : null}
                 </div>
                 {selectedTemplate && (
                   <div className="rounded-lg border bg-muted/30 p-4">
@@ -359,28 +461,75 @@ export function CampaignWizard({
             {startMode === "later" && (
               <div className="space-y-2">
                 <Label htmlFor="c-when">Start date & time</Label>
-                <Input id="c-when" type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} />
+                <Input
+                  id="c-when"
+                  type="datetime-local"
+                  value={scheduledAt}
+                  aria-invalid={!!fieldMessage("scheduledAt")}
+                  aria-describedby={fieldMessage("scheduledAt") ? "err-scheduledAt" : undefined}
+                  className={fieldMessage("scheduledAt") ? INVALID : undefined}
+                  onChange={(e) => { setScheduledAt(e.target.value); clearField("scheduledAt"); }}
+                />
+                {fieldMessage("scheduledAt") ? (
+                  <p id="err-scheduledAt" className="text-sm text-destructive">{fieldMessage("scheduledAt")}</p>
+                ) : null}
               </div>
             )}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Sending timezone</Label>
-                <Select value={sendingTimezone} onValueChange={setSendingTimezone}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Label htmlFor="c-tz">Sending timezone</Label>
+                <Select value={sendingTimezone} onValueChange={(v) => { setSendingTimezone(v); clearField("sendingTimezone"); }}>
+                  <SelectTrigger
+                    id="c-tz"
+                    aria-invalid={!!fieldMessage("sendingTimezone")}
+                    aria-describedby={fieldMessage("sendingTimezone") ? "err-tz" : undefined}
+                    className={fieldMessage("sendingTimezone") ? INVALID : undefined}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {(TIMEZONES as readonly string[]).map((tz) => (
                       <SelectItem key={tz} value={tz}>{tz}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {fieldMessage("sendingTimezone") ? (
+                  <p id="err-tz" className="text-sm text-destructive">{fieldMessage("sendingTimezone")}</p>
+                ) : null}
               </div>
               <div className="space-y-2">
                 <Label>Sending window</Label>
                 <div className="flex items-center gap-2">
-                  <Input type="time" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} />
-                  <span className="text-muted-foreground">–</span>
-                  <Input type="time" value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} />
+                  <Input
+                    id="c-window-start"
+                    type="time"
+                    step={60}
+                    value={windowStart}
+                    aria-label="Sending window start"
+                    aria-invalid={!!fieldMessage("sendingWindowStart")}
+                    aria-describedby={fieldMessage("sendingWindowStart") ? "err-window-start" : undefined}
+                    className={fieldMessage("sendingWindowStart") ? INVALID : undefined}
+                    onChange={(e) => { setWindowStart(normalizeHhMm(e.target.value)); clearField("sendingWindowStart"); }}
+                  />
+                  <span className="text-muted-foreground" aria-hidden>–</span>
+                  <Input
+                    id="c-window-end"
+                    type="time"
+                    step={60}
+                    value={windowEnd}
+                    aria-label="Sending window end"
+                    aria-invalid={!!fieldMessage("sendingWindowEnd")}
+                    aria-describedby={fieldMessage("sendingWindowEnd") ? "err-window-end" : undefined}
+                    className={fieldMessage("sendingWindowEnd") ? INVALID : undefined}
+                    onChange={(e) => { setWindowEnd(normalizeHhMm(e.target.value)); clearField("sendingWindowEnd"); }}
+                  />
                 </div>
+                {fieldMessage("sendingWindowStart") ? (
+                  <p id="err-window-start" className="text-sm text-destructive">{fieldMessage("sendingWindowStart")}</p>
+                ) : null}
+                {fieldMessage("sendingWindowEnd") ? (
+                  <p id="err-window-end" className="text-sm text-destructive">{fieldMessage("sendingWindowEnd")}</p>
+                ) : null}
               </div>
             </div>
             <label className="flex cursor-pointer items-center justify-between rounded-lg border p-3">
@@ -397,25 +546,71 @@ export function CampaignWizard({
               <p className="text-sm text-muted-foreground">Sensible defaults pre-filled. Only change if you need to.</p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Daily campaign limit" hint="Max emails this campaign sends per day">
-                <Input type="number" min={1} value={dailyLimit} onChange={(e) => setDailyLimit(Number(e.target.value))} />
+              <Field label="Daily campaign limit" hint="Max emails this campaign sends per day" htmlFor="c-daily" error={fieldMessage("dailyLimit")}>
+                <Input
+                  id="c-daily"
+                  type="number"
+                  min={1}
+                  value={dailyLimit}
+                  aria-invalid={!!fieldMessage("dailyLimit")}
+                  aria-describedby={fieldMessage("dailyLimit") ? "c-daily-error" : undefined}
+                  className={fieldMessage("dailyLimit") ? INVALID : undefined}
+                  onChange={(e) => { setDailyLimit(Number(e.target.value)); clearField("dailyLimit"); }}
+                />
               </Field>
-              <Field label="Max per sender / day" hint="Cap per inbox across all campaigns">
-                <Input type="number" min={1} value={perSender} onChange={(e) => setPerSender(Number(e.target.value))} />
+              <Field label="Max per sender / day" hint="Cap per inbox across all campaigns" htmlFor="c-per-sender" error={fieldMessage("maxEmailsPerSenderPerDay")}>
+                <Input
+                  id="c-per-sender"
+                  type="number"
+                  min={1}
+                  value={perSender}
+                  aria-invalid={!!fieldMessage("maxEmailsPerSenderPerDay")}
+                  aria-describedby={fieldMessage("maxEmailsPerSenderPerDay") ? "c-per-sender-error" : undefined}
+                  className={fieldMessage("maxEmailsPerSenderPerDay") ? INVALID : undefined}
+                  onChange={(e) => { setPerSender(Number(e.target.value)); clearField("maxEmailsPerSenderPerDay"); }}
+                />
               </Field>
-              <Field label="Min delay (sec)" hint="Randomized lower bound">
-                <Input type="number" min={5} value={minDelay} onChange={(e) => setMinDelay(Number(e.target.value))} />
+              <Field label="Min delay (sec)" hint="Randomized lower bound" htmlFor="c-min-delay" error={fieldMessage("minDelaySec")}>
+                <Input
+                  id="c-min-delay"
+                  type="number"
+                  min={5}
+                  value={minDelay}
+                  aria-invalid={!!fieldMessage("minDelaySec")}
+                  aria-describedby={fieldMessage("minDelaySec") ? "c-min-delay-error" : undefined}
+                  className={fieldMessage("minDelaySec") ? INVALID : undefined}
+                  onChange={(e) => { setMinDelay(Number(e.target.value)); clearField("minDelaySec"); }}
+                />
               </Field>
-              <Field label="Max delay (sec)" hint="Randomized upper bound">
-                <Input type="number" min={5} value={maxDelay} onChange={(e) => setMaxDelay(Number(e.target.value))} />
+              <Field label="Max delay (sec)" hint="Randomized upper bound" htmlFor="c-max-delay" error={fieldMessage("maxDelaySec")}>
+                <Input
+                  id="c-max-delay"
+                  type="number"
+                  min={5}
+                  value={maxDelay}
+                  aria-invalid={!!fieldMessage("maxDelaySec")}
+                  aria-describedby={fieldMessage("maxDelaySec") ? "c-max-delay-error" : undefined}
+                  className={fieldMessage("maxDelaySec") ? INVALID : undefined}
+                  onChange={(e) => { setMaxDelay(Number(e.target.value)); clearField("maxDelaySec"); }}
+                />
               </Field>
-              <Field label="Retry count" hint="Attempts for failed sends">
-                <Input type="number" min={0} max={10} value={retryCount} onChange={(e) => setRetryCount(Number(e.target.value))} />
+              <Field label="Retry count" hint="Attempts for failed sends" htmlFor="c-retry" error={fieldMessage("retryCount")}>
+                <Input
+                  id="c-retry"
+                  type="number"
+                  min={0}
+                  max={10}
+                  value={retryCount}
+                  aria-invalid={!!fieldMessage("retryCount")}
+                  aria-describedby={fieldMessage("retryCount") ? "c-retry-error" : undefined}
+                  className={fieldMessage("retryCount") ? INVALID : undefined}
+                  onChange={(e) => { setRetryCount(Number(e.target.value)); clearField("retryCount"); }}
+                />
               </Field>
             </div>
-            {maxDelay < minDelay && (
+            {maxDelay < minDelay && !fieldMessage("maxDelaySec") ? (
               <p className="text-sm text-destructive">Max delay must be ≥ min delay.</p>
-            )}
+            ) : null}
             <label className="flex cursor-pointer items-center justify-between rounded-lg border p-3">
               <span className="text-sm">Stop sending after a reply</span>
               <Switch checked={stopOnReply} onCheckedChange={setStopOnReply} />
@@ -434,11 +629,26 @@ export function CampaignWizard({
         )}
       </div>
 
-      {(stepHint || error) && (
+      {postalBanner ? (
+        <div
+          id="postal-required-alert"
+          tabIndex={-1}
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm text-destructive outline-none"
+        >
+          <p>{postalBanner}</p>
+          <Link
+            href="/settings"
+            className="mt-1 inline-flex rounded-sm font-medium underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Open Settings
+          </Link>
+        </div>
+      ) : (stepHint || error) ? (
         <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
           {error ?? stepHint}
         </p>
-      )}
+      ) : null}
 
       <div className="flex items-center justify-between gap-3">
         <Button variant="ghost" onClick={back} disabled={step === 1 || pending}>
@@ -459,12 +669,29 @@ export function CampaignWizard({
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  error,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  error?: string;
+  htmlFor?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="space-y-2">
-      <Label>{label}</Label>
+      <Label htmlFor={htmlFor}>{label}</Label>
       {children}
-      {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
+      {hint && !error ? <p className="text-[11px] text-muted-foreground">{hint}</p> : null}
+      {error ? (
+        <p id={htmlFor ? `${htmlFor}-error` : undefined} className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

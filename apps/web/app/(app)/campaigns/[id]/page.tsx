@@ -1,8 +1,10 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/session";
-import { getCampaign } from "@/lib/queries";
-import { Badge, Card, CardContent, Progress, statusVariant } from "@smartreach/ui";
+import { getCampaign, hasWorkspacePostalAddress } from "@/lib/queries";
+import { Alert, AlertDescription, AlertTitle, Badge, Card, CardContent, Progress, statusVariant } from "@smartreach/ui";
 import { formatDate } from "@smartreach/shared";
+import { CAMPAIGN_POSTAL_REQUIRED_ERROR } from "@/lib/campaign-start-guard";
 import { CampaignActions } from "../campaign-actions";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +13,10 @@ export const dynamic = "force-dynamic";
 export default async function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   const { id } = await params;
-  const c = await getCampaign(user.id, id);
+  const [c, hasPostal] = await Promise.all([
+    getCampaign(user.id, id),
+    hasWorkspacePostalAddress(user.id),
+  ]);
   if (!c) notFound();
 
   const total = Number(c.stats?.total ?? 0);
@@ -48,6 +53,18 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
         </div>
         <CampaignActions id={c.id} status={c.status} />
       </div>
+
+      {!hasPostal && c.status !== "running" ? (
+        <Alert variant="warning">
+          <AlertTitle>Postal address required to start</AlertTitle>
+          <AlertDescription>
+            {CAMPAIGN_POSTAL_REQUIRED_ERROR}{" "}
+            <Link href="/settings" className="font-medium underline underline-offset-4">
+              Open Settings
+            </Link>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {/* Progress */}
       <Card>
