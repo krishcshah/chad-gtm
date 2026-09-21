@@ -5,7 +5,7 @@ import { ChevronDown, Download, Search, Tag, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { LEAD_STATUSES } from "@smartreach/shared";
 import {
-  Badge,
+  Badge, statusVariant,
   Button,
   Checkbox,
   Input,
@@ -255,12 +255,7 @@ export function LeadTable({
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    sent: "default", replied: "default", completed: "default",
-    pending: "secondary", queued: "secondary",
-    bounced: "destructive", failed: "destructive",
-  };
-  return <Badge variant={(map[status] as never) ?? "secondary"} className={cn(status === "replied" && "bg-emerald-600 hover:bg-emerald-600")}>{status}</Badge>;
+  return <Badge variant={statusVariant(status)}>{status}</Badge>;
 }
 
 function TagDropdown({ tags, onTag, onNew }: { tags: TagOpt[]; onTag: (id: string, m: "add" | "remove") => void; onNew: () => void }) {

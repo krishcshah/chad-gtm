@@ -1,0 +1,45 @@
+{
+  "broken": {
+    "loads": [
+      {
+        "path": "/workspace/work/smart-reach/wt-forge/packages/email-engine/.env",
+        "exists": true,
+        "parsed": true
+      },
+      {
+        "path": "/workspace/work/smart-reach/wt-forge/packages/apps/web/.env.local",
+        "exists": false,
+        "parsed": true
+      },
+      {
+        "path": "/workspace/work/smart-reach/wt-forge/packages/.env",
+        "exists": false,
+        "parsed": true
+      }
+    ],
+    "hasAuth": false,
+    "hasEnc": true
+  },
+  "fixed": {
+    "loads": [
+      {
+        "path": "/workspace/work/smart-reach/wt-forge/packages/email-engine/.env",
+        "exists": true,
+        "parsed": true
+      },
+      {
+        "path": "/workspace/work/smart-reach/wt-forge/apps/web/.env.local",
+        "exists": true,
+        "parsed": true
+      },
+      {
+        "path": "/workspace/work/smart-reach/wt-forge/.env",
+        "exists": false,
+        "parsed": true
+      }
+    ],
+    "hasAuth": true,
+    "hasEnc": true,
+    "authEqEnc": false
+  }
+}

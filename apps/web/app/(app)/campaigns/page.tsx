@@ -2,40 +2,29 @@ import Link from "next/link";
 import { Plus, Rocket } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { listCampaigns } from "@/lib/queries";
-import { Badge, Button, EmptyState, Progress, cn } from "@smartreach/ui";
+import { Badge, Button, EmptyState, PageHeader, Progress, statusVariant } from "@smartreach/ui";
 import { formatDate } from "@smartreach/shared";
 import { CampaignActions } from "./campaign-actions";
 
 export const dynamic = "force-dynamic";
-
-const statusVariant = (s: string) =>
-  s === "running"
-    ? "default"
-    : s === "scheduled"
-      ? "secondary"
-      : s === "paused"
-        ? "outline"
-        : "secondary";
 
 export default async function CampaignsPage() {
   const user = await requireUser();
   const campaigns = await listCampaigns(user.id);
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Campaigns</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Launch outreach in under a minute. Senders rotate automatically.
-          </p>
-        </div>
-        <Button size="sm" asChild>
-          <Link href="/campaigns/new">
-            <Plus className="h-4 w-4" /> New Campaign
-          </Link>
-        </Button>
-      </div>
+    <div className="page-stack">
+      <PageHeader
+        title="Campaigns"
+        description="Launch outreach in under a minute. Senders rotate automatically."
+        actions={
+          <Button size="sm" asChild>
+            <Link href="/campaigns/new">
+              <Plus className="h-4 w-4" /> New campaign
+            </Link>
+          </Button>
+        }
+      />
 
       {campaigns.length === 0 ? (
         <EmptyState
@@ -51,8 +40,8 @@ export default async function CampaignsPage() {
           }
         />
       ) : (
-        <div className="rounded-xl border overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-xl border">
+          <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
                 <th className="px-4 py-3 font-medium">Campaign</th>
@@ -60,6 +49,7 @@ export default async function CampaignsPage() {
                 <th className="px-4 py-3 font-medium">Progress</th>
                 <th className="px-4 py-3 font-medium text-right">Replies</th>
                 <th className="px-4 py-3 font-medium text-right">Failed</th>
+                <th className="px-4 py-3 font-medium text-right">Bounced</th>
                 <th className="px-4 py-3 font-medium">Created</th>
                 <th className="px-4 py-3" />
               </tr>
@@ -78,18 +68,19 @@ export default async function CampaignsPage() {
                       </p>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge variant={statusVariant(c.status)} className={cn(c.status === "running" && "bg-emerald-600 hover:bg-emerald-600")}>
+                      <Badge variant={statusVariant(c.status)} dot={c.status === "running"}>
                         {c.status}
                       </Badge>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex w-32 items-center gap-2">
                         <Progress value={pct} className="h-1.5" />
-                        <span className="text-xs text-muted-foreground">{pct}%</span>
+                        <span className="text-xs text-muted-foreground tabular-nums">{pct}%</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-right">{c.replied}</td>
-                    <td className="px-4 py-3 text-right">{c.failed}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{c.replied}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{c.failed}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{c.bounced}</td>
                     <td className="px-4 py-3 text-muted-foreground">{formatDate(c.createdAt)}</td>
                     <td className="px-4 py-3 text-right">
                       <CampaignActions id={c.id} status={c.status} />

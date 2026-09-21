@@ -166,7 +166,7 @@ export function SenderImport() {
           {result && (
             <div className="space-y-2">
               <p className="text-sm">
-                <span className="font-medium text-emerald-500">{result.imported} imported</span>
+                <span className="font-medium text-success-foreground">{result.imported} imported</span>
                 {result.failed.length > 0 && (
                   <span className="ml-3 font-medium text-destructive">{result.failed.length} failed</span>
                 )}

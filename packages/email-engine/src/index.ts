@@ -9,3 +9,4 @@ export * from "./sync-replies";
 export * from "./mailer";
 export * from "./worker";
 export type { EngineDb, SenderRow, CampaignRow, JobRow } from "./db-port";
+export * from "./queue-mode";

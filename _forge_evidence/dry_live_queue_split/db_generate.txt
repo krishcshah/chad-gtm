@@ -1,0 +1,23 @@
+No config path provided, using default 'drizzle.config.ts'
+Reading config file '/workspace/work/smart-reach/wt-forge/apps/web/drizzle.config.ts'
+18 tables
+activity_logs 7 columns 1 indexes 1 fks
+campaign_leads 10 columns 3 indexes 2 fks
+campaign_senders 3 columns 1 indexes 2 fks
+campaigns 25 columns 3 indexes 3 fks
+email_jobs 20 columns 5 indexes 4 fks
+email_templates 10 columns 1 indexes 1 fks
+lead_lists 6 columns 2 indexes 1 fks
+lead_tags 5 columns 1 indexes 1 fks
+leads 19 columns 6 indexes 2 fks
+replies 14 columns 3 indexes 4 fks
+sender_accounts 28 columns 3 indexes 1 fks
+suppressions 7 columns 3 indexes 1 fks
+usage_counters 6 columns 2 indexes 1 fks
+workspace_settings 6 columns 0 indexes 1 fks
+accounts 13 columns 1 indexes 1 fks
+sessions 8 columns 2 indexes 1 fks
+users 7 columns 1 indexes 0 fks
+verifications 6 columns 1 indexes 0 fks
+
+[✓] Your SQL migration file ➜ drizzle/0002_email_jobs_dry_run.sql 🚀

@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { pickSenderIndex, todayKey } from "../rotation";
 import { isInSendingWindow, leadVars } from "../scheduler";
-import type { CampaignRow, SenderRow } from "../db-port";
+import { claimDueJobs } from "../processor";
+import { isEngineDryRun, workerOwnsJob } from "../queue-mode";
+import type { CampaignRow, JobRow, SenderRow } from "../db-port";
 
 function sender(over: Partial<SenderRow>): SenderRow {
   return {
@@ -132,5 +134,94 @@ describe("merge variables from a lead row", () => {
 describe("todayKey", () => {
   it("is a YYYY-MM-DD UTC bucket", () => {
     expect(todayKey(new Date("2024-03-05T23:59:00Z"))).toBe("2024-03-05");
+  });
+});
+
+function job(over: Partial<JobRow> & Pick<JobRow, "id" | "dryRun">): JobRow {
+  return {
+    campaignId: "c1",
+    campaignLeadId: `cl-${over.id}`,
+    senderId: "s1",
+    leadId: `l-${over.id}`,
+    toEmail: `${over.id}@x.com`,
+    subject: "hi",
+    bodyText: "body",
+    bodyHtml: "",
+    status: "pending",
+    scheduledFor: "2020-01-01T00:00:00.000Z",
+    attempts: 0,
+    maxAttempts: 3,
+    lastError: null,
+    messageId: null,
+    sentAt: null,
+    processingAt: null,
+    ...over,
+  };
+}
+
+/** Fake DB: select returns both modes; CAS update always succeeds. Isolation relies on claimDueJobs. */
+function fakeClaimDb(rows: JobRow[]) {
+  return {
+    select: () => ({
+      from: () => ({
+        where: () => ({
+          orderBy: () => ({
+            limit: async () => rows,
+          }),
+        }),
+      }),
+    }),
+    update: () => ({
+      set: () => ({
+        where: () => ({
+          returning: async () => [{ id: "ok" }],
+        }),
+      }),
+    }),
+  };
+}
+
+describe("dry/live queue isolation", () => {
+  const prev = process.env.ENGINE_DRY_RUN;
+  afterEach(() => {
+    if (prev === undefined) delete process.env.ENGINE_DRY_RUN;
+    else process.env.ENGINE_DRY_RUN = prev;
+  });
+
+  it("isEngineDryRun treats 1/true as dry, everything else as live", () => {
+    delete process.env.ENGINE_DRY_RUN;
+    expect(isEngineDryRun()).toBe(false);
+    process.env.ENGINE_DRY_RUN = "0";
+    expect(isEngineDryRun()).toBe(false);
+    process.env.ENGINE_DRY_RUN = "false";
+    expect(isEngineDryRun()).toBe(false);
+    process.env.ENGINE_DRY_RUN = "1";
+    expect(isEngineDryRun()).toBe(true);
+    process.env.ENGINE_DRY_RUN = "true";
+    expect(isEngineDryRun()).toBe(true);
+    process.env.ENGINE_DRY_RUN = "TRUE";
+    expect(isEngineDryRun()).toBe(true);
+  });
+
+  it("workerOwnsJob: dry worker ignores live job and vice versa", () => {
+    expect(workerOwnsJob(false, true)).toBe(false);
+    expect(workerOwnsJob(true, true)).toBe(true);
+    expect(workerOwnsJob(true, false)).toBe(false);
+    expect(workerOwnsJob(false, false)).toBe(true);
+  });
+
+  it("claimDueJobs: dry worker ignores live job and vice versa", async () => {
+    const all = [job({ id: "live", dryRun: false }), job({ id: "dry", dryRun: true })];
+    const db = fakeClaimDb(all);
+    const now = new Date("2024-01-01T00:00:00Z");
+
+    process.env.ENGINE_DRY_RUN = "1";
+    expect((await claimDueJobs(db as any, now, 10)).map((j) => j.id)).toEqual(["dry"]);
+
+    process.env.ENGINE_DRY_RUN = "0";
+    expect((await claimDueJobs(db as any, now, 10)).map((j) => j.id)).toEqual(["live"]);
+
+    delete process.env.ENGINE_DRY_RUN;
+    expect((await claimDueJobs(db as any, now, 10)).map((j) => j.id)).toEqual(["live"]);
   });
 });

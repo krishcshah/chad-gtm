@@ -1,0 +1,12 @@
+{
+  "at": "2026-09-21T21:23:55.798Z",
+  "campaignId": "22aed636-9544-42e6-a329-64fa6ed5aab1",
+  "userId": "6ff0ed60-0e21-437e-83fe-2102c3e39c55",
+  "senders": [
+    "co…@krishshah.work",
+    "he…@krishshah.work"
+  ],
+  "lead": "he…@krishshah.work",
+  "window": "00:00==00:00 all-day Europe/Berlin",
+  "minDelaySec": 5
+}

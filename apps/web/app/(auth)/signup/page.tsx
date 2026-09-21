@@ -5,7 +5,18 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { signUpSchema, type SignUpInput } from "@smartreach/validation";
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from "@smartreach/ui";
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+} from "@smartreach/ui";
 import { authClient } from "@/lib/auth-client";
 
 export default function SignupPage() {
@@ -24,16 +35,16 @@ export default function SignupPage() {
   });
 
   return (
-    <Card className="w-full max-w-sm">
+    <Card className="w-full max-w-sm shadow-md">
       <CardHeader>
         <CardTitle className="text-xl">Create your account</CardTitle>
-        <CardDescription>Start sending in under five minutes</CardDescription>
+        <CardDescription>Start sending cold email in under five minutes</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={onSubmit} className="space-y-4">
+        <form onSubmit={onSubmit} className="space-y-4" noValidate>
           <div className="space-y-1.5">
             <Label htmlFor="name">Name</Label>
-            <Input id="name" placeholder="Ada Lovelace" autoComplete="name" {...register("name")} />
+            <Input id="name" placeholder="Your name" autoComplete="name" {...register("name")} />
             {formState.errors.name && <p className="text-xs text-destructive">{formState.errors.name.message}</p>}
           </div>
           <div className="space-y-1.5">
@@ -46,7 +57,11 @@ export default function SignupPage() {
             <Input id="password" type="password" autoComplete="new-password" {...register("password")} />
             {formState.errors.password && <p className="text-xs text-destructive">{formState.errors.password.message}</p>}
           </div>
-          {error && <p className="rounded-lg bg-destructive/10 px-3 py-2 text-[13px] text-destructive">{error}</p>}
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
           <Button className="w-full" disabled={formState.isSubmitting}>
             {formState.isSubmitting ? "Creating…" : "Create account"}
           </Button>

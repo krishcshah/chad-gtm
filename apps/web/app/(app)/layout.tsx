@@ -11,7 +11,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="app-shell flex min-h-dvh">
       <NavigationProgress />
       <AppSidebar user={session.user} />
-      <main className="flex-1 min-w-0 lg:pl-60">
+      <main className="flex-1 min-w-0 pt-14 lg:pt-0 lg:pl-60">
         <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 [&:has(>.unibox-root)]:max-w-none [&:has(>.unibox-root)]:p-0">
           {children}
         </div>

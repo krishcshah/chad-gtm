@@ -1,0 +1,11 @@
+
+> smartreach@0.1.0 db:migrate
+> npm run db:migrate --workspace @smartreach/web
+
+
+> @smartreach/web@0.1.0 db:migrate
+> tsx scripts/migrate.ts
+
+[migrate] applying migrations from /workspace/work/smart-reach/wt-forge/apps/web/drizzle
+[migrate] target postgres://postgres:***@127.0.0.1:5432/smartreach
+[migrate] ok

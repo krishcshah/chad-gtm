@@ -1,0 +1,19 @@
+{
+  "userId": "4ad4c532-697d-42a3-8d66-6e4c24f37a6f",
+  "email": "f16-proof-1790025347395@example.com",
+  "broken_signed_with": "ENCRYPTION_KEY",
+  "fixed_signed_with": "BETTER_AUTH_SECRET",
+  "broken": {
+    "status": 400,
+    "body": "{\"ok\":false,\"error\":\"Invalid signature\"}"
+  },
+  "fixed": {
+    "status": 200,
+    "body": "{\"ok\":true}"
+  },
+  "suppression_row": {
+    "value": "f16-proof-1790025347395@example.com",
+    "source": "unsubscribe",
+    "kind": "email"
+  }
+}

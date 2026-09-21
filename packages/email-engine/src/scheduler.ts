@@ -12,7 +12,15 @@
  * stuck-job recovery) picks them up. Emails are NEVER sent from HTTP
  * requests; they only flow through email_jobs → processor.
  */
-import { renderTemplate, schema } from "@smartreach/database";
+import {
+  buildUnsubscribeUrl,
+  createUnsubscribeToken,
+  ensurePostalFooter,
+  ensureUnsubscribeFooter,
+  matchesSuppression,
+  renderTemplate,
+  schema,
+} from "@smartreach/database";
 import {
   addSeconds,
   isBusinessDay,
@@ -29,6 +37,7 @@ import {
   pickSenderIndex,
   takeHourlySnapshot,
 } from "./rotation";
+import { isEngineDryRun } from "./queue-mode";
 
 const BATCH_SIZE = Number(process.env.ENGINE_BATCH_SIZE ?? 25);
 const RESCHEDULE_PAD_MIN = 5;
@@ -108,6 +117,34 @@ export async function scheduleCampaign(
   const activeSenders = senders.filter((s) => s.status !== "paused");
   if (activeSenders.length === 0) return { enqueued: 0, note: "all-paused" };
 
+  // F16/F17: workspace postal + unsub base (load before claim so live missing
+  // postal never leaves leads stuck in "scheduled").
+  const settingsRows: any[] = await db
+    .select()
+    .from(schema.workspaceSettings)
+    .where(eq(schema.workspaceSettings.userId, campaign.userId))
+    .limit(1);
+  const settings = settingsRows[0] as
+    | { postalAddress?: string; companyName?: string; unsubscribeBaseUrl?: string }
+    | undefined;
+  const postalAddress = (settings?.postalAddress ?? "").trim();
+  const companyName = (settings?.companyName ?? "").trim();
+  const unsubBase =
+    (settings?.unsubscribeBaseUrl ?? "").trim() ||
+    process.env.BETTER_AUTH_URL ||
+    process.env.APP_URL ||
+    "http://localhost:3000";
+  const dryRun = isEngineDryRun();
+  // F17 / CAN-SPAM: live sends hard-require a postal address; dry-run may warn.
+  if (!postalAddress) {
+    if (!dryRun) {
+      return { enqueued: 0, note: "postal-address-required" };
+    }
+    console.warn(
+      `[scheduler] campaign ${campaign.id}: postal address empty — dry-run continuing without F17 footer`,
+    );
+  }
+
   // Skip leads that already replied anywhere in this campaign (stopOnReply)
   // and any campaign_leads already scheduled/sent — atomic claim does the rest.
   const claimable: { id: string; leadId: string }[] = await db
@@ -176,7 +213,22 @@ export async function scheduleCampaign(
     .where(eq(schema.emailTemplates.id, campaign.templateId))
     .limit(1);
   const tpl = tplRows[0];
-  if (!tpl) return { enqueued: 0, note: "template-missing" };
+  if (!tpl) {
+    // Unclaim so the next tick can retry once a template exists — do not leave
+    // campaign_leads stuck in "scheduled" with no email_jobs.
+    await db
+      .update(schema.campaignLeads)
+      .set({ status: "queued", updatedAt: nowIsoS })
+      .where(inArray(schema.campaignLeads.id, claimed.map((c) => c.id)));
+    return { enqueued: 0, note: "template-missing" };
+  }
+
+  // F15: load suppressions for this workspace (emails + domains)
+  const suppressionRows: { value: string }[] = await db
+    .select({ value: schema.suppressions.value })
+    .from(schema.suppressions)
+    .where(eq(schema.suppressions.userId, campaign.userId));
+  const suppressedValues = suppressionRows.map((r) => r.value);
 
   // Sender availability
   const daily = await loadDailyUsage(db, activeSenders.map((s) => s.id));
@@ -187,6 +239,10 @@ export async function scheduleCampaign(
   let cursor = campaign.lastSenderIdx;
   let scheduleAt = new Date(now.getTime() + randomBetween(0, 5) * 1000);
   let enqueued = 0;
+  // Track rows we finished (enqueued or cancelled) so senders-exhausted
+  // unclaim does not reset already-handled leads (slice(enqueued) was wrong
+  // when suppressions/missing leads appeared mid-batch).
+  const handledIds = new Set<string>();
 
   for (const cl of claimedRows) {
     const pick = pickSenderIndex(
@@ -197,8 +253,8 @@ export async function scheduleCampaign(
       campaign.maxEmailsPerSenderPerDay,
     );
     if (!pick) {
-      // Every sender exhausted → unclaim the rest, park the campaign briefly.
-      const remainingIds = claimedRows.slice(enqueued).map((r) => r.id);
+      // Every sender exhausted → unclaim only untouched rows, park briefly.
+      const remainingIds = claimedRows.filter((r) => !handledIds.has(r.id)).map((r) => r.id);
       if (remainingIds.length > 0) {
         await db
           .update(schema.campaignLeads)
@@ -214,11 +270,44 @@ export async function scheduleCampaign(
     }
 
     const lead = leadById.get(cl.leadId);
-    if (!lead) continue;
+    if (!lead) {
+      await db
+        .update(schema.campaignLeads)
+        .set({ status: "cancelled", lastError: "lead-missing", updatedAt: nowIsoS })
+        .where(eq(schema.campaignLeads.id, cl.id));
+      handledIds.add(cl.id);
+      continue;
+    }
+
+    // F15: skip suppressed emails/domains — cancel campaign_lead, do not enqueue
+    if (matchesSuppression(lead.email, suppressedValues)) {
+      await db
+        .update(schema.campaignLeads)
+        .set({ status: "cancelled", lastError: "suppressed", updatedAt: nowIsoS })
+        .where(eq(schema.campaignLeads.id, cl.id));
+      handledIds.add(cl.id);
+      continue;
+    }
+
     const vars = leadVars(lead);
     const subject = renderTemplate(tpl.subject, vars);
-    const bodyText = tpl.format === "text" ? appendSignature(renderTemplate(tpl.bodyText, vars), pick.sender) : renderTemplate(tpl.bodyText, vars);
-    const bodyHtml = tpl.format === "html" ? appendSignature(renderTemplate(tpl.bodyHtml, vars), pick.sender) : renderTemplate(tpl.bodyHtml, vars);
+    let bodyText =
+      tpl.format === "text"
+        ? appendSignature(renderTemplate(tpl.bodyText, vars), pick.sender)
+        : renderTemplate(tpl.bodyText, vars);
+    let bodyHtml =
+      tpl.format === "html"
+        ? appendSignature(renderTemplate(tpl.bodyHtml, vars), pick.sender)
+        : renderTemplate(tpl.bodyHtml, vars);
+
+    const unsubToken = createUnsubscribeToken(campaign.userId, lead.email);
+    const unsubUrl = buildUnsubscribeUrl(unsubBase, unsubToken);
+    bodyText = ensureUnsubscribeFooter(bodyText, { unsubUrl, asHtml: false });
+    bodyHtml = ensureUnsubscribeFooter(bodyHtml || bodyText, { unsubUrl, asHtml: true });
+    if (postalAddress) {
+      bodyText = ensurePostalFooter(bodyText, { postalAddress, companyName, asHtml: false });
+      bodyHtml = ensurePostalFooter(bodyHtml, { postalAddress, companyName, asHtml: true });
+    }
 
     await db.insert(schema.emailJobs).values({
       id: crypto.randomUUID(),
@@ -234,6 +323,7 @@ export async function scheduleCampaign(
       scheduledFor: scheduleAt.toISOString(),
       attempts: 0,
       maxAttempts: campaign.retryFailed ? campaign.retryCount : 1,
+      dryRun,
     });
     await db
       .update(schema.campaignLeads)
@@ -251,11 +341,10 @@ export async function scheduleCampaign(
       scheduleAt,
       randomBetween(campaign.minDelaySec, campaign.maxDelaySec),
     );
-    if (--budget <= 0) break;
+    handledIds.add(cl.id);
     enqueued++;
+    if (--budget <= 0) break;
   }
-  enqueued = Math.max(enqueued, 0) + (budget >= 0 ? 1 : 0); // count the one inserted before budget check
-  enqueued = Math.min(enqueued, claimedRows.length);
 
   await db
     .update(schema.campaigns)

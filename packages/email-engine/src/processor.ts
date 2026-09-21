@@ -6,12 +6,22 @@
  * the assigned sender, records usage counters, handles automatic retries with
  * backoff, and recovers jobs stuck in "processing" after a crash.
  */
-import { decryptSecret, schema } from "@smartreach/database";
+import {
+  buildUnsubscribeApiUrl,
+  buildUnsubscribeUrl,
+  createUnsubscribeToken,
+  ensurePostalFooter,
+  ensureUnsubscribeFooter,
+  listUnsubscribeHeaders,
+  matchesSuppression,
+  schema,
+} from "@smartreach/database";
 import { addSeconds, nowIso, randomBetween } from "@smartreach/shared";
 import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import type { EngineDb, JobRow, SenderRow } from "./db-port";
 import { makeTransport } from "./mailer";
 import { noteHourlySend, recordSend } from "./rotation";
+import { isEngineDryRun, workerOwnsJob } from "./queue-mode";
 
 const BATCH = Number(process.env.ENGINE_BATCH_SIZE ?? 25);
 const STUCK_AFTER_MS = 3 * 60_000;
@@ -26,14 +36,23 @@ export interface ProcessResult {
 
 /** Claim due jobs: conditional CAS update makes it safe across overlapping workers. */
 export async function claimDueJobs(db: EngineDb, now = new Date(), limit = BATCH): Promise<JobRow[]> {
+  const dryRun = isEngineDryRun();
   const due: JobRow[] = await db
     .select()
     .from(schema.emailJobs)
-    .where(and(eq(schema.emailJobs.status, "pending"), lte(schema.emailJobs.scheduledFor, now.toISOString())))
+    .where(
+      and(
+        eq(schema.emailJobs.status, "pending"),
+        lte(schema.emailJobs.scheduledFor, now.toISOString()),
+        eq(schema.emailJobs.dryRun, dryRun),
+      ),
+    )
     .orderBy(asc(schema.emailJobs.scheduledFor))
     .limit(limit);
+  // Belt-and-suspenders: never claim the other mode even if SQL filter is absent (tests / old DBs).
+  const owned = due.filter((j) => workerOwnsJob(Boolean(j.dryRun), dryRun));
   const claimed: JobRow[] = [];
-  for (const job of due) {
+  for (const job of owned) {
     const res: { id: string }[] = await db
       .update(schema.emailJobs)
       .set({ status: "processing", processingAt: now.toISOString(), updatedAt: now.toISOString() })
@@ -46,11 +65,18 @@ export async function claimDueJobs(db: EngineDb, now = new Date(), limit = BATCH
 
 /** Re-queue jobs that have been "processing" for too long (worker died mid-send). */
 export async function recoverStuckJobs(db: EngineDb, now = new Date()): Promise<number> {
+  const dryRun = isEngineDryRun();
   const cutoff = new Date(now.getTime() - STUCK_AFTER_MS).toISOString();
   const stuck: { id: string }[] = await db
     .select({ id: schema.emailJobs.id })
     .from(schema.emailJobs)
-    .where(and(eq(schema.emailJobs.status, "processing"), lte(schema.emailJobs.processingAt, cutoff)))
+    .where(
+      and(
+        eq(schema.emailJobs.status, "processing"),
+        lte(schema.emailJobs.processingAt, cutoff),
+        eq(schema.emailJobs.dryRun, dryRun),
+      ),
+    )
     .limit(200);
   for (const s of stuck) {
     await db
@@ -89,6 +115,17 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
     await cancelJobChain(db, job, "lead-no-longer-sendable");
     return "skipped";
   }
+
+  // F15: re-check suppression at send time
+  const suppressionRows: { value: string }[] = await db
+    .select({ value: schema.suppressions.value })
+    .from(schema.suppressions)
+    .where(eq(schema.suppressions.userId, campaign.userId));
+  if (matchesSuppression(job.toEmail, suppressionRows.map((r) => r.value))) {
+    await cancelJobChain(db, job, "suppressed");
+    return "skipped";
+  }
+
   // Sender died since scheduling → requeue for the scheduler to reassign
   if (!sender || sender.status !== "active") {
     await db
@@ -99,6 +136,109 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
   }
 
   try {
+    // F16/F17: ensure List-Unsubscribe + postal footer even if job was enqueued earlier
+    const settingsRows: any[] = await db
+      .select()
+      .from(schema.workspaceSettings)
+      .where(eq(schema.workspaceSettings.userId, campaign.userId))
+      .limit(1);
+    const settings = settingsRows[0] as
+      | { postalAddress?: string; companyName?: string; unsubscribeBaseUrl?: string }
+      | undefined;
+    const unsubBase =
+      (settings?.unsubscribeBaseUrl ?? "").trim() ||
+      process.env.BETTER_AUTH_URL ||
+      process.env.APP_URL ||
+      "http://localhost:3000";
+    const token = createUnsubscribeToken(campaign.userId, job.toEmail);
+    const unsubUrl = buildUnsubscribeUrl(unsubBase, token);
+    const headers = listUnsubscribeHeaders(buildUnsubscribeApiUrl(unsubBase, token));
+    let textBody = ensureUnsubscribeFooter(job.bodyText || "", { unsubUrl, asHtml: false });
+    let htmlBody = ensureUnsubscribeFooter(job.bodyHtml || job.bodyText || "", {
+      unsubUrl,
+      asHtml: true,
+    });
+    const postal = (settings?.postalAddress ?? "").trim();
+    const dryRun = isEngineDryRun();
+    // F17: live hard-fail if postal missing (defense in depth vs stale queued jobs).
+    if (!postal && !dryRun) {
+      const msg = "postal-address-required (set Settings → Compliance)";
+      await db
+        .update(schema.emailJobs)
+        .set({
+          status: "failed",
+          lastError: msg,
+          processingAt: null,
+          updatedAt: nowS,
+        })
+        .where(eq(schema.emailJobs.id, job.id));
+      await db
+        .update(schema.campaignLeads)
+        .set({ status: "failed", lastError: msg, updatedAt: nowS })
+        .where(eq(schema.campaignLeads.id, job.campaignLeadId));
+      await db.insert(schema.activityLogs).values({
+        id: crypto.randomUUID(),
+        userId: campaign.userId,
+        type: "email_failed",
+        message: `Blocked send to ${job.toEmail}: ${msg}`,
+        campaignId: campaign.id,
+      });
+      return "failed";
+    }
+    if (!postal && dryRun) {
+      console.warn(
+        `[processor] job ${job.id}: postal address empty — dry-run continuing without F17 footer`,
+      );
+    }
+    if (postal) {
+      textBody = ensurePostalFooter(textBody, {
+        postalAddress: postal,
+        companyName: settings?.companyName ?? "",
+        asHtml: false,
+      });
+      htmlBody = ensurePostalFooter(htmlBody, {
+        postalAddress: postal,
+        companyName: settings?.companyName ?? "",
+        asHtml: true,
+      });
+    }
+
+    // Dry-run: prove enqueue→process path without live SMTP
+    if (dryRun) {
+      const nowDry = new Date().toISOString();
+      await db
+        .update(schema.emailJobs)
+        .set({
+          status: "sent",
+          messageId: `dry-run-${job.id}`,
+          sentAt: nowDry,
+          processingAt: null,
+          lastError: null,
+          bodyText: textBody,
+          bodyHtml: htmlBody,
+          updatedAt: nowDry,
+        })
+        .where(eq(schema.emailJobs.id, job.id));
+      await db
+        .update(schema.campaignLeads)
+        .set({
+          status: "sent",
+          sentAt: nowDry,
+          attempts: sql`${schema.campaignLeads.attempts} + 1`,
+          lastError: null,
+          updatedAt: nowDry,
+        })
+        .where(eq(schema.campaignLeads.id, job.campaignLeadId));
+      await db
+        .update(schema.leads)
+        .set({ status: "sent", updatedAt: nowDry })
+        .where(eq(schema.leads.id, job.leadId));
+      await recordSend(db, { userId: campaign.userId, entityType: "sender", entityId: sender.id });
+      await recordSend(db, { userId: campaign.userId, entityType: "campaign", entityId: campaign.id });
+      noteHourlySend(sender.id);
+      return "sent";
+    }
+
     const transporter = makeTransport(sender);
     const from = sender.fromName ? `"${sender.fromName.replace(/"/g, "")}" <${sender.email}>` : sender.email;
     let info;
@@ -108,8 +248,12 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
         to: job.toEmail,
         replyTo: sender.replyTo || undefined,
         subject: job.subject,
-        text: job.bodyText || undefined,
-        html: job.bodyHtml || undefined,
+        text: textBody || undefined,
+        html: htmlBody || undefined,
+        headers,
+        list: {
+          unsubscribe: { url: unsubUrl, comment: "Unsubscribe" },
+        },
       });
     } finally {
       transporter.close();

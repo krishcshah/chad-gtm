@@ -5,16 +5,23 @@
 import { config } from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
-import { schema } from "@smartreach/database";
+import { createDb } from "@smartreach/database/connection";
 import { startWorkerLoop } from "./worker";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-// load .env from this package, then fall back to repo root / apps/web
-config({ path: path.join(here, "..", ".env") });
-config({ path: path.join(here, "..", "..", "apps", "web", ".env.local") });
-config({ path: path.join(here, "..", "..", ".env") });
+// Package root whether we run from src/ (tsx) or dist/
+const pkgRoot = path.resolve(here, "..");
+const repoRoot = path.resolve(pkgRoot, "..", "..");
+// Engine package env first, then web .env.local so BETTER_AUTH_SECRET matches the app
+// (unsubscribe HMAC parity — F16 / Sentinel BLOCKING).
+config({ path: path.join(pkgRoot, ".env") });
+config({ path: path.join(repoRoot, "apps", "web", ".env.local") });
+config({ path: path.join(repoRoot, ".env") });
+if (!process.env.BETTER_AUTH_SECRET) {
+  console.warn(
+    "[engine] BETTER_AUTH_SECRET is unset after dotenv load — unsubscribe tokens will not verify in the web app",
+  );
+}
 
 const url = process.env.DATABASE_URL;
 if (!url) {
@@ -22,7 +29,7 @@ if (!url) {
   process.exit(1);
 }
 
-const db = drizzle(neon(url), { schema });
+const { db } = createDb(url);
 const intervalMs = Number(process.env.ENGINE_INTERVAL_MS ?? 30_000);
 const syncMs = Number(process.env.ENGINE_SYNC_MS ?? 120_000);
 

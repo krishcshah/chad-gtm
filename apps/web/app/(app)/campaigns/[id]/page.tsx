@@ -1,14 +1,12 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { getCampaign } from "@/lib/queries";
-import { Badge, Card, CardContent, Progress, cn } from "@smartreach/ui";
+import { Badge, Card, CardContent, Progress, statusVariant } from "@smartreach/ui";
 import { formatDate } from "@smartreach/shared";
 import { CampaignActions } from "../campaign-actions";
 
 export const dynamic = "force-dynamic";
 
-const statusVariant = (s: string) =>
-  s === "running" ? "default" : s === "paused" ? "outline" : "secondary";
 
 export default async function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -20,22 +18,26 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
   const sent = Number(c.stats?.sent ?? 0);
   const replied = Number(c.stats?.replied ?? 0);
   const failed = Number(c.stats?.failed ?? 0);
+  const bounced = Number(c.stats?.bounced ?? 0);
   const pct = total > 0 ? Math.round((sent / total) * 100) : 0;
 
+  const replyRate = sent > 0 ? `${((replied / sent) * 100).toFixed(1)}%` : "—";
   const stats = [
     { label: "Total leads", value: total },
     { label: "Sent", value: sent },
     { label: "Replies", value: replied },
+    { label: "Reply rate", value: replyRate },
     { label: "Failed", value: failed },
+    { label: "Bounced", value: bounced },
   ];
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="page-stack">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-semibold tracking-tight">{c.name}</h1>
-            <Badge variant={statusVariant(c.status)} className={cn(c.status === "running" && "bg-emerald-600 hover:bg-emerald-600")}>
+            <Badge variant={statusVariant(c.status)} dot={c.status === "running"}>
               {c.status}
             </Badge>
           </div>
@@ -52,14 +54,19 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
         <CardContent className="p-5">
           <div className="mb-2 flex items-center justify-between text-sm">
             <span className="font-medium">Delivery progress</span>
-            <span className="text-muted-foreground">{sent}/{total} · {pct}%</span>
+            <span className="tabular-nums text-muted-foreground">{sent}/{total} · {pct}%</span>
           </div>
           <Progress value={pct} className="h-2" />
+          {total === 0 && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              No leads queued yet. Attach a lead list with pending prospects to start delivering.
+            </p>
+          )}
         </CardContent>
       </Card>
 
       {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {stats.map((s) => (
           <Card key={s.label}>
             <CardContent className="p-5">
@@ -75,7 +82,9 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
         <CardContent className="p-5">
           <h3 className="mb-4 font-medium">Sender rotation ({c.senders.length})</h3>
           {c.senders.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No senders attached.</p>
+            <p className="rounded-lg border border-dashed border-border/80 px-4 py-8 text-center text-sm text-muted-foreground">
+              No senders attached to this campaign.
+            </p>
           ) : (
             <div className="divide-y">
               {c.senders.map((s) => (

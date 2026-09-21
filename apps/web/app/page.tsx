@@ -26,12 +26,12 @@ export default async function Landing() {
 
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col items-center justify-center px-6 text-center">
         <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/60 px-3.5 py-1.5 text-xs text-muted-foreground backdrop-blur">
-          <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="size-1.5 rounded-full bg-success animate-pulse" />
           Lightweight cold email, done right
         </p>
         <h1 className="max-w-3xl text-balance text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl">
           Cold email that takes
-          <span className="bg-gradient-to-r from-primary to-sky-400 bg-clip-text text-transparent"> five minutes</span>, not five tabs
+          <span className="bg-gradient-to-r from-primary to-info bg-clip-text text-transparent"> five minutes</span>, not five tabs
         </h1>
         <p className="mt-5 max-w-xl text-pretty text-base text-muted-foreground sm:text-lg">
           Upload leads, add senders, pick a template, click Start. SmartReach handles rotation, throttling and reply detection — everything you need, nothing you don't.

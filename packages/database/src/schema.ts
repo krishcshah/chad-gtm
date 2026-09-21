@@ -206,8 +206,8 @@ export const campaigns = pgTable(
     scheduledAt: text("scheduled_at"),
     businessDaysOnly: boolean("business_days_only").notNull().default(false),
     sendingTimezone: text("sending_timezone").notNull().default("UTC"),
-    sendingWindowStart: text("sending_window_start").notNull().default("09:00"),
-    sendingWindowEnd: text("sending_window_end").notNull().default("18:00"),
+    sendingWindowStart: text("sending_window_start").notNull().default("00:00"),
+    sendingWindowEnd: text("sending_window_end").notNull().default("00:00"),
     dailyLimit: integer("daily_limit").notNull().default(100),
     minDelaySec: integer("min_delay_sec").notNull().default(90),
     maxDelaySec: integer("max_delay_sec").notNull().default(240),
@@ -312,15 +312,17 @@ export const emailJobs = pgTable(
     messageId: text("message_id"),
     sentAt: text("sent_at"),
     processingAt: text("processing_at"), // stuck-job recovery marker
+    /** When true, only ENGINE_DRY_RUN workers may claim/process this job. */
+    dryRun: boolean("dry_run").notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
     uniqueIndex("email_jobs_campaign_lead_unique").on(t.campaignLeadId),
-    index("email_jobs_poll_idx").on(t.status, t.scheduledFor),
+    index("email_jobs_poll_idx").on(t.status, t.scheduledFor, t.dryRun),
     index("email_jobs_sender_idx").on(t.senderId, t.status),
     index("email_jobs_campaign_idx").on(t.campaignId, t.status),
-    index("email_jobs_recovery_idx").on(t.status, t.processingAt),
+    index("email_jobs_recovery_idx").on(t.status, t.processingAt, t.dryRun),
   ],
 );
 
@@ -392,6 +394,48 @@ export const activityLogs = pgTable(
   },
   (t) => [index("activity_logs_user_idx").on(t.userId, t.createdAt)],
 );
+
+
+/* ─── Suppressions / block list (F15) ──────────────────────────────────── */
+
+export const suppressions = pgTable(
+  "suppressions",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Lowercased email OR leading-@ domain like "@example.com". */
+    value: text("value").notNull(),
+    kind: text("kind", { enum: ["email", "domain"] }).notNull().default("email"),
+    reason: text("reason").notNull().default(""),
+    source: text("source", {
+      enum: ["manual", "unsubscribe", "bounce", "complaint", "import"],
+    })
+      .notNull()
+      .default("manual"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("suppressions_user_value_unique").on(t.userId, t.value),
+    index("suppressions_user_idx").on(t.userId),
+    index("suppressions_value_idx").on(t.value),
+  ],
+);
+
+/* ─── Workspace settings (F16/F17 compliance) ──────────────────────────── */
+
+export const workspaceSettings = pgTable("workspace_settings", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  companyName: text("company_name").notNull().default(""),
+  /** Physical postal address required by CAN-SPAM on commercial mail. */
+  postalAddress: text("postal_address").notNull().default(""),
+  unsubscribeBaseUrl: text("unsubscribe_base_url").notNull().default(""),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
 
 /* ─── Re-export auth tables so drizzle sees the whole graph ────────────── */
 export * from "./schema-auth";

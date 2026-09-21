@@ -17,7 +17,7 @@ export interface SenderCardData {
 }
 
 const healthColor = (h: number) =>
-  h >= 80 ? "text-emerald-500" : h >= 50 ? "text-amber-500" : "text-rose-500";
+  h >= 80 ? "text-success-foreground" : h >= 50 ? "text-warning-foreground" : "text-destructive";
 
 export function SenderCard({ sender: s }: { sender: SenderCardData }) {
   const [pending, start] = useTransition();

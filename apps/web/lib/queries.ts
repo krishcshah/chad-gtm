@@ -40,7 +40,9 @@ export async function getDashboardStats(userId: string) {
       .where(and(eq(campaigns.userId, userId), isNull(campaigns.deletedAt))),
     db
       .select({
-        queuedToday: count(sql`case when ${usageCounters.entityType} = 'sender' then ${usageCounters.count} end`),
+        // SUM of campaign counters — COUNT() was wrong (row count ≠ sends) and
+        // was incorrectly folded into "Queued today".
+        sentToday: sql<number>`coalesce(sum(case when ${usageCounters.entityType} = 'campaign' then ${usageCounters.count} else 0 end), 0)`,
       })
       .from(usageCounters)
       .where(and(eq(usageCounters.userId, userId), eq(usageCounters.date, t))),
@@ -49,6 +51,7 @@ export async function getDashboardStats(userId: string) {
         sent: count(sql`case when ${emailJobs.status} = 'sent' then 1 end`),
         queued: count(sql`case when ${emailJobs.status} in ('pending','retry','processing') then 1 end`),
         failed: count(sql`case when ${emailJobs.status} = 'failed' then 1 end`),
+        bounced: count(sql`case when ${emailJobs.status} = 'bounced' then 1 end`),
       })
       .from(emailJobs)
       .innerJoin(campaigns, eq(emailJobs.campaignId, campaigns.id))
@@ -70,12 +73,16 @@ export async function getDashboardStats(userId: string) {
       .where(eq(replies.userId, userId)),
   ]);
 
+  // usageRows.sentToday cross-checks job-row sent count (both should agree after recordSend).
+  const sentFromJobs = Number(jobsToday?.sent ?? 0);
+  const sentFromUsage = Number(usageRows?.sentToday ?? 0);
   return {
     activeCampaigns: Number(campaignRows?.active ?? 0),
     scheduledCampaigns: Number(campaignRows?.scheduled ?? 0),
-    emailsQueuedToday: Number(jobsToday?.queued ?? 0) + Number(usageRows?.queuedToday ?? 0),
-    emailsSentToday: Number(jobsToday?.sent ?? 0),
+    emailsQueuedToday: Number(jobsToday?.queued ?? 0),
+    emailsSentToday: Math.max(sentFromJobs, sentFromUsage),
     failedToday: Number(jobsToday?.failed ?? 0),
+    bouncedToday: Number(jobsToday?.bounced ?? 0),
     totalLeads: Number(leadRows?.total ?? 0),
     replyCount: Number(replyRows?.total ?? 0),
     senderTotal: Number(senderRows?.total ?? 0),
@@ -248,6 +255,7 @@ export interface CampaignRow {
   sent: number;
   replied: number;
   failed: number;
+  bounced: number;
 }
 
 export async function listCampaigns(userId: string): Promise<CampaignRow[]> {
@@ -263,13 +271,18 @@ export async function listCampaigns(userId: string): Promise<CampaignRow[]> {
       sent: count(sql`case when ${campaignLeads.status} in ('sent','replied') then 1 end`),
       replied: count(sql`case when ${campaignLeads.status} = 'replied' then 1 end`),
       failed: count(sql`case when ${campaignLeads.status} = 'failed' then 1 end`),
+      // Bounces live on email_jobs (permanent SMTP); campaign_leads stay "failed".
+      bounced: sql<number>`coalesce((
+        select count(*)::int from email_jobs ej
+        where ej.campaign_id = ${campaigns.id} and ej.status = 'bounced'
+      ), 0)`,
     })
     .from(campaigns)
     .leftJoin(campaignLeads, eq(campaignLeads.campaignId, campaigns.id))
     .where(and(eq(campaigns.userId, userId), isNull(campaigns.deletedAt)))
     .groupBy(campaigns.id)
     .orderBy(desc(campaigns.createdAt));
-  return rows as CampaignRow[];
+  return rows.map((r) => ({ ...r, bounced: Number(r.bounced ?? 0) })) as CampaignRow[];
 }
 
 export async function getCampaign(userId: string, id: string) {
@@ -288,6 +301,10 @@ export async function getCampaign(userId: string, id: string) {
         sent: count(sql`case when ${campaignLeads.status} in ('sent','replied') then 1 end`),
         replied: count(sql`case when ${campaignLeads.status} = 'replied' then 1 end`),
         failed: count(sql`case when ${campaignLeads.status} = 'failed' then 1 end`),
+        bounced: sql<number>`coalesce((
+          select count(*)::int from email_jobs ej
+          where ej.campaign_id = ${id} and ej.status = 'bounced'
+        ), 0)`,
       })
       .from(campaignLeads)
       .where(eq(campaignLeads.campaignId, id)),
@@ -303,7 +320,13 @@ export async function getCampaign(userId: string, id: string) {
       .innerJoin(senderAccounts, eq(senderAccounts.id, campaignSenders.senderId))
       .where(eq(campaignSenders.campaignId, id)),
   ]);
-  return { ...c, stats, senders };
+  return {
+    ...c,
+    stats: stats
+      ? { ...stats, bounced: Number(stats.bounced ?? 0) }
+      : { total: 0, sent: 0, replied: 0, failed: 0, bounced: 0 },
+    senders,
+  };
 }
 
 export async function listReplies(userId: string, limit = 50) {

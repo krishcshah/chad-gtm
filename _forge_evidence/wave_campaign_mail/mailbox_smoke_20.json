@@ -1,0 +1,190 @@
+{
+  "at": "2026-09-21T21:22:39.303Z",
+  "source": "prior smoke + finalize (Atlas: skip known-bad)",
+  "envFile": "/home/box/.config/smart-reach/mail.env",
+  "smtpHost": "krishshah.cloud",
+  "smtpPort": 465,
+  "imapHost": "krishshah.cloud",
+  "imapPort": 993,
+  "total": 20,
+  "smtpOk": 17,
+  "imapOk": 17,
+  "smtpFail": 3,
+  "imapFail": 3,
+  "knownBadSkip": [
+    7,
+    17,
+    19
+  ],
+  "note": "Relay pruned mail.env to 17 good accounts (removed hey1hello1@krishshah.work, notifications@krishshah.cloud, test1@krishshah.cloud). Prior smoke: smtpOk=17 imapOk=17 of 20; remaining failures were those three.",
+  "rows": [
+    {
+      "index": 1,
+      "key": "MAIL_ACCOUNT_01",
+      "account": "co…@krishshah.work",
+      "smtp": "OK",
+      "imap": "OK",
+      "skipKnownBad": false
+    },
+    {
+      "index": 2,
+      "key": "MAIL_ACCOUNT_02",
+      "account": "he…@krishshah.work",
+      "smtp": "OK",
+      "imap": "OK",
+      "skipKnownBad": false
+    },
+    {
+      "index": 3,
+      "key": "MAIL_ACCOUNT_03",
+      "account": "he…@krishshah.work",
+      "smtp": "OK",
+      "imap": "OK",
+      "skipKnownBad": false
+    },
+    {
+      "index": 4,
+      "key": "MAIL_ACCOUNT_04",
+      "account": "he…@krishshah.work",
+      "smtp": "OK",
+      "imap": "OK",
+      "skipKnownBad": false
+    },
+    {
+      "index": 5,
+      "key": "MAIL_ACCOUNT_05",
+      "account": "he…@krishshah.work",
+      "smtp": "OK",
+      "imap": "OK",
+      "skipKnownBad": false
+    },
+    {
+      "index": 6,
+      "key": "MAIL_ACCOUNT_06",
+      "account": "he…@krishshah.work",
+      "smtp": "OK",
+      "imap": "OK",
+      "skipKnownBad": false
+    },
+    {
+      "index": 7,
+      "key": "MAIL_ACCOUNT_07",
+      "account": "he…@krishshah.work",
+      "smtp": "FAIL",
+      "imap": "FAIL",
+      "smtpError": "535 Incorrect authentication data",
+      "imapError": "Authentication failed.",
+      "skipKnownBad": true
+    },
+    {
+      "index": 8,
+      "key": "MAIL_ACCOUNT_08",
+      "account": "he…@krishshah.work",
+      "smtp": "OK",
+      "imap": "OK",
+      "skipKnownBad": false
+    },
+    {
+      "index": 9,
+      "key": "MAIL_ACCOUNT_09",
+      "account": "te…@krishshah.work",
+      "smtp": "OK",
+      "imap": "OK",
+      "skipKnownBad": false
+    },
+    {
+      "index": 10,
+      "key": "MAIL_ACCOUNT_10",
+      "account": "te…@krishshah.work",
+      "smtp": "OK",
+      "imap": "OK",
+      "skipKnownBad": false
+    },
+    {
+      "index": 11,
+      "key": "MAIL_ACCOUNT_11",
+      "account": "te…@krishshah.work",
+      "smtp": "OK",
+      "imap": "OK",
+      "skipKnownBad": false
+    },
+    {
+      "index": 12,
+      "key": "MAIL_ACCOUNT_12",
+      "account": "he…@krishshah.cloud",
+      "smtp": "OK",
+      "imap": "OK",
+      "skipKnownBad": false
+    },
+    {
+      "index": 13,
+      "key": "MAIL_ACCOUNT_13",
+      "account": "he…@krishshah.cloud",
+      "smtp": "OK",
+      "imap": "OK",
+      "skipKnownBad": false
+    },
+    {
+      "index": 14,
+      "key": "MAIL_ACCOUNT_14",
+      "account": "he…@krishshah.cloud",
+      "smtp": "OK",
+      "imap": "OK",
+      "skipKnownBad": false
+    },
+    {
+      "index": 15,
+      "key": "MAIL_ACCOUNT_15",
+      "account": "he…@krishshah.cloud",
+      "smtp": "OK",
+      "imap": "OK",
+      "skipKnownBad": false
+    },
+    {
+      "index": 16,
+      "key": "MAIL_ACCOUNT_16",
+      "account": "he…@krishshah.cloud",
+      "smtp": "OK",
+      "imap": "OK",
+      "skipKnownBad": false
+    },
+    {
+      "index": 17,
+      "key": "MAIL_ACCOUNT_17",
+      "account": "no…@krishshah.cloud",
+      "smtp": "FAIL",
+      "imap": "FAIL",
+      "smtpError": "535 Incorrect authentication data",
+      "imapError": "Authentication failed.",
+      "skipKnownBad": true
+    },
+    {
+      "index": 18,
+      "key": "MAIL_ACCOUNT_18",
+      "account": "te…@krishshah.cloud",
+      "smtp": "OK",
+      "imap": "OK",
+      "skipKnownBad": false
+    },
+    {
+      "index": 19,
+      "key": "MAIL_ACCOUNT_19",
+      "account": "te…@krishshah.cloud",
+      "smtp": "FAIL",
+      "imap": "FAIL",
+      "smtpError": "535 Incorrect authentication data",
+      "imapError": "Authentication failed.",
+      "skipKnownBad": true
+    },
+    {
+      "index": 20,
+      "key": "MAIL_ACCOUNT_20",
+      "account": "te…@krishshah.cloud",
+      "smtp": "OK",
+      "imap": "OK",
+      "skipKnownBad": false
+    }
+  ],
+  "mailEnvAccountCountNow": 17,
+  "updatedAt": "2026-09-21T21:24:29.520Z"
+}

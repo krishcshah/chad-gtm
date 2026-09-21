@@ -32,8 +32,8 @@ export function NavigationProgress() {
   return (
     <div role="progressbar" className="pointer-events-none fixed inset-x-0 top-0 z-[9999] h-[2.5px] overflow-hidden">
       <div
-        className="h-full w-1/3 rounded-full bg-gradient-to-r from-indigo-500 via-fuchsia-400 to-indigo-500"
-        style={{ animation: "srProgressSlide 900ms cubic-bezier(0,0,0.2,1) infinite", boxShadow: "0 0 12px rgba(99,102,241,.8)" }}
+        className="h-full w-1/3 rounded-full bg-gradient-to-r from-primary via-primary/70 to-primary"
+        style={{ animation: "srProgressSlide 900ms cubic-bezier(0,0,0.2,1) infinite", boxShadow: "0 0 12px color-mix(in oklch, var(--primary) 80%, transparent)" }}
       />
       <style>{`@keyframes srProgressSlide { 0% { transform: translateX(-100%);} 100% { transform: translateX(400%);} }`}</style>
     </div>

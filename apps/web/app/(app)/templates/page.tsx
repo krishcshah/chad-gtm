@@ -2,7 +2,7 @@ import Link from "next/link";
 import { FileText, Plus } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { listTemplates } from "@/lib/queries";
-import { Badge, Button, Card, CardContent, EmptyState } from "@smartreach/ui";
+import { Badge, Button, Card, CardContent, EmptyState, PageHeader } from "@smartreach/ui";
 import { formatDate } from "@smartreach/shared";
 
 export const dynamic = "force-dynamic";
@@ -12,20 +12,18 @@ export default async function TemplatesPage() {
   const templates = await listTemplates(user.id);
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Email Templates</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Reusable message bodies with merge variables like {"{{first_name}}"}.
-          </p>
-        </div>
-        <Button size="sm" asChild>
-          <Link href="/templates/new">
-            <Plus className="h-4 w-4" /> New Template
-          </Link>
-        </Button>
-      </div>
+    <div className="page-stack">
+      <PageHeader
+        title="Templates"
+        description='Reusable message bodies with merge variables like {{first_name}}.'
+        actions={
+          <Button size="sm" asChild>
+            <Link href="/templates/new">
+              <Plus className="h-4 w-4" /> New template
+            </Link>
+          </Button>
+        }
+      />
 
       {templates.length === 0 ? (
         <EmptyState
@@ -43,7 +41,7 @@ export default async function TemplatesPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {templates.map((t) => (
-            <Link key={t.id} href={`/templates/${t.id}`}>
+            <Link key={t.id} href={`/templates/${t.id}`} className="rounded-xl focus-visible:ring-2 focus-visible:ring-ring">
               <Card className="h-full transition-colors hover:border-foreground/20">
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between gap-2">

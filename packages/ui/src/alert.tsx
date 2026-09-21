@@ -7,10 +7,10 @@ const alertVariants = cva("relative w-full rounded-xl border px-4 py-3 text-sm f
   variants: {
     variant: {
       default: "border-border bg-card/80 text-foreground",
-      info: "border-sky-500/30 bg-sky-500/10 text-sky-300",
-      success: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
-      warning: "border-amber-500/30 bg-amber-500/10 text-amber-300",
-      destructive: "border-red-500/30 bg-red-500/10 text-red-300",
+      info: "border-info/30 bg-info/10 text-info-foreground",
+      success: "border-success/30 bg-success/10 text-success-foreground",
+      warning: "border-warning/30 bg-warning/10 text-warning-foreground",
+      destructive: "border-destructive/30 bg-destructive/10 text-destructive",
     },
   },
   defaultVariants: { variant: "default" },
@@ -28,13 +28,14 @@ export function Alert({
   className,
   variant = "default",
   icon = true,
+  children,
   ...props
 }: React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof alertVariants> & { icon?: boolean }) {
   const Icon = icons[variant ?? "default"];
   return (
     <div role="alert" className={cn(alertVariants({ variant }), className)} {...props}>
-      {icon && <Icon className="size-4 mt-0.5 shrink-0" />}
-      <div className="flex-1 min-w-0">{props.children}</div>
+      {icon && <Icon className="size-4 mt-0.5 shrink-0" aria-hidden />}
+      <div className="flex-1 min-w-0">{children}</div>
     </div>
   );
 }
