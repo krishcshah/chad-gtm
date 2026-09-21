@@ -149,8 +149,8 @@ export type SendTestEmailInput = z.infer<typeof sendTestEmailSchema>;
 export const campaignCreateSchema = z
   .object({
     name: z.string().trim().min(1, "Give the campaign a name").max(140),
-    leadListId: z.string().min(1, "Choose a lead list"),
-    senderIds: z.array(z.string().min(1)).min(1, "Pick at least one sender"),
+    leadListId: z.string().min(1, "Lead list is required"),
+    senderIds: z.array(z.string().min(1)).min(1, "Select at least one sender"),
     templateId: z.string().min(1, "Choose a template"),
     startMode: z.enum(["now", "later"]).default("now"),
     scheduledAt: z.string().datetime({ offset: true }).nullable().default(null),

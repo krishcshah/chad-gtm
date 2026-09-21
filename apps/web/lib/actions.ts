@@ -24,6 +24,7 @@ import { normalizeEmail, nowIso } from "@smartreach/shared";
 import { campaignStartPostalError } from "./campaign-start-guard";
 import { getDb } from "./db";
 import { requireUser } from "./session";
+import { formatZodActionError } from "./zod-action-error";
 
 const {
   leadLists,
@@ -46,12 +47,8 @@ const err = (e: unknown): ActionResult<never> => ({
 });
 
 function zodFail(error: { issues: { path: PropertyKey[]; message: string }[] }): ActionResult<never> {
-  const fieldErrors: Record<string, string[]> = {};
-  for (const issue of error.issues) {
-    const key = String(issue.path[0] ?? "_");
-    (fieldErrors[key] ??= []).push(issue.message);
-  }
-  return { ok: false, error: "Please fix the highlighted fields", fieldErrors };
+  const { error: message, fieldErrors } = formatZodActionError(error.issues);
+  return { ok: false, error: message, fieldErrors };
 }
 
 /* ═══ Activity log helper ═══ */
