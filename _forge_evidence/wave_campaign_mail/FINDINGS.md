@@ -42,3 +42,15 @@ Mailboxes: use 17 OK accounts; skip known-bad indices 07/17/19.
 3. **Bad mailboxes** 07/17/19 — skip for any live send E2E.
 4. **campaignAction UI** still calls `resume` for non-paused Start (same server path as start; snapshot now covers both).
 5. No full create→send E2E re-run in this helper (no engine restart / no steal of Sentinel).
+
+## Cross-check (parallel Forge E2E, same wave)
+`e2e_report.json` / `MUST_GAPS.md`: live create→SMTP→IMAP reply **PASS** on 17 good mailboxes (engine already running; old binary). blockers:[].
+
+Additional remaining gap (not code-fixed here — product default):
+- Wizard/DEFAULTS `09:00–18:00` → night CE create stalls with `outside-window`. Mitigation: equal start/end (`00:00`) = all-day. Prefer Atlas/Prism default change.
+
+## Commits (this helper)
+- `6998b90` fix(engine): enqueue count + orphan scheduled leads
+- `15ed30e` fix(web): dashboard queued/sent stats
+- `0853750` fix(web): lead snapshot on start/duplicate
+- `9ee329a` docs(forge): wave evidence
