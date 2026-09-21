@@ -1,0 +1,5 @@
+ sent_jobs | pending_jobs | failed_jobs 
+-----------+--------------+-------------
+         6 |            0 |           0
+(1 row)
+

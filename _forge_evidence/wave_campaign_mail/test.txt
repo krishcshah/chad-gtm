@@ -1,0 +1,33 @@
+
+> smartreach@0.1.0 test
+> npm run test --workspaces --if-present
+
+
+> @smartreach/database@0.1.0 test
+> vitest run
+
+
+ RUN  v3.2.7 /workspace/work/smart-reach/wt-forge/packages/database
+
+ ✓ src/__tests__/compliance.test.ts (5 tests) 5ms
+ ✓ src/__tests__/template.test.ts (10 tests) 7ms
+
+ Test Files  2 passed (2)
+      Tests  15 passed (15)
+   Start at  21:24:43
+   Duration  314ms (transform 97ms, setup 0ms, collect 131ms, tests 13ms, environment 0ms, prepare 112ms)
+
+
+> @smartreach/email-engine@0.1.0 test
+> vitest run
+
+
+ RUN  v3.2.7 /workspace/work/smart-reach/wt-forge/packages/email-engine
+
+ ✓ src/__tests__/engine.test.ts (10 tests) 17ms
+
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+   Start at  21:24:44
+   Duration  486ms (transform 120ms, setup 0ms, collect 198ms, tests 17ms, environment 0ms, prepare 51ms)
+

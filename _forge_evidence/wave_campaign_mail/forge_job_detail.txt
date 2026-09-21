@@ -1,0 +1,5 @@
+ status |                          mid                          |       from_m       |        to_m        
+--------+-------------------------------------------------------+--------------------+--------------------
+ sent   | <d1fa543a-dc5d-c46c-aa8c-d47612b22aba@krishshah.work> | he…@krishshah.work | he…@krishshah.work
+(1 row)
+

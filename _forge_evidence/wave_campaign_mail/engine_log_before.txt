@@ -1,0 +1,5 @@
+> tsx src/run.ts
+
+[engine] SmartReach sending engine online — tick every 3000ms, IMAP sync every 8000ms
+[engine] 2026-09-21T21:23:31.151Z enqueued=3 sent=0 failed=0 retried=0
+[engine] 2026-09-21T21:23:38.505Z enqueued=0 sent=2 failed=0 retried=0 skipped=[Sentinel Live Camp 1790025808563: waiting-retry]
