@@ -1,9 +1,13 @@
 /**
- * Lead create/update persistence — pure of Next session/revalidate for unit tests.
+ * Lead create/update/delete + list rename — pure of Next session/revalidate for unit tests.
  */
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { schema } from "@smartreach/database";
-import { leadCreateSchema, leadUpdateSchema } from "@smartreach/validation";
+import {
+  leadCreateSchema,
+  leadListRenameSchema,
+  leadUpdateSchema,
+} from "@smartreach/validation";
 import { normalizeEmail, nowIso } from "@smartreach/shared";
 import { mergeLeadCustomFields, stripUndefined } from "./lead-custom-fields";
 import { formatZodActionError } from "./zod-action-error";
@@ -116,3 +120,75 @@ export async function updateLeadForUser(
   }
 }
 
+/** Soft-delete a single owned lead (F03c). Confirm is UI-side; API just deletes. */
+export async function deleteLeadForUser(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  userId: string,
+  leadId: string,
+): Promise<LeadActionResult> {
+  try {
+    const [row] = await db
+      .update(leads)
+      .set({ deletedAt: nowIso(), updatedAt: nowIso() })
+      .where(and(eq(leads.id, leadId), eq(leads.userId, userId), isNull(leads.deletedAt)))
+      .returning({ id: leads.id });
+    if (!row) return { ok: false, error: "Lead not found" };
+    return { ok: true, message: "Lead deleted" };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Something went wrong" };
+  }
+}
+
+/** Soft-delete owned leads by id (P01). Empty ids → error. */
+export async function bulkDeleteLeadsForUser(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  userId: string,
+  ids: string[],
+): Promise<LeadActionResult> {
+  if (!ids.length) return { ok: false, error: "No leads selected" };
+  try {
+    await db
+      .update(leads)
+      .set({ deletedAt: nowIso(), updatedAt: nowIso() })
+      .where(and(eq(leads.userId, userId), inArray(leads.id, ids)));
+    return {
+      ok: true,
+      message: `Deleted ${ids.length} lead${ids.length > 1 ? "s" : ""}`,
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Something went wrong" };
+  }
+}
+
+/** Rename an owned lead list (P02). Uses same name rules as create (trim min1 max120). */
+export async function renameLeadListForUser(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  userId: string,
+  listId: string,
+  input: unknown,
+): Promise<LeadActionResult> {
+  const parsed = leadListRenameSchema.safeParse(input);
+  if (!parsed.success) return zodFail(parsed.error);
+
+  const [list] = await db
+    .select({ id: leadLists.id })
+    .from(leadLists)
+    .where(and(eq(leadLists.id, listId), eq(leadLists.userId, userId), isNull(leadLists.deletedAt)));
+  if (!list) return { ok: false, error: "List not found" };
+
+  try {
+    await db
+      .update(leadLists)
+      .set({ name: parsed.data.name, updatedAt: nowIso() })
+      .where(and(eq(leadLists.id, listId), eq(leadLists.userId, userId), isNull(leadLists.deletedAt)));
+    return { ok: true, message: "List renamed" };
+  } catch (e) {
+    if (isUniqueConflict(e)) {
+      return { ok: false, error: "A list with that name already exists" };
+    }
+    return { ok: false, error: e instanceof Error ? e.message : "Something went wrong" };
+  }
+}

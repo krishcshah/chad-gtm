@@ -18,7 +18,14 @@ import {
   templateSchema,
   workspaceSettingsSchema,
 } from "@smartreach/validation";
-import { createLeadForUser, updateLeadForUser } from "./leads";
+import {
+  bulkDeleteLeadsForUser,
+  createLeadForUser,
+  deleteLeadForUser,
+  renameLeadListForUser,
+  updateLeadForUser,
+} from "./leads";
+import { toggleSenderForUser } from "./senders";
 import { normalizeEmail, nowIso } from "@smartreach/shared";
 import {
   ensureCampaignLeadSnapshot,
@@ -102,6 +109,20 @@ export async function deleteLeadList(listId: string): Promise<ActionResult> {
     return err(e);
   }
 }
+
+/** Rename owned lead list (P02). Zod: name trim min1 max120 via leadListCreateSchema. */
+export async function renameLeadList(
+  listId: string,
+  input: unknown,
+): Promise<ActionResult> {
+  const user = await requireUser();
+  const result = await renameLeadListForUser(getDb(), user.id, listId, input);
+  if (result.ok) revalidatePath("/leads");
+  return result;
+}
+
+/** Alias for renameLeadList. */
+export const updateLeadList = renameLeadList;
 
 /* ═══ LEADS — CSV import ═══ */
 
@@ -255,21 +276,26 @@ export async function updateLead(leadId: string, input: unknown): Promise<Action
   return result;
 }
 
+/** Soft-delete a single owned lead (F03c). Confirm is UI-side. */
+export async function deleteLead(leadId: string): Promise<ActionResult> {
+  const user = await requireUser();
+  const result = await deleteLeadForUser(getDb(), user.id, leadId);
+  if (result.ok) {
+    await logActivity(user.id, "leads.deleted", "Deleted a lead");
+    revalidatePath("/leads");
+  }
+  return result;
+}
+
+/** Soft-delete owned leads (P01). */
 export async function bulkDeleteLeads(ids: string[]): Promise<ActionResult> {
   const user = await requireUser();
-  if (!ids.length) return { ok: false, error: "No leads selected" };
-  const db = getDb();
-  try {
-    await db
-      .update(leads)
-      .set({ deletedAt: nowIso() })
-      .where(and(eq(leads.userId, user.id), inArray(leads.id, ids)));
+  const result = await bulkDeleteLeadsForUser(getDb(), user.id, ids);
+  if (result.ok) {
     await logActivity(user.id, "leads.deleted", `Deleted ${ids.length} leads`);
     revalidatePath("/leads");
-    return { ok: true, message: `Deleted ${ids.length} lead${ids.length > 1 ? "s" : ""}` };
-  } catch (e) {
-    return err(e);
   }
+  return result;
 }
 
 export async function bulkTagLeads(
@@ -363,19 +389,12 @@ export async function createSender(input: unknown): Promise<ActionResult<{ id: s
   }
 }
 
+/** Pause/resume owned sender (P04). */
 export async function toggleSender(senderId: string, pause: boolean): Promise<ActionResult> {
   const user = await requireUser();
-  const db = getDb();
-  try {
-    await db
-      .update(senderAccounts)
-      .set({ status: pause ? "paused" : "active", updatedAt: nowIso() })
-      .where(and(eq(senderAccounts.id, senderId), eq(senderAccounts.userId, user.id)));
-    revalidatePath("/senders");
-    return { ok: true, message: pause ? "Sender paused" : "Sender resumed" };
-  } catch (e) {
-    return err(e);
-  }
+  const result = await toggleSenderForUser(getDb(), user.id, senderId, pause);
+  if (result.ok) revalidatePath("/senders");
+  return result;
 }
 
 export async function deleteSender(senderId: string): Promise<ActionResult> {

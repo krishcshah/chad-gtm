@@ -140,12 +140,18 @@ export async function listLeadLists(userId: string) {
 
 export interface LeadsPageParams {
   listId?: string;
+  /** Case-insensitive match on email, firstName, lastName, company (P03). */
   search?: string;
   status?: string;
   cursor?: string; // id of last row from previous page
   pageSize?: number;
 }
 
+/**
+ * Cursor-paginated leads for list detail / fetchLeadsPage.
+ * Optional listId scopes to one list; optional search ILIKE-filters
+ * email | firstName | lastName | company (P03 — already present).
+ */
 export async function listLeads(userId: string, params: LeadsPageParams) {
   const db = getDb();
   const size = Math.min(params.pageSize ?? 50, 200);

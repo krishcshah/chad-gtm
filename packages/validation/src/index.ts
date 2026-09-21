@@ -21,6 +21,8 @@ export type SignInInput = z.infer<typeof signInSchema>;
 export const leadListCreateSchema = z.object({
   name: z.string().trim().min(1, "Give the list a name").max(120),
 });
+/** Rename / update lead list — same name rules as create (P02). */
+export const leadListRenameSchema = leadListCreateSchema;
 
 export const leadTagSchema = z.object({
   name: z.string().trim().min(1).max(40),

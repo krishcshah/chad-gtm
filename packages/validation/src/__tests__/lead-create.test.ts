@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { leadCreateSchema, leadUpdateSchema } from "../index";
+import {
+  leadCreateSchema,
+  leadListQuerySchema,
+  leadListRenameSchema,
+  leadUpdateSchema,
+} from "../index";
 
 describe("leadCreateSchema", () => {
   it("accepts only listId + email", () => {
@@ -48,6 +53,33 @@ describe("leadUpdateSchema", () => {
     expect(parsed.success).toBe(true);
     if (parsed.success) {
       expect(parsed.data.customFields).toEqual({ keep: "yes", drop: null });
+    }
+  });
+});
+
+describe("leadListRenameSchema (P02)", () => {
+  it("trims and accepts name within 1..120", () => {
+    const parsed = leadListRenameSchema.safeParse({ name: "  Prospects  " });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.name).toBe("Prospects");
+  });
+
+  it("rejects empty name", () => {
+    const parsed = leadListRenameSchema.safeParse({ name: "   " });
+    expect(parsed.success).toBe(false);
+  });
+});
+
+describe("leadListQuerySchema search (P03)", () => {
+  it("accepts optional search + listId", () => {
+    const parsed = leadListQuerySchema.safeParse({
+      search: "ada",
+      listId: "list-1",
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.search).toBe("ada");
+      expect(parsed.data.listId).toBe("list-1");
     }
   });
 });
