@@ -571,6 +571,46 @@ export async function createCampaign(input: unknown): Promise<ActionResult<{ id:
   }
 }
 
+
+/** Snapshot sendable list leads into campaign_leads if none exist yet (duplicate→start, draft start). */
+async function ensureCampaignLeadSnapshot(
+  db: ReturnType<typeof getDb>,
+  campaignId: string,
+  leadListId: string,
+): Promise<number> {
+  const [{ n }] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(campaignLeads)
+    .where(eq(campaignLeads.campaignId, campaignId));
+  if (Number(n) > 0) return Number(n);
+
+  const listLeads = await db
+    .select({ id: leads.id })
+    .from(leads)
+    .where(
+      and(
+        eq(leads.listId, leadListId),
+        sql`${leads.deletedAt} is null`,
+        inArray(leads.status, ["pending", "queued", "sent", "failed"]),
+      ),
+    );
+  if (!listLeads.length) return 0;
+  const CHUNK = 500;
+  for (let i = 0; i < listLeads.length; i += CHUNK) {
+    await db
+      .insert(campaignLeads)
+      .values(
+        listLeads.slice(i, i + CHUNK).map((l) => ({
+          campaignId,
+          leadId: l.id,
+          status: "queued" as const,
+        })),
+      )
+      .onConflictDoNothing();
+  }
+  return listLeads.length;
+}
+
 export async function campaignAction(
   campaignId: string,
   action: "start" | "pause" | "resume" | "archive" | "delete" | "duplicate",
@@ -586,12 +626,16 @@ export async function campaignAction(
 
     switch (action) {
       case "start":
-      case "resume":
+      case "resume": {
+        // Duplicate/draft campaigns had no lead snapshot — without this the
+        // engine sees 0 queued leads and immediately completes.
+        await ensureCampaignLeadSnapshot(db, campaignId, c.leadListId);
         await db
           .update(campaigns)
           .set({ status: "running", startedAt: c.startedAt ?? nowIso(), updatedAt: nowIso() })
           .where(eq(campaigns.id, campaignId));
         break;
+      }
       case "pause":
         await db.update(campaigns).set({ status: "paused", updatedAt: nowIso() }).where(eq(campaigns.id, campaignId));
         break;
@@ -635,6 +679,8 @@ export async function campaignAction(
             .insert(campaignSenders)
             .values(senders.map((s) => ({ campaignId: copy.id, senderId: s.senderId })));
         }
+        // Prefill campaign_leads so Start does not race an empty queue
+        await ensureCampaignLeadSnapshot(db, copy.id, c.leadListId);
         break;
       }
     }
