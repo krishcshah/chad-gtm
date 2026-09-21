@@ -10,7 +10,6 @@ import {
   verifyUnsubscribeToken,
 } from "@smartreach/database";
 import {
-  campaignCreateSchema,
   leadImportSchema,
   leadListCreateSchema,
   leadUpdateSchema,
@@ -22,6 +21,12 @@ import {
 } from "@smartreach/validation";
 import { normalizeEmail, nowIso } from "@smartreach/shared";
 import { campaignStartPostalError } from "./campaign-start-guard";
+import {
+  ensureCampaignLeadSnapshot,
+  getCampaignWizardStateForUser,
+  publishCampaignForUser,
+  saveCampaignDraftForUser,
+} from "./campaign-drafts";
 import { getDb } from "./db";
 import { requireUser } from "./session";
 import { formatZodActionError } from "./zod-action-error";
@@ -116,7 +121,7 @@ const STANDARD_KEY_TO_COLUMN: Record<string, string> = {
 };
 
 export async function importLeads(input: unknown): Promise<
-  ActionResult<{ imported: number; skipped: number; invalid: number }>
+  ActionResult<{ imported: number; skipped: number; invalid: number; listId: string }>
 > {
   const user = await requireUser();
   const parsed = leadImportSchema.safeParse(input);
@@ -214,7 +219,7 @@ export async function importLeads(input: unknown): Promise<
     listId: targetListId,
   });
   revalidatePath("/leads");
-  return { ok: true, data: { imported, skipped, invalid } };
+  return { ok: true, data: { imported, skipped, invalid, listId: targetListId } };
 }
 
 /** Server action: cursor-paginated leads for the table's "load more". */
@@ -500,135 +505,50 @@ async function workspacePostalStartBlock(
   return error ? { ok: false, error } : null;
 }
 
-export async function createCampaign(input: unknown): Promise<ActionResult<{ id: string }>> {
+export async function saveCampaignDraft(input: unknown): Promise<ActionResult<{ id: string }>> {
   const user = await requireUser();
-  const parsed = campaignCreateSchema.safeParse(input);
-  if (!parsed.success) return zodFail(parsed.error);
-  const d = parsed.data;
   const db = getDb();
+  const result = await saveCampaignDraftForUser(db, user.id, input);
+  if (result.ok) {
+    revalidatePath("/campaigns");
+    revalidatePath("/dashboard");
+  }
+  return result;
+}
 
-  try {
-    // Create & Start sets status running in the insert. Refuse first so we
-    // never persist a running campaign that the engine will silently skip.
-    // Scheduled creates stay allowed; the scheduler still hard-fails enqueue.
-    if (d.startMode === "now") {
-      const blocked = await workspacePostalStartBlock(db, user.id);
-      if (blocked) return blocked;
-    }
-
-    const [campaign] = await db
-      .insert(campaigns)
-      .values({
-        userId: user.id,
-        name: d.name,
-        leadListId: d.leadListId,
-        templateId: d.templateId,
-        status: d.startMode === "now" ? "running" : "scheduled",
-        scheduledAt: d.startMode === "later" ? d.scheduledAt : null,
-        businessDaysOnly: d.businessDaysOnly,
-        sendingTimezone: d.sendingTimezone,
-        sendingWindowStart: d.sendingWindowStart,
-        sendingWindowEnd: d.sendingWindowEnd,
-        dailyLimit: d.dailyLimit,
-        minDelaySec: d.minDelaySec,
-        maxDelaySec: d.maxDelaySec,
-        maxEmailsPerSenderPerDay: d.maxEmailsPerSenderPerDay,
-        stopOnReply: d.stopOnReply,
-        retryFailed: d.retryFailed,
-        retryCount: d.retryCount,
-        startedAt: d.startMode === "now" ? nowIso() : null,
-      })
-      .returning({ id: campaigns.id });
-
-    // Attach senders
-    await db
-      .insert(campaignSenders)
-      .values(d.senderIds.map((senderId) => ({ campaignId: campaign.id, senderId })));
-
-    // Snapshot the list's sendable leads into the campaign. A lead's overall
-    // status is per-campaign (tracked in campaign_leads), not global — so we
-    // take any lead that hasn't hard-bounced/replied/completed. We do NOT
-    // mutate lead.status here; doing so would lock leads into one campaign
-    // and make them invisible to the next one ("0 leads").
-    const listLeads = await db
-      .select({ id: leads.id })
-      .from(leads)
-      .where(
-        and(
-          eq(leads.listId, d.leadListId),
-          sql`${leads.deletedAt} is null`,
-          inArray(leads.status, ["pending", "queued", "sent", "failed"]),
-        ),
-      );
-
-    if (listLeads.length) {
-      const CHUNK = 500;
-      for (let i = 0; i < listLeads.length; i += CHUNK) {
-        await db
-          .insert(campaignLeads)
-          .values(
-            listLeads.slice(i, i + CHUNK).map((l) => ({
-              campaignId: campaign.id,
-              leadId: l.id,
-              status: "queued" as const,
-            })),
-          )
-          .onConflictDoNothing();
-      }
-    }
-
+export async function publishCampaign(input: unknown): Promise<ActionResult<{ id: string }>> {
+  const user = await requireUser();
+  const db = getDb();
+  const [row] = await db
+    .select({ postalAddress: schema.workspaceSettings.postalAddress })
+    .from(schema.workspaceSettings)
+    .where(eq(schema.workspaceSettings.userId, user.id))
+    .limit(1);
+  const result = await publishCampaignForUser(db, user.id, input, row?.postalAddress);
+  if (result.ok) {
+    const id = result.data?.id;
     await logActivity(
       user.id,
       "campaign.created",
-      `Created campaign "${d.name}" with ${listLeads.length} leads`,
-      campaign.id,
+      result.message ?? "Campaign published",
+      id,
     );
     revalidatePath("/campaigns");
     revalidatePath("/dashboard");
-    return { ok: true, data: { id: campaign.id }, message: "Campaign created" };
-  } catch (e) {
-    return err(e);
   }
+  return result;
 }
 
+/** Thin wrapper — wizard Start continues to call createCampaign. */
+export async function createCampaign(input: unknown): Promise<ActionResult<{ id: string }>> {
+  return publishCampaign(input);
+}
 
-/** Snapshot sendable list leads into campaign_leads if none exist yet (duplicate→start, draft start). */
-async function ensureCampaignLeadSnapshot(
-  db: ReturnType<typeof getDb>,
-  campaignId: string,
-  leadListId: string,
-): Promise<number> {
-  const [{ n }] = await db
-    .select({ n: sql<number>`count(*)` })
-    .from(campaignLeads)
-    .where(eq(campaignLeads.campaignId, campaignId));
-  if (Number(n) > 0) return Number(n);
-
-  const listLeads = await db
-    .select({ id: leads.id })
-    .from(leads)
-    .where(
-      and(
-        eq(leads.listId, leadListId),
-        sql`${leads.deletedAt} is null`,
-        inArray(leads.status, ["pending", "queued", "sent", "failed"]),
-      ),
-    );
-  if (!listLeads.length) return 0;
-  const CHUNK = 500;
-  for (let i = 0; i < listLeads.length; i += CHUNK) {
-    await db
-      .insert(campaignLeads)
-      .values(
-        listLeads.slice(i, i + CHUNK).map((l) => ({
-          campaignId,
-          leadId: l.id,
-          status: "queued" as const,
-        })),
-      )
-      .onConflictDoNothing();
-  }
-  return listLeads.length;
+export async function getCampaignWizardState(
+  id: string,
+): Promise<ActionResult<import("./campaign-drafts").CampaignWizardState>> {
+  const user = await requireUser();
+  return getCampaignWizardStateForUser(getDb(), user.id, id);
 }
 
 export async function campaignAction(
@@ -651,6 +571,9 @@ export async function campaignAction(
         if (blocked) return blocked;
         // Duplicate/draft campaigns had no lead snapshot — without this the
         // engine sees 0 queued leads and immediately completes.
+        if (!c.leadListId) {
+          return { ok: false, error: "Campaign is missing a lead list" };
+        }
         await ensureCampaignLeadSnapshot(db, campaignId, c.leadListId);
         await db
           .update(campaigns)
@@ -702,7 +625,9 @@ export async function campaignAction(
             .values(senders.map((s) => ({ campaignId: copy.id, senderId: s.senderId })));
         }
         // Prefill campaign_leads so Start does not race an empty queue
-        await ensureCampaignLeadSnapshot(db, copy.id, c.leadListId);
+        if (c.leadListId) {
+          await ensureCampaignLeadSnapshot(db, copy.id, c.leadListId);
+        }
         break;
       }
     }

@@ -197,17 +197,15 @@ export const campaigns = pgTable(
     })
       .notNull()
       .default("draft"),
-    leadListId: text("lead_list_id")
-      .notNull()
-      .references(() => leadLists.id, { onDelete: "restrict" }),
-    templateId: text("template_id")
-      .notNull()
-      .references(() => emailTemplates.id, { onDelete: "restrict" }),
+    leadListId: text("lead_list_id").references(() => leadLists.id, { onDelete: "restrict" }),
+    templateId: text("template_id").references(() => emailTemplates.id, { onDelete: "restrict" }),
+    /** Wizard resume cursor (1-based step). Null once published / not used. */
+    wizardStep: integer("wizard_step"),
     scheduledAt: text("scheduled_at"),
     businessDaysOnly: boolean("business_days_only").notNull().default(false),
     sendingTimezone: text("sending_timezone").notNull().default("UTC"),
-    sendingWindowStart: text("sending_window_start").notNull().default("00:00"),
-    sendingWindowEnd: text("sending_window_end").notNull().default("00:00"),
+    sendingWindowStart: text("sending_window_start").notNull().default("09:00"),
+    sendingWindowEnd: text("sending_window_end").notNull().default("17:00"),
     dailyLimit: integer("daily_limit").notNull().default(100),
     minDelaySec: integer("min_delay_sec").notNull().default(90),
     maxDelaySec: integer("max_delay_sec").notNull().default(240),

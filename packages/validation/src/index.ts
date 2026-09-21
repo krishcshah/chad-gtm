@@ -190,6 +190,59 @@ export const campaignCreateSchema = z
   });
 export type CampaignCreateInput = z.infer<typeof campaignCreateSchema>;
 
+/** Partial campaign payload for Save as Draft — required create fields may be omitted. */
+export const campaignDraftSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    name: z
+      .string()
+      .trim()
+      .max(140)
+      .optional()
+      .transform((v) => (v === undefined ? undefined : v.length > 0 ? v : "Untitled campaign")),
+    leadListId: z.string().min(1).nullable().optional(),
+    templateId: z.string().min(1).nullable().optional(),
+    /** Empty array is allowed on draft; omit to leave existing senders unchanged on update. */
+    senderIds: z.array(z.string().min(1)).optional(),
+    startMode: z.enum(["now", "later"]).optional(),
+    scheduledAt: z.string().datetime({ offset: true }).nullable().optional(),
+    businessDaysOnly: z.boolean().optional(),
+    sendingTimezone: z
+      .string()
+      .refine((v) => (TIMEZONES as readonly string[]).includes(v), "Unknown timezone")
+      .optional(),
+    sendingWindowStart: hhmm.optional(),
+    sendingWindowEnd: hhmm.optional(),
+    dailyLimit: z.coerce.number().int().min(1).max(100_000).optional(),
+    minDelaySec: z.coerce.number().int().min(5).max(86_400).optional(),
+    maxDelaySec: z.coerce.number().int().min(5).max(86_400).optional(),
+    maxEmailsPerSenderPerDay: z.coerce.number().int().min(1).max(5000).optional(),
+    stopOnReply: z.boolean().optional(),
+    retryFailed: z.boolean().optional(),
+    retryCount: z.coerce.number().int().min(0).max(10).optional(),
+    wizardStep: z.coerce.number().int().min(1).max(20).optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (
+      v.minDelaySec !== undefined &&
+      v.maxDelaySec !== undefined &&
+      v.maxDelaySec < v.minDelaySec
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Max delay must be ≥ min delay",
+        path: ["maxDelaySec"],
+      });
+    }
+  });
+export type CampaignDraftInput = z.infer<typeof campaignDraftSchema>;
+
+/** Full create (+ optional id to publish an existing draft). */
+export const campaignPublishSchema = campaignCreateSchema.and(
+  z.object({ id: z.string().min(1).optional() }),
+);
+export type CampaignPublishInput = z.infer<typeof campaignPublishSchema>;
+
 export const campaignActionSchema = z.object({
   action: z.enum(["start", "pause", "resume", "archive", "delete", "duplicate"]),
 });

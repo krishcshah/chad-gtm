@@ -40,8 +40,8 @@ export interface CampaignRow {
   userId: string;
   name: string;
   status: "draft" | "scheduled" | "running" | "paused" | "completed" | "archived";
-  leadListId: string;
-  templateId: string;
+  leadListId: string | null;
+  templateId: string | null;
   scheduledAt: string | null;
   businessDaysOnly: boolean;
   sendingTimezone: string;

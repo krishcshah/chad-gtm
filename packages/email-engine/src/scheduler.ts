@@ -116,6 +116,10 @@ export async function scheduleCampaign(
   if (senders.length === 0) return { enqueued: 0, note: "no-senders" };
   const activeSenders = senders.filter((s) => s.status !== "paused");
   if (activeSenders.length === 0) return { enqueued: 0, note: "all-paused" };
+  // Drafts may omit list/template; scheduler only runs scheduled/running but guard anyway.
+  if (!campaign.leadListId || !campaign.templateId) {
+    return { enqueued: 0, note: "missing-list-or-template" };
+  }
 
   // F16/F17: workspace postal + unsub base (load before claim so live missing
   // postal never leaves leads stuck in "scheduled").
