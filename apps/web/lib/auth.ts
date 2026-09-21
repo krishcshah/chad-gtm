@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { schema } from "@smartreach/database";
-import { getDb } from "./db";
+import { lazyDb } from "./db";
 import { env } from "./env";
 import { resolveTrustedOrigins } from "./auth-trusted-origins";
 
@@ -35,7 +35,7 @@ export const auth = betterAuth({
   appName: "SmartReach",
   baseURL: env.BETTER_AUTH_URL,
   secret: env.BETTER_AUTH_SECRET,
-  database: drizzleAdapter(getDb(), { provider: "pg", schema: authSchema }),
+  database: drizzleAdapter(lazyDb(), { provider: "pg", schema: authSchema }),
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 8,
