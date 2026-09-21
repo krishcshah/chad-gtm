@@ -1,0 +1,72 @@
+
+> smartreach@0.1.0 build
+> npm run build --workspaces --if-present
+
+
+> @smartreach/web@0.1.0 build
+> NEXT_DIST_DIR=.next-build next build
+
+Attention: Next.js now collects completely anonymous telemetry regarding usage.
+This information is used to shape Next.js' roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+https://nextjs.org/telemetry
+
+   ▲ Next.js 15.4.6
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 12.0s
+   Skipping linting
+   Checking validity of types ...
+
+   We detected TypeScript in your project and reconfigured your tsconfig.json file for you.
+   The following suggested values were added to your tsconfig.json. These values can be changed to fit your project's needs:
+
+   	- include was updated to add '.next-build/types/**/*.ts'
+
+   Collecting page data ...
+   Generating static pages (0/7) ...
+   Generating static pages (1/7) 
+   Generating static pages (3/7) 
+   Generating static pages (5/7) 
+ ✓ Generating static pages (7/7)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                 Size  First Load JS
+┌ ƒ /                                      165 B         104 kB
+├ ○ /_not-found                            994 B         101 kB
+├ ƒ /analytics                             245 B         167 kB
+├ ƒ /api/auth/[...all]                     134 B         100 kB
+├ ƒ /api/senders/template                  134 B         100 kB
+├ ƒ /api/unsubscribe                       134 B         100 kB
+├ ƒ /campaigns                           2.16 kB         172 kB
+├ ƒ /campaigns/[id]                      2.14 kB         168 kB
+├ ƒ /campaigns/new                       6.21 kB         176 kB
+├ ƒ /dashboard                             245 B         167 kB
+├ ƒ /leads                                 245 B         167 kB
+├ ƒ /leads/[id]                          4.46 kB         171 kB
+├ ƒ /leads/import                        5.14 kB         171 kB
+├ ƒ /leads/new                           1.91 kB         168 kB
+├ ○ /login                               3.06 kB         207 kB
+├ ○ /permission-denied                     232 B         164 kB
+├ ƒ /senders                             1.84 kB         171 kB
+├ ƒ /senders/import                      3.78 kB         170 kB
+├ ƒ /senders/new                         4.17 kB         170 kB
+├ ƒ /settings                            2.84 kB         169 kB
+├ ○ /signup                              3.12 kB         207 kB
+├ ƒ /templates                             245 B         167 kB
+├ ƒ /templates/[id]                        135 B         169 kB
+├ ƒ /templates/new                         136 B         169 kB
+├ ƒ /unibox                              6.88 kB         173 kB
+└ ƒ /unsubscribe                           168 B         104 kB
++ First Load JS shared by all             100 kB
+  ├ chunks/1902-4811c3a0a789cbe2.js      43.9 kB
+  ├ chunks/87c73c54-1f4741035a95c140.js  54.1 kB
+  └ other shared chunks (total)          1.93 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+EXIT:0
