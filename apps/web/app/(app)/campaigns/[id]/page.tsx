@@ -114,32 +114,6 @@ export default async function CampaignDetailPage({
               heading="Analytics"
               description="Leads contacted, replies, and bounces for this campaign. Opens and clicks are not tracked."
             />
-
-            <Card>
-              <CardContent className="p-5">
-                <h3 className="mb-4 font-medium">Sender rotation ({c.senders.length})</h3>
-                {c.senders.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-border/80 px-4 py-8 text-center text-sm text-muted-foreground">
-                    No senders attached to this campaign.
-                  </p>
-                ) : (
-                  <div className="divide-y">
-                    {c.senders.map((s) => (
-                      <div key={s.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                        <div className="min-w-0">
-                          <span className="font-medium">{s.senderName}</span>
-                          <span className="ml-2 text-muted-foreground">{s.email}</span>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
-                          <span>health {s.health}</span>
-                          <Badge variant={s.status === "active" ? "default" : "secondary"}>{s.status}</Badge>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
           </>
         }
         sequence={
