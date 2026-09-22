@@ -162,15 +162,9 @@ export async function scheduleCampaign(
         .update(schema.campaigns)
         .set({ status: "completed", completedAt: nowIsoS, updatedAt: nowIsoS })
         .where(eq(schema.campaigns.id, campaign.id));
-      await db
-        .update(schema.leads)
-        .set({ status: "completed", updatedAt: nowIsoS })
-        .where(
-          and(
-            eq(schema.leads.listId, campaign.leadListId),
-            inArray(schema.leads.id, sentLeadIdsSubquery(campaign.id)),
-          ),
-        );
+      // Lead funnel status is owned by send/reply/bounce/unsub (F03d).
+      // Do not stamp "completed" here — that value is outside the lead enum
+      // and would clobber contacted/replied/bounced.
       await log(db, campaign.userId, "campaign_completed", `Campaign "${campaign.name}" finished`, campaign.id);
       return { enqueued: 0, note: "completed" };
     }
@@ -314,10 +308,7 @@ export async function scheduleCampaign(
       .update(schema.campaignLeads)
       .set({ scheduledFor: scheduleAt.toISOString(), updatedAt: nowIsoS })
       .where(eq(schema.campaignLeads.id, cl.id));
-    await db
-      .update(schema.leads)
-      .set({ status: "queued", updatedAt: nowIsoS })
-      .where(eq(schema.leads.id, cl.leadId));
+    // Leave leads.status as "new" until send success promotes it to "contacted".
 
     // advance rotation + randomized pace
     cursor = pick.index;
@@ -368,10 +359,6 @@ function normalizeKeys(cf: Record<string, string>): Record<string, string> {
 function notExistsReplied(db: EngineDb, campaignId: string) {
   // campaign_leads.lead_id NOT IN (select lead_id from campaign_leads where campaign & replied)
   return sql`NOT EXISTS (SELECT 1 FROM campaign_leads cr WHERE cr.campaign_id = ${campaignId} AND cr.lead_id = campaign_leads.lead_id AND cr.status = 'replied')`;
-}
-
-function sentLeadIdsSubquery(campaignId: string) {
-  return sql`(SELECT lead_id FROM campaign_leads WHERE campaign_id = ${campaignId} AND status IN ('sent','completed'))` as any;
 }
 
 async function pendingWork(db: EngineDb, campaignId: string): Promise<number> {
