@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Download, Plus, Search, Tag, Trash2, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
@@ -27,9 +27,10 @@ import {
   TableRow,
   cn,
 } from "@smartreach/ui";
-import { bulkDeleteLeads, bulkTagLeads, createLeadTag, fetchLeadsPage } from "@/lib/actions";
+import { bulkTagLeads, createLeadTag, fetchLeadsPage } from "@/lib/actions";
 import { asCustomFields, isNextRedirect, isPermissionError } from "@/lib/lead-form";
 import { LeadFormDialog, type LeadFormLead } from "./lead-form-dialog";
+import { DeleteLeadsDialog, RenameListDialog } from "./lead-manage-dialogs";
 
 export interface LeadRow {
   id: string;
@@ -70,6 +71,9 @@ export function LeadTable({
   const [cursor, setCursor] = useState<string | undefined>(initialCursor);
   const [search, setSearch] = useState(initialSearch);
   const [status, setStatus] = useState(initialStatus);
+  const [title, setTitle] = useState(listName);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [deleteRequest, setDeleteRequest] = useState<{ mode: "one" | "bulk"; leads: { id: string; email: string }[] } | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [tagList, setTagList] = useState(tags);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -78,13 +82,29 @@ export function LeadTable({
   const [pending, start] = useTransition();
   const [listPending, startList] = useTransition();
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestId = useRef(0);
+
+  useEffect(() => {
+    setTitle(listName);
+  }, [listName]);
 
   const tagById = useMemo(() => Object.fromEntries(tagList.map((t) => [t.id, t])), [tagList]);
 
+  const writeFilterUrl = (q: string, s: string) => {
+    const params = new URLSearchParams();
+    if (q) params.set("search", q);
+    if (s) params.set("status", s);
+    const qs = params.toString();
+    router.replace(qs ? `/leads/${listId}?${qs}` : `/leads/${listId}`, { scroll: false });
+  };
+
   const applyFilters = (q: string, s: string) => {
+    const id = ++requestId.current;
+    writeFilterUrl(q, s);
     startList(async () => {
       try {
         const res = await fetchLeadsPage({ listId, search: q || undefined, status: s || undefined, pageSize: 50 });
+        if (id !== requestId.current) return;
         setRows((res.items as LeadRow[]).map(normalizeRow));
         setCursor(res.nextCursor);
         setSelected(new Set());
@@ -92,6 +112,7 @@ export function LeadTable({
         setDenied(false);
       } catch (error) {
         if (isNextRedirect(error)) throw error;
+        if (id !== requestId.current) return;
         const message = error instanceof Error ? error.message : "Could not load leads";
         if (isPermissionError(message)) setDenied(true);
         else setLoadError(message);
@@ -108,13 +129,16 @@ export function LeadTable({
   const loadMore = () =>
     startList(async () => {
       if (!cursor) return;
+      const id = requestId.current;
       try {
         const res = await fetchLeadsPage({ listId, search: search || undefined, status: status || undefined, cursor, pageSize: 50 });
+        if (id !== requestId.current) return;
         setRows((r) => [...r, ...(res.items as LeadRow[]).map(normalizeRow)]);
         setCursor(res.nextCursor);
         setLoadError(null);
       } catch (error) {
         if (isNextRedirect(error)) throw error;
+        if (id !== requestId.current) return;
         const message = error instanceof Error ? error.message : "Could not load leads";
         if (isPermissionError(message)) setDenied(true);
         else setLoadError(message);
@@ -148,22 +172,18 @@ export function LeadTable({
       return n;
     });
 
-  const doDelete = () => {
-    const ids = [...selected];
+  const askBulkDelete = () => {
+    const leads = rows.filter((row) => selected.has(row.id)).map((row) => ({ id: row.id, email: row.email }));
+    if (!leads.length) return;
+    setDeleteRequest({ mode: "bulk", leads });
+  };
+
+  const onDeleted = (ids: string[]) => {
     const removed = new Set(ids);
-    // optimistic
-    setRows((r) => r.filter((x) => !removed.has(x.id)));
+    setRows((current) => current.filter((row) => !removed.has(row.id)));
     setSelected(new Set());
-    toast(`Deleted ${ids.length} lead${ids.length > 1 ? "s" : ""}`, {
-      action: {
-        label: "Undo",
-        onClick: () => applyFilters(search, status), // soft-deleted rows stay gone; restore = re-import
-      },
-    });
-    start(async () => {
-      const res = await bulkDeleteLeads(ids);
-      if (!res.ok) toast.error(res.error);
-    });
+    toast.success(ids.length === 1 ? "Lead deleted" : `Deleted ${ids.length} leads`);
+    router.refresh();
   };
 
   const doExport = () => {
@@ -213,16 +233,21 @@ export function LeadTable({
   return (
     <div className="page-stack">
       <PageHeader
-        title={listName}
+        title={title}
         description={
           filtered
-            ? `${countLabel} matching ${rows.length === 1 ? "lead" : "leads"}.`
+            ? `${countLabel} matching ${rows.length === 1 ? "lead" : "leads"} for email, name, or company.`
             : `${countLabel} ${rows.length === 1 ? "lead" : "leads"} in this list.`
         }
         actions={
-          <Button size="sm" onClick={openCreate}>
-            <Plus className="h-4 w-4" /> Add Lead
-          </Button>
+          <>
+            <Button variant="outline" size="sm" onClick={() => setRenameOpen(true)}>
+              Rename
+            </Button>
+            <Button size="sm" onClick={openCreate}>
+              <Plus className="h-4 w-4" /> Add Lead
+            </Button>
+          </>
         }
       />
 
@@ -235,26 +260,41 @@ export function LeadTable({
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={(e) => onSearch(e.target.value)} placeholder="Search email, name, company…"
-            className="w-full pl-9" aria-label="Search leads" />
+            className="w-full pl-9" type="search" aria-label="Search leads by email, name, or company" />
         </div>
+        <div className="w-full sm:w-40">
         <Select value={status || "all"} onValueChange={(v) => { const s = v === "all" ? "" : v; setStatus(s); applyFilters(search, s); }}>
-          <SelectTrigger className="w-40"><SelectValue placeholder="All statuses" /></SelectTrigger>
+          <SelectTrigger className="w-full" aria-label="Filter by status"><SelectValue placeholder="All statuses" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
             {LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
-        <div className="ml-auto flex items-center gap-2">
+        </div>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           {selected.size > 0 && (
             <span className="text-sm text-muted-foreground">{selected.size} selected</span>
           )}
+          {filtered ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearch("");
+                setStatus("");
+                applyFilters("", "");
+              }}
+            >
+              Clear
+            </Button>
+          ) : null}
           <Button variant="outline" size="sm" onClick={doExport}>
             <Download className="h-4 w-4" /> Export
           </Button>
           {selected.size > 0 && (
             <>
               <TagDropdown tags={tagList} onTag={doTag} onNew={newTag} />
-              <Button variant="destructive" size="sm" onClick={doDelete} disabled={pending}>
+              <Button variant="destructive" size="sm" onClick={askBulkDelete} disabled={pending}>
                 <Trash2 className="h-4 w-4" /> Delete
               </Button>
             </>
@@ -300,7 +340,7 @@ export function LeadTable({
               <TableHead>Company</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Tags</TableHead>
-              <TableHead className="w-28"><span className="sr-only">Actions</span></TableHead>
+              <TableHead className="w-[1%]"><span className="sr-only">Actions</span></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -335,15 +375,26 @@ export function LeadTable({
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openEdit(r)}
-                      aria-label={`Edit Lead ${r.email}`}
-                    >
-                      Edit Lead
-                    </Button>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEdit(r)}
+                        aria-label={`Edit Lead ${r.email}`}
+                      >
+                        Edit Lead
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => setDeleteRequest({ mode: "one", leads: [{ id: r.id, email: r.email }] })}
+                        aria-label={`Delete lead ${r.email}`}
+                      >
+                        Delete
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -374,6 +425,33 @@ export function LeadTable({
             if (!next) setEditor(null);
           }}
           onSaved={onSaved}
+        />
+      ) : null}
+
+      {renameOpen ? (
+        <RenameListDialog
+          key={title}
+          open
+          listId={listId}
+          name={title}
+          onOpenChange={setRenameOpen}
+          onRenamed={(next) => {
+            setTitle(next);
+            toast.success("List renamed");
+            router.refresh();
+          }}
+        />
+      ) : null}
+
+      {deleteRequest ? (
+        <DeleteLeadsDialog
+          open
+          mode={deleteRequest.mode}
+          leads={deleteRequest.leads}
+          onOpenChange={(next) => {
+            if (!next) setDeleteRequest(null);
+          }}
+          onDeleted={onDeleted}
         />
       ) : null}
     </div>
