@@ -5,7 +5,7 @@
  */
 import createDOMPurify from "dompurify";
 import type { Config, DOMPurify } from "dompurify";
-import { classifyHttpUrl, indexOfQuotedReply, linkifyPlainText } from "./message-body";
+import { classifyHttpUrl, dropTrailingReplyDuplicate, indexOfQuotedReply, linkifyPlainText } from "./message-body";
 
 export interface SanitizedEmail {
   main: string;
@@ -127,6 +127,7 @@ function partitionEmailHtml(cleanHtml: string): { main: string; quoted: string |
   if (last && last.tagName === "BLOCKQUOTE" && root.contains(last)) take(last);
 
   peelInlineAttribution(root, quoted);
+  dedupeQuotedText(quoted, root.textContent ?? "");
 
   const quotedHtml = quoted.innerHTML.trim();
   return { main: root.innerHTML.trim(), quoted: quotedHtml || null };
@@ -152,6 +153,27 @@ function attributionAlreadyQuoted(existing: string, tail: string): boolean {
   if (!marker) return false;
   const head = marker.replace(/\s+/g, " ").toLowerCase().slice(0, 22);
   return head.length >= 12 && have.includes(head);
+}
+
+function dedupeQuotedText(quoted: HTMLElement, reply: string) {
+  const body = reply.trim();
+  if (!body) return;
+  const nodes: Text[] = [];
+  const walker = quoted.ownerDocument.createTreeWalker(quoted, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) nodes.push(walker.currentNode as Text);
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const node = nodes[i];
+    const current = node.nodeValue ?? "";
+    if (!current.trim()) continue;
+    const next = dropTrailingReplyDuplicate(body, current);
+    if (next === current.trim()) break;
+    if (!next) {
+      node.parentNode?.removeChild(node);
+      continue;
+    }
+    node.nodeValue = next;
+    break;
+  }
 }
 
 function textNodeAt(root: HTMLElement, index: number): Text | null {

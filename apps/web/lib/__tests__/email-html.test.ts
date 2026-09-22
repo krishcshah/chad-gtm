@@ -41,7 +41,10 @@ describe("sanitizeEmailHtml", () => {
     expect(safe.main).not.toContain("YOOO");
     expect(safe.main).not.toContain("wrote:");
     expect(safe.quoted).toContain("On Tue, 22 Sept 2026, 02:00 Hello1, wrote:");
-    expect(safe.quoted).toContain("YOOO");
+    const quotedText = new DOMParser().parseFromString(safe.quoted ?? "", "text/html").body.textContent ?? "";
+    expect(quotedText).toContain("YOOO");
+    expect(quotedText).not.toContain("What?");
+    expect(quotedText).not.toMatch(/(?:^|>\s*)What\?\s*$/);
   });
 
   it("strips a flattened Gmail quote when the html quote is already collapsed", () => {

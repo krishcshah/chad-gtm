@@ -474,10 +474,14 @@ export function indexOfQuotedReply(text: string): number {
   return best;
 }
 
-/** A bare copy of the new reply after the quote block is not part of the prior mail. */
-function dropTrailingReplyDuplicate(body: string, quoted: string): string {
+/**
+ * Drop a trailing copy of the new reply inside the quote.
+ * Compares quote-marker-stripped lines (`> What?`) and a same-line tail
+ * (`> YOOO > What?`) against the body, and removes only that final segment.
+ */
+export function dropTrailingReplyDuplicate(body: string, quoted: string): string {
   const reply = body.trim();
-  if (!reply) return quoted;
+  if (!reply) return quoted.trim();
   const lines = quoted.split("\n");
   while (lines.length > 0) {
     const last = lines[lines.length - 1].trim();
@@ -485,14 +489,30 @@ function dropTrailingReplyDuplicate(body: string, quoted: string): string {
       lines.pop();
       continue;
     }
-    if (/^>/.test(last)) break;
-    if (last === reply) {
+    const withoutTail = stripFinalQuoteSegment(last, reply);
+    if (withoutTail !== last) {
+      if (!withoutTail) lines.pop();
+      else lines[lines.length - 1] = withoutTail;
+      continue;
+    }
+    if (stripQuoteMarkers(last) === reply) {
       lines.pop();
       continue;
     }
     break;
   }
   return lines.join("\n").trim();
+}
+
+function stripQuoteMarkers(line: string): string {
+  return line.replace(/^(?:>\s*)+/, "").trim();
+}
+
+/** Remove only the final `> segment` when that segment equals the new reply. */
+function stripFinalQuoteSegment(line: string, reply: string): string {
+  const match = line.match(/^(.*\S)\s*>\s*([^>]*)$/);
+  if (!match || match[2].trim() !== reply) return line;
+  return match[1].trim();
 }
 
 function isMostlyQuoted(lines: string[], start: number): boolean {

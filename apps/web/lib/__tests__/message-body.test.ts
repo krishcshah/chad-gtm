@@ -91,8 +91,10 @@ describe("prepareMessageBody", () => {
       text: "What? On Tue, 22 Sept 2026, 02:00 Hello1, wrote: > YOOO > What?",
     });
     expect(what.body).toBe("What?");
-    expect(what.quoted).toContain("On Tue, 22 Sept 2026, 02:00 Hello1, wrote:");
     expect(what.quoted).toContain("YOOO");
+    expect(what.quoted).not.toMatch(/(?:^|>\s*)What\?\s*$/);
+    expect(what.quoted).toContain("On Tue, 22 Sept 2026, 02:00 Hello1, wrote:");
+    expect(what.quoted?.match(/YOOO/g)).toHaveLength(1);
     expect(what.body).not.toContain("YOOO");
     expect(what.body).not.toContain("wrote:");
 
