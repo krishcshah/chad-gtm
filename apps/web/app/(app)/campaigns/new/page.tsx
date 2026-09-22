@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/session";
+import { requireWorkspace } from "@/lib/session";
 import { listLeadLists, listSenders, listTemplates } from "@/lib/queries";
 import { getCampaignWizardState } from "@/lib/actions";
 import { PageHeader } from "@smartreach/ui";
@@ -11,13 +11,13 @@ export default async function NewCampaignPage({
 }: {
   searchParams: Promise<{ draft?: string; sequenceTemplate?: string }>;
 }) {
-  const user = await requireUser();
+  const { user, workspace } = await requireWorkspace();
   const sp = await searchParams;
   const draftId = sp.draft?.trim() || "";
   const initialSequenceTemplateId = sp.sequenceTemplate?.trim() || null;
   const [lists, senders, templates, draftResult] = await Promise.all([
-    listLeadLists(user.id),
-    listSenders(user.id),
+    listLeadLists(user.id, workspace.id),
+    listSenders(user.id, workspace.id),
     listTemplates(user.id),
     draftId ? getCampaignWizardState(draftId) : Promise.resolve(null),
   ]);

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 import { auth } from "./auth";
 import { isDbConfigured } from "./env";
+import { getActiveWorkspace, type WorkspaceItem } from "./workspaces";
 
 /** Request-scoped session lookup (deduped per render via React cache). */
 export const getSession = cache(async () => {
@@ -19,3 +20,14 @@ export async function requireUser() {
   if (!session?.user) redirect("/login");
   return session.user;
 }
+
+/** Guard for (app) pages — returns authenticated user and their active workspace. */
+export async function requireWorkspace(): Promise<{
+  user: NonNullable<Awaited<ReturnType<typeof getSession>>>["user"];
+  workspace: WorkspaceItem;
+}> {
+  const user = await requireUser();
+  const workspace = await getActiveWorkspace(user.id);
+  return { user, workspace };
+}
+

@@ -1,16 +1,19 @@
-import { requireUser } from "@/lib/session";
+import { requireWorkspace } from "@/lib/session";
 import { getDb } from "@/lib/db";
+import { listUserWorkspaces } from "@/lib/workspaces";
 import { schema } from "@smartreach/database";
 import { APP_NAME } from "@smartreach/shared";
 import { Avatar, AvatarFallback, Card, CardContent, Separator } from "@smartreach/ui";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { eq, desc } from "drizzle-orm";
 import { ComplianceForms } from "./compliance-forms";
+import { WorkspaceSettingsCard } from "./workspace-settings-card";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const user = await requireUser();
+  const { user, workspace } = await requireWorkspace();
+  const workspaces = await listUserWorkspaces(user.id);
   const initial = (user.name ?? user.email ?? "U").slice(0, 1).toUpperCase();
   const db = getDb();
   const [settings] = await db
@@ -30,9 +33,11 @@ export default async function SettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Account, compliance, appearance, and sending engine.
+          Workspaces, account, compliance, appearance, and sending engine.
         </p>
       </div>
+
+      <WorkspaceSettingsCard workspaces={workspaces} activeWorkspaceId={workspace.id} />
 
       <Card>
         <CardContent className="p-6">

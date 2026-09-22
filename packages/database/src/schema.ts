@@ -30,6 +30,26 @@ const isoNow = sql`to_char((now() AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS.
 const createdAt = () => text("created_at").notNull().default(isoNow);
 const updatedAt = () => text("updated_at").notNull().default(isoNow);
 
+/* ─── Workspaces (multi-client isolation) ─────────────────────────────── */
+
+export const workspaces = pgTable(
+  "workspaces",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    isDefault: boolean("is_default").notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("workspaces_user_idx").on(t.userId),
+  ],
+);
+
 /* ─── Lead lists & leads ───────────────────────────────────────────────── */
 
 export const leadLists = pgTable(
@@ -39,6 +59,8 @@ export const leadLists = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     deletedAt: text("deleted_at"),
     createdAt: createdAt(),
@@ -46,6 +68,7 @@ export const leadLists = pgTable(
   },
   (t) => [
     index("lead_lists_user_idx").on(t.userId),
+    index("lead_lists_workspace_idx").on(t.workspaceId),
     uniqueIndex("lead_lists_user_name_active_unique").on(t.userId, t.name, t.deletedAt),
   ],
 );
@@ -57,6 +80,8 @@ export const leads = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     listId: text("list_id")
       .notNull()
       .references(() => leadLists.id, { onDelete: "cascade" }),
@@ -88,6 +113,7 @@ export const leads = pgTable(
   },
   (t) => [
     index("leads_user_idx").on(t.userId),
+    index("leads_workspace_idx").on(t.workspaceId),
     index("leads_list_idx").on(t.listId),
     index("leads_status_idx").on(t.status),
     index("leads_email_idx").on(t.email),
@@ -119,6 +145,8 @@ export const senderAccounts = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     senderName: text("sender_name").notNull(),
     email: text("email").notNull(),
     smtpHost: text("smtp_host").notNull(),
@@ -156,6 +184,7 @@ export const senderAccounts = pgTable(
   },
   (t) => [
     index("sender_accounts_user_idx").on(t.userId),
+    index("sender_accounts_workspace_idx").on(t.workspaceId),
     index("sender_accounts_status_idx").on(t.status),
     uniqueIndex("sender_accounts_user_email_active_unique").on(t.userId, t.email, t.deletedAt),
   ],
@@ -191,6 +220,8 @@ export const campaigns = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     status: text("status", {
       enum: ["draft", "scheduled", "running", "paused", "completed", "archived"],
@@ -225,6 +256,7 @@ export const campaigns = pgTable(
   },
   (t) => [
     index("campaigns_user_idx").on(t.userId),
+    index("campaigns_workspace_idx").on(t.workspaceId),
     index("campaigns_status_idx").on(t.status),
     index("campaigns_due_idx").on(t.status, t.scheduledAt),
   ],
@@ -472,6 +504,8 @@ export const suppressions = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     /** Lowercased email OR leading-@ domain like "@example.com". */
     value: text("value").notNull(),
     kind: text("kind", { enum: ["email", "domain"] }).notNull().default("email"),
@@ -486,6 +520,7 @@ export const suppressions = pgTable(
   (t) => [
     uniqueIndex("suppressions_user_value_unique").on(t.userId, t.value),
     index("suppressions_user_idx").on(t.userId),
+    index("suppressions_workspace_idx").on(t.workspaceId),
     index("suppressions_value_idx").on(t.value),
   ],
 );
@@ -496,6 +531,8 @@ export const workspaceSettings = pgTable("workspace_settings", {
   userId: text("user_id")
     .primaryKey()
     .references(() => users.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id")
+    .references(() => workspaces.id, { onDelete: "cascade" }),
   companyName: text("company_name").notNull().default(""),
   /** Physical postal address required by CAN-SPAM on commercial mail. */
   postalAddress: text("postal_address").notNull().default(""),
@@ -513,6 +550,8 @@ export const uniboxMessages = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     /** Anchor inbound reply that opened the thread (nullable for lead+campaign lookups). */
     replyId: text("reply_id").references(() => replies.id, { onDelete: "set null" }),
     leadId: text("lead_id").references(() => leads.id, { onDelete: "set null" }),
@@ -534,6 +573,7 @@ export const uniboxMessages = pgTable(
   },
   (t) => [
     index("unibox_messages_user_sent_idx").on(t.userId, t.sentAt),
+    index("unibox_messages_workspace_idx").on(t.workspaceId),
     index("unibox_messages_reply_idx").on(t.replyId),
     index("unibox_messages_lead_campaign_idx").on(t.leadId, t.campaignId),
   ],

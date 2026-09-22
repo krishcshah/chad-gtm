@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, Progress, statusVariant } from "@smartreach/ui";
-import { requireUser } from "@/lib/session";
+import { requireWorkspace } from "@/lib/session";
 import { getActiveCampaigns, getDashboardStats, getRecentActivity } from "@/lib/queries";
 import { AnalyticsSectionLoader } from "@/components/analytics-section-loader";
 import { ActivityFeed } from "./activity-feed";
@@ -33,12 +33,12 @@ export default async function DashboardPage({
 }: {
   searchParams: Promise<{ from?: string; to?: string }>;
 }) {
-  const user = await requireUser();
+  const { user, workspace } = await requireWorkspace();
   const sp = await searchParams;
   const [stats, activity, activeCampaigns] = await Promise.all([
-    getDashboardStats(user.id),
+    getDashboardStats(user.id, workspace.id),
     getRecentActivity(user.id, 50),
-    getActiveCampaigns(user.id),
+    getActiveCampaigns(user.id, workspace.id),
   ]);
 
   const firstName = user.name?.split(" ")[0] ?? "there";
@@ -60,9 +60,12 @@ export default async function DashboardPage({
               <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
               Engine Online
             </span>
+            <span className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+              {workspace.name}
+            </span>
           </div>
           <p className="text-xs text-muted-foreground">
-            System overview across your campaigns, connected mailboxes, and incoming lead replies.
+            System overview for {workspace.name} · mailboxes, campaigns, and incoming replies.
           </p>
         </div>
 

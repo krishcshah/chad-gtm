@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Plus, Rocket } from "lucide-react";
-import { requireUser } from "@/lib/session";
+import { requireWorkspace } from "@/lib/session";
 import { listCampaigns } from "@/lib/queries";
 import { Badge, Button, EmptyState, PageHeader, Progress, statusVariant } from "@smartreach/ui";
 import { formatDate } from "@smartreach/shared";
@@ -9,14 +9,14 @@ import { CampaignActions } from "./campaign-actions";
 export const dynamic = "force-dynamic";
 
 export default async function CampaignsPage() {
-  const user = await requireUser();
-  const campaigns = await listCampaigns(user.id);
+  const { user, workspace } = await requireWorkspace();
+  const campaigns = await listCampaigns(user.id, workspace.id);
 
   return (
     <div className="page-stack">
       <PageHeader
         title="Campaigns"
-        description="Launch outreach in under a minute. Senders rotate automatically."
+        description={`Outreach campaigns for ${workspace.name}. Senders rotate automatically.`}
         actions={
           <Button size="sm" asChild>
             <Link href="/campaigns/new">

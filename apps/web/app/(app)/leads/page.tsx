@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, FileSpreadsheet, Plus, Sparkles, Upload, Users } from "lucide-react";
-import { requireUser } from "@/lib/session";
+import { requireWorkspace } from "@/lib/session";
 import { listLeadLists } from "@/lib/queries";
 import { Badge, Button, Card, CardContent, EmptyState, PageHeader } from "@smartreach/ui";
 import { formatDate } from "@smartreach/shared";
@@ -11,15 +11,15 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Leads · SmartReach" };
 
 export default async function LeadsPage() {
-  const user = await requireUser();
-  const lists = await listLeadLists(user.id);
+  const { user, workspace } = await requireWorkspace();
+  const lists = await listLeadLists(user.id, workspace.id);
   const totalLeads = lists.reduce((acc, l) => acc + Number(l.leadCount || 0), 0);
 
   return (
     <div className="page-stack space-y-6">
       <PageHeader
         title="Leads & Contact Lists"
-        description="Upload CSV contacts, map custom fields, and build targeted audiences for your campaigns."
+        description={`Manage audience lists and verified contacts for ${workspace.name}.`}
         actions={
           <Button size="sm" asChild className="gap-1.5 shadow-sm">
             <Link href="/leads/import">

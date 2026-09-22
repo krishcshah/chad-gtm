@@ -144,6 +144,7 @@ export async function saveCampaignDraftForUser(
   db: Db,
   userId: string,
   input: unknown,
+  workspaceId?: string | null,
 ): Promise<DraftActionResult<{ id: string }>> {
   const parsed = campaignDraftSchema.safeParse(input);
   if (!parsed.success) return zodFail(parsed.error);
@@ -170,6 +171,9 @@ export async function saveCampaignDraftForUser(
       const patch = draftPatchFromInput(d, keys);
       patch.updatedAt = nowIso();
       patch.status = "draft";
+      if (workspaceId) {
+        patch.workspaceId = workspaceId;
+      }
       await db.update(campaigns).set(patch).where(eq(campaigns.id, d.id));
 
       if (keys.has("senderIds") && d.senderIds !== undefined) {
@@ -181,6 +185,7 @@ export async function saveCampaignDraftForUser(
 
     const insertValues: Record<string, unknown> = {
       userId,
+      workspaceId: workspaceId ?? null,
       name: d.name ?? "Untitled campaign",
       status: "draft",
       leadListId: d.leadListId ?? null,
@@ -225,6 +230,7 @@ export async function publishCampaignForUser(
   userId: string,
   input: unknown,
   _postalAddress?: string | null,
+  workspaceId?: string | null,
 ): Promise<DraftActionResult<{ id: string }>> {
   const parsed = campaignPublishSchema.safeParse(input);
   if (!parsed.success) return zodFail(parsed.error);
@@ -274,7 +280,13 @@ export async function publishCampaignForUser(
         return { ok: false, error: "Only draft campaigns can be published" };
       }
 
-      await db.update(campaigns).set(fieldValues).where(eq(campaigns.id, d.id));
+      await db
+        .update(campaigns)
+        .set({
+          ...fieldValues,
+          ...(workspaceId ? { workspaceId } : {}),
+        })
+        .where(eq(campaigns.id, d.id));
       await replaceCampaignSenders(db, d.id, d.senderIds);
       const n = await ensureCampaignLeadSnapshot(db, d.id, d.leadListId);
       return {
@@ -288,6 +300,7 @@ export async function publishCampaignForUser(
       .insert(campaigns)
       .values({
         userId,
+        workspaceId: workspaceId ?? null,
         ...fieldValues,
       })
       .returning({ id: campaigns.id });

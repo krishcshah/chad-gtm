@@ -1,8 +1,8 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { UNIBOX_REPLY_TAGS, type UniboxReplyTag } from "@smartreach/shared";
 import { getDb } from "@/lib/db";
-import { requireUser } from "@/lib/session";
+import { requireWorkspace } from "@/lib/session";
 import { UniboxClient } from "./unibox-client";
 
 export const dynamic = "force-dynamic";
@@ -17,13 +17,23 @@ export default async function UniboxPage({
 }: {
   searchParams: Promise<{ tag?: string }>;
 }) {
-  const user = await requireUser();
+  const { user, workspace } = await requireWorkspace();
   const sp = await searchParams;
   const tag = parseTag(sp.tag);
   const db = getDb();
   const t = schema;
   const conds = [eq(t.replies.userId, user.id)];
   if (tag) conds.push(eq(t.replies.tag, tag));
+
+  if (workspace.isDefault) {
+    conds.push(
+      sql`(${t.campaigns.workspaceId} = ${workspace.id} OR ${t.senderAccounts.workspaceId} = ${workspace.id} OR (${t.campaigns.workspaceId} IS NULL AND ${t.senderAccounts.workspaceId} IS NULL))`
+    );
+  } else {
+    conds.push(
+      sql`(${t.campaigns.workspaceId} = ${workspace.id} OR ${t.senderAccounts.workspaceId} = ${workspace.id})`
+    );
+  }
 
   const rows = await db
     .select({

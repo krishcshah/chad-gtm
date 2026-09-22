@@ -19,6 +19,8 @@ import { cn } from "@smartreach/ui";
 import { authClient } from "@/lib/auth-client";
 import { Logo } from "./logo";
 import { ThemeToggle } from "./theme-toggle";
+import { WorkspaceSwitcher } from "./workspace-switcher";
+import type { WorkspaceItem } from "@/lib/workspaces";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -32,7 +34,15 @@ const nav = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function AppSidebar({ user }: { user: { name?: string | null; email?: string | null } }) {
+export function AppSidebar({
+  user,
+  workspaces = [],
+  activeWorkspace,
+}: {
+  user: { name?: string | null; email?: string | null };
+  workspaces?: WorkspaceItem[];
+  activeWorkspace?: WorkspaceItem;
+}) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -44,6 +54,16 @@ export function AppSidebar({ user }: { user: { name?: string | null; email?: str
         <div className="flex h-16 items-center px-5 border-b border-border/40">
           <Logo />
         </div>
+
+        {/* Workspace Switcher */}
+        {activeWorkspace && (
+          <div className="p-3 border-b border-border/40">
+            <WorkspaceSwitcher
+              workspaces={workspaces}
+              activeWorkspace={activeWorkspace}
+            />
+          </div>
+        )}
 
         {/* Navigation items */}
         <nav className="flex-1 space-y-1 px-3 py-3 overflow-y-auto">
@@ -130,6 +150,14 @@ export function AppSidebar({ user }: { user: { name?: string | null; email?: str
       {/* Mobile Top Bar */}
       <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-2 border-b border-border/50 bg-card/80 px-3 backdrop-blur-xl lg:hidden">
         <Logo compact />
+        {activeWorkspace && (
+          <WorkspaceSwitcher
+            workspaces={workspaces}
+            activeWorkspace={activeWorkspace}
+            compact
+            className="max-w-[130px]"
+          />
+        )}
         <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {nav.map((item) => (
             <Link

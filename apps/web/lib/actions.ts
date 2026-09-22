@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   schema,
@@ -53,6 +54,7 @@ import {
 } from "./sequences";
 import { getDb } from "./db";
 import { requireUser } from "./session";
+import { ACTIVE_WORKSPACE_COOKIE, getActiveWorkspace, type WorkspaceItem } from "./workspaces";
 import { formatZodActionError } from "./zod-action-error";
 import {
   getAnalyticsSeriesForUser,
@@ -113,13 +115,14 @@ async function logActivity(
 
 export async function createLeadList(input: unknown): Promise<ActionResult<{ id: string }>> {
   const user = await requireUser();
+  const workspace = await getActiveWorkspace(user.id);
   const parsed = leadListCreateSchema.safeParse(input);
   if (!parsed.success) return zodFail(parsed.error);
   const db = getDb();
   try {
     const [row] = await db
       .insert(leadLists)
-      .values({ userId: user.id, name: parsed.data.name })
+      .values({ userId: user.id, workspaceId: workspace.id, name: parsed.data.name })
       .returning({ id: leadLists.id });
     revalidatePath("/leads");
     return { ok: true, data: { id: row.id } };
@@ -183,6 +186,7 @@ export async function importLeads(input: unknown): Promise<
   ActionResult<{ imported: number; skipped: number; invalid: number; listId: string }>
 > {
   const user = await requireUser();
+  const workspace = await getActiveWorkspace(user.id);
   const parsed = leadImportSchema.safeParse(input);
   if (!parsed.success) return zodFail(parsed.error);
 
@@ -195,7 +199,7 @@ export async function importLeads(input: unknown): Promise<
     if (!listName) return { ok: false, error: "Give the new list a name" };
     const [row] = await db
       .insert(leadLists)
-      .values({ userId: user.id, name: listName })
+      .values({ userId: user.id, workspaceId: workspace.id, name: listName })
       .returning({ id: leadLists.id });
     targetListId = row.id;
   } else {
@@ -256,6 +260,7 @@ export async function importLeads(input: unknown): Promise<
 
     toInsert.push({
       userId: user.id,
+      workspaceId: workspace.id,
       listId: targetListId,
       email,
       firstName: values.firstName ?? null,
@@ -423,13 +428,14 @@ function buildSenderValues(userId: string, d: ReturnType<typeof senderCreateSche
 
 export async function createSender(input: unknown): Promise<ActionResult<{ id: string }>> {
   const user = await requireUser();
+  const workspace = await getActiveWorkspace(user.id);
   const parsed = senderCreateSchema.safeParse(input);
   if (!parsed.success) return zodFail(parsed.error);
   const db = getDb();
   try {
     const [row] = await db
       .insert(senderAccounts)
-      .values(buildSenderValues(user.id, parsed.data))
+      .values({ ...buildSenderValues(user.id, parsed.data), workspaceId: workspace.id })
       .returning({ id: senderAccounts.id });
     await logActivity(user.id, "sender.added", `Added sender ${parsed.data.email}`);
     revalidatePath("/senders");
@@ -785,7 +791,8 @@ export async function updateSequenceTemplate(
 export async function saveCampaignDraft(input: unknown): Promise<ActionResult<{ id: string }>> {
   const user = await requireUser();
   const db = getDb();
-  const result = await saveCampaignDraftForUser(db, user.id, input);
+  const workspace = await getActiveWorkspace(user.id);
+  const result = await saveCampaignDraftForUser(db, user.id, input, workspace.id);
   if (result.ok) {
     revalidatePath("/campaigns");
     revalidatePath("/dashboard");
@@ -796,7 +803,8 @@ export async function saveCampaignDraft(input: unknown): Promise<ActionResult<{ 
 export async function publishCampaign(input: unknown): Promise<ActionResult<{ id: string }>> {
   const user = await requireUser();
   const db = getDb();
-  const result = await publishCampaignForUser(db, user.id, input);
+  const workspace = await getActiveWorkspace(user.id);
+  const result = await publishCampaignForUser(db, user.id, input, null, workspace.id);
   if (result.ok) {
     const id = result.data?.id;
     await logActivity(
@@ -899,6 +907,7 @@ export async function campaignAction(
           .insert(campaigns)
           .values({
             userId: user.id,
+            workspaceId: c.workspaceId,
             name: `${c.name} (copy)`,
             status: "draft",
             leadListId: c.leadListId,
@@ -963,6 +972,7 @@ export async function duplicateCampaignToDraft(
       .insert(campaigns)
       .values({
         userId: user.id,
+        workspaceId: c.workspaceId,
         name: copyName,
         status: "draft",
         leadListId: c.leadListId,
@@ -1311,6 +1321,7 @@ export async function upsertWorkspaceSettings(input: unknown): Promise<ActionRes
 
 export async function addSuppression(input: unknown): Promise<ActionResult<{ id: string }>> {
   const user = await requireUser();
+  const workspace = await getActiveWorkspace(user.id);
   const parsed = suppressionCreateSchema.safeParse(input);
   if (!parsed.success) return zodFail(parsed.error);
   let value = parsed.data.value;
@@ -1331,6 +1342,7 @@ export async function addSuppression(input: unknown): Promise<ActionResult<{ id:
       .insert(schema.suppressions)
       .values({
         userId: user.id,
+        workspaceId: workspace.id,
         value,
         kind,
         reason: parsed.data.reason || "",
@@ -1388,6 +1400,7 @@ export async function listSuppressions(params: unknown = {}): Promise<
   }>
 > {
   const user = await requireUser();
+  const workspace = await getActiveWorkspace(user.id);
   const parsed = suppressionListQuerySchema.safeParse(params ?? {});
   if (!parsed.success) return zodFail(parsed.error);
   try {
@@ -1397,6 +1410,7 @@ export async function listSuppressions(params: unknown = {}): Promise<
       limit: parsed.data.limit,
       search: parsed.data.search,
       kind: parsed.data.kind,
+      workspaceId: workspace.id,
     });
     return {
       ok: true,
@@ -1415,6 +1429,7 @@ export async function importSuppressions(
   input: unknown,
 ): Promise<ActionResult<{ added: number; skipped: number; invalid: number }>> {
   const user = await requireUser();
+  const workspace = await getActiveWorkspace(user.id);
   const parsed = suppressionImportSchema.safeParse(input);
   if (!parsed.success) return zodFail(parsed.error);
   const expanded = expandSuppressionImportLines(parsed.data);
@@ -1426,6 +1441,7 @@ export async function importSuppressions(
   const seen = new Set<string>();
   const toInsert: {
     userId: string;
+    workspaceId: string;
     value: string;
     kind: "email" | "domain";
     reason: string;
@@ -1445,6 +1461,7 @@ export async function importSuppressions(
     seen.add(token.value);
     toInsert.push({
       userId: user.id,
+      workspaceId: workspace.id,
       value: token.value,
       kind: token.kind,
       reason: "",
@@ -1551,6 +1568,168 @@ export async function processUnsubscribe(token: string): Promise<ActionResult<{ 
       `Unsubscribed ${verified.email}`,
     );
     return { ok: true, data: { email: verified.email }, message: "You have been unsubscribed" };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+/* ═══ WORKSPACES ═══ */
+
+export async function createWorkspaceAction(input: {
+  name: string;
+  description?: string;
+}): Promise<ActionResult<WorkspaceItem>> {
+  try {
+    const user = await requireUser();
+    const name = input.name?.trim();
+    if (!name) {
+      return { ok: false, error: "Workspace name is required" };
+    }
+
+    const db = getDb();
+    const [created] = await db
+      .insert(schema.workspaces)
+      .values({
+        userId: user.id,
+        name,
+        description: input.description?.trim() || null,
+        isDefault: false,
+      })
+      .returning();
+
+    // Switch active workspace to newly created one
+    const cookieStore = await cookies();
+    cookieStore.set(ACTIVE_WORKSPACE_COOKIE, created.id, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+      httpOnly: false,
+    });
+
+    await logActivity(user.id, "workspace.created", `Created workspace "${name}"`, created.id);
+    revalidatePath("/", "layout");
+    return { ok: true, data: created as WorkspaceItem, message: "Workspace created" };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+export async function switchWorkspaceAction(
+  workspaceId: string,
+): Promise<ActionResult<{ id: string; name: string }>> {
+  try {
+    const user = await requireUser();
+    const db = getDb();
+    const [workspace] = await db
+      .select()
+      .from(schema.workspaces)
+      .where(and(eq(schema.workspaces.id, workspaceId), eq(schema.workspaces.userId, user.id)))
+      .limit(1);
+
+    if (!workspace) {
+      return { ok: false, error: "Workspace not found" };
+    }
+
+    const cookieStore = await cookies();
+    cookieStore.set(ACTIVE_WORKSPACE_COOKIE, workspace.id, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+      httpOnly: false,
+    });
+
+    revalidatePath("/", "layout");
+    return { ok: true, data: { id: workspace.id, name: workspace.name } };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+export async function updateWorkspaceAction(
+  workspaceId: string,
+  input: { name: string; description?: string },
+): Promise<ActionResult<WorkspaceItem>> {
+  try {
+    const user = await requireUser();
+    const name = input.name?.trim();
+    if (!name) {
+      return { ok: false, error: "Workspace name is required" };
+    }
+
+    const db = getDb();
+    const [updated] = await db
+      .update(schema.workspaces)
+      .set({
+        name,
+        description: input.description !== undefined ? input.description.trim() || null : undefined,
+        updatedAt: sql`now()`,
+      })
+      .where(and(eq(schema.workspaces.id, workspaceId), eq(schema.workspaces.userId, user.id)))
+      .returning();
+
+    if (!updated) {
+      return { ok: false, error: "Workspace not found" };
+    }
+
+    revalidatePath("/", "layout");
+    return { ok: true, data: updated as WorkspaceItem, message: "Workspace updated" };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+export async function deleteWorkspaceAction(
+  workspaceId: string,
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const user = await requireUser();
+    const db = getDb();
+
+    // Check workspace
+    const [workspace] = await db
+      .select()
+      .from(schema.workspaces)
+      .where(and(eq(schema.workspaces.id, workspaceId), eq(schema.workspaces.userId, user.id)))
+      .limit(1);
+
+    if (!workspace) {
+      return { ok: false, error: "Workspace not found" };
+    }
+
+    if (workspace.isDefault) {
+      return { ok: false, error: "Cannot delete your primary default workspace" };
+    }
+
+    // Check count of user workspaces
+    const allWorkspaces = await db
+      .select({ id: schema.workspaces.id, isDefault: schema.workspaces.isDefault })
+      .from(schema.workspaces)
+      .where(eq(schema.workspaces.userId, user.id));
+
+    if (allWorkspaces.length <= 1) {
+      return { ok: false, error: "You must have at least one workspace" };
+    }
+
+    // Delete workspace
+    await db
+      .delete(schema.workspaces)
+      .where(and(eq(schema.workspaces.id, workspaceId), eq(schema.workspaces.userId, user.id)));
+
+    // If active workspace was deleted, reset cookie to default workspace
+    const defaultWs = allWorkspaces.find((w) => w.isDefault) || allWorkspaces.find((w) => w.id !== workspaceId);
+    if (defaultWs) {
+      const cookieStore = await cookies();
+      cookieStore.set(ACTIVE_WORKSPACE_COOKIE, defaultWs.id, {
+        path: "/",
+        maxAge: 60 * 60 * 24 * 365,
+        sameSite: "lax",
+        httpOnly: false,
+      });
+    }
+
+    await logActivity(user.id, "workspace.deleted", `Deleted workspace "${workspace.name}"`);
+    revalidatePath("/", "layout");
+    return { ok: true, data: { id: workspaceId }, message: "Workspace deleted" };
   } catch (e) {
     return err(e);
   }

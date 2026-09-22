@@ -64,6 +64,13 @@
       "when": 1790055000000,
       "tag": "0008_sequences",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790060000000,
+      "tag": "0009_workspaces",
+      "breakpoints": true
     }
   ]
 }

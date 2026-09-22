@@ -20,7 +20,7 @@ const {
 const today = () => new Date().toISOString().slice(0, 10);
 const nowIso = () => new Date().toISOString();
 
-export async function getDashboardStats(userId: string) {
+export async function getDashboardStats(userId: string, workspaceId?: string) {
   const db = getDb();
   const t = today();
 
@@ -34,6 +34,18 @@ export async function getDashboardStats(userId: string) {
       AND leads.deleted_at IS NULL
       AND leads.user_id = ${userId}
   `).catch(() => {});
+
+  const campaignConds = [eq(campaigns.userId, userId), isNull(campaigns.deletedAt)];
+  if (workspaceId) campaignConds.push(eq(campaigns.workspaceId, workspaceId));
+
+  const leadConds = [eq(leads.userId, userId), isNull(leads.deletedAt)];
+  if (workspaceId) leadConds.push(eq(leads.workspaceId, workspaceId));
+
+  const senderConds = [eq(senderAccounts.userId, userId), isNull(senderAccounts.deletedAt)];
+  if (workspaceId) senderConds.push(eq(senderAccounts.workspaceId, workspaceId));
+
+  const jobConds = [eq(campaigns.userId, userId), gte(emailJobs.createdAt, `${t}T00:00:00Z`)];
+  if (workspaceId) jobConds.push(eq(campaigns.workspaceId, workspaceId));
 
   // Fire all six independent aggregates in parallel — one Neon hop (~120ms)
   // instead of six sequential hops (~720ms). This is the dashboard's hot path.
@@ -51,11 +63,9 @@ export async function getDashboardStats(userId: string) {
         scheduled: count(sql`case when ${campaigns.status} = 'scheduled' then 1 end`),
       })
       .from(campaigns)
-      .where(and(eq(campaigns.userId, userId), isNull(campaigns.deletedAt))),
+      .where(and(...campaignConds)),
     db
       .select({
-        // SUM of campaign counters — COUNT() was wrong (row count ≠ sends) and
-        // was incorrectly folded into "Queued today".
         sentToday: sql<number>`coalesce(sum(case when ${usageCounters.entityType} = 'campaign' then ${usageCounters.count} else 0 end), 0)`,
       })
       .from(usageCounters)
@@ -69,19 +79,19 @@ export async function getDashboardStats(userId: string) {
       })
       .from(emailJobs)
       .innerJoin(campaigns, eq(emailJobs.campaignId, campaigns.id))
-      .where(and(eq(campaigns.userId, userId), gte(emailJobs.createdAt, `${t}T00:00:00Z`))),
+      .where(and(...jobConds)),
     db
       .select({ total: count(leads.id) })
       .from(leads)
       .innerJoin(leadLists, and(eq(leads.listId, leadLists.id), isNull(leadLists.deletedAt)))
-      .where(and(eq(leads.userId, userId), isNull(leads.deletedAt))),
+      .where(and(...leadConds)),
     db
       .select({
         total: count(),
         active: count(sql`case when ${senderAccounts.status} = 'active' then 1 end`),
       })
       .from(senderAccounts)
-      .where(and(eq(senderAccounts.userId, userId), isNull(senderAccounts.deletedAt))),
+      .where(and(...senderConds)),
     db
       .select({ total: count() })
       .from(replies)
@@ -118,8 +128,15 @@ export async function getRecentActivity(userId: string, limit = 20) {
 
 /* ─── List pages ───────────────────────────────────────────────────────── */
 
-export async function getActiveCampaigns(userId: string) {
+export async function getActiveCampaigns(userId: string, workspaceId?: string) {
   const db = getDb();
+  const conds = [
+    eq(campaigns.userId, userId),
+    isNull(campaigns.deletedAt),
+    inArray(campaigns.status, ["running", "scheduled", "paused"]),
+  ];
+  if (workspaceId) conds.push(eq(campaigns.workspaceId, workspaceId));
+
   return db
     .select({
       id: campaigns.id,
@@ -131,14 +148,17 @@ export async function getActiveCampaigns(userId: string) {
     })
     .from(campaigns)
     .leftJoin(campaignLeads, eq(campaignLeads.campaignId, campaigns.id))
-    .where(and(eq(campaigns.userId, userId), isNull(campaigns.deletedAt), inArray(campaigns.status, ["running", "scheduled", "paused"])))
+    .where(and(...conds))
     .groupBy(campaigns.id)
     .orderBy(desc(campaigns.createdAt))
     .limit(8);
 }
 
-export async function listLeadLists(userId: string) {
+export async function listLeadLists(userId: string, workspaceId?: string) {
   const db = getDb();
+  const conds = [eq(leadLists.userId, userId), isNull(leadLists.deletedAt)];
+  if (workspaceId) conds.push(eq(leadLists.workspaceId, workspaceId));
+
   return db
     .select({
       id: leadLists.id,
@@ -148,13 +168,14 @@ export async function listLeadLists(userId: string) {
     })
     .from(leadLists)
     .leftJoin(leads, and(eq(leads.listId, leadLists.id), isNull(leads.deletedAt)))
-    .where(and(eq(leadLists.userId, userId), isNull(leadLists.deletedAt)))
+    .where(and(...conds))
     .groupBy(leadLists.id)
     .orderBy(desc(leadLists.createdAt));
 }
 
 export interface LeadsPageParams {
   listId?: string;
+  workspaceId?: string;
   /** Case-insensitive match on email, firstName, lastName, company (P03). */
   search?: string;
   status?: string;
@@ -171,6 +192,7 @@ export async function listLeads(userId: string, params: LeadsPageParams) {
   const db = getDb();
   const size = Math.min(params.pageSize ?? 50, 200);
   const conds = [eq(leads.userId, userId), isNull(leads.deletedAt)];
+  if (params.workspaceId) conds.push(eq(leads.workspaceId, params.workspaceId));
   if (params.listId) conds.push(eq(leads.listId, params.listId));
   if (params.status) conds.push(eq(leads.status, params.status as never));
   if (params.search) {
@@ -195,9 +217,12 @@ export async function listLeads(userId: string, params: LeadsPageParams) {
   return { items, nextCursor: hasMore ? items[items.length - 1]?.id : undefined };
 }
 
-export async function listSenders(userId: string) {
+export async function listSenders(userId: string, workspaceId?: string) {
   const db = getDb();
   const t = today();
+  const conds = [eq(senderAccounts.userId, userId), isNull(senderAccounts.deletedAt)];
+  if (workspaceId) conds.push(eq(senderAccounts.workspaceId, workspaceId));
+
   const usage = db.$with("usage").as(
     db
       .select({ id: usageCounters.entityId, count: usageCounters.count })
@@ -226,7 +251,7 @@ export async function listSenders(userId: string) {
     })
     .from(senderAccounts)
     .leftJoin(usage, eq(usage.id, senderAccounts.id))
-    .where(and(eq(senderAccounts.userId, userId), isNull(senderAccounts.deletedAt)))
+    .where(and(...conds))
     .orderBy(desc(senderAccounts.createdAt));
 }
 
@@ -290,8 +315,11 @@ export interface CampaignRow {
   bounced: number;
 }
 
-export async function listCampaigns(userId: string): Promise<CampaignRow[]> {
+export async function listCampaigns(userId: string, workspaceId?: string): Promise<CampaignRow[]> {
   const db = getDb();
+  const conds = [eq(campaigns.userId, userId), isNull(campaigns.deletedAt)];
+  if (workspaceId) conds.push(eq(campaigns.workspaceId, workspaceId));
+
   const rows = await db
     .select({
       id: campaigns.id,
@@ -311,7 +339,7 @@ export async function listCampaigns(userId: string): Promise<CampaignRow[]> {
     })
     .from(campaigns)
     .leftJoin(campaignLeads, eq(campaignLeads.campaignId, campaigns.id))
-    .where(and(eq(campaigns.userId, userId), isNull(campaigns.deletedAt)))
+    .where(and(...conds))
     .groupBy(campaigns.id)
     .orderBy(desc(campaigns.createdAt));
   return rows.map((r) => ({ ...r, bounced: Number(r.bounced ?? 0) })) as CampaignRow[];
@@ -421,6 +449,7 @@ export async function listReplies(
 /* ─── Suppressions / blocklist (F15a) ──────────────────────────────────── */
 
 export interface SuppressionsPageParams {
+  workspaceId?: string;
   cursor?: string;
   limit?: number;
   search?: string;
@@ -435,6 +464,7 @@ export async function listSuppressions(userId: string, params: SuppressionsPageP
   const db = getDb();
   const size = Math.min(params.limit ?? 50, 200);
   const conds = [eq(suppressions.userId, userId)];
+  if (params.workspaceId) conds.push(eq(suppressions.workspaceId, params.workspaceId));
   if (params.kind) conds.push(eq(suppressions.kind, params.kind));
   if (params.search) {
     const q = `%${params.search}%`;
