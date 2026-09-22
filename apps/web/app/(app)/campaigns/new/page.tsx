@@ -9,11 +9,12 @@ export const dynamic = "force-dynamic";
 export default async function NewCampaignPage({
   searchParams,
 }: {
-  searchParams: Promise<{ draft?: string }>;
+  searchParams: Promise<{ draft?: string; sequenceTemplate?: string }>;
 }) {
   const user = await requireUser();
   const sp = await searchParams;
   const draftId = sp.draft?.trim() || "";
+  const initialSequenceTemplateId = sp.sequenceTemplate?.trim() || null;
   const [lists, senders, templates, draftResult] = await Promise.all([
     listLeadLists(user.id),
     listSenders(user.id),
@@ -27,7 +28,7 @@ export default async function NewCampaignPage({
     draftId && draftResult && !draftResult.ok ? draftResult.error : null;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8 p-6 lg:p-10">
+    <div className="w-full max-w-[1400px] mx-auto space-y-8 p-6 lg:p-10">
       <PageHeader
         title={initialDraft ? "Resume campaign" : "Create campaign"}
         description={
@@ -39,6 +40,7 @@ export default async function NewCampaignPage({
       <CampaignWizard
         initialDraft={initialDraft}
         draftLoadError={draftLoadError}
+        initialSequenceTemplateId={initialSequenceTemplateId}
         leadLists={lists.map((l) => ({ id: l.id, name: l.name, leadCount: Number(l.leadCount) }))}
         senders={senders
           .filter((s) => s.status !== "failed")

@@ -29,7 +29,7 @@ import {
 import { bulkTagLeads, createLeadTag, fetchLeadsPage, updateLeadStatus } from "@/lib/actions";
 import { asCustomFields, isNextRedirect, isPermissionError } from "@/lib/lead-form";
 import { LeadFormDialog, type LeadFormLead } from "./lead-form-dialog";
-import { DeleteLeadsDialog, RenameListDialog } from "./lead-manage-dialogs";
+import { DeleteLeadsDialog, DeleteListDialog, RenameListDialog } from "./lead-manage-dialogs";
 
 export interface LeadRow {
   id: string;
@@ -51,6 +51,7 @@ interface TagOpt { id: string; name: string; color: string }
 export function LeadTable({
   listName,
   listId,
+  totalCount,
   initialRows,
   initialCursor,
   initialSearch,
@@ -59,6 +60,7 @@ export function LeadTable({
 }: {
   listName: string;
   listId: string;
+  totalCount?: number;
   initialRows: LeadRow[];
   initialCursor?: string;
   initialSearch: string;
@@ -72,6 +74,7 @@ export function LeadTable({
   const [status, setStatus] = useState(initialStatus);
   const [title, setTitle] = useState(listName);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [deleteListOpen, setDeleteListOpen] = useState(false);
   const [deleteRequest, setDeleteRequest] = useState<{ mode: "one" | "bulk"; leads: { id: string; email: string }[] } | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [tagList, setTagList] = useState(tags);
@@ -251,6 +254,7 @@ export function LeadTable({
   const allSelected = rows.length > 0 && selected.size === rows.length;
   const filtered = Boolean(search || status);
   const countLabel = `${rows.length}${cursor ? "+" : ""}`;
+  const exactTotal = totalCount ?? rows.length;
 
   return (
     <div className="page-stack">
@@ -259,12 +263,20 @@ export function LeadTable({
         description={
           filtered
             ? `${countLabel} matching ${rows.length === 1 ? "lead" : "leads"} for email, name, or company.`
-            : `${countLabel} ${rows.length === 1 ? "lead" : "leads"} in this list.`
+            : `${exactTotal.toLocaleString()} ${exactTotal === 1 ? "lead" : "leads"} in this list.`
         }
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => setRenameOpen(true)}>
               Rename
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setDeleteListOpen(true)}
+            >
+              <Trash2 className="h-4 w-4 mr-1.5" /> Delete List
             </Button>
             <Button size="sm" onClick={openCreate}>
               <Plus className="h-4 w-4" /> Add Lead
@@ -467,6 +479,20 @@ export function LeadTable({
           onRenamed={(next) => {
             setTitle(next);
             toast.success("List renamed");
+            router.refresh();
+          }}
+        />
+      ) : null}
+
+      {deleteListOpen ? (
+        <DeleteListDialog
+          open
+          listId={listId}
+          name={title}
+          onOpenChange={setDeleteListOpen}
+          onDeleted={() => {
+            toast.success("List deleted");
+            router.push("/leads");
             router.refresh();
           }}
         />

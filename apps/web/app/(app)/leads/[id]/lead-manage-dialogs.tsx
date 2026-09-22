@@ -17,7 +17,7 @@ import {
   Input,
   PermissionDenied,
 } from "@smartreach/ui";
-import { bulkDeleteLeads, deleteLead, renameLeadList } from "@/lib/actions";
+import { bulkDeleteLeads, deleteLead, deleteLeadList, renameLeadList } from "@/lib/actions";
 import { isNextRedirect, isPermissionError } from "@/lib/lead-form";
 
 type LeadRef = { id: string; email: string };
@@ -205,3 +205,77 @@ export function DeleteLeadsDialog({
     </Dialog>
   );
 }
+
+export function DeleteListDialog({
+  open,
+  listId,
+  name,
+  onOpenChange,
+  onDeleted,
+}: {
+  open: boolean;
+  listId: string;
+  name: string;
+  onOpenChange: (open: boolean) => void;
+  onDeleted: () => void;
+}) {
+  const [pending, start] = useTransition();
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const confirm = () => {
+    if (pending) return;
+    setFormError(null);
+    start(async () => {
+      try {
+        const res = await deleteLeadList(listId);
+        if (!res.ok) {
+          setFormError(res.error || "Failed to delete lead list");
+        } else {
+          onOpenChange(false);
+          onDeleted();
+        }
+      } catch (e) {
+        if (isNextRedirect(e)) throw e;
+        setFormError(e instanceof Error ? e.message : "Failed to delete lead list");
+      }
+    });
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!pending) onOpenChange(next);
+      }}
+    >
+      <DialogContent className="w-[calc(100%-2rem)]">
+        <DialogHeader>
+          <DialogTitle>Delete lead list</DialogTitle>
+          <DialogDescription>
+            Are you sure you want to delete &ldquo;{name}&rdquo;? This will remove the list and all contacts within it.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          {formError ? (
+            <Alert variant="destructive">
+              <AlertDescription>{formError}</AlertDescription>
+            </Alert>
+          ) : null}
+          <p className="text-xs text-muted-foreground">
+            Any past campaign reports referencing these leads will retain their aggregate stats.
+          </p>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" onClick={confirm} disabled={pending}>
+              {pending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+              {pending ? "Deleting list…" : "Delete list"}
+            </Button>
+          </DialogFooter>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+

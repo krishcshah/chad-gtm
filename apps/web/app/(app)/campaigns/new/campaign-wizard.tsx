@@ -6,12 +6,14 @@ import Link from "next/link";
 import {
   ArrowLeft,
   ArrowRight,
+  BookmarkPlus,
   Check,
   ChevronDown,
   ChevronUp,
   Clock,
   Eye,
   FileText,
+  Layers,
   Mail,
   Plus,
   Rocket,
@@ -24,6 +26,12 @@ import { TIMEZONES } from "@smartreach/shared";
 import {
   Badge,
   Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   EmptyState,
   Input,
   Label,
@@ -40,7 +48,20 @@ import {
   Textarea,
   cn,
 } from "@smartreach/ui";
-import { publishCampaign, saveCampaignDraft, saveCampaignSequence } from "@/lib/actions";
+import {
+  publishCampaign,
+  saveCampaignDraft,
+  saveCampaignSequence,
+  saveSequenceAsTemplate,
+} from "@/lib/actions";
+import {
+  PRESET_SEQUENCES,
+  isSequenceTemplate,
+  parseSequenceTemplate,
+  serializeSequenceTemplate,
+  type ReusableSequence,
+  type TemplateStepItem,
+} from "@/lib/sequence-templates";
 import {
   CAMPAIGN_FIELD_CONTROL_ID,
   CAMPAIGN_FIELD_STEP,
@@ -151,12 +172,14 @@ export function CampaignWizard({
   templates,
   initialDraft,
   draftLoadError,
+  initialSequenceTemplateId,
 }: {
   leadLists: LeadListOpt[];
   senders: SenderOpt[];
   templates: TemplateOpt[];
   initialDraft?: CampaignDraftSeed | null;
   draftLoadError?: string | null;
+  initialSequenceTemplateId?: string | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -168,6 +191,49 @@ export function CampaignWizard({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const focusId = useRef<string | null>(null);
   const [draftId, setDraftId] = useState<string | null>(initialDraft?.id ?? null);
+  const [localTemplates, setLocalTemplates] = useState<TemplateOpt[]>(templates);
+
+  const userSequenceTemplates = useMemo(() => {
+    return localTemplates
+      .map((t) => parseSequenceTemplate(t))
+      .filter((s): s is ReusableSequence => s !== null);
+  }, [localTemplates]);
+
+  const singleTemplates = useMemo(() => {
+    return localTemplates.filter((t) => !isSequenceTemplate(t.bodyText));
+  }, [localTemplates]);
+
+  const sequenceToDraftSteps = (seq: ReusableSequence): DraftStep[] => {
+    return seq.steps.map((st, idx) => ({
+      key: `step-${Date.now()}-${idx}`,
+      delayDays: idx === 0 ? 0 : (st.delayDays ?? 3),
+      type: idx === 0 ? "initial" : "follow_up",
+      variants:
+        st.variants && st.variants.length > 0
+          ? st.variants.map((v, vi) => ({
+              key: `var-${Date.now()}-${idx}-${vi}`,
+              label: (vi === 0 ? "A" : "B") as "A" | "B",
+              subject: v.subject || "",
+              bodyText: v.bodyText || "",
+              bodyHtml: v.bodyHtml || (v.bodyText ? `<p>${v.bodyText.replace(/\n/g, "<br>")}</p>` : ""),
+              weight: 50,
+              pausedAt: null,
+              plainEdited: false,
+            }))
+          : [
+              {
+                key: `var-${Date.now()}-${idx}-0`,
+                label: "A" as const,
+                subject: "",
+                bodyText: "",
+                bodyHtml: "",
+                weight: 50,
+                pausedAt: null,
+                plainEdited: false,
+              },
+            ],
+    }));
+  };
 
   // Form state
   const [name, setName] = useState(initialDraft?.name ?? "");
@@ -190,6 +256,14 @@ export function CampaignWizard({
 
   // Sequence state
   const [steps, setSteps] = useState<DraftStep[]>(() => {
+    if (initialSequenceTemplateId) {
+      const match =
+        PRESET_SEQUENCES.find((p) => p.id === initialSequenceTemplateId) ||
+        templates.map((t) => parseSequenceTemplate(t)).find((s) => s?.id === initialSequenceTemplateId);
+      if (match) {
+        return sequenceToDraftSteps(match);
+      }
+    }
     const initial = [blankStep(1)];
     if (initialDraft?.templateId) {
       const tpl = templates.find((t) => t.id === initialDraft.templateId);
@@ -201,6 +275,57 @@ export function CampaignWizard({
     }
     return initial;
   });
+
+  const [saveSeqOpen, setSaveSeqOpen] = useState(false);
+  const [saveSeqName, setSaveSeqName] = useState("");
+  const [saveSeqDesc, setSaveSeqDesc] = useState("");
+  const [saveSeqPending, setSaveSeqPending] = useState(false);
+  const [importSeqOpen, setImportSeqOpen] = useState(false);
+
+  const applySavedSequence = (seq: ReusableSequence) => {
+    if (!seq.steps || seq.steps.length === 0) return;
+    const newSteps = sequenceToDraftSteps(seq);
+    setSteps(newSteps);
+    setSelectedStep(0);
+    setVariantIndex(0);
+    setNotice(`Imported sequence "${seq.name}" with ${newSteps.length} steps.`);
+    setImportSeqOpen(false);
+  };
+
+  const handleSaveSequenceAsTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!saveSeqName.trim()) return;
+    setSaveSeqPending(true);
+    try {
+      const templateSteps: TemplateStepItem[] = steps.map((s) => ({
+        delayDays: s.delayDays,
+        variants: s.variants.map((v) => ({
+          label: v.label,
+          subject: v.subject,
+          bodyText: v.bodyText,
+          bodyHtml: v.bodyHtml,
+        })),
+      }));
+      const res = await saveSequenceAsTemplate(saveSeqName, saveSeqDesc, templateSteps);
+      if (res.ok && res.data) {
+        const newTpl: TemplateOpt = {
+          id: res.data.id,
+          name: saveSeqName.trim(),
+          subject: steps[0]?.variants[0]?.subject || saveSeqName.trim(),
+          bodyText: serializeSequenceTemplate(saveSeqName.trim(), saveSeqDesc.trim(), templateSteps),
+        };
+        setLocalTemplates((prev) => [newTpl, ...prev]);
+        setSaveSeqOpen(false);
+        setNotice(`Sequence "${saveSeqName.trim()}" saved to templates!`);
+      } else {
+        setError(!res.ok ? res.error : "Failed to save sequence template");
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to save sequence template");
+    } finally {
+      setSaveSeqPending(false);
+    }
+  };
   const [selectedStep, setSelectedStep] = useState(0);
   const [variantIndex, setVariantIndex] = useState(0);
   const [bodyMode, setBodyMode] = useState<"formatted" | "plain">("formatted");
@@ -778,34 +903,119 @@ export function CampaignWizard({
                   Configure the sequence of emails. Step 1 is always initial; subsequent steps are follow-ups.
                 </p>
               </div>
-              {templates.length > 0 && (
-                <Popover>
+              <div className="flex flex-wrap items-center gap-2">
+                <Popover open={importSeqOpen} onOpenChange={setImportSeqOpen}>
                   <PopoverTrigger asChild>
-                    <Button type="button" variant="outline" size="sm">
-                      <FileText className="size-3.5" /> Insert from template
+                    <Button type="button" variant="outline" size="sm" className="gap-1.5 font-medium shadow-2xs">
+                      <Layers className="size-3.5 text-primary" /> Import Saved Sequence
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent align="end" className="w-64 p-2">
-                    <p className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Choose a template</p>
-                    <div className="max-h-56 space-y-1 overflow-y-auto">
-                      {templates.map((tpl) => (
-                        <button
-                          key={tpl.id}
-                          type="button"
-                          onClick={() => applyTemplateToActiveStep(tpl.id)}
-                          className="flex w-full flex-col rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent"
-                        >
-                          <span className="font-medium text-foreground">{tpl.name}</span>
-                          <span className="truncate text-muted-foreground">{tpl.subject}</span>
-                        </button>
-                      ))}
+                  <PopoverContent align="end" className="w-80 p-3 sm:w-96">
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-xs font-semibold text-foreground">Import Reusable Sequence</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Replace sequence with a pre-configured multi-step template.
+                        </p>
+                      </div>
+
+                      {userSequenceTemplates.length > 0 && (
+                        <div className="space-y-1.5">
+                          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            Your Saved Sequences
+                          </p>
+                          <div className="max-h-36 space-y-1 overflow-y-auto pr-1">
+                            {userSequenceTemplates.map((seq) => (
+                              <button
+                                key={seq.id}
+                                type="button"
+                                onClick={() => applySavedSequence(seq)}
+                                className="flex w-full items-start justify-between gap-2 rounded-lg border border-border/60 bg-card p-2 text-left text-xs transition-colors hover:border-primary/50 hover:bg-accent/50"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <span className="font-medium text-foreground">{seq.name}</span>
+                                  <p className="line-clamp-1 text-[11px] text-muted-foreground">{seq.description}</p>
+                                </div>
+                                <Badge variant="secondary" className="shrink-0 text-[10px]">
+                                  {seq.stepsCount} steps
+                                </Badge>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-1.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Battle-Tested Presets
+                        </p>
+                        <div className="space-y-1.5">
+                          {PRESET_SEQUENCES.map((seq) => (
+                            <button
+                              key={seq.id}
+                              type="button"
+                              onClick={() => applySavedSequence(seq)}
+                              className="flex w-full items-start justify-between gap-2 rounded-lg border border-border/60 bg-card p-2 text-left text-xs transition-colors hover:border-primary/50 hover:bg-accent/50"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <Sparkles className="size-3 text-primary" />
+                                  <span className="font-medium text-foreground">{seq.name}</span>
+                                </div>
+                                <p className="line-clamp-1 text-[11px] text-muted-foreground">{seq.description}</p>
+                              </div>
+                              <Badge variant="outline" className="shrink-0 text-[10px]">
+                                {seq.stepsCount} steps
+                              </Badge>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {singleTemplates.length > 0 && (
+                        <div className="border-t border-border pt-2">
+                          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            Single Step Templates
+                          </p>
+                          <div className="max-h-24 space-y-1 overflow-y-auto pr-1">
+                            {singleTemplates.map((tpl) => (
+                              <button
+                                key={tpl.id}
+                                type="button"
+                                onClick={() => {
+                                  applyTemplateToActiveStep(tpl.id);
+                                  setImportSeqOpen(false);
+                                }}
+                                className="flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs hover:bg-accent"
+                              >
+                                <span className="truncate font-medium text-foreground">{tpl.name}</span>
+                                <span className="text-[10px] text-muted-foreground">Insert step</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </PopoverContent>
                 </Popover>
-              )}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    setSaveSeqName(name ? `${name} Sequence` : "My Sequence Template");
+                    setSaveSeqDesc(`${steps.length}-step cold email sequence`);
+                    setSaveSeqOpen(true);
+                  }}
+                >
+                  <BookmarkPlus className="size-3.5" /> Save as Template
+                </Button>
+              </div>
             </div>
 
-            <div className="grid items-start gap-4 lg:grid-cols-[16.5rem_minmax(0,1fr)]">
+            <div className="grid items-start gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
               {/* Left Sidebar: Steps & Delays & A/B Variants */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
@@ -1050,7 +1260,7 @@ export function CampaignWizard({
                         <Textarea
                           ref={textRef}
                           id="step-body"
-                          rows={8}
+                          rows={14}
                           value={activeVariant.bodyText}
                           onChange={(e) =>
                             patchVariant(selectedStep, actualVariantIndex, {
@@ -1059,13 +1269,13 @@ export function CampaignWizard({
                             })
                           }
                           placeholder={`Hi {{first_name}},\n\nI noticed {{company}} and wanted to reach out…`}
-                          className="min-h-[180px] resize-y border-0 bg-transparent p-3 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                          className="min-h-[380px] resize-y border-0 bg-transparent p-4 text-sm leading-relaxed focus-visible:ring-0 focus-visible:ring-offset-0"
                         />
                       ) : (
                         <Textarea
                           ref={textRef}
                           id="step-body"
-                          rows={8}
+                          rows={14}
                           value={activeVariant.bodyText}
                           onChange={(e) =>
                             patchVariant(selectedStep, actualVariantIndex, {
@@ -1074,7 +1284,7 @@ export function CampaignWizard({
                             })
                           }
                           placeholder="Plain text email body…"
-                          className="min-h-[180px] resize-y border-0 bg-transparent p-3 font-mono text-xs focus-visible:ring-0 focus-visible:ring-offset-0"
+                          className="min-h-[380px] resize-y border-0 bg-transparent p-4 font-mono text-xs leading-relaxed focus-visible:ring-0 focus-visible:ring-offset-0"
                         />
                       )}
 
@@ -1550,6 +1760,60 @@ export function CampaignWizard({
           )}
         </div>
       </div>
+
+      {/* Save Sequence as Template Dialog */}
+      <Dialog open={saveSeqOpen} onOpenChange={setSaveSeqOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BookmarkPlus className="size-5 text-primary" /> Save Sequence as Template
+            </DialogTitle>
+            <DialogDescription>
+              Save this {steps.length}-step sequence with all subject lines, intervals, and body copy to your reusable library.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveSequenceAsTemplate} className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="seq-template-name">Template Name</Label>
+              <Input
+                id="seq-template-name"
+                value={saveSeqName}
+                onChange={(e) => setSaveSeqName(e.target.value)}
+                placeholder="e.g. 3-Step Tech Follow Up"
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="seq-template-desc">Description (Optional)</Label>
+              <Input
+                id="seq-template-desc"
+                value={saveSeqDesc}
+                onChange={(e) => setSaveSeqDesc(e.target.value)}
+                placeholder="e.g. Proven 18% reply rate for B2B executives"
+              />
+            </div>
+
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+              <div className="font-medium text-foreground">Sequence Summary:</div>
+              <ul className="mt-1.5 list-inside list-disc space-y-0.5">
+                <li>{steps.length} sequential email step{steps.length !== 1 ? "s" : ""}</li>
+                <li>{steps.reduce((acc, s) => acc + s.variants.length, 0)} total message variant(s)</li>
+                <li>Instant 1-click loading into future campaigns</li>
+              </ul>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" onClick={() => setSaveSeqOpen(false)} disabled={saveSeqPending}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={saveSeqPending || !saveSeqName.trim()}>
+                {saveSeqPending ? "Saving..." : "Save Sequence"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

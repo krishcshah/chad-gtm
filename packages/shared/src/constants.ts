@@ -103,6 +103,9 @@ export const SENDER_IMPORT_COLUMNS = [
   "Hourly Limit",
   "Timezone",
   "Signature",
+  "Warmup Enabled",
+  "Warmup Daily Limit",
+  "Warmup Reply Rate",
 ] as const;
 
 export const TIMEZONES = [

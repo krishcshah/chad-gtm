@@ -18,27 +18,75 @@ const SERIES = [
   { key: "bounces", label: "Bounces", color: "var(--warning)", dash: "9 3 2 3" },
 ] as const;
 
-function buildSmoothPath(pts: { x: number; y: number }[]): string {
+function buildSmoothPath(pts: { x: number; y: number }[], yZero?: number): string {
   if (pts.length === 0) return "";
   if (pts.length === 1) return `M ${pts[0]!.x} ${pts[0]!.y}`;
   if (pts.length === 2) return `M ${pts[0]!.x} ${pts[0]!.y} L ${pts[1]!.x} ${pts[1]!.y}`;
 
-  let d = `M ${pts[0]!.x.toFixed(1)} ${pts[0]!.y.toFixed(1)}`;
-  const tension = 0.16;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[Math.max(0, i - 1)]!;
+  const n = pts.length;
+  // Calculate slopes (secants)
+  const d: number[] = new Array(n - 1);
+  const m: number[] = new Array(n);
+
+  for (let i = 0; i < n - 1; i++) {
+    const dx = pts[i + 1]!.x - pts[i]!.x;
+    d[i] = dx === 0 ? 0 : (pts[i + 1]!.y - pts[i]!.y) / dx;
+  }
+
+  // Initial tangents
+  m[0] = d[0]!;
+  for (let i = 1; i < n - 1; i++) {
+    if (d[i - 1]! * d[i]! <= 0) {
+      // Local extremum or flat: tangent must be 0 to prevent overshoot!
+      m[i] = 0;
+    } else {
+      m[i] = (d[i - 1]! + d[i]!) / 2;
+    }
+  }
+  m[n - 1] = d[n - 2]!;
+
+  // Fritsch-Carlson clamping to guarantee strict monotonicity (no overshoot/undershoot)
+  for (let i = 0; i < n - 1; i++) {
+    if (d[i] === 0) {
+      m[i] = 0;
+      m[i + 1] = 0;
+    } else {
+      const alpha = m[i]! / d[i]!;
+      const beta = m[i + 1]! / d[i]!;
+      const dist = alpha * alpha + beta * beta;
+      if (dist > 9) {
+        const tau = 3 / Math.sqrt(dist);
+        m[i] = tau * alpha * d[i]!;
+        m[i + 1] = tau * beta * d[i]!;
+      }
+    }
+  }
+
+  let path = `M ${pts[0]!.x.toFixed(1)} ${pts[0]!.y.toFixed(1)}`;
+  for (let i = 0; i < n - 1; i++) {
     const p1 = pts[i]!;
     const p2 = pts[i + 1]!;
-    const p3 = pts[Math.min(pts.length - 1, i + 2)]!;
+    const dx = (p2.x - p1.x) / 3;
 
-    const cp1x = p1.x + (p2.x - p0.x) * tension;
-    const cp1y = p1.y + (p2.y - p0.y) * tension;
-    const cp2x = p2.x - (p3.x - p1.x) * tension;
-    const cp2y = p2.y - (p3.y - p1.y) * tension;
+    let cp1y = p1.y + m[i]! * dx;
+    let cp2y = p2.y - m[i + 1]! * dx;
 
-    d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+    // Strict clamp: never go below 0 (yZero) and never overshoot monotonic bounds
+    if (yZero !== undefined) {
+      cp1y = Math.min(cp1y, yZero);
+      cp2y = Math.min(cp2y, yZero);
+    }
+    const minY = Math.min(p1.y, p2.y);
+    const maxY = Math.max(p1.y, p2.y);
+    cp1y = Math.max(minY, Math.min(maxY, cp1y));
+    cp2y = Math.max(minY, Math.min(maxY, cp2y));
+
+    const cp1x = p1.x + dx;
+    const cp2x = p2.x - dx;
+
+    path += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
   }
-  return d;
+  return path;
 }
 
 /**
@@ -157,7 +205,7 @@ export function AnalyticsSeriesChart({
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeDasharray={series.dash}
-                    d={buildSmoothPath(pts)}
+                    d={buildSmoothPath(pts, yAt(0))}
                   />
                 );
               })}

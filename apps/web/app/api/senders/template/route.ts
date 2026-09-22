@@ -19,6 +19,9 @@ const EXAMPLE = [
   "20",
   "UTC",
   "",
+  "true",
+  "20",
+  "40",
 ];
 
 export async function GET() {

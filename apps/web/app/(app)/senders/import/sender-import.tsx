@@ -25,6 +25,9 @@ const HEADER_TO_FIELD: Record<string, string> = {
   "hourly limit": "hourlyLimit",
   "timezone": "timezone",
   "signature": "signature",
+  "warmup enabled": "warmupEnabled",
+  "warmup daily limit": "warmupDailyLimit",
+  "warmup reply rate": "warmupReplyRate",
 };
 
 function rowToInput(row: Record<string, string>) {

@@ -180,6 +180,9 @@ export const senderCsvRowSchema = z.object({
   hourlyLimit: z.coerce.number().int().min(1).max(1000).default(DEFAULTS.senderHourlyLimit),
   timezone: z.string().trim().default("UTC"),
   signature: z.string().default(""),
+  warmupEnabled: z.coerce.boolean().optional().default(false),
+  warmupDailyLimit: z.coerce.number().int().min(1).max(100).optional().default(20),
+  warmupReplyRate: z.coerce.number().int().min(0).max(100).optional().default(40),
 });
 export type SenderCsvInput = z.infer<typeof senderCsvRowSchema>;
 

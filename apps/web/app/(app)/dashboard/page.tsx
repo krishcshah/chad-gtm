@@ -1,29 +1,32 @@
 import type { LucideIcon } from "lucide-react";
-import { Activity, AlertCircle, CheckCircle2, Inbox, Mail, Rocket, Timer, TrendingUp, Users, Ban } from "lucide-react";
+import {
+  Activity,
+  AlertCircle,
+  ArrowRight,
+  Ban,
+  CheckCircle2,
+  Inbox,
+  Mail,
+  Plus,
+  Rocket,
+  ShieldCheck,
+  Sparkles,
+  Timer,
+  TrendingUp,
+  Upload,
+  Users,
+  Zap,
+} from "lucide-react";
 import Link from "next/link";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, Progress, statusVariant } from "@smartreach/ui";
 import { requireUser } from "@/lib/session";
 import { getActiveCampaigns, getDashboardStats, getRecentActivity } from "@/lib/queries";
 import { AnalyticsSectionLoader } from "@/components/analytics-section-loader";
+import { ActivityFeed } from "./activity-feed";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Dashboard" };
-
-function Stat({ label, value, icon: Icon, hint }: { label: string; value: string | number; icon: LucideIcon; hint?: string }) {
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <p className="text-[13px] text-muted-foreground">{label}</p>
-          <Icon className="size-4 text-muted-foreground/60" aria-hidden />
-        </div>
-        <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
-        {hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>}
-      </CardContent>
-    </Card>
-  );
-}
+export const metadata = { title: "Dashboard · SmartReach" };
 
 export default async function DashboardPage({
   searchParams,
@@ -34,70 +37,251 @@ export default async function DashboardPage({
   const sp = await searchParams;
   const [stats, activity, activeCampaigns] = await Promise.all([
     getDashboardStats(user.id),
-    getRecentActivity(user.id),
+    getRecentActivity(user.id, 50),
     getActiveCampaigns(user.id),
   ]);
 
   const firstName = user.name?.split(" ")[0] ?? "there";
+  const replyRate =
+    stats.emailsSentToday > 0
+      ? ((stats.replyCount / stats.emailsSentToday) * 100).toFixed(1)
+      : "0.0";
 
   return (
-    <div className="page-stack">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="page-stack space-y-6">
+      {/* Top Executive Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b border-border/40 pb-5">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Good to see you, {firstName}</h1>
-          <p className="text-[13px] text-muted-foreground">Here&apos;s what&apos;s happening across your campaigns.</p>
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+              Good to see you, {firstName}
+            </h1>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-400">
+              <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Engine Online
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            System overview across your campaigns, connected mailboxes, and incoming lead replies.
+          </p>
         </div>
-        <Button size="sm" asChild>
-          <Link href="/campaigns/new">
-            <Rocket className="size-3.5" /> New campaign
-          </Link>
-        </Button>
+
+        {/* Quick Actions Bar */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/leads/import" className="gap-1.5 text-xs">
+              <Upload className="size-3.5 text-muted-foreground" /> Import Leads
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/senders/new" className="gap-1.5 text-xs">
+              <Mail className="size-3.5 text-muted-foreground" /> Connect Mailbox
+            </Link>
+          </Button>
+          <Button size="sm" asChild className="shadow-sm">
+            <Link href="/campaigns/new" className="gap-1.5 text-xs font-semibold">
+              <Rocket className="size-3.5" /> New Campaign
+            </Link>
+          </Button>
+        </div>
       </div>
 
+      {/* 4 Hero KPI Cards */}
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Total Pipeline Leads */}
+        <Card className="relative overflow-hidden border-border/70 bg-gradient-to-b from-card/80 to-card/40 backdrop-blur">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-xs font-medium uppercase tracking-wider">Total Pipeline Leads</span>
+              <div className="flex size-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                <Users className="size-4" />
+              </div>
+            </div>
+            <div className="mt-3 flex items-baseline justify-between">
+              <p className="text-3xl font-bold tracking-tight text-foreground tabular-nums">
+                {stats.totalLeads.toLocaleString()}
+              </p>
+              <Badge variant="outline" className="text-[11px] font-normal border-border/60">
+                Ready to contact
+              </Badge>
+            </div>
+            <p className="mt-2 text-[11px] text-muted-foreground flex items-center gap-1">
+              <Sparkles className="size-3 text-blue-400" />
+              Deduplicated across all lists
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Outreach Velocity */}
+        <Card className="relative overflow-hidden border-border/70 bg-gradient-to-b from-card/80 to-card/40 backdrop-blur">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-xs font-medium uppercase tracking-wider">Sent Today</span>
+              <div className="flex size-8 items-center justify-center rounded-lg bg-violet-500/10 text-violet-400 border border-violet-500/20">
+                <Zap className="size-4" />
+              </div>
+            </div>
+            <div className="mt-3 flex items-baseline justify-between">
+              <p className="text-3xl font-bold tracking-tight text-foreground tabular-nums">
+                {stats.emailsSentToday.toLocaleString()}
+              </p>
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {stats.emailsQueuedToday} queued
+              </span>
+            </div>
+            <div className="mt-3 space-y-1">
+              <Progress
+                value={
+                  stats.emailsSentToday + stats.emailsQueuedToday > 0
+                    ? Math.round(
+                        (stats.emailsSentToday /
+                          (stats.emailsSentToday + stats.emailsQueuedToday)) *
+                          100
+                      )
+                    : 100
+                }
+                className="h-1.5"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Unique Lead Replies */}
+        <Card className="relative overflow-hidden border-border/70 bg-gradient-to-b from-card/80 to-card/40 backdrop-blur">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-xs font-medium uppercase tracking-wider">Unique Replies</span>
+              <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <Inbox className="size-4" />
+              </div>
+            </div>
+            <div className="mt-3 flex items-baseline justify-between">
+              <p className="text-3xl font-bold tracking-tight text-foreground tabular-nums">
+                {stats.replyCount.toLocaleString()}
+              </p>
+              <Badge variant="success" className="text-[11px] font-medium">
+                {replyRate}% rate
+              </Badge>
+            </div>
+            <p className="mt-2 text-[11px] text-muted-foreground flex items-center gap-1">
+              <CheckCircle2 className="size-3 text-emerald-400" />
+              Distinct lead conversions
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Mailbox Deliverability */}
+        <Card className="relative overflow-hidden border-border/70 bg-gradient-to-b from-card/80 to-card/40 backdrop-blur">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-xs font-medium uppercase tracking-wider">Mailbox Health</span>
+              <div className="flex size-8 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                <ShieldCheck className="size-4" />
+              </div>
+            </div>
+            <div className="mt-3 flex items-baseline justify-between">
+              <p className="text-3xl font-bold tracking-tight text-foreground tabular-nums">
+                {stats.senderActive}
+                <span className="text-sm font-normal text-muted-foreground">/{stats.senderTotal}</span>
+              </p>
+              <Badge
+                variant={stats.bouncedToday === 0 ? "outline" : "destructive"}
+                className="text-[11px] font-normal"
+              >
+                {stats.bouncedToday === 0 ? "100% clean" : `${stats.bouncedToday} bounced`}
+              </Badge>
+            </div>
+            <p className="mt-2 text-[11px] text-muted-foreground flex items-center gap-1">
+              <Mail className="size-3 text-cyan-400" />
+              Automatic sender rotation active
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Secondary Status Strip */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="flex items-center gap-3 rounded-xl border border-border/50 bg-card/30 px-3.5 py-2.5 backdrop-blur">
+          <TrendingUp className="size-4 text-primary shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] text-muted-foreground">Active Campaigns</p>
+            <p className="text-sm font-semibold tabular-nums">{stats.activeCampaigns}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-xl border border-border/50 bg-card/30 px-3.5 py-2.5 backdrop-blur">
+          <Rocket className="size-4 text-violet-400 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] text-muted-foreground">Scheduled Launches</p>
+            <p className="text-sm font-semibold tabular-nums">{stats.scheduledCampaigns}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-xl border border-border/50 bg-card/30 px-3.5 py-2.5 backdrop-blur">
+          <AlertCircle
+            className={`size-4 shrink-0 ${
+              stats.failedToday > 0 ? "text-destructive" : "text-emerald-400"
+            }`}
+          />
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] text-muted-foreground">Failed Today</p>
+            <p className="text-sm font-semibold tabular-nums">
+              {stats.failedToday > 0 ? `${stats.failedToday} errors` : "0 (All clear)"}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-xl border border-border/50 bg-card/30 px-3.5 py-2.5 backdrop-blur">
+          <Ban
+            className={`size-4 shrink-0 ${
+              stats.bouncedToday > 0 ? "text-amber-400" : "text-muted-foreground"
+            }`}
+          />
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] text-muted-foreground">Permanent Bounces</p>
+            <p className="text-sm font-semibold tabular-nums">
+              {stats.bouncedToday > 0 ? `${stats.bouncedToday} blocked` : "0"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Analytics Chart Section */}
       <AnalyticsSectionLoader
         from={sp.from}
         to={sp.to}
-        heading="Overview"
-        description="Leads contacted, replies, and bounces across your campaigns. Opens and clicks are not tracked."
+        heading="Campaign Outreach & Delivery Trajectory"
+        description="Leads contacted, unique replies, and deliverability performance over time."
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <Stat label="Active campaigns" value={stats.activeCampaigns} icon={TrendingUp} />
-        <Stat label="Emails sent today" value={stats.emailsSentToday} icon={CheckCircle2} />
-        <Stat label="Queued today" value={stats.emailsQueuedToday} icon={Timer} />
-        <Stat label="Replies" value={stats.replyCount} icon={Inbox} />
-        <Stat label="Scheduled" value={stats.scheduledCampaigns} icon={Rocket} />
-        <Stat label="Senders" value={stats.senderActive} icon={Mail} hint={`${stats.senderTotal} total`} />
-        <Stat label="Total leads" value={stats.totalLeads} icon={Users} />
-        <Stat
-          label="Failed today"
-          value={stats.failedToday}
-          icon={AlertCircle}
-          hint={stats.failedToday > 0 ? "Needs attention" : "All clear"}
-        />
-        <Stat
-          label="Bounced today"
-          value={stats.bouncedToday}
-          icon={Ban}
-          hint={stats.bouncedToday > 0 ? "Permanent SMTP fails" : "None"}
-        />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-            <CardTitle className="text-[15px]">Active campaigns</CardTitle>
-            <Link href="/campaigns" className="text-xs text-primary hover:underline">View all</Link>
+      {/* Main Grid: Active Campaigns + Revamped Intelligent Activity Feed */}
+      <div className="grid gap-6 lg:grid-cols-12 items-start">
+        {/* Active Campaigns Column (7 cols) */}
+        <Card className="lg:col-span-7 border-border/60 bg-card/50 backdrop-blur">
+          <CardHeader className="flex flex-row items-center justify-between border-b border-border/40 pb-4">
+            <div>
+              <CardTitle className="text-base font-semibold tracking-tight">
+                Active Campaigns
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Multi-step sequence execution and outreach velocity.
+              </p>
+            </div>
+            <Button variant="ghost" size="sm" asChild className="text-xs text-primary gap-1">
+              <Link href="/campaigns">
+                View all <ArrowRight className="size-3" />
+              </Link>
+            </Button>
           </CardHeader>
-          <CardContent className="space-y-2.5">
+          <CardContent className="pt-4 space-y-3">
             {activeCampaigns.length === 0 ? (
               <EmptyState
                 icon={Rocket}
                 title="No active campaigns"
-                description="Launch your first campaign in under a minute."
-                className="py-12"
+                description="Launch your first multi-stage sequence in under 60 seconds."
+                className="py-14 border-0 bg-transparent"
                 action={
-                  <Button size="sm" variant="outline" asChild>
+                  <Button size="sm" asChild>
                     <Link href="/campaigns/new">Create campaign</Link>
                   </Button>
                 }
@@ -111,23 +295,30 @@ export default async function DashboardPage({
                   <Link
                     key={c.id}
                     href={`/campaigns/${c.id}`}
-                    className="flex items-center gap-4 rounded-xl border border-border/60 p-3.5 transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
+                    className="group flex flex-col gap-3 rounded-xl border border-border/60 bg-card/60 p-4 transition-all hover:bg-accent/40 hover:border-border focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate text-[13px] font-medium">{c.name}</p>
-                        <Badge variant={statusVariant(c.status)}>{c.status}</Badge>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <p className="truncate text-sm font-semibold group-hover:text-primary transition-colors">
+                          {c.name}
+                        </p>
+                        <Badge variant={statusVariant(c.status)} className="capitalize text-[10px]">
+                          {c.status}
+                        </Badge>
                       </div>
-                      <div className="mt-2 flex items-center gap-3">
-                        <Progress value={pct} className="h-1.5 flex-1" />
-                        <span className="text-xs tabular-nums text-muted-foreground">
-                          {sent}/{total} · {pct}%
-                        </span>
-                      </div>
+                      {Number(c.replied) > 0 && (
+                        <Badge variant="success" className="text-xs font-semibold shrink-0">
+                          {Number(c.replied)} {Number(c.replied) === 1 ? "reply" : "replies"}
+                        </Badge>
+                      )}
                     </div>
-                    {Number(c.replied) > 0 && (
-                      <Badge variant="success">{Number(c.replied)} replies</Badge>
-                    )}
+
+                    <div className="flex items-center gap-3">
+                      <Progress value={pct} className="h-2 flex-1" />
+                      <span className="text-xs tabular-nums text-muted-foreground font-medium shrink-0">
+                        {sent.toLocaleString()} / {total.toLocaleString()} ({pct}%)
+                      </span>
+                    </div>
                   </Link>
                 );
               })
@@ -135,34 +326,20 @@ export default async function DashboardPage({
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-[15px]">
-              <Activity className="size-4 text-primary" aria-hidden /> Recent activity
-            </CardTitle>
+        {/* Revamped Recent Activity Hub (5 cols) */}
+        <Card className="lg:col-span-5 border-border/60 bg-card/50 backdrop-blur">
+          <CardHeader className="flex flex-row items-center justify-between border-b border-border/40 pb-4">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base font-semibold tracking-tight">
+                <Activity className="size-4 text-primary" aria-hidden /> Live Activity Feed
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Real-time aggregated timeline of system and outreach events.
+              </p>
+            </div>
           </CardHeader>
-          <CardContent>
-            {activity.length === 0 ? (
-              <EmptyState
-                icon={Activity}
-                title="No activity yet"
-                description="Sends, replies, and campaign changes will show up here."
-                className="border-0 bg-transparent py-8"
-              />
-            ) : (
-              <div className="space-y-0">
-                {activity.slice(0, 12).map((a) => (
-                  <div key={a.id} className="flex gap-3 border-l-2 border-border/50 py-2 pl-3.5 first:border-primary/60">
-                    <div className="min-w-0">
-                      <p className="text-[13px] leading-snug">{a.message}</p>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">
-                        {new Date(a.createdAt).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+          <CardContent className="pt-4">
+            <ActivityFeed initialActivities={activity} />
           </CardContent>
         </Card>
       </div>

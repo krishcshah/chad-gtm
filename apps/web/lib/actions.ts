@@ -31,7 +31,13 @@ import {
   updateLeadForUser,
   updateLeadStatusForUser,
 } from "./leads";
-import { toggleSenderForUser } from "./senders";
+import {
+  toggleSenderForUser,
+  updateSenderLimitsForUser,
+  updateSenderDetailsForUser,
+  runWarmupCycleForUser,
+} from "./senders";
+import { formatSenderWarmup } from "./sender-warmup";
 import { normalizeEmail, nowIso } from "@smartreach/shared";
 import {
   ensureCampaignLeadSnapshot,
@@ -62,6 +68,7 @@ import {
   type UniboxThreadKey,
   type UniboxThreadMessage,
 } from "./unibox-thread";
+import { serializeSequenceTemplate, type TemplateStepItem } from "./sequence-templates";
 
 const {
   leadLists,
@@ -450,6 +457,37 @@ export async function deleteSender(senderId: string): Promise<ActionResult> {
   }
 }
 
+export async function updateSenderLimits(
+  senderId: string,
+  dailyLimit: number,
+  hourlyLimit?: number,
+): Promise<ActionResult> {
+  const user = await requireUser();
+  const result = await updateSenderLimitsForUser(getDb(), user.id, senderId, dailyLimit, hourlyLimit);
+  if (result.ok) revalidatePath("/senders");
+  return result;
+}
+
+export async function updateSenderDetails(
+  senderId: string,
+  data: Parameters<typeof updateSenderDetailsForUser>[3],
+): Promise<ActionResult> {
+  const user = await requireUser();
+  const result = await updateSenderDetailsForUser(getDb(), user.id, senderId, data);
+  if (result.ok) revalidatePath("/senders");
+  return result;
+}
+
+export async function runWarmupCycle(): Promise<{ ok: boolean; message: string; exchanged: number }> {
+  const user = await requireUser();
+  const result = await runWarmupCycleForUser(getDb(), user.id);
+  if (result.ok) {
+    await logActivity(user.id, "sender.warmup", result.message);
+    revalidatePath("/senders");
+  }
+  return result;
+}
+
 export async function importSendersCsv(rows: unknown[]): Promise<
   ActionResult<{ imported: number; failed: { row: number; error: string }[] }>
 > {
@@ -475,9 +513,22 @@ export async function importSendersCsv(rows: unknown[]): Promise<
       failed.push({ row: i + 1, error: `${email} already exists` });
       continue;
     }
+    const finalSignature = parsed.data.warmupEnabled
+      ? formatSenderWarmup(parsed.data.signature || "", {
+          enabled: true,
+          dailyLimit: parsed.data.warmupDailyLimit ?? 20,
+          replyRate: parsed.data.warmupReplyRate ?? 40,
+        })
+      : parsed.data.signature || "";
+
     try {
       await db.insert(senderAccounts).values({
-        ...buildSenderValues(user.id, { ...parsed.data, fromName: parsed.data.senderName, replyTo: "" }),
+        ...buildSenderValues(user.id, {
+          ...parsed.data,
+          signature: finalSignature,
+          fromName: parsed.data.senderName,
+          replyTo: "",
+        }),
       });
       existingSet.add(email);
       imported++;
@@ -536,6 +587,37 @@ export async function deleteTemplate(templateId: string): Promise<ActionResult> 
       .where(and(eq(emailTemplates.id, templateId), eq(emailTemplates.userId, user.id)));
     revalidatePath("/templates");
     return { ok: true, message: "Template deleted" };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+export async function saveSequenceAsTemplate(
+  name: string,
+  description: string,
+  steps: TemplateStepItem[],
+): Promise<ActionResult<{ id: string }>> {
+  const user = await requireUser();
+  const db = getDb();
+  const trimmedName = name?.trim() || "Untitled Sequence";
+  const firstSubject = steps[0]?.variants[0]?.subject?.trim() || trimmedName;
+  const serialized = serializeSequenceTemplate(trimmedName, description?.trim() || "", steps);
+
+  try {
+    const [row] = await db
+      .insert(emailTemplates)
+      .values({
+        userId: user.id,
+        name: trimmedName,
+        subject: firstSubject,
+        bodyText: serialized,
+        bodyHtml: "",
+        format: "text",
+      })
+      .returning({ id: emailTemplates.id });
+    await logActivity(user.id, "template.created", `Saved sequence template "${trimmedName}"`);
+    revalidatePath("/templates");
+    return { ok: true, data: { id: row.id }, message: `Sequence "${trimmedName}" saved` };
   } catch (e) {
     return err(e);
   }

@@ -205,6 +205,10 @@ export async function listSenders(userId: string) {
       hourlyLimit: senderAccounts.hourlyLimit,
       repliedCount: senderAccounts.repliedCount,
       lastSyncAt: senderAccounts.lastSyncAt,
+      signature: senderAccounts.signature,
+      fromName: senderAccounts.fromName,
+      replyTo: senderAccounts.replyTo,
+      timezone: senderAccounts.timezone,
       usedToday: sql<number>`coalesce(${usage.count}, 0)`,
     })
     .from(senderAccounts)
@@ -241,9 +245,16 @@ export async function getTemplate(userId: string, id: string) {
 export async function getLeadList(userId: string, id: string) {
   const db = getDb();
   const [row] = await db
-    .select()
+    .select({
+      id: leadLists.id,
+      name: leadLists.name,
+      createdAt: leadLists.createdAt,
+      totalLeads: count(leads.id),
+    })
     .from(leadLists)
+    .leftJoin(leads, and(eq(leads.listId, leadLists.id), isNull(leads.deletedAt)))
     .where(and(eq(leadLists.id, id), eq(leadLists.userId, userId), isNull(leadLists.deletedAt)))
+    .groupBy(leadLists.id)
     .limit(1);
   return row ?? null;
 }

@@ -27,6 +27,7 @@ export default async function LeadListPage({
     <LeadTable
       listName={list.name}
       listId={id}
+      totalCount={Number(list.totalLeads ?? 0)}
       initialRows={items as unknown as LeadRow[]}
       initialCursor={nextCursor}
       initialSearch={sp.search ?? ""}
