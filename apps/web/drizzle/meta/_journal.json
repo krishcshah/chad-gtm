@@ -36,6 +36,13 @@
       "when": 1790035000000,
       "tag": "0004_replies_body_html",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790040000000,
+      "tag": "0005_unibox_messages",
+      "breakpoints": true
     }
   ]
 }

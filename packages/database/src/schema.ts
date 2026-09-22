@@ -436,5 +436,40 @@ export const workspaceSettings = pgTable("workspace_settings", {
   updatedAt: updatedAt(),
 });
 
+/* ─── Unibox operator messages (F11c thread store) ─────────────────────── */
+
+export const uniboxMessages = pgTable(
+  "unibox_messages",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Anchor inbound reply that opened the thread (nullable for lead+campaign lookups). */
+    replyId: text("reply_id").references(() => replies.id, { onDelete: "set null" }),
+    leadId: text("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    campaignId: text("campaign_id").references(() => campaigns.id, { onDelete: "set null" }),
+    senderId: text("sender_id").references(() => senderAccounts.id, { onDelete: "set null" }),
+    direction: text("direction", { enum: ["campaign", "inbound", "operator"] })
+      .notNull()
+      .default("operator"),
+    fromRole: text("from_role", { enum: ["automation", "lead", "operator"] })
+      .notNull()
+      .default("operator"),
+    fromName: text("from_name").notNull().default(""),
+    fromEmail: text("from_email").notNull().default(""),
+    subject: text("subject"),
+    bodyText: text("body_text").notNull().default(""),
+    bodyHtml: text("body_html").notNull().default(""),
+    sentAt: text("sent_at").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("unibox_messages_user_sent_idx").on(t.userId, t.sentAt),
+    index("unibox_messages_reply_idx").on(t.replyId),
+    index("unibox_messages_lead_campaign_idx").on(t.leadId, t.campaignId),
+  ],
+);
+
 /* ─── Re-export auth tables so drizzle sees the whole graph ────────────── */
 export * from "./schema-auth";

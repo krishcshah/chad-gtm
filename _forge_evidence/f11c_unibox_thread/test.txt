@@ -1,0 +1,14 @@
+
+> @smartreach/web@0.1.0 test
+> vitest run lib/__tests__/unibox-thread.test.ts
+
+
+ RUN  v3.2.7 /workspace/work/smart-reach/wt-forge/apps/web
+
+ ✓ lib/__tests__/unibox-thread.test.ts (3 tests) 4ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  00:06:37
+   Duration  437ms (transform 94ms, setup 0ms, collect 155ms, tests 4ms, environment 0ms, prepare 56ms)
+

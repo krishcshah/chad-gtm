@@ -40,6 +40,13 @@ import {
 import { getDb } from "./db";
 import { requireUser } from "./session";
 import { formatZodActionError } from "./zod-action-error";
+import {
+  buildOperatorThreadMessage,
+  loadUniboxThreadMessages,
+  resolveUniboxThreadContext,
+  type UniboxThreadKey,
+  type UniboxThreadMessage,
+} from "./unibox-thread";
 
 const {
   leadLists,
@@ -686,11 +693,27 @@ export async function testSenderConnection(input: unknown): Promise<
   }
 }
 
-/* ═══ UNIBOX — reply to a received reply via the inbox sender's SMTP ═══ */
+/* ═══ UNIBOX — thread transcript + operator reply (F11c) ═══ */
+
+export async function getUniboxThread(
+  key: UniboxThreadKey,
+): Promise<ActionResult<{ messages: UniboxThreadMessage[] }>> {
+  const user = await requireUser();
+  const db = getDb();
+  try {
+    const ctx = await resolveUniboxThreadContext(db, user.id, key);
+    if (!ctx) return { ok: false, error: "Thread not found" };
+    const messages = await loadUniboxThreadMessages(db, user.id, ctx);
+    return { ok: true, data: { messages } };
+  } catch (e) {
+    return err(e);
+  }
+}
+
 export async function sendUniboxReply(input: {
   replyId: string;
   body: string;
-}): Promise<ActionResult> {
+}): Promise<ActionResult<{ message: UniboxThreadMessage }>> {
   const user = await requireUser();
   const body = input?.body?.toString().trim();
   if (!body) return { ok: false, error: "Write something before sending" };
@@ -713,22 +736,54 @@ export async function sendUniboxReply(input: {
 
     const { sendMail } = await import("@smartreach/email-engine/mailer");
     const subject = reply.subject?.startsWith("Re:") ? reply.subject : `Re: ${reply.subject ?? ""}`.trim();
+    const finalSubject = subject === "Re:" ? "Re: Your email" : subject;
     await sendMail(sender as never, {
       to: reply.fromEmail,
-      subject: subject === "Re:" ? "Re: Your email" : subject,
+      subject: finalSubject,
       text: body,
     });
 
-    // Log + mark this reply read
+    const sentAt = nowIso();
+    const rowId = crypto.randomUUID();
+    const fromName = (sender.fromName || sender.senderName || "").trim();
+    const fromEmail = sender.email;
+    await db.insert(schema.uniboxMessages).values({
+      id: rowId,
+      userId: user.id,
+      replyId: reply.id,
+      leadId: reply.leadId,
+      campaignId: reply.campaignId,
+      senderId: sender.id,
+      direction: "operator",
+      fromRole: "operator",
+      fromName,
+      fromEmail,
+      subject: finalSubject,
+      bodyText: body,
+      bodyHtml: "",
+      sentAt,
+    });
+
+    const message = buildOperatorThreadMessage({
+      id: rowId,
+      fromName,
+      fromEmail,
+      subject: finalSubject,
+      bodyText: body,
+      bodyHtml: "",
+      sentAt,
+    });
+
     await db
       .update(schema.replies)
       .set({ readAt: nowIso() })
       .where(eq(schema.replies.id, reply.id));
     await logActivity(user.id, "unibox.replied", `Replied to ${reply.fromEmail}`, reply.campaignId, {
       replyId: reply.id,
+      uniboxMessageId: rowId,
     });
     revalidatePath("/unibox");
-    return { ok: true, message: `Reply sent to ${reply.fromEmail}` };
+    return { ok: true, data: { message }, message: `Reply sent to ${reply.fromEmail}` };
   } catch (e) {
     return {
       ok: false,

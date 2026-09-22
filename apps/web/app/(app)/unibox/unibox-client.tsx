@@ -1,11 +1,15 @@
 "use client";
 import { formatDistanceToNow } from "date-fns";
-import { Inbox, Mail, MailOpen, SendHorizonal, X } from "lucide-react";
+import { Inbox, SendHorizonal, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button, EmptyState, Textarea } from "@smartreach/ui";
-import { sendUniboxReply } from "@/lib/actions";
+import { getUniboxThread, sendUniboxReply } from "@/lib/actions";
+import {
+  bubbleSide,
+  type UniboxThreadMessage,
+} from "@/lib/unibox-thread";
 
 interface ReplyRow {
   id: string; fromName: string; fromEmail: string; subject: string; snippet: string;
@@ -27,15 +31,40 @@ function EmailBody({ html }: { html: string }) {
     .replace(/javascript:/gi, "")
     .replace(/<base[\s\S]*?>/gi, "");
   if (!isHtml) {
-    return <div className="whitespace-pre-wrap rounded-lg border bg-background/60 p-4 text-sm leading-relaxed text-foreground/90">{html}</div>;
+    return <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">{html}</div>;
   }
   return (
     <iframe
       title="reply body"
-      className="h-full w-full rounded-lg border bg-white"
+      className="min-h-[120px] w-full rounded-lg border bg-white"
       sandbox="allow-same-origin"
-      srcDoc={`<!doctype html><html><head><style>body{margin:0;padding:18px;font:14px/1.6 -apple-system,sans-serif;color:#0a1128;background:#fff;}img{max-width:100%}blockquote{margin:0;padding-left:1em;border-left:3px solid #ddd}</style></head><body>${sanitized}</body></html>`}
+      srcDoc={`<!doctype html><html><head><style>body{margin:0;padding:12px;font:14px/1.6 -apple-system,sans-serif;color:#0a1128;background:#fff;}img{max-width:100%}blockquote{margin:0;padding-left:1em;border-left:3px solid #ddd}</style></head><body>${sanitized}</body></html>`}
     />
+  );
+}
+
+function ThreadBubble({ m }: { m: UniboxThreadMessage }) {
+  const side = bubbleSide(m.direction); // campaign+inbound LEFT, operator RIGHT
+  const display = m.bodyHtml || m.bodyText || "";
+  const label =
+    m.direction === "campaign" ? "Campaign" : m.direction === "inbound" ? "Lead" : "You";
+  return (
+    <div className={`flex w-full ${side === "right" ? "justify-end" : "justify-start"}`}>
+      <div
+        className={`max-w-[85%] rounded-2xl border px-3.5 py-2.5 shadow-sm ${
+          side === "right"
+            ? "rounded-br-md border-primary/20 bg-primary/10"
+            : "rounded-bl-md border-border/60 bg-background/80"
+        }`}
+      >
+        <div className="mb-1 flex items-center justify-between gap-3 text-[10px] uppercase tracking-wide text-muted-foreground">
+          <span className="font-semibold">{label}</span>
+          <span>{m.sentAt ? formatDistanceToNow(new Date(m.sentAt), { addSuffix: true }) : ""}</span>
+        </div>
+        {m.subject ? <p className="mb-1 text-xs font-medium text-foreground/80">{m.subject}</p> : null}
+        <EmailBody html={display} />
+      </div>
+    </div>
   );
 }
 
@@ -44,15 +73,42 @@ export function UniboxClient({ initial }: { initial: ReplyRow[] }) {
   const [activeId, setActiveId] = useState<string | null>(initial[0]?.id ?? null);
   const [body, setBody] = useState("");
   const [pending, start] = useTransition();
+  const [thread, setThread] = useState<UniboxThreadMessage[]>([]);
+  const [threadLoading, setThreadLoading] = useState(false);
   const unread = initial.filter((r) => !r.readAt).length;
+
+  useEffect(() => {
+    if (!activeId) {
+      setThread([]);
+      return;
+    }
+    let cancelled = false;
+    setThreadLoading(true);
+    (async () => {
+      const res = await getUniboxThread({ replyId: activeId });
+      if (cancelled) return;
+      if (res.ok && res.data?.messages) setThread(res.data.messages);
+      else setThread([]);
+      setThreadLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeId]);
 
   const send = (row: ReplyRow) => {
     const text = body.trim();
     if (!text) { toast.error("Write a message first"); return; }
     start(async () => {
       const res = await sendUniboxReply({ replyId: row.id, body: text });
-      if (res.ok) { toast.success(res.message ?? "Reply sent"); setBody(""); router.refresh(); }
-      else toast.error(res.ok ? "Send failed" : res.error);
+      if (res.ok) {
+        toast.success(res.message ?? "Reply sent");
+        setBody("");
+        if (res.data?.message) {
+          setThread((prev) => [...prev, res.data!.message]);
+        }
+        router.refresh();
+      } else toast.error(res.ok ? "Send failed" : res.error);
     });
   };
 
@@ -67,7 +123,6 @@ export function UniboxClient({ initial }: { initial: ReplyRow[] }) {
       </header>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(240px,320px)_1fr] overflow-hidden rounded-xl border bg-card">
-        {/* left: list — full width on mobile when no thread open */}
         <div className={`min-h-0 overflow-y-auto border-r border-border/60 ${activeId ? "hidden md:block" : "block"}`}>
           {initial.length === 0 && (
             <EmptyState
@@ -95,7 +150,6 @@ export function UniboxClient({ initial }: { initial: ReplyRow[] }) {
           })}
         </div>
 
-        {/* right: thread — full screen on mobile when a conversation is open */}
         <div className={`flex min-h-0 flex-col bg-card/40 ${activeId ? "flex" : "hidden md:flex"}`}>
           {activeId ? (
             (() => {
@@ -113,8 +167,14 @@ export function UniboxClient({ initial }: { initial: ReplyRow[] }) {
                     </div>
                     <button type="button" aria-label="Back to conversations" onClick={() => setActiveId(null)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent md:aria-[label]:content-auto"><X className="size-4" /></button>
                   </div>
-                  <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-                    <EmailBody html={r.bodyHtml || r.bodyText || r.snippet || ""} />
+                  <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
+                    {threadLoading && thread.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Loading conversation…</p>
+                    ) : thread.length === 0 ? (
+                      <EmailBody html={r.bodyHtml || r.bodyText || r.snippet || ""} />
+                    ) : (
+                      thread.map((m) => <ThreadBubble key={m.id} m={m} />)
+                    )}
                   </div>
                   <div className="border-t border-border/60 px-5 py-3">
                     <label className="mb-2 block text-xs font-medium text-muted-foreground">Reply via {r.senderEmail ?? "your sender"}</label>
