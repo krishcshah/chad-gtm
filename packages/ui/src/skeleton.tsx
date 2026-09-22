@@ -57,35 +57,43 @@ export function WizardSkeleton({ steps = 6 }: { steps?: number }) {
   );
 }
 
-/** Analytics / detail metrics loading shell. */
+/** KPI row + chart shell while a date range is loading. */
+export function AnalyticsBodySkeleton() {
+  return (
+    <div className="space-y-4" aria-busy="true">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+        <StatSkeleton />
+        <StatSkeleton />
+        <StatSkeleton />
+        <StatSkeleton />
+        <StatSkeleton />
+      </div>
+      <div className="rounded-xl border border-border/70 bg-card/80 p-5 space-y-4">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-52 w-full sm:h-64" />
+      </div>
+    </div>
+  );
+}
+
+/** Analytics page loading shell: title, date range, KPI cards, one chart. */
 export function AnalyticsSkeleton() {
   return (
     <div className="page-stack" aria-busy="true" aria-live="polite">
       <div className="space-y-2">
         <Skeleton className="h-7 w-40" />
-        <Skeleton className="h-4 w-64 max-w-full" />
+        <Skeleton className="h-4 w-80 max-w-full" />
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-3">
-        <StatSkeleton />
-        <StatSkeleton />
-        <StatSkeleton />
-        <StatSkeleton />
-        <StatSkeleton />
-        <StatSkeleton />
+      <div className="flex flex-wrap gap-2">
+        <Skeleton className="h-8 w-16" />
+        <Skeleton className="h-8 w-20" />
+        <Skeleton className="h-8 w-20" />
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-xl border border-border/70 bg-card/80 p-5 space-y-3">
-          <Skeleton className="h-4 w-40" />
-          <Skeleton className="h-3 w-full" />
-          <Skeleton className="h-3 w-3/4" />
-          <Skeleton className="h-3 w-2/3" />
-        </div>
-        <div className="rounded-xl border border-border/70 bg-card/80 p-5 space-y-3">
-          <Skeleton className="h-4 w-36" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-        </div>
+      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
+        <Skeleton className="h-9 w-full" />
+        <Skeleton className="h-9 w-full" />
       </div>
+      <AnalyticsBodySkeleton />
       <span className="sr-only">Loading analytics</span>
     </div>
   );

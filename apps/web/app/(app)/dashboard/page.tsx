@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, Progress, statusVariant } from "@smartreach/ui";
 import { requireUser } from "@/lib/session";
 import { getActiveCampaigns, getDashboardStats, getRecentActivity } from "@/lib/queries";
+import { AnalyticsSectionLoader } from "@/components/analytics-section-loader";
 
 export const dynamic = "force-dynamic";
 
@@ -24,8 +25,13 @@ function Stat({ label, value, icon: Icon, hint }: { label: string; value: string
   );
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; to?: string }>;
+}) {
   const user = await requireUser();
+  const sp = await searchParams;
   const [stats, activity, activeCampaigns] = await Promise.all([
     getDashboardStats(user.id),
     getRecentActivity(user.id),
@@ -47,6 +53,13 @@ export default async function DashboardPage() {
           </Link>
         </Button>
       </div>
+
+      <AnalyticsSectionLoader
+        from={sp.from}
+        to={sp.to}
+        heading="Overview"
+        description="Leads contacted, replies, and bounces across your campaigns. Opens and clicks are not tracked."
+      />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Stat label="Active campaigns" value={stats.activeCampaigns} icon={TrendingUp} />

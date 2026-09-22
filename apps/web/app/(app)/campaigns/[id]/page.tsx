@@ -8,6 +8,7 @@ import { formatDate } from "@smartreach/shared";
 import { CampaignActions } from "../campaign-actions";
 import { CampaignTabs } from "./campaign-tabs";
 import { SequenceEditor } from "./sequence-editor";
+import { AnalyticsSectionLoader } from "@/components/analytics-section-loader";
 
 export const dynamic = "force-dynamic";
 
@@ -21,11 +22,11 @@ export default async function CampaignDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; from?: string; to?: string }>;
 }) {
   const user = await requireUser();
   const { id } = await params;
-  const { tab } = await searchParams;
+  const sp = await searchParams;
   const c = await getCampaign(user.id, id);
   if (!c) notFound();
 
@@ -74,7 +75,7 @@ export default async function CampaignDetailPage({
       </div>
 
       <CampaignTabs
-        initialTab={tab === "sequence" ? "sequence" : "overview"}
+        initialTab={sp.tab === "sequence" ? "sequence" : "overview"}
         stepCount={sequence.ok ? sequence.data?.steps.length ?? 0 : undefined}
         overview={
           <>
@@ -105,6 +106,14 @@ export default async function CampaignDetailPage({
                 </Card>
               ))}
             </div>
+
+            <AnalyticsSectionLoader
+              campaignId={c.id}
+              from={sp.from}
+              to={sp.to}
+              heading="Analytics"
+              description="Leads contacted, replies, and bounces for this campaign. Opens and clicks are not tracked."
+            />
 
             <Card>
               <CardContent className="p-5">

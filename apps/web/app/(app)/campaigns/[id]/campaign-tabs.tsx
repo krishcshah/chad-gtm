@@ -25,8 +25,11 @@ export function CampaignTabs({
       onValueChange={(value) => {
         const next = value === "sequence" ? "sequence" : "overview";
         setTab(next);
-        const href = next === "sequence" ? `${pathname}?tab=sequence` : pathname;
-        router.replace(href, { scroll: false });
+        const params = new URLSearchParams(window.location.search);
+        if (next === "sequence") params.set("tab", "sequence");
+        else params.delete("tab");
+        const qs = params.toString();
+        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
       }}
     >
       <TabsList aria-label="Campaign sections">
