@@ -6,7 +6,6 @@ import { ArrowLeft, ArrowRight, CloudUpload, Loader2, Upload, X } from "lucide-r
 import { toast } from "sonner";
 import { STANDARD_LEAD_FIELDS } from "@smartreach/shared";
 import {
-  Badge,
   Button,
   Input,
   Select,
@@ -16,29 +15,18 @@ import {
   SelectValue,
   cn,
 } from "@smartreach/ui";
-import { guessField, parseCsvText, type ParsedCsv } from "@/lib/csv";
+import { autoMapHeaders, parseCsvText, type ParsedCsv } from "@/lib/csv";
 import { importLeads } from "@/lib/actions";
 
 const IGNORE = "__ignore__";
 const CUSTOM = "__custom__";
 
+/** Shown beside Confirm until a column is mapped to Email. */
+export const EMAIL_MAPPING_REQUIRED_MESSAGE = "Map one column to Email before you confirm.";
+
 type Mapping = Record<string, string | null>; // csv column -> field key | null
 
-function autoMap(headers: string[]): Mapping {
-  const m: Mapping = {};
-  const used = new Set<string>();
-  for (const h of headers) {
-    const guess = guessField(h, STANDARD_LEAD_FIELDS as unknown as { key: string; label: string }[]);
-    if (guess && !used.has(guess)) {
-      m[h] = guess;
-      used.add(guess);
-    } else {
-      // unmapped standard-ish -> custom variable by default, name = normalized header
-      m[h] = null;
-    }
-  }
-  return m;
-}
+const LEAD_FIELDS = STANDARD_LEAD_FIELDS as unknown as { key: string; label: string }[];
 
 export function LeadImport({
   lists,
@@ -84,7 +72,7 @@ export function LeadImport({
     }
     setFileName(file.name);
     setCsv(parsed);
-    setMapping(autoMap(parsed.headers));
+    setMapping(autoMapHeaders(parsed.headers, LEAD_FIELDS));
     setNewListName(file.name.replace(/\.csv$/i, ""));
     setResult(null);
     setStep(1);
@@ -160,7 +148,7 @@ export function LeadImport({
         tabIndex={0}
         aria-label="Upload leads CSV"
         className={cn(
-          "flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "flex w-full min-w-0 max-w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           onImported ? "p-8" : "p-20",
           dragOver ? "border-primary bg-primary/5" : "border-border hover:border-foreground/30",
         )}
@@ -178,8 +166,8 @@ export function LeadImport({
 
   /* ── Steps ── */
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2 text-sm">
+    <div className="w-full min-w-0 max-w-full space-y-6">
+      <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
         <button type="button" onClick={() => setStep(1)} className={cn("flex items-center gap-2", step === 1 ? "text-foreground" : "text-muted-foreground")}>
           <span className={cn("flex h-6 w-6 items-center justify-center rounded-full text-xs", step === 1 ? "bg-primary text-primary-foreground" : "bg-success/20 text-success-foreground")}>1</span>
           Preview
@@ -191,31 +179,37 @@ export function LeadImport({
         </span>
       </div>
 
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="rounded-lg bg-accent p-2"><Upload className="h-4 w-4" /></div>
-          <div>
-            <p className="font-medium">{fileName}</p>
+          <div className="min-w-0">
+            <p className="truncate font-medium">{fileName}</p>
             <p className="text-xs text-muted-foreground">{csv.rows.length} rows · {csv.headers.length} columns</p>
           </div>
         </div>
-        <Button variant="ghost" size="sm" onClick={reset}><X className="h-4 w-4" /> Change file</Button>
+        <Button type="button" variant="ghost" size="sm" onClick={reset}><X className="h-4 w-4" /> Change file</Button>
       </div>
 
       {step === 1 && (
         <>
-          <div className="overflow-auto rounded-xl border">
-            <table className="w-full text-xs">
+          <div className="min-w-0 max-w-full overflow-x-auto rounded-xl border">
+            <table className="w-max min-w-full text-xs">
               <thead>
                 <tr className="border-b bg-muted/40 text-left text-muted-foreground">
-                  {csv.headers.slice(0, 8).map((h) => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}
+                  {csv.headers.map((h, i) => (
+                    <th key={`${h}-${i}`} className="px-3 py-2 font-medium">
+                      <div className="max-w-44 truncate">{h}</div>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {csv.rows.slice(0, 8).map((r, i) => (
                   <tr key={i} className="border-b last:border-0">
-                    {csv.headers.slice(0, 8).map((h) => (
-                      <td key={h} className="max-w-44 truncate px-3 py-2">{r[h]}</td>
+                    {csv.headers.map((h, hi) => (
+                      <td key={`${h}-${hi}`} className="px-3 py-2">
+                        <div className="max-w-44 truncate">{r[h]}</div>
+                      </td>
                     ))}
                   </tr>
                 ))}
@@ -223,7 +217,7 @@ export function LeadImport({
             </table>
           </div>
           <div className="flex justify-end">
-            <Button onClick={() => setStep(2)}>Continue <ArrowRight className="h-4 w-4" /></Button>
+            <Button type="button" onClick={() => setStep(2)}>Continue <ArrowRight className="h-4 w-4" /></Button>
           </div>
         </>
       )}
@@ -250,53 +244,61 @@ export function LeadImport({
               )}
             </div>
 
-            <div className="rounded-xl border">
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-b bg-muted/40 px-4 py-2.5 text-xs font-medium text-muted-foreground">
-                <span>CSV column</span>
-                <span className="w-6" />
-                <span>SmartReach field / variable</span>
+            {/* Scroll wide column rows inside the panel; actions stay outside it. */}
+            <div
+              data-testid="column-mapping-scroll"
+              className="max-h-[min(32rem,calc(100dvh-14rem))] min-w-0 max-w-full overflow-auto overscroll-x-contain rounded-xl border"
+            >
+              <div className="min-w-[40rem]">
+                <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1.1fr)] items-center gap-3 border-b bg-muted px-4 py-2.5 text-xs font-medium text-muted-foreground">
+                  <span>CSV column</span>
+                  <span className="w-6" />
+                  <span>SmartReach field / variable</span>
+                </div>
+                {csv.headers.map((col, index) => {
+                  const val = mapping[col] ?? CUSTOM;
+                  return (
+                    <div key={`${col}-${index}`} className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1.1fr)] items-center gap-3 border-b px-4 py-2.5 last:border-0">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{col}</p>
+                        <p className="truncate text-xs text-muted-foreground">{csv.rows[0]?.[col]}</p>
+                      </div>
+                      <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <div className="flex min-w-0 items-center gap-2">
+                        <div className="min-w-0 flex-1">
+                          <Select
+                            value={val === null || val === undefined ? CUSTOM : val}
+                            onValueChange={(v) => setMapping((p) => ({ ...p, [col]: v === IGNORE ? IGNORE : v }))}
+                          >
+                            <SelectTrigger className="h-8 w-full min-w-0" aria-label={`Map column ${col}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent position="popper" sideOffset={4} className="z-[100]">
+                              {STANDARD_LEAD_FIELDS.map((f) => (
+                                <SelectItem key={f.key} value={f.key}>
+                                  {f.label}{f.required ? " *" : ""}
+                                </SelectItem>
+                              ))}
+                              <SelectItem value={CUSTOM}>Custom variable</SelectItem>
+                              <SelectItem value={IGNORE}>— Ignore —</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {val === CUSTOM && (
+                          <Input
+                            className="h-8 w-36 shrink-0 font-mono text-xs"
+                            placeholder="{{field}}"
+                            aria-label={`Custom variable for ${col}`}
+                            value={customKeys[col] ?? col.toLowerCase().replace(/[^a-z0-9_]+/g, "_")}
+                            onChange={(e) => setCustomKeys((p) => ({ ...p, [col]: e.target.value }))}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              {csv.headers.map((col) => {
-                const val = mapping[col] ?? CUSTOM;
-                return (
-                  <div key={col} className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-b px-4 py-2.5 last:border-0">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{col}</p>
-                      <p className="truncate text-xs text-muted-foreground">{csv.rows[0]?.[col]}</p>
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                    <div className="flex items-center gap-2">
-                      <Select
-                        value={val === null || val === undefined ? CUSTOM : val}
-                        onValueChange={(v) => setMapping((p) => ({ ...p, [col]: v === IGNORE ? IGNORE : v }))}
-                      >
-                        <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {STANDARD_LEAD_FIELDS.map((f) => (
-                            <SelectItem key={f.key} value={f.key}>
-                              {f.label}{f.required ? " *" : ""}
-                            </SelectItem>
-                          ))}
-                          <SelectItem value={CUSTOM}>Custom variable</SelectItem>
-                          <SelectItem value={IGNORE}>— Ignore —</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      {val === CUSTOM && (
-                        <Input
-                          className="h-8 w-36 font-mono text-xs"
-                          placeholder="{{field}}"
-                          value={customKeys[col] ?? col.toLowerCase().replace(/[^a-z0-9_]+/g, "_")}
-                          onChange={(e) => setCustomKeys((p) => ({ ...p, [col]: e.target.value }))}
-                        />
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
             </div>
-            {!emailMapped && (
-              <p className="text-sm text-destructive">Map one column to <strong>Email</strong> to continue.</p>
-            )}
             <p className="text-xs text-muted-foreground">
               Custom variables become <code className="font-mono">{"{{var}}"}</code> in templates.
               Duplicates skipped, invalid emails removed automatically.
@@ -311,17 +313,34 @@ export function LeadImport({
             </div>
           )}
 
-          <div className="flex items-center justify-between">
-            <Button variant="ghost" onClick={() => setStep(1)}><ArrowLeft className="h-4 w-4" /> Back</Button>
-            <div className="flex gap-3">
-              {result && !onImported ? (
-                <Button onClick={() => router.push("/leads")}>View leads <ArrowRight className="h-4 w-4" /></Button>
-              ) : (
-                <Button onClick={doImport} disabled={pending || !emailMapped || (targetList === "__new__" && !newListName.trim())}>
-                  {pending && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Import {csv.rows.length} leads
-                </Button>
-              )}
+          <div
+            data-testid="column-mapping-actions"
+            className="sticky bottom-0 z-30 space-y-3 border-t border-border bg-background/95 py-3 backdrop-blur"
+          >
+            {!emailMapped && (
+              <p id="email-mapping-error" role="alert" className="text-sm text-destructive">
+                {EMAIL_MAPPING_REQUIRED_MESSAGE}
+              </p>
+            )}
+            <div className="flex items-center justify-between gap-3">
+              <Button type="button" variant="outline" onClick={() => setStep(1)}>
+                <ArrowLeft className="h-4 w-4" /> Cancel
+              </Button>
+              <div className="flex gap-3">
+                {result && !onImported ? (
+                  <Button type="button" onClick={() => router.push("/leads")}>View leads <ArrowRight className="h-4 w-4" /></Button>
+                ) : (
+                  <Button
+                    type="button"
+                    onClick={doImport}
+                    disabled={pending || !emailMapped || (targetList === "__new__" && !newListName.trim())}
+                    aria-describedby={!emailMapped ? "email-mapping-error" : undefined}
+                  >
+                    {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Confirm
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </>
