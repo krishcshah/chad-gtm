@@ -1,6 +1,7 @@
 import { and, count, desc, eq, gte, isNull, sql, inArray } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { getDb } from "./db";
+import { summarizeUniboxThreads } from "./unibox-conversations";
 
 const {
   campaigns,
@@ -341,8 +342,23 @@ export async function hasWorkspacePostalAddress(_userId: string): Promise<boolea
   return true;
 }
 
-/** List inbound replies. Second arg may be a limit number (legacy) or opts. */
-export async function listReplies(
+const MAX_REPLY_SCAN = 1000;
+
+/** Raw rows to read so one chatty conversation does not fill the thread page. */
+function replyScanLimit(threadLimit: number): number {
+  const n = Number.isFinite(threadLimit) && threadLimit > 0 ? Math.floor(threadLimit) : 1;
+  return Math.min(MAX_REPLY_SCAN, Math.max(n, n * 20));
+}
+
+/**
+ * One row per conversation for Prism.
+ * `threadKey` is the RFC822 root when In-Reply-To / References are present on
+ * the row; otherwise `uniboxConversationKey` (lead + campaign + normalized subject).
+ * Those header columns are not on `replies`, so today's rows use the fallback.
+ * `readAt` is not written. `limit` counts threads.
+ * Legacy `listReplies(userId, limit)` still works.
+ */
+export async function listUniboxConversations(
   userId: string,
   limitOrOpts: number | { limit?: number; tag?: string | null } = 50,
 ) {
@@ -353,12 +369,20 @@ export async function listReplies(
   if (opts.tag != null) {
     conds.push(eq(replies.tag, opts.tag as never));
   }
-  return db
+  const rows = await db
     .select()
     .from(replies)
     .where(and(...conds))
     .orderBy(desc(replies.receivedAt))
-    .limit(limit);
+    .limit(replyScanLimit(limit));
+  return summarizeUniboxThreads(rows).slice(0, limit);
+}
+
+export async function listReplies(
+  userId: string,
+  limitOrOpts: number | { limit?: number; tag?: string | null } = 50,
+) {
+  return listUniboxConversations(userId, limitOrOpts);
 }
 
 /* ─── Suppressions / blocklist (F15a) ──────────────────────────────────── */

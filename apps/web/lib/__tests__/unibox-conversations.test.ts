@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { groupUniboxConversations, normalizeThreadSubject, uniboxConversationKey } from "../unibox-conversations";
+import {
+  groupUniboxConversations,
+  normalizeThreadSubject,
+  summarizeUniboxThreads,
+  uniboxConversationKey,
+} from "../unibox-conversations";
 
 function reply(partial: {
   id: string;
@@ -102,5 +107,69 @@ describe("groupUniboxConversations", () => {
     expect(grouped[0]?.tagReplyId).toBe("o");
     expect(grouped[0]?.latest.id).toBe("n");
     expect(uniboxConversationKey(rows[0]!)).toBe(uniboxConversationKey(rows[1]!));
+    expect(grouped[0]?.threadKey).toBe(uniboxConversationKey(rows[0]!));
+  });
+
+  it("returns one list row and the client key for five replies in one lead conversation", () => {
+    const rows = [
+      reply({ id: "r5", subject: "Re: Intro", receivedAt: "2026-09-22T05:00:00.000Z", snippet: "fifth" }),
+      reply({ id: "r4", subject: "RE: Intro", receivedAt: "2026-09-22T04:00:00.000Z", snippet: "fourth" }),
+      reply({ id: "r3", subject: "Re: Re: Intro", receivedAt: "2026-09-22T03:00:00.000Z", snippet: "third" }),
+      reply({ id: "r2", subject: "Intro", receivedAt: "2026-09-22T02:00:00.000Z", snippet: "second", readAt: "2026-09-22T02:05:00.000Z" }),
+      reply({ id: "r1", subject: "Fwd: Intro", receivedAt: "2026-09-22T01:00:00.000Z", snippet: "first" }),
+    ].map((row) => ({ ...row, messageId: `<${row.id}@example.com>` }));
+
+    const listed = summarizeUniboxThreads(rows);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.id).toBe("r5");
+    expect(listed[0]?.snippet).toBe("fifth");
+    expect(listed[0]?.replyIds).toEqual(["r5", "r4", "r3", "r2", "r1"]);
+    expect(listed[0]?.threadKey).toBe(uniboxConversationKey(rows[0]!));
+    expect(listed[0]?.threadKey.startsWith("lead-1\u0000camp-1\u0000")).toBe(true);
+    expect(listed[0]?.readAt).toBeNull();
+    expect(listed[0]?.unread).toBe(true);
+  });
+
+  it("keeps two leads as two threadKeys", () => {
+    const listed = summarizeUniboxThreads([
+      reply({ id: "a", subject: "Re: Intro", receivedAt: "2026-09-22T03:00:00.000Z", leadId: "lead-1" }),
+      reply({ id: "b", subject: "Intro", receivedAt: "2026-09-22T02:00:00.000Z", leadId: "lead-2" }),
+    ]);
+    expect(listed).toHaveLength(2);
+    expect(new Set(listed.map((row) => row.threadKey)).size).toBe(2);
+  });
+
+  it("uses the RFC822 root when In-Reply-To and References are present", () => {
+    const listed = summarizeUniboxThreads([
+      {
+        ...reply({ id: "root", subject: "Hello", receivedAt: "2026-09-22T00:00:00.000Z" }),
+        messageId: "<root@example.com>",
+      },
+      {
+        ...reply({
+          id: "child",
+          subject: "Different subject",
+          receivedAt: "2026-09-22T00:02:00.000Z",
+          leadId: "lead-9",
+          campaignId: "camp-9",
+        }),
+        messageId: "<child@example.com>",
+        inReplyTo: "<root@example.com>",
+        references: "<root@example.com>",
+      },
+    ]);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.replyIds).toEqual(["child", "root"]);
+    expect(listed[0]?.threadKey).toBe(`rfc822:${encodeURIComponent("root@example.com")}`);
+  });
+
+  it("does not split a lead conversation on messageId alone", () => {
+    const rows = [
+      { ...reply({ id: "a", subject: "Intro", receivedAt: "2026-09-22T02:00:00.000Z" }), messageId: "<one@example.com>" },
+      { ...reply({ id: "b", subject: "Re: Intro", receivedAt: "2026-09-22T01:00:00.000Z" }), messageId: "<two@example.com>" },
+    ];
+    const listed = summarizeUniboxThreads(rows);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.threadKey).toBe(uniboxConversationKey(rows[0]!));
   });
 });
