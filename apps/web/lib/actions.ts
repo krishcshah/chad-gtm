@@ -16,6 +16,7 @@ import {
   parseSuppressionToken,
   senderCreateSchema,
   senderCsvRowSchema,
+  setUniboxReplyTagSchema,
   suppressionCreateSchema,
   suppressionImportSchema,
   suppressionListQuerySchema,
@@ -789,6 +790,32 @@ export async function sendUniboxReply(input: {
       ok: false,
       error: e instanceof Error ? e.message : "Failed to send reply (check SMTP settings)",
     };
+  }
+}
+
+export async function setUniboxReplyTag(input: {
+  replyId: string;
+  tag: string | null;
+}): Promise<ActionResult<{ replyId: string; tag: string | null }>> {
+  const user = await requireUser();
+  const parsed = setUniboxReplyTagSchema.safeParse(input);
+  if (!parsed.success) return zodFail(parsed.error);
+  const db = getDb();
+  try {
+    const [row] = await db
+      .update(schema.replies)
+      .set({ tag: parsed.data.tag })
+      .where(and(eq(schema.replies.id, parsed.data.replyId), eq(schema.replies.userId, user.id)))
+      .returning({ id: schema.replies.id, tag: schema.replies.tag });
+    if (!row) return { ok: false, error: "Reply not found" };
+    revalidatePath("/unibox");
+    return {
+      ok: true,
+      data: { replyId: row.id, tag: row.tag ?? null },
+      message: parsed.data.tag ? `Tagged as ${parsed.data.tag}` : "Tag cleared",
+    };
+  } catch (e) {
+    return err(e);
   }
 }
 

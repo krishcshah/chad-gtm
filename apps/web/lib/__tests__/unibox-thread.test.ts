@@ -58,3 +58,23 @@ describe("Prism UniboxThreadMessage contract", () => {
     expect(["automation", "lead", "operator"]).toContain(sample.fromRole);
   });
 });
+
+describe("Unibox reply tags (0008)", () => {
+  it("inbound messages may carry a nullable tag", () => {
+    const sample: UniboxThreadMessage = {
+      id: "inbound:1",
+      direction: "inbound",
+      fromRole: "lead",
+      fromName: "Lead",
+      fromEmail: "lead@x.com",
+      subject: null,
+      bodyHtml: "",
+      bodyText: "ooo",
+      sentAt: "2026-09-22T00:00:00.000Z",
+      tag: "out_of_office",
+    };
+    expect(sample.tag).toBe("out_of_office");
+    const cleared: UniboxThreadMessage = { ...sample, tag: null };
+    expect(cleared.tag).toBeNull();
+  });
+});

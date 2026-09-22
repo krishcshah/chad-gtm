@@ -7,10 +7,12 @@
  */
 import { and, eq, isNotNull, or, sql } from "drizzle-orm";
 import { schema } from "@smartreach/database";
+import type { UniboxReplyTag } from "@smartreach/shared";
 import type { getDb } from "./db";
 
 export type UniboxDirection = "campaign" | "inbound" | "operator";
 export type UniboxFromRole = "automation" | "lead" | "operator";
+export type { UniboxReplyTag };
 
 /** Prism thread message shape — keep in sync with Unibox UI + sendUniboxReply. */
 export interface UniboxThreadMessage {
@@ -23,6 +25,8 @@ export interface UniboxThreadMessage {
   bodyHtml: string;
   bodyText: string;
   sentAt: string; // ISO-8601
+  /** Present on inbound messages; null/undefined elsewhere. */
+  tag?: UniboxReplyTag | null;
 }
 
 export type UniboxThreadKey =
@@ -179,6 +183,7 @@ export async function loadUniboxThreadMessages(
         bodyHtml: schema.replies.bodyHtml,
         receivedAt: schema.replies.receivedAt,
         campaignId: schema.replies.campaignId,
+        tag: schema.replies.tag,
       })
       .from(schema.replies)
       .where(and(...replyConds));
@@ -198,6 +203,7 @@ export async function loadUniboxThreadMessages(
         bodyHtml: r.bodyHtml || "",
         bodyText: r.bodyText || "",
         sentAt: r.receivedAt,
+        tag: (r.tag as UniboxReplyTag | null) ?? null,
       });
     }
   }

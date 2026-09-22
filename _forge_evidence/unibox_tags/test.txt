@@ -1,0 +1,42 @@
+
+> @smartreach/validation@0.1.0 test
+> vitest run
+
+
+ RUN  v3.2.7 /workspace/work/smart-reach/wt-forge/packages/validation
+
+ ✓ src/__tests__/campaign-window.test.ts (2 tests) 4ms
+ ✓ src/__tests__/lead-create.test.ts (8 tests) 6ms
+ ✓ src/__tests__/unibox-reply-tag.test.ts (2 tests) 4ms
+ ✓ src/__tests__/campaign-draft.test.ts (8 tests) 8ms
+ ✓ src/__tests__/suppression-import.test.ts (9 tests) 14ms
+
+ Test Files  5 passed (5)
+      Tests  29 passed (29)
+   Start at  00:13:29
+   Duration  419ms (transform 151ms, setup 0ms, collect 504ms, tests 36ms, environment 1ms, prepare 319ms)
+
+
+> @smartreach/web@0.1.0 test
+> vitest run
+
+
+ RUN  v3.2.7 /workspace/work/smart-reach/wt-forge/apps/web
+
+ ✓ lib/__tests__/zod-action-error.test.ts (2 tests) 3ms
+ ✓ lib/__tests__/auth-trusted-origins.test.ts (5 tests) 4ms
+ ✓ lib/__tests__/lead-form.test.ts (6 tests) 7ms
+ ✓ lib/__tests__/unibox-thread.test.ts (4 tests) 6ms
+ ✓ lib/__tests__/senders.test.ts (3 tests) 5ms
+ ✓ lib/__tests__/campaign-drafts.test.ts (10 tests) 13ms
+ ✓ lib/__tests__/leads.test.ts (12 tests) 13ms
+ ✓ lib/__tests__/lead-custom-fields.test.ts (3 tests) 5ms
+ ✓ lib/__tests__/hhmm.test.ts (2 tests) 3ms
+ ✓ lib/__tests__/campaign-wizard-errors.test.ts (2 tests) 3ms
+ ✓ lib/__tests__/campaign-start-guard.test.ts (2 tests) 2ms
+
+ Test Files  11 passed (11)
+      Tests  51 passed (51)
+   Start at  00:13:30
+   Duration  816ms (transform 544ms, setup 0ms, collect 1.57s, tests 64ms, environment 2ms, prepare 716ms)
+

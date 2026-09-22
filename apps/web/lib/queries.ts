@@ -341,12 +341,22 @@ export async function hasWorkspacePostalAddress(_userId: string): Promise<boolea
   return true;
 }
 
-export async function listReplies(userId: string, limit = 50) {
+/** List inbound replies. Second arg may be a limit number (legacy) or opts. */
+export async function listReplies(
+  userId: string,
+  limitOrOpts: number | { limit?: number; tag?: string | null } = 50,
+) {
   const db = getDb();
+  const opts = typeof limitOrOpts === "number" ? { limit: limitOrOpts } : limitOrOpts;
+  const limit = opts.limit ?? 50;
+  const conds = [eq(replies.userId, userId)];
+  if (opts.tag != null) {
+    conds.push(eq(replies.tag, opts.tag as never));
+  }
   return db
     .select()
     .from(replies)
-    .where(eq(replies.userId, userId))
+    .where(and(...conds))
     .orderBy(desc(replies.receivedAt))
     .limit(limit);
 }

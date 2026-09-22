@@ -12,6 +12,17 @@ export const LEAD_STATUSES = [
 ] as const;
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
 
+/** Unibox inbound reply disposition tags (F03 / tip 0008). */
+export const UNIBOX_REPLY_TAGS = [
+  "out_of_office",
+  "not_interested",
+  "interested",
+  "meeting_booked",
+  "won",
+  "lost",
+] as const;
+export type UniboxReplyTag = (typeof UNIBOX_REPLY_TAGS)[number];
+
 export const CAMPAIGN_STATUSES = [
   "draft",
   "scheduled",

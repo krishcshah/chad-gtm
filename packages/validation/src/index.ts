@@ -99,6 +99,22 @@ export const leadListQuerySchema = z.object({
 });
 export type LeadListQuery = z.infer<typeof leadListQuerySchema>;
 
+export const UNIBOX_REPLY_TAG_VALUES = [
+  "out_of_office",
+  "not_interested",
+  "interested",
+  "meeting_booked",
+  "won",
+  "lost",
+] as const;
+
+export const uniboxReplyTagSchema = z.enum(UNIBOX_REPLY_TAG_VALUES);
+export const setUniboxReplyTagSchema = z.object({
+  replyId: z.string().min(1),
+  tag: uniboxReplyTagSchema.nullable(),
+});
+export type SetUniboxReplyTagInput = z.infer<typeof setUniboxReplyTagSchema>;
+
 /* ─── Sender accounts ──────────────────────────────────────────────────── */
 
 const port = z.coerce.number().int().min(1).max(65535);

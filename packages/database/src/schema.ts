@@ -367,12 +367,24 @@ export const replies = pgTable(
     messageId: text("message_id"),
     receivedAt: text("received_at").notNull(),
     readAt: text("read_at"),
+    /** Operator disposition tag — nullable; Unibox tags do not change lead status. */
+    tag: text("tag", {
+      enum: [
+        "out_of_office",
+        "not_interested",
+        "interested",
+        "meeting_booked",
+        "won",
+        "lost",
+      ],
+    }),
     createdAt: createdAt(),
   },
   (t) => [
     uniqueIndex("replies_message_unique").on(t.senderId, t.messageId),
     index("replies_user_idx").on(t.userId, t.receivedAt),
     index("replies_lead_idx").on(t.leadId),
+    index("replies_tag_idx").on(t.tag),
   ],
 );
 

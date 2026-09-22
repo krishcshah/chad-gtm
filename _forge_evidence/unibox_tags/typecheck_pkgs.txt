@@ -1,0 +1,12 @@
+
+> @smartreach/shared@0.1.0 typecheck
+> tsc --noEmit
+
+
+> @smartreach/validation@0.1.0 typecheck
+> tsc --noEmit
+
+
+> @smartreach/database@0.1.0 typecheck
+> tsc --noEmit
+
