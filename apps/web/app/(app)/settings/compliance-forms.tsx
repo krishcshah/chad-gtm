@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { addSuppression, removeSuppression, upsertWorkspaceSettings } from "@/lib/actions";
 import { Button, Card, CardContent, Input, Label, Textarea } from "@smartreach/ui";
 
@@ -96,11 +97,17 @@ export function ComplianceForms({
 
       <Card>
         <CardContent className="space-y-4 p-6">
-          <div>
-            <h2 className="font-medium">Suppression / block list</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Emails or domains (prefix with @) that must never be mailed.
-            </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="font-medium">Suppression / block list</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Emails or domains (prefix with @) that must never be mailed. Search, filter by
+                email or domain, and bulk import on the global blocklist.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" asChild className="shrink-0">
+              <Link href="/blocklist">Open blocklist</Link>
+            </Button>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input

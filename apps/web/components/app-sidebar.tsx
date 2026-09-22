@@ -1,5 +1,6 @@
 "use client";
 import {
+  Ban,
   BarChart3,
   FileText,
   Inbox,
@@ -25,6 +26,7 @@ const nav = [
   { href: "/senders", label: "Senders", icon: Mail },
   { href: "/templates", label: "Templates", icon: FileText },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/blocklist", label: "Blocklist", icon: Ban },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -45,6 +47,7 @@ export function AppSidebar({ user }: { user: { name?: string | null; email?: str
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   active
@@ -82,14 +85,15 @@ export function AppSidebar({ user }: { user: { name?: string | null; email?: str
         </div>
       </aside>
       {/* Mobile top bar */}
-      <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-border/60 bg-card/80 px-4 backdrop-blur-xl lg:hidden">
-        <Logo />
-        <nav className="flex items-center gap-0.5">
-          {nav.slice(0, 5).map((item) => (
+      <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-2 border-b border-border/60 bg-card/80 px-3 backdrop-blur-xl lg:hidden">
+        <Logo compact />
+        <nav className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {nav.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               aria-label={item.label}
+              aria-current={pathname.startsWith(item.href) ? "page" : undefined}
               className={cn(
                 "flex size-9 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 pathname.startsWith(item.href) ? "bg-accent text-accent-foreground" : "text-muted-foreground"

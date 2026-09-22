@@ -8,6 +8,7 @@ const actions = [
   { keys: "g l", label: "Go to Leads", href: "/leads" },
   { keys: "g s", label: "Go to Senders", href: "/senders" },
   { keys: "g t", label: "Go to Templates", href: "/templates" },
+  { keys: "g b", label: "Go to Blocklist", href: "/blocklist" },
   { keys: "c", label: "New Campaign", href: "/campaigns/new" },
 ];
 
