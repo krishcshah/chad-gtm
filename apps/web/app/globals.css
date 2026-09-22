@@ -310,3 +310,28 @@ body {
 .email-sheet .email-quoted {
   color: #334155;
 }
+
+/* Sequence step body — token colors only */
+.sequence-body {
+  overflow-wrap: anywhere;
+  outline: none;
+}
+.sequence-body p {
+  margin: 0 0 0.75em;
+}
+.sequence-body ul,
+.sequence-body ol {
+  margin: 0 0 0.75em;
+  padding-left: 1.25rem;
+}
+.sequence-body ul {
+  list-style: disc;
+}
+.sequence-body ol {
+  list-style: decimal;
+}
+.sequence-body a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
