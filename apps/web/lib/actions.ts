@@ -10,11 +10,15 @@ import {
   verifyUnsubscribeToken,
 } from "@smartreach/database";
 import {
+  expandSuppressionImportLines,
   leadImportSchema,
   leadListCreateSchema,
+  parseSuppressionToken,
   senderCreateSchema,
   senderCsvRowSchema,
   suppressionCreateSchema,
+  suppressionImportSchema,
+  suppressionListQuerySchema,
   templateSchema,
   workspaceSettingsSchema,
 } from "@smartreach/validation";
@@ -815,10 +819,12 @@ export async function addSuppression(input: unknown): Promise<ActionResult<{ id:
         .where(and(eq(schema.suppressions.userId, user.id), eq(schema.suppressions.value, value)))
         .limit(1);
       revalidatePath("/settings");
+      revalidatePath("/blocklist");
       return { ok: true, data: { id: existing?.id ?? "" }, message: "Already on suppression list" };
     }
     await logActivity(user.id, "suppression.added", `Suppressed ${value}`);
     revalidatePath("/settings");
+    revalidatePath("/blocklist");
     return { ok: true, data: { id: row.id }, message: "Added to suppression list" };
   } catch (e) {
     return err(e);
@@ -833,7 +839,111 @@ export async function removeSuppression(id: string): Promise<ActionResult> {
       .delete(schema.suppressions)
       .where(and(eq(schema.suppressions.id, id), eq(schema.suppressions.userId, user.id)));
     revalidatePath("/settings");
+    revalidatePath("/blocklist");
     return { ok: true, message: "Removed from suppression list" };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+/** Cursor-paginated suppressions for the signed-in user (F15a). */
+export async function listSuppressions(params: unknown = {}): Promise<
+  ActionResult<{
+    items: {
+      id: string;
+      value: string;
+      kind: string;
+      reason: string;
+      source: string;
+      createdAt: string;
+    }[];
+    nextCursor: string | null;
+  }>
+> {
+  const user = await requireUser();
+  const parsed = suppressionListQuerySchema.safeParse(params ?? {});
+  if (!parsed.success) return zodFail(parsed.error);
+  try {
+    const { listSuppressions: queryList } = await import("./queries");
+    const { items, nextCursor } = await queryList(user.id, {
+      cursor: parsed.data.cursor,
+      limit: parsed.data.limit,
+      search: parsed.data.search,
+      kind: parsed.data.kind,
+    });
+    return {
+      ok: true,
+      data: {
+        items: JSON.parse(JSON.stringify(items)),
+        nextCursor: nextCursor ?? null,
+      },
+    };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+/** Bulk import emails/@domains into the suppression list (F15a). */
+export async function importSuppressions(
+  input: unknown,
+): Promise<ActionResult<{ added: number; skipped: number; invalid: number }>> {
+  const user = await requireUser();
+  const parsed = suppressionImportSchema.safeParse(input);
+  if (!parsed.success) return zodFail(parsed.error);
+  const expanded = expandSuppressionImportLines(parsed.data);
+  if (!expanded.ok) return { ok: false, error: expanded.error };
+
+  let added = 0;
+  let skipped = 0;
+  let invalid = 0;
+  const seen = new Set<string>();
+  const toInsert: {
+    userId: string;
+    value: string;
+    kind: "email" | "domain";
+    reason: string;
+    source: "import";
+  }[] = [];
+
+  for (const raw of expanded.lines) {
+    const token = parseSuppressionToken(raw);
+    if (!token.ok) {
+      invalid++;
+      continue;
+    }
+    if (seen.has(token.value)) {
+      skipped++;
+      continue;
+    }
+    seen.add(token.value);
+    toInsert.push({
+      userId: user.id,
+      value: token.value,
+      kind: token.kind,
+      reason: "",
+      source: "import",
+    });
+  }
+
+  const db = getDb();
+  const CHUNK = 500;
+  try {
+    for (let i = 0; i < toInsert.length; i += CHUNK) {
+      const chunk = toInsert.slice(i, i + CHUNK);
+      const inserted = await db
+        .insert(schema.suppressions)
+        .values(chunk)
+        .onConflictDoNothing()
+        .returning({ id: schema.suppressions.id });
+      added += inserted.length;
+      skipped += chunk.length - inserted.length;
+    }
+    if (added > 0) {
+      await logActivity(user.id, "suppression.imported", `Imported ${added} suppressions`);
+    }
+    revalidatePath("/settings");
+    revalidatePath("/blocklist");
+    return { ok: true, data: { added, skipped, invalid } };
   } catch (e) {
     return err(e);
   }

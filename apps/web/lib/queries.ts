@@ -13,6 +13,7 @@ const {
   senderAccounts,
   activityLogs,
   usageCounters,
+  suppressions,
 } = schema;
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -348,4 +349,52 @@ export async function listReplies(userId: string, limit = 50) {
     .where(eq(replies.userId, userId))
     .orderBy(desc(replies.receivedAt))
     .limit(limit);
+}
+
+/* ─── Suppressions / blocklist (F15a) ──────────────────────────────────── */
+
+export interface SuppressionsPageParams {
+  cursor?: string;
+  limit?: number;
+  search?: string;
+  kind?: "email" | "domain";
+}
+
+/**
+ * Cursor-paginated suppressions for the session user.
+ * Optional search ILIKE on value; optional kind filter.
+ */
+export async function listSuppressions(userId: string, params: SuppressionsPageParams) {
+  const db = getDb();
+  const size = Math.min(params.limit ?? 50, 200);
+  const conds = [eq(suppressions.userId, userId)];
+  if (params.kind) conds.push(eq(suppressions.kind, params.kind));
+  if (params.search) {
+    const q = `%${params.search}%`;
+    conds.push(sql`${suppressions.value} ilike ${q}`);
+  }
+  if (params.cursor) {
+    conds.push(
+      sql`(${suppressions.createdAt}, ${suppressions.id}) < (select ${suppressions.createdAt}, ${suppressions.id} from ${suppressions} where ${suppressions.id} = ${params.cursor})`,
+    );
+  }
+  const rows = await db
+    .select({
+      id: suppressions.id,
+      value: suppressions.value,
+      kind: suppressions.kind,
+      reason: suppressions.reason,
+      source: suppressions.source,
+      createdAt: suppressions.createdAt,
+    })
+    .from(suppressions)
+    .where(and(...conds))
+    .orderBy(desc(suppressions.createdAt), desc(suppressions.id))
+    .limit(size + 1);
+  const hasMore = rows.length > size;
+  const items = rows.slice(0, size);
+  return {
+    items,
+    nextCursor: hasMore ? (items[items.length - 1]?.id ?? null) : null,
+  };
 }

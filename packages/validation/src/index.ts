@@ -300,6 +300,68 @@ export const suppressionCreateSchema = z.object({
 });
 export type SuppressionCreateInput = z.infer<typeof suppressionCreateSchema>;
 
+/** Cursor-paginated blocklist listing (F15a). */
+export const suppressionListQuerySchema = z.object({
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  search: z.string().trim().max(200).optional(),
+  kind: z.enum(["email", "domain"]).optional(),
+});
+export type SuppressionListQuery = z.infer<typeof suppressionListQuerySchema>;
+
+const SUPPRESSION_IMPORT_MAX = 10_000;
+
+/** Bulk import: either `lines` (max 10k) or `text` split on newlines/commas. */
+export const suppressionImportSchema = z.union([
+  z.object({ lines: z.array(z.string()).max(SUPPRESSION_IMPORT_MAX) }),
+  z.object({ text: z.string().min(1).max(2_000_000) }),
+]);
+export type SuppressionImportInput = z.infer<typeof suppressionImportSchema>;
+
+const EMAIL_TOKEN_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+/** Bare or @-prefixed domains: at least one dot, no spaces/@ mid-label. */
+const DOMAIN_TOKEN_RE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/i;
+
+export type ParsedSuppressionToken =
+  | { ok: true; value: string; kind: "email" | "domain" }
+  | { ok: false };
+
+/** Normalize one import token → email or @domain (matches compliance helpers). */
+export function parseSuppressionToken(raw: string): ParsedSuppressionToken {
+  const t = raw.trim().toLowerCase();
+  if (!t || t.length > 255) return { ok: false };
+
+  if (t.startsWith("@")) {
+    const d = t.slice(1).trim();
+    if (!d || !DOMAIN_TOKEN_RE.test(d)) return { ok: false };
+    return { ok: true, value: `@${d}`, kind: "domain" };
+  }
+
+  if (t.includes("@")) {
+    if (!EMAIL_TOKEN_RE.test(t)) return { ok: false };
+    return { ok: true, value: t, kind: "email" };
+  }
+
+  // bare domain.com
+  if (!DOMAIN_TOKEN_RE.test(t)) return { ok: false };
+  return { ok: true, value: `@${t}`, kind: "domain" };
+}
+
+/** Expand import input to a flat token list (cap 10k when expanding text). */
+export function expandSuppressionImportLines(
+  input: SuppressionImportInput,
+): { ok: true; lines: string[] } | { ok: false; error: string } {
+  if ("lines" in input) return { ok: true, lines: input.lines };
+  const lines = input.text
+    .split(/[\n,]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  if (lines.length > SUPPRESSION_IMPORT_MAX) {
+    return { ok: false, error: `Max ${SUPPRESSION_IMPORT_MAX} entries` };
+  }
+  return { ok: true, lines };
+}
+
 export const workspaceSettingsSchema = z.object({
   companyName: z.string().trim().max(200).default(""),
   /** Optional storage only — not required to start/send campaigns. */
