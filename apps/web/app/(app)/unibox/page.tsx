@@ -28,6 +28,8 @@ export default async function UniboxPage({
   const rows = await db
     .select({
       id: t.replies.id,
+      leadId: t.replies.leadId,
+      campaignId: t.replies.campaignId,
       fromName: t.replies.fromName,
       fromEmail: t.replies.fromEmail,
       subject: t.replies.subject,
