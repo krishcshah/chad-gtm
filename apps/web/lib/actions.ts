@@ -49,6 +49,12 @@ import { getDb } from "./db";
 import { requireUser } from "./session";
 import { formatZodActionError } from "./zod-action-error";
 import {
+  getAnalyticsSeriesForUser,
+  getAnalyticsSummaryForUser,
+  type AnalyticsSeriesPoint,
+  type AnalyticsSummary,
+} from "./analytics";
+import {
   buildOperatorThreadMessage,
   loadUniboxThreadMessages,
   resolveUniboxThreadContext,
@@ -1075,6 +1081,49 @@ export async function importSuppressions(
     revalidatePath("/settings");
     revalidatePath("/blocklist");
     return { ok: true, data: { added, skipped, invalid } };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+
+/* ═══ ANALYTICS (F13a) — real metrics only; open/click always null ═══ */
+
+export async function getAnalyticsSummary(input: {
+  campaignId?: string;
+  from: string;
+  to: string;
+}): Promise<ActionResult<AnalyticsSummary>> {
+  try {
+    const user = await requireUser();
+    if (!input?.from || !input?.to) return { ok: false, error: "from and to are required" };
+    const data = await getAnalyticsSummaryForUser(user.id, {
+      campaignId: input.campaignId,
+      from: input.from,
+      to: input.to,
+    });
+    return { ok: true, data };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+export async function getAnalyticsSeries(input: {
+  campaignId?: string;
+  from: string;
+  to: string;
+  granularity?: "day";
+}): Promise<ActionResult<{ points: AnalyticsSeriesPoint[] }>> {
+  try {
+    const user = await requireUser();
+    if (!input?.from || !input?.to) return { ok: false, error: "from and to are required" };
+    const data = await getAnalyticsSeriesForUser(user.id, {
+      campaignId: input.campaignId,
+      from: input.from,
+      to: input.to,
+      granularity: input.granularity ?? "day",
+    });
+    return { ok: true, data };
   } catch (e) {
     return err(e);
   }
