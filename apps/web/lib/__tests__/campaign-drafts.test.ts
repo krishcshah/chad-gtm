@@ -399,8 +399,8 @@ describe("publishCampaignForUser", () => {
 
   it("publish/start with empty postal succeeds (no CAMPAIGN_POSTAL_REQUIRED_ERROR)", async () => {
     store.leads.push(
-      { id: "lead-1", listId: "list-1", status: "pending", deletedAt: null },
-      { id: "lead-2", listId: "list-1", status: "pending", deletedAt: null },
+      { id: "lead-1", listId: "list-1", status: "new", deletedAt: null },
+      { id: "lead-2", listId: "list-1", status: "new", deletedAt: null },
     );
     const result = await publishCampaignForUser(createStoreDb() as never, "user-1", full, null);
     expect(result.ok).toBe(true);
@@ -415,8 +415,8 @@ describe("publishCampaignForUser", () => {
 
   it("with postal still publishes and creates campaign_leads", async () => {
     store.leads.push(
-      { id: "lead-1", listId: "list-1", status: "pending", deletedAt: null },
-      { id: "lead-2", listId: "list-1", status: "pending", deletedAt: null },
+      { id: "lead-1", listId: "list-1", status: "new", deletedAt: null },
+      { id: "lead-2", listId: "list-1", status: "new", deletedAt: null },
     );
     const result = await publishCampaignForUser(
       createStoreDb() as never,
@@ -436,7 +436,7 @@ describe("publishCampaignForUser", () => {
 
   it("publishes an existing draft by id", async () => {
     seedDraft({ name: "Drafty" });
-    store.leads.push({ id: "lead-1", listId: "list-1", status: "pending", deletedAt: null });
+    store.leads.push({ id: "lead-1", listId: "list-1", status: "new", deletedAt: null });
     const result = await publishCampaignForUser(
       createStoreDb() as never,
       "user-1",

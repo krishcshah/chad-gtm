@@ -7,6 +7,7 @@ import {
   leadCreateSchema,
   leadListRenameSchema,
   leadUpdateSchema,
+  updateLeadStatusSchema,
 } from "@smartreach/validation";
 import { normalizeEmail, nowIso } from "@smartreach/shared";
 import { mergeLeadCustomFields, stripUndefined } from "./lead-custom-fields";
@@ -189,6 +190,28 @@ export async function renameLeadListForUser(
     if (isUniqueConflict(e)) {
       return { ok: false, error: "A list with that name already exists" };
     }
+    return { ok: false, error: e instanceof Error ? e.message : "Something went wrong" };
+  }
+}
+
+/** F03d — set lead funnel status (column+filter). Engine also auto-promotes. */
+export async function updateLeadStatusForUser(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  userId: string,
+  input: unknown,
+): Promise<LeadActionResult<{ leadId: string; status: string }>> {
+  const parsed = updateLeadStatusSchema.safeParse(input);
+  if (!parsed.success) return zodFail(parsed.error);
+  try {
+    const [row] = await db
+      .update(leads)
+      .set({ status: parsed.data.status, updatedAt: nowIso() })
+      .where(and(eq(leads.id, parsed.data.leadId), eq(leads.userId, userId), isNull(leads.deletedAt)))
+      .returning({ id: leads.id, status: leads.status });
+    if (!row) return { ok: false, error: "Lead not found" };
+    return { ok: true, data: { leadId: row.id, status: row.status }, message: `Status set to ${row.status}` };
+  } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Something went wrong" };
   }
 }

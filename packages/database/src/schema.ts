@@ -78,10 +78,10 @@ export const leads = pgTable(
     /** JSON array of tag ids. */
     tags: jsonb("tags").$type<string[]>().notNull().default([]),
     status: text("status", {
-      enum: ["pending", "queued", "sent", "replied", "bounced", "failed", "completed"],
+      enum: ["new", "contacted", "replied", "bounced", "unsubscribed", "blocked"],
     })
       .notNull()
-      .default("pending"),
+      .default("new"),
     deletedAt: text("deleted_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

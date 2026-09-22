@@ -164,7 +164,7 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
         .where(eq(schema.campaignLeads.id, job.campaignLeadId));
       await db
         .update(schema.leads)
-        .set({ status: "sent", updatedAt: nowDry })
+        .set({ status: "contacted", updatedAt: nowDry })
         .where(eq(schema.leads.id, job.leadId));
       await recordSend(db, { userId: campaign.userId, entityType: "sender", entityId: sender.id });
       await recordSend(db, { userId: campaign.userId, entityType: "campaign", entityId: campaign.id });
@@ -206,7 +206,7 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
       .where(eq(schema.campaignLeads.id, job.campaignLeadId));
     await db
       .update(schema.leads)
-      .set({ status: "sent", updatedAt: nowS })
+      .set({ status: "contacted", updatedAt: nowS })
       .where(eq(schema.leads.id, job.leadId));
     await recordSend(db, { userId: campaign.userId, entityType: "sender", entityId: sender.id });
     await recordSend(db, { userId: campaign.userId, entityType: "campaign", entityId: campaign.id });
@@ -266,7 +266,7 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
       .where(eq(schema.campaignLeads.id, job.campaignLeadId));
     await db
       .update(schema.leads)
-      .set({ status: permanent ? "bounced" : "failed", updatedAt: nowS })
+      .set({ status: permanent ? "bounced" : "contacted", updatedAt: nowS })
       .where(eq(schema.leads.id, job.leadId));
     await db
       .update(schema.emailJobs)

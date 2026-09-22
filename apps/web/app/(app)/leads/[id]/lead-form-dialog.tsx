@@ -141,7 +141,7 @@ export function LeadFormDialog({
             firstName: prepared.input.firstName,
             lastName: prepared.input.lastName,
             company: prepared.input.company,
-            status: "pending",
+            status: "new",
             tags: [],
             customFields: prepared.savedCustomFields,
           });

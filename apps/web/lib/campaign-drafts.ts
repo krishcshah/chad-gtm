@@ -76,7 +76,7 @@ export async function ensureCampaignLeadSnapshot(
       and(
         eq(leads.listId, leadListId),
         sql`${leads.deletedAt} is null`,
-        inArray(leads.status, ["pending", "queued", "sent", "failed"]),
+        inArray(leads.status, ["new", "contacted"]),
       ),
     );
   if (!listLeads.length) return 0;
@@ -303,7 +303,7 @@ export async function publishCampaignForUser(
         and(
           eq(leads.listId, d.leadListId),
           sql`${leads.deletedAt} is null`,
-          inArray(leads.status, ["pending", "queued", "sent", "failed"]),
+          inArray(leads.status, ["new", "contacted"]),
         ),
       );
 

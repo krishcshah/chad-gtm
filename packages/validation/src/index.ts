@@ -90,7 +90,7 @@ export const leadListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
   search: z.string().trim().max(200).optional(),
   status: z
-    .enum(["pending", "queued", "sent", "replied", "bounced", "failed", "completed"])
+    .enum(["new", "contacted", "replied", "bounced", "unsubscribed", "blocked"])
     .optional(),
   listId: z.string().optional(),
   tagId: z.string().optional(),
@@ -114,6 +114,21 @@ export const setUniboxReplyTagSchema = z.object({
   tag: uniboxReplyTagSchema.nullable(),
 });
 export type SetUniboxReplyTagInput = z.infer<typeof setUniboxReplyTagSchema>;
+
+export const LEAD_STATUS_VALUES = [
+  "new",
+  "contacted",
+  "replied",
+  "bounced",
+  "unsubscribed",
+  "blocked",
+] as const;
+export const leadStatusSchema = z.enum(LEAD_STATUS_VALUES);
+export const updateLeadStatusSchema = z.object({
+  leadId: z.string().min(1),
+  status: leadStatusSchema,
+});
+export type UpdateLeadStatusInput = z.infer<typeof updateLeadStatusSchema>;
 
 /* ─── Sender accounts ──────────────────────────────────────────────────── */
 

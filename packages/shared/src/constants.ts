@@ -2,13 +2,12 @@ export const APP_NAME = "SmartReach";
 export const APP_TAGLINE = "Everything you need. Nothing you don't.";
 
 export const LEAD_STATUSES = [
-  "pending",
-  "queued",
-  "sent",
+  "new",
+  "contacted",
   "replied",
   "bounced",
-  "failed",
-  "completed",
+  "unsubscribed",
+  "blocked",
 ] as const;
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
 

@@ -42,11 +42,13 @@ export function statusVariant(status: string): BadgeProps["variant"] {
     case "completed":
     case "ok":
     case "replied":
+    case "contacted":
       return "success";
     case "scheduled":
     case "queued":
     case "pending":
     case "processing":
+    case "new":
       return "info";
     case "paused":
     case "draft":
@@ -54,6 +56,8 @@ export function statusVariant(status: string): BadgeProps["variant"] {
       return "secondary";
     case "failed":
     case "bounced":
+    case "unsubscribed":
+    case "blocked":
       return "destructive";
     case "archived":
     case "cancelled":

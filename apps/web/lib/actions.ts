@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   schema,
   encryptSecret,
@@ -29,6 +29,7 @@ import {
   deleteLeadForUser,
   renameLeadListForUser,
   updateLeadForUser,
+  updateLeadStatusForUser,
 } from "./leads";
 import { toggleSenderForUser } from "./senders";
 import { normalizeEmail, nowIso } from "@smartreach/shared";
@@ -284,6 +285,17 @@ export async function createLead(input: unknown): Promise<ActionResult<{ id: str
 export async function updateLead(leadId: string, input: unknown): Promise<ActionResult> {
   const user = await requireUser();
   const result = await updateLeadForUser(getDb(), user.id, leadId, input);
+  if (result.ok) revalidatePath("/leads");
+  return result;
+}
+
+/** F03d — set lead status (new|contacted|replied|bounced|unsubscribed|blocked). */
+export async function updateLeadStatus(input: {
+  leadId: string;
+  status: string;
+}): Promise<ActionResult<{ leadId: string; status: string }>> {
+  const user = await requireUser();
+  const result = await updateLeadStatusForUser(getDb(), user.id, input);
   if (result.ok) revalidatePath("/leads");
   return result;
 }
@@ -1047,6 +1059,16 @@ export async function processUnsubscribe(token: string): Promise<ActionResult<{ 
         source: "unsubscribe",
       })
       .onConflictDoNothing();
+    await db
+      .update(schema.leads)
+      .set({ status: "unsubscribed", updatedAt: nowIso() })
+      .where(
+        and(
+          eq(schema.leads.userId, verified.userId),
+          eq(schema.leads.email, verified.email),
+          isNull(schema.leads.deletedAt),
+        ),
+      );
     await logActivity(
       verified.userId,
       "suppression.unsubscribe",

@@ -6,6 +6,7 @@ import {
   deleteLeadForUser,
   renameLeadListForUser,
   updateLeadForUser,
+  updateLeadStatusForUser,
 } from "../leads";
 
 const { leadLists, leads } = schema;
@@ -26,6 +27,7 @@ type LeadRow = {
   industry: string | null;
   tags: string[];
   customFields: Record<string, string>;
+  status?: string;
   deletedAt: string | null;
   updatedAt?: string;
 };
@@ -289,7 +291,12 @@ function createStoreDb() {
             }
             for (const row of rows) Object.assign(row, ctx.set);
             if (ctx.returning) {
-              resolve(rows.map((r) => ({ id: r.id })));
+              resolve(
+                rows.map((r) => ({
+                  id: r.id,
+                  status: (r as { status?: string }).status ?? null,
+                })),
+              );
             } else {
               resolve([]);
             }
@@ -317,6 +324,7 @@ function seedLead(partial: Partial<LeadRow> & Pick<LeadRow, "id" | "userId" | "e
     industry: null,
     tags: [],
     customFields: {},
+    status: "new",
     deletedAt: null,
     ...partial,
   };
@@ -461,3 +469,32 @@ describe("lead search fields (P03)", () => {
 
 void leadLists;
 void leads;
+
+describe("updateLeadStatusForUser", () => {
+  it("sets F03d status on owned lead", async () => {
+    seedLead({ id: "lead-1", userId: "user-1", email: "a@x.com", status: "new" });
+    const result = await updateLeadStatusForUser(createStoreDb(), "user-1", {
+      leadId: "lead-1",
+      status: "contacted",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data?.status).toBe("contacted");
+    }
+    expect(store.leads[0].status).toBe("contacted");
+  });
+
+  it("rejects unknown status and missing lead", async () => {
+    seedLead({ id: "lead-1", userId: "user-1", email: "a@x.com" });
+    const bad = await updateLeadStatusForUser(createStoreDb(), "user-1", {
+      leadId: "lead-1",
+      status: "pending",
+    });
+    expect(bad.ok).toBe(false);
+    const missing = await updateLeadStatusForUser(createStoreDb(), "user-1", {
+      leadId: "nope",
+      status: "blocked",
+    });
+    expect(missing.ok).toBe(false);
+  });
+});
