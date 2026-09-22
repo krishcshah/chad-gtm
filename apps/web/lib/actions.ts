@@ -37,7 +37,7 @@ import {
   updateSenderDetailsForUser,
   runWarmupCycleForUser,
 } from "./senders";
-import { formatSenderWarmup } from "./sender-warmup";
+import { formatSenderWarmup, parseSenderWarmup } from "./sender-warmup";
 import { normalizeEmail, nowIso } from "@smartreach/shared";
 import {
   ensureCampaignLeadSnapshot,
@@ -486,6 +486,121 @@ export async function runWarmupCycle(): Promise<{ ok: boolean; message: string; 
     revalidatePath("/senders");
   }
   return result;
+}
+
+export async function bulkUpdateSenders(
+  senderIds: string[],
+  updates: {
+    dailyLimit?: number;
+    hourlyLimit?: number;
+    status?: "active" | "paused";
+    warmupEnabled?: boolean;
+    warmupReplyRate?: number;
+    warmupDailyTarget?: number;
+    smtpHost?: string;
+    smtpPort?: number;
+    smtpPassword?: string;
+    smtpSecurity?: "tls" | "ssl" | "none";
+    imapHost?: string;
+    imapPort?: number;
+    imapPassword?: string;
+    fromName?: string;
+    replyTo?: string;
+    timezone?: string;
+  },
+): Promise<ActionResult> {
+  const user = await requireUser();
+  if (!senderIds || senderIds.length === 0) {
+    return { ok: false, error: "No senders selected" };
+  }
+
+  const db = getDb();
+  const selectedSenders = await db
+    .select()
+    .from(senderAccounts)
+    .where(and(eq(senderAccounts.userId, user.id), inArray(senderAccounts.id, senderIds)));
+
+  if (selectedSenders.length === 0) {
+    return { ok: false, error: "No matching senders found" };
+  }
+
+  for (const s of selectedSenders) {
+    const patch: Record<string, unknown> = {
+      updatedAt: nowIso(),
+    };
+
+    if (updates.dailyLimit !== undefined && !isNaN(updates.dailyLimit)) {
+      patch.dailyLimit = Math.max(1, updates.dailyLimit);
+    }
+    if (updates.hourlyLimit !== undefined && !isNaN(updates.hourlyLimit)) {
+      patch.hourlyLimit = Math.max(1, updates.hourlyLimit);
+    }
+    if (updates.status !== undefined) {
+      patch.status = updates.status;
+    }
+    if (updates.fromName !== undefined && updates.fromName.trim() !== "") {
+      patch.fromName = updates.fromName.trim();
+    }
+    if (updates.replyTo !== undefined && updates.replyTo.trim() !== "") {
+      patch.replyTo = updates.replyTo.trim();
+    }
+    if (updates.timezone !== undefined && updates.timezone.trim() !== "") {
+      patch.timezone = updates.timezone.trim();
+    }
+    if (updates.smtpHost !== undefined && updates.smtpHost.trim() !== "") {
+      patch.smtpHost = updates.smtpHost.trim();
+    }
+    if (updates.smtpPort !== undefined && !isNaN(updates.smtpPort)) {
+      patch.smtpPort = updates.smtpPort;
+    }
+    if (updates.smtpSecurity !== undefined) {
+      patch.smtpSecurity = updates.smtpSecurity;
+    }
+    if (updates.smtpPassword !== undefined && updates.smtpPassword.trim() !== "") {
+      patch.smtpPasswordEnc = encryptSecret(updates.smtpPassword.trim());
+    }
+    if (updates.imapHost !== undefined && updates.imapHost.trim() !== "") {
+      patch.imapHost = updates.imapHost.trim();
+    }
+    if (updates.imapPort !== undefined && !isNaN(updates.imapPort)) {
+      patch.imapPort = updates.imapPort;
+    }
+    if (updates.imapPassword !== undefined && updates.imapPassword.trim() !== "") {
+      patch.imapPasswordEnc = encryptSecret(updates.imapPassword.trim());
+    }
+
+    if (
+      updates.warmupEnabled !== undefined ||
+      updates.warmupReplyRate !== undefined ||
+      updates.warmupDailyTarget !== undefined
+    ) {
+      const { warmup: currentWarmup, cleanSig } = parseSenderWarmup(s.signature);
+      const newWarmup = {
+        ...currentWarmup,
+        enabled: updates.warmupEnabled !== undefined ? updates.warmupEnabled : currentWarmup.enabled,
+        replyRate:
+          updates.warmupReplyRate !== undefined ? updates.warmupReplyRate : currentWarmup.replyRate,
+        dailyLimit:
+          updates.warmupDailyTarget !== undefined
+            ? updates.warmupDailyTarget
+            : currentWarmup.dailyLimit,
+      };
+      patch.signature = formatSenderWarmup(cleanSig, newWarmup);
+    }
+
+    await db
+      .update(senderAccounts)
+      .set(patch)
+      .where(and(eq(senderAccounts.id, s.id), eq(senderAccounts.userId, user.id)));
+  }
+
+  await logActivity(
+    user.id,
+    "senders.bulk_updated",
+    `Bulk updated ${selectedSenders.length} sender accounts`,
+  );
+  revalidatePath("/senders");
+  return { ok: true, message: `Successfully updated ${selectedSenders.length} senders` };
 }
 
 export async function importSendersCsv(rows: unknown[]): Promise<

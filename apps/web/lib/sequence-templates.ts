@@ -187,21 +187,47 @@ export function parseSequenceTemplate(tpl: {
   name: string;
   subject: string;
   bodyText: string;
-}): ReusableSequence | null {
+  bodyHtml?: string;
+}): ReusableSequence {
   try {
-    if (!isSequenceTemplate(tpl.bodyText)) return null;
-    const parsed = JSON.parse(tpl.bodyText);
-    return {
-      id: tpl.id,
-      name: tpl.name || parsed.name || "Untitled Sequence",
-      description: parsed.description || `${parsed.steps?.length || 1}-step automated sequence`,
-      stepsCount: parsed.steps?.length || 1,
-      steps: parsed.steps || [],
-      isPreset: false,
-    };
+    if (isSequenceTemplate(tpl.bodyText)) {
+      const parsed = JSON.parse(tpl.bodyText);
+      return {
+        id: tpl.id,
+        name: tpl.name || parsed.name || "Untitled Sequence",
+        description: parsed.description || `${parsed.steps?.length || 1}-step automated sequence`,
+        stepsCount: parsed.steps?.length || 1,
+        steps: parsed.steps || [],
+        isPreset: false,
+      };
+    }
   } catch {
-    return null;
+    // fallback to 1-step sequence
   }
+
+  // Treat legacy single templates as 1-step sequences
+  return {
+    id: tpl.id,
+    name: tpl.name || "Untitled Sequence",
+    description: "1-step outreach sequence",
+    stepsCount: 1,
+    steps: [
+      {
+        key: "step-1",
+        stepNumber: 1,
+        delayDays: 0,
+        variants: [
+          {
+            label: "A",
+            subject: tpl.subject || "Quick question",
+            bodyText: tpl.bodyText || "",
+            bodyHtml: tpl.bodyHtml || "",
+          },
+        ],
+      },
+    ],
+    isPreset: false,
+  };
 }
 
 export function serializeSequenceTemplate(

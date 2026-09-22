@@ -255,10 +255,10 @@ export default async function DashboardPage({
       />
 
       {/* Main Grid: Active Campaigns + Revamped Intelligent Activity Feed */}
-      <div className="grid gap-6 lg:grid-cols-12 items-start">
+      <div className="grid gap-6 lg:grid-cols-12 items-stretch">
         {/* Active Campaigns Column (7 cols) */}
-        <Card className="lg:col-span-7 border-border/60 bg-card/50 backdrop-blur">
-          <CardHeader className="flex flex-row items-center justify-between border-b border-border/40 pb-4">
+        <Card className="lg:col-span-7 flex flex-col h-[560px] border-border/60 bg-card/50 backdrop-blur shadow-2xs">
+          <CardHeader className="flex flex-row items-center justify-between border-b border-border/40 pb-4 shrink-0">
             <div>
               <CardTitle className="text-base font-semibold tracking-tight">
                 Active Campaigns
@@ -273,19 +273,21 @@ export default async function DashboardPage({
               </Link>
             </Button>
           </CardHeader>
-          <CardContent className="pt-4 space-y-3">
+          <CardContent className="pt-4 flex-1 min-h-0 overflow-y-auto space-y-3 pr-2 focus-visible:outline-none">
             {activeCampaigns.length === 0 ? (
-              <EmptyState
-                icon={Rocket}
-                title="No active campaigns"
-                description="Launch your first multi-stage sequence in under 60 seconds."
-                className="py-14 border-0 bg-transparent"
-                action={
-                  <Button size="sm" asChild>
-                    <Link href="/campaigns/new">Create campaign</Link>
-                  </Button>
-                }
-              />
+              <div className="flex h-full min-h-[360px] flex-col items-center justify-center text-center">
+                <EmptyState
+                  icon={Rocket}
+                  title="No active campaigns"
+                  description="Launch your first multi-stage sequence in under 60 seconds."
+                  className="border-0 bg-transparent py-0"
+                  action={
+                    <Button size="sm" asChild>
+                      <Link href="/campaigns/new">Create campaign</Link>
+                    </Button>
+                  }
+                />
+              </div>
             ) : (
               activeCampaigns.map((c) => {
                 const total = Number(c.total || 0);
@@ -295,7 +297,7 @@ export default async function DashboardPage({
                   <Link
                     key={c.id}
                     href={`/campaigns/${c.id}`}
-                    className="group flex flex-col gap-3 rounded-xl border border-border/60 bg-card/60 p-4 transition-all hover:bg-accent/40 hover:border-border focus-visible:ring-2 focus-visible:ring-ring"
+                    className="group flex flex-col gap-3 rounded-xl border border-border/60 bg-card/60 p-4 transition-all hover:bg-accent/40 hover:border-border focus-visible:ring-2 focus-visible:ring-ring shrink-0"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2.5 min-w-0">
@@ -327,8 +329,8 @@ export default async function DashboardPage({
         </Card>
 
         {/* Revamped Recent Activity Hub (5 cols) */}
-        <Card className="lg:col-span-5 border-border/60 bg-card/50 backdrop-blur">
-          <CardHeader className="flex flex-row items-center justify-between border-b border-border/40 pb-4">
+        <Card className="lg:col-span-5 flex flex-col h-[560px] border-border/60 bg-card/50 backdrop-blur shadow-2xs">
+          <CardHeader className="flex flex-row items-center justify-between border-b border-border/40 pb-4 shrink-0">
             <div>
               <CardTitle className="flex items-center gap-2 text-base font-semibold tracking-tight">
                 <Activity className="size-4 text-primary" aria-hidden /> Live Activity Feed
@@ -338,7 +340,7 @@ export default async function DashboardPage({
               </p>
             </div>
           </CardHeader>
-          <CardContent className="pt-4">
+          <CardContent className="pt-4 flex-1 min-h-0 flex flex-col">
             <ActivityFeed initialActivities={activity} />
           </CardContent>
         </Card>

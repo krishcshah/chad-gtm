@@ -3,8 +3,8 @@
 import {
   Ban,
   BarChart3,
-  FileText,
   Inbox,
+  Layers,
   LayoutDashboard,
   LogOut,
   Mail,
@@ -26,7 +26,7 @@ const nav = [
   { href: "/campaigns", label: "Campaigns", icon: Rocket },
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/senders", label: "Senders", icon: Mail },
-  { href: "/templates", label: "Templates", icon: FileText },
+  { href: "/templates", label: "Sequences", icon: Layers },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/blocklist", label: "Blocklist", icon: Ban },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -43,17 +43,6 @@ export function AppSidebar({ user }: { user: { name?: string | null; email?: str
         {/* Logo and Brand Header */}
         <div className="flex h-16 items-center px-5 border-b border-border/40">
           <Logo />
-        </div>
-
-        {/* Workspace Quick-Status Badge */}
-        <div className="mx-3.5 mt-3 mb-1.5 px-3 py-1.5 rounded-xl border border-border/40 bg-accent/25 flex items-center justify-between text-[11px] text-muted-foreground">
-          <div className="flex items-center gap-1.5 font-medium text-foreground">
-            <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="truncate">Active Cluster</span>
-          </div>
-          <span className="text-[10px] font-semibold tracking-wide uppercase px-1.5 py-0.5 rounded-md bg-primary/15 text-primary border border-primary/20">
-            Unlimited
-          </span>
         </div>
 
         {/* Navigation items */}

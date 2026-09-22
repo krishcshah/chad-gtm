@@ -1,8 +1,17 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, CloudUpload, Loader2, Upload, X } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  CloudUpload,
+  Loader2,
+  Upload,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { STANDARD_LEAD_FIELDS } from "@smartreach/shared";
 import {
@@ -18,6 +27,7 @@ import {
 } from "@smartreach/ui";
 import { autoMapHeaders, parseCsvText, type ParsedCsv } from "@/lib/csv";
 import { importLeads } from "@/lib/actions";
+import { useImportJob } from "@/components/import-job-provider";
 
 const IGNORE = "__ignore__";
 const CUSTOM = "__custom__";
@@ -30,17 +40,22 @@ type Mapping = Record<string, string | null>; // csv column -> field key | null
 const LEAD_FIELDS = STANDARD_LEAD_FIELDS as unknown as { key: string; label: string }[];
 
 export function LeadImport({
-  lists,
+  lists = [],
   initialListId,
   onImported,
 }: {
-  lists: { id: string; name: string }[];
+  lists?: { id: string; name: string }[];
   /** Preselect a list, or "__new__" to create one during import. */
   initialListId?: string;
   /** Stay on the current screen and hand back the list (campaign wizard). */
   onImported?: (result: { listId: string; listName: string; imported: number }) => void;
 }) {
   const router = useRouter();
+  const importJob = useImportJob();
+  const activeJob = importJob?.activeJob ?? null;
+  const startImportJob = importJob?.startImportJob;
+  const dismissActiveJob = importJob?.dismissActiveJob ?? (async () => {});
+  const cancelActiveJob = importJob?.cancelActiveJob ?? (async () => {});
   const [pending, start] = useTransition();
   const [step, setStep] = useState<1 | 2>(1);
   const [csv, setCsv] = useState<ParsedCsv | null>(null);
@@ -48,14 +63,9 @@ export function LeadImport({
   const [dragOver, setDragOver] = useState(false);
   const [mapping, setMapping] = useState<Mapping>({});
   const [customKeys, setCustomKeys] = useState<Record<string, string>>({});
-  const [targetList, setTargetList] = useState<string>(() => {
-    if (initialListId === "__new__") return "__new__";
-    if (initialListId && lists.some((l) => l.id === initialListId)) return initialListId;
-    return lists[0]?.id ?? "__new__";
-  });
   const [newListName, setNewListName] = useState("");
   const [result, setResult] = useState<{ imported: number; skipped: number; invalid: number } | null>(null);
-  const [importProgress, setImportProgress] = useState<{
+  const [inlineProgress, setInlineProgress] = useState<{
     processed: number;
     total: number;
     percent: number;
@@ -65,8 +75,14 @@ export function LeadImport({
   const emailMapped = useMemo(() => Object.values(mapping).includes("email"), [mapping]);
 
   const reset = () => {
-    setCsv(null); setFileName(""); setMapping({}); setCustomKeys({}); setResult(null); setImportProgress(null); setStep(1);
-    if (lists[0]) setTargetList(lists[0].id);
+    setCsv(null);
+    setFileName("");
+    setMapping({});
+    setCustomKeys({});
+    setResult(null);
+    setInlineProgress(null);
+    setStep(1);
+    setNewListName("");
   };
 
   const handleFile = useCallback(async (file: File) => {
@@ -81,7 +97,7 @@ export function LeadImport({
     setMapping(autoMapHeaders(parsed.headers, LEAD_FIELDS));
     setNewListName(file.name.replace(/\.csv$/i, ""));
     setResult(null);
-    setImportProgress(null);
+    setInlineProgress(null);
     setStep(1);
   }, []);
 
@@ -97,9 +113,16 @@ export function LeadImport({
     const out: Record<string, string | null> = {};
     for (const col of csv?.headers ?? []) {
       const val = mapping[col];
-      if (val === IGNORE || val === undefined) { out[col] = null; continue; }
+      if (val === IGNORE || val === undefined) {
+        out[col] = null;
+        continue;
+      }
       if (val === CUSTOM) {
-        const key = (customKeys[col] ?? col).trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
+        const key = (customKeys[col] ?? col)
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9_]+/g, "_")
+          .replace(/^_+|_+$/g, "");
         out[col] = key || null;
       } else {
         out[col] = val;
@@ -113,17 +136,31 @@ export function LeadImport({
   const doImport = () =>
     start(async () => {
       if (!csv || csv.rows.length === 0) return;
+      const resolvedListName =
+        newListName.trim() || fileName.replace(/\.csv$/i, "") || "New Lead List";
+
+      // If background job provider is active and this is not a campaign wizard inline callback,
+      // dispatch to persistent background runner!
+      if (startImportJob && typeof window !== "undefined" && !onImported) {
+        await startImportJob({
+          listName: resolvedListName,
+          fileName,
+          mapping: finalMapping,
+          rows: csv.rows,
+        });
+        setCsv(null);
+        toast.success("Lead import started in background");
+        return;
+      }
+
+      // Inline runner (used for wizard callback or isolated unit tests)
       const total = csv.rows.length;
-      let currentListId = targetList;
+      let currentListId = initialListId || "__new__";
       let totalImported = 0;
       let totalSkipped = 0;
       let totalInvalid = 0;
-      const resolvedListName =
-        targetList === "__new__"
-          ? newListName.trim()
-          : (lists.find((l) => l.id === targetList)?.name ?? "Lead list");
 
-      setImportProgress({ processed: 0, total, percent: 0 });
+      setInlineProgress({ processed: 0, total, percent: 0 });
 
       try {
         for (let i = 0; i < total; i += IMPORT_CHUNK_SIZE) {
@@ -132,19 +169,19 @@ export function LeadImport({
 
           const res = await importLeads({
             listId: currentListId,
-            listName: isFirstChunk && currentListId === "__new__" ? newListName.trim() : undefined,
+            listName: isFirstChunk && currentListId === "__new__" ? resolvedListName : undefined,
             mapping: finalMapping,
             rows: chunk,
           });
 
           if (!res.ok) {
             toast.error(res.error || "Failed to import leads chunk");
-            setImportProgress(null);
+            setInlineProgress(null);
             return;
           }
           if (!res.data) {
             toast.error("Failed to import leads chunk");
-            setImportProgress(null);
+            setInlineProgress(null);
             return;
           }
 
@@ -157,7 +194,7 @@ export function LeadImport({
           totalInvalid += res.data.invalid;
 
           const processed = Math.min(i + chunk.length, total);
-          setImportProgress({
+          setInlineProgress({
             processed,
             total,
             percent: Math.round((processed / total) * 100),
@@ -181,15 +218,156 @@ export function LeadImport({
         const message = err instanceof Error ? err.message : "Failed to import leads. Please try again.";
         toast.error(message);
       } finally {
-        setImportProgress(null);
+        setInlineProgress(null);
       }
     });
 
-  /* ── Step 1: upload ── */
+  /* ── Background Running State (persisted across reloads & navigation) ── */
+  if (!csv && activeJob && activeJob.status === "running") {
+    const percent = Math.round(
+      (activeJob.processedRows / (activeJob.totalRows || 1)) * 100,
+    );
+    return (
+      <div className="space-y-6 rounded-2xl border border-border/80 bg-card p-6 shadow-sm sm:p-8">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Loader2 className="size-4 animate-spin text-primary" />
+              </span>
+              <h2 className="text-lg font-bold tracking-tight">Importing Leads in Background</h2>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              This import is processing safely in the background. You can navigate away, close this page, or refresh anytime without losing progress.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={cancelActiveJob}
+            className="text-xs text-muted-foreground hover:text-destructive"
+          >
+            Cancel Import
+          </Button>
+        </div>
+
+        <div className="space-y-3 rounded-xl border border-border/60 bg-muted/30 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div>
+              <span className="font-semibold text-foreground">{activeJob.listName}</span>
+              <span className="ml-2 text-muted-foreground">({activeJob.fileName})</span>
+            </div>
+            <span className="font-semibold tabular-nums text-primary">{percent}%</span>
+          </div>
+          <Progress value={percent} className="h-2.5" />
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              Processed {activeJob.processedRows.toLocaleString()} of {activeJob.totalRows.toLocaleString()} rows
+            </span>
+            <span className="text-emerald-500 font-medium">
+              {activeJob.imported.toLocaleString()} added
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-center">
+            <p className="text-lg font-bold tabular-nums text-foreground">
+              {activeJob.imported.toLocaleString()}
+            </p>
+            <p className="text-[11px] text-muted-foreground">Imported</p>
+          </div>
+          <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-center">
+            <p className="text-lg font-bold tabular-nums text-amber-500">
+              {activeJob.skipped.toLocaleString()}
+            </p>
+            <p className="text-[11px] text-muted-foreground">Duplicates Skipped</p>
+          </div>
+          <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-center">
+            <p className="text-lg font-bold tabular-nums text-muted-foreground">
+              {activeJob.invalid.toLocaleString()}
+            </p>
+            <p className="text-[11px] text-muted-foreground">Invalid Skipped</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/leads">View Contact Lists</Link>
+          </Button>
+          <Button variant="default" size="sm" asChild>
+            <Link href="/dashboard">Go to Dashboard</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Background Completed State ── */
+  if (!csv && activeJob && activeJob.status === "completed") {
+    return (
+      <div className="space-y-6 rounded-2xl border border-emerald-500/20 bg-card p-6 shadow-sm sm:p-8">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
+            <CheckCircle2 className="size-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold tracking-tight">Import Complete!</h2>
+            <p className="text-xs text-muted-foreground">
+              {activeJob.imported.toLocaleString()} leads successfully imported into "{activeJob.listName}".
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-center">
+            <p className="text-lg font-bold tabular-nums text-emerald-500">
+              {activeJob.imported.toLocaleString()}
+            </p>
+            <p className="text-[11px] text-muted-foreground">Total Imported</p>
+          </div>
+          <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-center">
+            <p className="text-lg font-bold tabular-nums text-amber-500">
+              {activeJob.skipped.toLocaleString()}
+            </p>
+            <p className="text-[11px] text-muted-foreground">Duplicates Skipped</p>
+          </div>
+          <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-center">
+            <p className="text-lg font-bold tabular-nums text-muted-foreground">
+              {activeJob.invalid.toLocaleString()}
+            </p>
+            <p className="text-[11px] text-muted-foreground">Invalid Skipped</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              await dismissActiveJob();
+              reset();
+            }}
+          >
+            Import Another CSV
+          </Button>
+          <Button size="sm" asChild>
+            <Link href="/leads">View Contact Lists</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Step 0: Upload Dropzone ── */
   if (!csv) {
     return (
       <div
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
         onDragLeave={() => setDragOver(false)}
         onDrop={onDrop}
         onClick={() => inputRef.current?.click()}
@@ -213,36 +391,65 @@ export function LeadImport({
         <p className="mt-1 text-sm text-muted-foreground">
           UTF-8, any delimiter (comma, semicolon, tab). Up to 50,000 rows.
         </p>
-        <input ref={inputRef} type="file" accept=".csv,text/csv" className="hidden"
-          onChange={(e) => e.target.files?.[0] && void handleFile(e.target.files[0])} />
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".csv,text/csv"
+          className="hidden"
+          onChange={(e) => e.target.files?.[0] && void handleFile(e.target.files[0])}
+        />
       </div>
     );
   }
 
-  /* ── Steps ── */
+  /* ── Step 1 & 2: Preview & Map Columns ── */
   return (
     <div className="w-full min-w-0 max-w-full space-y-6">
       <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
-        <button type="button" onClick={() => setStep(1)} className={cn("flex items-center gap-2", step === 1 ? "text-foreground" : "text-muted-foreground")}>
-          <span className={cn("flex h-6 w-6 items-center justify-center rounded-full text-xs", step === 1 ? "bg-primary text-primary-foreground" : "bg-success/20 text-success-foreground")}>1</span>
+        <button
+          type="button"
+          onClick={() => setStep(1)}
+          className={cn("flex items-center gap-2", step === 1 ? "text-foreground" : "text-muted-foreground")}
+        >
+          <span
+            className={cn(
+              "flex h-6 w-6 items-center justify-center rounded-full text-xs",
+              step === 1 ? "bg-primary text-primary-foreground" : "bg-success/20 text-success-foreground",
+            )}
+          >
+            1
+          </span>
           Preview
         </button>
         <span className="h-px w-8 bg-border" />
         <span className={cn("flex items-center gap-2", step === 2 ? "text-foreground" : "text-muted-foreground")}>
-          <span className={cn("flex h-6 w-6 items-center justify-center rounded-full text-xs", step === 2 ? "bg-primary text-primary-foreground" : "bg-muted")}>2</span>
+          <span
+            className={cn(
+              "flex h-6 w-6 items-center justify-center rounded-full text-xs",
+              step === 2 ? "bg-primary text-primary-foreground" : "bg-muted",
+            )}
+          >
+            2
+          </span>
           Map columns
         </span>
       </div>
 
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="rounded-lg bg-accent p-2"><Upload className="h-4 w-4" /></div>
+          <div className="rounded-lg bg-accent p-2">
+            <Upload className="h-4 w-4" />
+          </div>
           <div className="min-w-0">
             <p className="truncate font-medium">{fileName}</p>
-            <p className="text-xs text-muted-foreground">{csv.rows.length} rows · {csv.headers.length} columns</p>
+            <p className="text-xs text-muted-foreground">
+              {csv.rows.length.toLocaleString()} rows · {csv.headers.length} columns
+            </p>
           </div>
         </div>
-        <Button type="button" variant="ghost" size="sm" onClick={reset}><X className="h-4 w-4" /> Change file</Button>
+        <Button type="button" variant="ghost" size="sm" onClick={reset}>
+          <X className="h-4 w-4" /> Change file
+        </Button>
       </div>
 
       {step === 1 && (
@@ -272,7 +479,9 @@ export function LeadImport({
             </table>
           </div>
           <div className="flex justify-end">
-            <Button type="button" onClick={() => setStep(2)}>Continue <ArrowRight className="h-4 w-4" /></Button>
+            <Button type="button" onClick={() => setStep(2)}>
+              Continue <ArrowRight className="h-4 w-4" />
+            </Button>
           </div>
         </>
       )}
@@ -280,23 +489,28 @@ export function LeadImport({
       {step === 2 && (
         <>
           <div className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
+            {/* Automatic dedicated list creation - no dropdown to accidentally overwrite existing lists */}
+            <div className="rounded-xl border border-border/80 bg-card/60 p-4 shadow-xs">
               <div className="space-y-2">
-                <p className="text-sm font-medium">Import into</p>
-                <Select value={targetList} onValueChange={setTargetList}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {lists.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
-                    <SelectItem value="__new__">+ Create new list…</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {targetList === "__new__" && (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">New list name</p>
-                  <Input value={newListName} onChange={(e) => setNewListName(e.target.value)} placeholder="e.g. Q1 SaaS founders" />
+                <div className="flex items-center justify-between">
+                  <label htmlFor="list-name" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Target Contact List Name
+                  </label>
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    New dedicated list
+                  </span>
                 </div>
-              )}
+                <Input
+                  id="list-name"
+                  value={newListName}
+                  onChange={(e) => setNewListName(e.target.value)}
+                  placeholder="e.g. Q4 Outreach Prospects"
+                  className="bg-background font-medium"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Every uploaded file creates a separate, dedicated contact list so contacts are never accidentally mixed into existing lists.
+                </p>
+              </div>
             </div>
 
             {/* Scroll wide column rows inside the panel; actions stay outside it. */}
@@ -313,7 +527,10 @@ export function LeadImport({
                 {csv.headers.map((col, index) => {
                   const val = mapping[col] ?? CUSTOM;
                   return (
-                    <div key={`${col}-${index}`} className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1.1fr)] items-center gap-3 border-b px-4 py-2.5 last:border-0">
+                    <div
+                      key={`${col}-${index}`}
+                      className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1.1fr)] items-center gap-3 border-b px-4 py-2.5 last:border-0"
+                    >
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{col}</p>
                         <p className="truncate text-xs text-muted-foreground">{csv.rows[0]?.[col]}</p>
@@ -323,7 +540,9 @@ export function LeadImport({
                         <div className="min-w-0 flex-1">
                           <Select
                             value={val === null || val === undefined ? CUSTOM : val}
-                            onValueChange={(v) => setMapping((p) => ({ ...p, [col]: v === IGNORE ? IGNORE : v }))}
+                            onValueChange={(v) =>
+                              setMapping((p) => ({ ...p, [col]: v === IGNORE ? IGNORE : v }))
+                            }
                           >
                             <SelectTrigger className="h-8 w-full min-w-0" aria-label={`Map column ${col}`}>
                               <SelectValue />
@@ -331,7 +550,8 @@ export function LeadImport({
                             <SelectContent position="popper" sideOffset={4} className="z-[100]">
                               {STANDARD_LEAD_FIELDS.map((f) => (
                                 <SelectItem key={f.key} value={f.key}>
-                                  {f.label}{f.required ? " *" : ""}
+                                  {f.label}
+                                  {f.required ? " *" : ""}
                                 </SelectItem>
                               ))}
                               <SelectItem value={CUSTOM}>Custom variable</SelectItem>
@@ -362,13 +582,19 @@ export function LeadImport({
 
           {result && (
             <div className="flex flex-wrap gap-4 rounded-xl border bg-muted/30 p-4 text-sm">
-              <span className="text-success-foreground font-medium">{result.imported.toLocaleString()} imported</span>
-              <span className="text-amber-500">{result.skipped.toLocaleString()} duplicates skipped</span>
-              <span className="text-destructive">{result.invalid.toLocaleString()} invalid emails</span>
+              <span className="text-success-foreground font-medium">
+                {result.imported.toLocaleString()} imported
+              </span>
+              <span className="text-amber-500">
+                {result.skipped.toLocaleString()} duplicates skipped
+              </span>
+              <span className="text-destructive">
+                {result.invalid.toLocaleString()} invalid emails
+              </span>
             </div>
           )}
 
-          {importProgress && (
+          {inlineProgress && (
             <div className="space-y-2 rounded-xl border bg-muted/40 p-4">
               <div className="flex items-center justify-between text-sm">
                 <span className="flex items-center gap-2 font-medium">
@@ -376,10 +602,11 @@ export function LeadImport({
                   Importing leads...
                 </span>
                 <span className="text-xs tabular-nums text-muted-foreground">
-                  {importProgress.processed.toLocaleString()} / {importProgress.total.toLocaleString()} ({importProgress.percent}%)
+                  {inlineProgress.processed.toLocaleString()} / {inlineProgress.total.toLocaleString()} (
+                  {inlineProgress.percent}%)
                 </span>
               </div>
-              <Progress value={importProgress.percent} className="h-2" />
+              <Progress value={inlineProgress.percent} className="h-2" />
             </div>
           )}
 
@@ -398,12 +625,14 @@ export function LeadImport({
               </Button>
               <div className="flex gap-3">
                 {result && !onImported ? (
-                  <Button type="button" onClick={() => router.push("/leads")}>View leads <ArrowRight className="h-4 w-4" /></Button>
+                  <Button type="button" onClick={() => router.push("/leads")}>
+                    View leads <ArrowRight className="h-4 w-4" />
+                  </Button>
                 ) : (
                   <Button
                     type="button"
                     onClick={doImport}
-                    disabled={pending || !emailMapped || (targetList === "__new__" && !newListName.trim())}
+                    disabled={pending || !emailMapped || !newListName.trim()}
                     aria-describedby={!emailMapped ? "email-mapping-error" : undefined}
                   >
                     {pending && <Loader2 className="h-4 w-4 animate-spin" />}

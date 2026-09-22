@@ -30,7 +30,7 @@ export default async function LeadsPage() {
       />
 
       {/* Summary KPI Strip */}
-      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
         <div className="rounded-xl border border-border/60 bg-card/40 p-4 backdrop-blur">
           <div className="flex items-center justify-between text-muted-foreground">
             <span className="text-xs font-medium uppercase tracking-wider">Total Stored Contacts</span>
@@ -41,7 +41,7 @@ export default async function LeadsPage() {
           </p>
           <p className="mt-1 text-[11px] text-muted-foreground flex items-center gap-1">
             <Sparkles className="size-3 text-emerald-400" />
-            Zero database row limits
+            Verified & ready for outreach campaigns
           </p>
         </div>
 
@@ -52,15 +52,6 @@ export default async function LeadsPage() {
           </div>
           <p className="mt-2 text-2xl font-bold tracking-tight tabular-nums">{lists.length}</p>
           <p className="mt-1 text-[11px] text-muted-foreground">Segmented campaign lists</p>
-        </div>
-
-        <div className="rounded-xl border border-border/60 bg-card/40 p-4 backdrop-blur">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-medium uppercase tracking-wider">Import Engine</span>
-            <Upload className="size-4 text-blue-400" />
-          </div>
-          <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">25k Chunker</p>
-          <p className="mt-1 text-[11px] text-muted-foreground">Background batch ingestion active</p>
         </div>
       </div>
 

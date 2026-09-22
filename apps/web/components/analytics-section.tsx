@@ -2,9 +2,10 @@
 
 import { useEffect, useId, useState } from "react";
 import Link from "next/link";
-import { BarChart3 } from "lucide-react";
+import { AlertCircle, BarChart3, Calendar, TrendingUp } from "lucide-react";
 import {
   AnalyticsBodySkeleton,
+  Badge,
   Button,
   Card,
   CardContent,
@@ -12,6 +13,7 @@ import {
   Input,
   Label,
   StatePanel,
+  cn,
 } from "@smartreach/ui";
 import { getAnalyticsSeries, getAnalyticsSummary } from "@/lib/actions";
 import { isNextRedirect } from "@/lib/lead-form";
@@ -176,96 +178,107 @@ export function AnalyticsSection({
   const ChartTitle = heading ? "h3" : "h2";
 
   return (
-    <section className="space-y-4" aria-labelledby={heading ? headingId : undefined}>
-      {heading ? (
-        <div>
-          <h2 id={headingId} className="text-[15px] font-semibold tracking-tight">
-            {heading}
-          </h2>
-          {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
-        </div>
-      ) : null}
-
+    <section className="space-y-3" aria-labelledby={heading ? headingId : undefined}>
       <p className="sr-only" aria-live="polite">
         {announcement}
       </p>
 
-      <div className="space-y-3">
-        <div role="group" aria-label="Quick ranges" className="flex flex-wrap gap-2">
-          {ANALYTICS_PRESETS.map((preset) => {
-            const range = rangeEndingOn(today, preset.days);
-            const active = !rangeError && from === range.from && to === range.to && draftFrom === from && draftTo === to;
-            return (
-              <Button
-                key={preset.days}
-                type="button"
-                size="sm"
-                variant={active ? "secondary" : "outline"}
-                aria-pressed={active}
-                onClick={() => commit(range.from, range.to)}
-              >
-                {preset.label}
-              </Button>
-            );
-          })}
+      {/* Info-Dense Executive Header & Range Filter Bar */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-card/50 p-3.5 backdrop-blur shadow-2xs lg:flex-row lg:items-center lg:justify-between">
+        {/* Left: Heading, Description & Active Range Badge */}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 id={heading ? headingId : undefined} className="text-base font-semibold tracking-tight text-foreground flex items-center gap-1.5">
+              <TrendingUp className="size-4 text-primary" aria-hidden />
+              {heading || "Campaign Outreach & Delivery Trajectory"}
+            </h2>
+            <Badge variant="outline" className="text-[11px] font-mono text-muted-foreground border-border/60 bg-background/50">
+              {rangeError ? "UTC" : `${formatRangeDate(from)} – ${formatRangeDate(to)}`}
+            </Badge>
+          </div>
+          {description && (
+            <p className="mt-0.5 text-xs text-muted-foreground line-clamp-1">
+              {description}
+            </p>
+          )}
         </div>
-        <form
-          aria-label="Custom date range"
-          className="flex flex-col gap-3 sm:flex-row sm:items-end"
-          onSubmit={(event) => {
-            event.preventDefault();
-            commit(draftFrom, draftTo);
-          }}
-        >
-          <div className="grid flex-1 grid-cols-1 gap-3 min-[420px]:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor={fromId}>
-                From<span className="ml-0.5 text-destructive">*</span>
-              </Label>
-              <Input
+
+        {/* Right: Info-dense inline controls */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {/* Segmented Preset Switcher */}
+          <div role="group" aria-label="Quick ranges" className="inline-flex items-center rounded-lg border border-border/60 bg-muted/40 p-0.5 shadow-2xs">
+            {ANALYTICS_PRESETS.map((preset) => {
+              const range = rangeEndingOn(today, preset.days);
+              const active = !rangeError && from === range.from && to === range.to && draftFrom === from && draftTo === to;
+              return (
+                <button
+                  key={preset.days}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => commit(range.from, range.to)}
+                  className={cn(
+                    "rounded-md px-2.5 py-1 text-xs font-medium transition-all",
+                    active
+                      ? "bg-background text-foreground font-semibold shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Compact Inline Date Range Picker */}
+          <form
+            aria-label="Custom date range"
+            className="flex items-center gap-1.5"
+            onSubmit={(event) => {
+              event.preventDefault();
+              commit(draftFrom, draftTo);
+            }}
+          >
+            <div className="flex items-center rounded-lg border border-border/60 bg-background/80 px-2.5 py-1 shadow-2xs">
+              <Calendar className="size-3.5 text-muted-foreground mr-1.5 shrink-0" />
+              <input
                 id={fromId}
                 type="date"
                 name="from"
+                aria-label="Start date"
                 value={draftFrom}
                 required
                 autoComplete="off"
                 aria-invalid={rangeError ? true : undefined}
-                aria-describedby={rangeError ? errorId : undefined}
-                className="[color-scheme:light] dark:[color-scheme:dark]"
+                className="w-28 border-0 bg-transparent p-0 text-xs font-mono text-foreground focus:outline-none [color-scheme:light] dark:[color-scheme:dark]"
                 onChange={(event) => setDraftFrom(event.target.value)}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={toId}>
-                To<span className="ml-0.5 text-destructive">*</span>
-              </Label>
-              <Input
+              <span className="mx-1 text-muted-foreground text-xs">→</span>
+              <input
                 id={toId}
                 type="date"
                 name="to"
+                aria-label="End date"
                 value={draftTo}
                 required
                 autoComplete="off"
                 aria-invalid={rangeError ? true : undefined}
-                aria-describedby={rangeError ? errorId : undefined}
-                className="[color-scheme:light] dark:[color-scheme:dark]"
+                className="w-28 border-0 bg-transparent p-0 text-xs font-mono text-foreground focus:outline-none [color-scheme:light] dark:[color-scheme:dark]"
                 onChange={(event) => setDraftTo(event.target.value)}
               />
             </div>
-          </div>
-          <Button type="submit" size="sm" className="w-full sm:w-auto">
-            Apply
-          </Button>
-        </form>
-        <p className="text-xs text-muted-foreground">
-          {rangeError ? "Inclusive, UTC." : `Showing ${formatRangeDate(from)} to ${formatRangeDate(to)}. Inclusive, UTC.`}
-        </p>
-        {rangeError ? (
-          <p id={errorId} role="alert" className="text-xs text-destructive">
-            {rangeError}
-          </p>
-        ) : null}
+            <Button type="submit" size="sm" variant="secondary" className="h-7 text-xs font-medium px-2.5 shadow-2xs">
+              Apply
+            </Button>
+          </form>
+        </div>
       </div>
+
+      {rangeError && (
+        <div id={errorId} role="alert" className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          <AlertCircle className="size-3.5 shrink-0" />
+          <span>{rangeError}</span>
+        </div>
+      )}
 
       {loading ? <AnalyticsBodySkeleton /> : null}
 

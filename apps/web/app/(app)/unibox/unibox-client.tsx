@@ -310,68 +310,116 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
   };
 
   return (
-    <div className="unibox-root flex h-dvh flex-col lg:-ml-60 lg:pl-60">
-      <header className="flex flex-wrap items-center justify-between gap-2 pb-3">
-        <h1 className="flex items-center gap-2 text-lg font-semibold">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary"><Inbox className="size-4" aria-hidden /></span>
-          Unibox
-        </h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <Select value={tagFilter || "all"} onValueChange={onTagFilter}>
-            <SelectTrigger className="h-8 w-[11.5rem]" aria-label="Filter by reply tag">
-              <SelectValue placeholder="All tags" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All tags</SelectItem>
-              {UNIBOX_REPLY_TAGS.map((tag) => (
-                <SelectItem key={tag} value={tag}>{tagLabel(tag)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button type="button" variant="outline" size="sm" onClick={refresh} disabled={refreshing}>
-            <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
-            {refreshing ? "Refreshing…" : "Refresh"}
+    <div className="unibox-root flex h-[calc(100dvh-3.5rem)] lg:h-dvh flex-col p-4 sm:p-6 lg:p-8 gap-4 overflow-hidden">
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-xs">
+            <Inbox className="size-5" aria-hidden />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold tracking-tight">UniBox</h1>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-500">
+                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live Sync
+              </span>
+              <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
+                {unread} unread
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground hidden sm:block">
+              Unified prospect responses & live outreach thread manager.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={refresh}
+            disabled={refreshing}
+            className="h-8 gap-1.5 text-xs font-medium shadow-xs"
+          >
+            <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Refreshing…" : "Refresh Inbox"}
           </Button>
-          <span className="rounded-md border px-2 py-1 text-[11px] text-muted-foreground">{unread} unread</span>
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(240px,320px)_1fr] overflow-hidden rounded-xl border bg-card">
-        <div className={`min-h-0 overflow-y-auto border-r border-border/60 ${activeId ? "hidden md:block" : "block"}`}>
-          {conversations.length === 0 && (
-            <EmptyState
-              icon={Inbox}
-              title={tagFilter ? "No replies with this tag" : "No replies yet"}
-              description={
-                tagFilter
-                  ? "Choose another tag, or show every reply."
-                  : "When prospects reply to your campaigns, conversations appear here in Unibox."
-              }
-              className="m-4 border-0 bg-transparent py-10"
-            />
-          )}
-          {conversations.map((c) => {
-            const r = c.latest;
-            const name = r.fromName || r.fromEmail.split("@")[0];
-            const isUnread = c.unread;
-            const isActive = activeConversation?.key === c.key;
-            return (
-              <button key={c.key} type="button" onClick={() => setActiveId(r.id)}
-                className={`flex w-full flex-col gap-0.5 border-b border-border/50 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${isActive ? "bg-accent/60" : "hover:bg-accent/30"} ${isUnread ? "bg-primary/[0.04]" : ""}`}>
-                <span className="flex items-center justify-between gap-2">
-                  <span className={`truncate text-[13px] ${isUnread ? "font-semibold" : "font-medium"}`}>{name}</span>
-                  <span className="shrink-0 text-[11px] text-muted-foreground">{r.receivedAt ? formatDistanceToNow(new Date(r.receivedAt), { addSuffix: true }) : ""}</span>
-                </span>
-                <span className={`truncate text-xs ${isUnread ? "text-foreground" : "text-muted-foreground"}`}>{r.subject || "(no subject)"}</span>
-                {c.tag ? (
-                  <span className="mt-1 inline-flex w-fit rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground">
-                    {tagLabel(c.tag)}
+      <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(280px,360px)_1fr] overflow-hidden rounded-xl border border-border/70 bg-card shadow-xs">
+        <div className={`flex min-h-0 flex-col border-r border-border/60 ${activeId ? "hidden md:flex" : "flex"}`}>
+          {/* List Sub-header with Filter & Count */}
+          <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/30 px-3.5 py-2.5 shrink-0">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Threads ({conversations.length})
+            </span>
+            <div className="flex items-center gap-1.5">
+              <Select value={tagFilter || "all"} onValueChange={onTagFilter}>
+                <SelectTrigger className="h-7 w-[9rem] bg-background text-xs" aria-label="Filter by reply tag">
+                  <SelectValue placeholder="All tags" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="text-xs">All tags</SelectItem>
+                  {UNIBOX_REPLY_TAGS.map((tag) => (
+                    <SelectItem key={tag} value={tag} className="text-xs">{tagLabel(tag)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto divide-y divide-border/40">
+            {conversations.length === 0 && (
+              <EmptyState
+                icon={Inbox}
+                title={tagFilter ? "No replies with this tag" : "No replies yet"}
+                description={
+                  tagFilter
+                    ? "Choose another tag, or show every reply."
+                    : "When prospects reply to your campaigns, conversations appear here in Unibox."
+                }
+                className="m-4 border-0 bg-transparent py-10"
+              />
+            )}
+            {conversations.map((c) => {
+              const r = c.latest;
+              const name = r.fromName || r.fromEmail.split("@")[0];
+              const isUnread = c.unread;
+              const isActive = activeConversation?.key === c.key;
+              return (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() => setActiveId(r.id)}
+                  className={`flex w-full flex-col gap-1 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
+                    isActive ? "bg-accent/60" : "hover:bg-accent/30"
+                  } ${isUnread ? "bg-primary/[0.04]" : ""}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`truncate text-[13px] ${isUnread ? "font-bold text-foreground" : "font-medium"}`}>
+                      {name}
+                    </span>
+                    <span className="shrink-0 text-[11px] text-muted-foreground">
+                      {r.receivedAt ? formatDistanceToNow(new Date(r.receivedAt), { addSuffix: true }) : ""}
+                    </span>
+                  </div>
+                  <span className={`truncate text-xs ${isUnread ? "font-medium text-foreground" : "text-muted-foreground"}`}>
+                    {r.subject || "(no subject)"}
                   </span>
-                ) : null}
-                <span className="line-clamp-1 text-[11px] text-muted-foreground/80">{messagePreview(r.snippet || r.bodyText)}</span>
-              </button>
-            );
-          })}
+                  {c.tag ? (
+                    <span className="mt-0.5 inline-flex w-fit rounded-md border border-border bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+                      {tagLabel(c.tag)}
+                    </span>
+                  ) : null}
+                  <span className="line-clamp-1 text-[11px] text-muted-foreground/80">
+                    {messagePreview(r.snippet || r.bodyText)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div className={`flex min-h-0 flex-col bg-card/40 ${activeId ? "flex" : "hidden md:flex"}`}>

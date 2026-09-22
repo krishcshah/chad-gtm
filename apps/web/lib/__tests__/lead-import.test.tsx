@@ -186,7 +186,8 @@ describe("LeadImport column mapping", () => {
 
     expect(mockImport).toHaveBeenCalledTimes(2);
     expect(mockImport.mock.calls[0]![0]).toMatchObject({
-      listId: "list-1",
+      listId: "__new__",
+      listName: "large",
       rows: expect.any(Array),
     });
     expect((mockImport.mock.calls[0]![0] as any).rows.length).toBe(1000);

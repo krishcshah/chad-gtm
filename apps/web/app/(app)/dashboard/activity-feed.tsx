@@ -210,7 +210,7 @@ export function ActivityFeed({ initialActivities }: ActivityFeedProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Feed Category Filter Tabs */}
-      <div className="flex items-center gap-1 border-b border-border/40 pb-2 mb-3">
+      <div className="flex items-center gap-1 border-b border-border/40 pb-2 mb-3 shrink-0">
         {(
           [
             { id: "all", label: "All" },
@@ -253,7 +253,7 @@ export function ActivityFeed({ initialActivities }: ActivityFeedProps) {
 
       {/* Activity Item Stream */}
       {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+        <div className="flex flex-1 min-h-0 flex-col items-center justify-center py-12 text-center text-muted-foreground">
           <Layers className="size-8 stroke-[1.25] text-muted-foreground/40 mb-2" />
           <p className="text-xs font-medium">No events in this view</p>
           <p className="text-[11px] text-muted-foreground/70 mt-0.5">
@@ -261,7 +261,7 @@ export function ActivityFeed({ initialActivities }: ActivityFeedProps) {
           </p>
         </div>
       ) : (
-        <div className="space-y-2.5 overflow-y-auto max-h-[460px] pr-1 focus-visible:outline-none">
+        <div className="flex-1 min-h-0 space-y-2.5 overflow-y-auto pr-1 focus-visible:outline-none">
           {filtered.map((item) => {
             const Icon = item.icon;
             return (
