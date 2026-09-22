@@ -1,0 +1,3 @@
+branch=feat/f19-sequences
+base=origin/main (8bdd5ad3e998dd4b3990fa7f0889205fa2eb2900)
+patch=0010-feat-sequences-F19-multi-step-sequences-API-0010.patch

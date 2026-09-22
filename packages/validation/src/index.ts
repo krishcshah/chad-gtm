@@ -1,4 +1,4 @@
-import { DEFAULTS, TIMEZONES } from "@smartreach/shared";
+import { DEFAULTS, MAX_SEQUENCE_STEPS, TIMEZONES } from "@smartreach/shared";
 import { z } from "zod";
 
 /* ─── Auth ─────────────────────────────────────────────────────────────── */
@@ -405,3 +405,46 @@ export const workspaceSettingsSchema = z.object({
     .default(""),
 });
 export type WorkspaceSettingsInput = z.infer<typeof workspaceSettingsSchema>;
+
+/* ─── Sequences (F19) ──────────────────────────────────────────────────── */
+
+
+const sequenceVariantSchema = z.object({
+  id: z.string().min(1).optional(),
+  label: z.string().trim().min(1).max(8).default("A"),
+  subject: z.string().max(500).default(""),
+  bodyHtml: z.string().max(200_000).default(""),
+  bodyText: z.string().max(100_000).default(""),
+  /** Equal-weight A/B; default 50. Ignored when only one active variant. */
+  weight: z.coerce.number().int().min(1).max(100).default(50),
+  pausedAt: z.string().datetime({ offset: true }).nullable().optional(),
+});
+
+const sequenceStepSchema = z.object({
+  id: z.string().min(1).optional(),
+  /** 1-based position; server re-numbers on save if omitted/unsorted. */
+  position: z.coerce.number().int().min(1).max(MAX_SEQUENCE_STEPS).optional(),
+  /** Calendar days to wait after previous step before sending this one. */
+  delayDays: z.coerce.number().int().min(0).max(365).default(0),
+  type: z.enum(["initial", "follow_up"]).default("initial"),
+  variants: z.array(sequenceVariantSchema).min(1).max(2),
+});
+
+/** Replace-all save for Prism step rail (max 20 steps). */
+export const sequenceSaveSchema = z.object({
+  campaignId: z.string().min(1),
+  steps: z.array(sequenceStepSchema).max(MAX_SEQUENCE_STEPS),
+});
+export type SequenceSaveInput = z.infer<typeof sequenceSaveSchema>;
+export type SequenceStepInput = z.infer<typeof sequenceStepSchema>;
+export type SequenceVariantInput = z.infer<typeof sequenceVariantSchema>;
+
+/** Preview: resolve {{vars}} + spintax for editor pane. */
+export const sequencePreviewSchema = z.object({
+  subject: z.string().max(500).default(""),
+  bodyHtml: z.string().max(200_000).default(""),
+  bodyText: z.string().max(100_000).default(""),
+  sampleVars: z.record(z.string(), z.string()).optional(),
+});
+export type SequencePreviewInput = z.infer<typeof sequencePreviewSchema>;
+

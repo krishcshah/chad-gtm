@@ -74,6 +74,13 @@ export function addSeconds(date: Date, seconds: number): Date {
   return new Date(date.getTime() + seconds * 1000);
 }
 
+/** Add N calendar days (UTC date arithmetic — F19 sequence waits). */
+export function addCalendarDays(date: Date, days: number): Date {
+  const d = new Date(date.getTime());
+  d.setUTCDate(d.getUTCDate() + days);
+  return d;
+}
+
 export function randomBetween(min: number, max: number): number {
   if (max <= min) return min;
   return Math.floor(min + Math.random() * (max - min));

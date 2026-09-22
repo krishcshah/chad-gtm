@@ -263,6 +263,8 @@ export const campaignLeads = pgTable(
       .notNull()
       .default("queued"),
     attempts: integer("attempts").notNull().default(0),
+    /** Next sequence step to send (1-based). Default 1 for single-template campaigns. */
+    stepPosition: integer("step_position").notNull().default(1),
     scheduledFor: text("scheduled_for"),
     sentAt: text("sent_at"),
     lastError: text("last_error"),
@@ -298,6 +300,10 @@ export const emailJobs = pgTable(
     subject: text("subject").notNull(),
     bodyText: text("body_text").notNull().default(""),
     bodyHtml: text("body_html").notNull().default(""),
+    /** Sequence step position this job belongs to (1-based). */
+    stepPosition: integer("step_position").notNull().default(1),
+    sequenceStepId: text("sequence_step_id"),
+    variantId: text("variant_id"),
     status: text("status", {
       enum: ["pending", "processing", "sent", "failed", "retry", "bounced", "cancelled"],
     })
@@ -316,11 +322,61 @@ export const emailJobs = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [
-    uniqueIndex("email_jobs_campaign_lead_unique").on(t.campaignLeadId),
+    uniqueIndex("email_jobs_campaign_lead_step_unique").on(t.campaignLeadId, t.stepPosition),
     index("email_jobs_poll_idx").on(t.status, t.scheduledFor, t.dryRun),
     index("email_jobs_sender_idx").on(t.senderId, t.status),
     index("email_jobs_campaign_idx").on(t.campaignId, t.status),
     index("email_jobs_recovery_idx").on(t.status, t.processingAt, t.dryRun),
+  ],
+);
+
+
+/* ─── Campaign sequences (F19) ─────────────────────────────────────────── */
+
+export const sequenceSteps = pgTable(
+  "sequence_steps",
+  {
+    id: id(),
+    campaignId: text("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    /** 1-based order in the campaign sequence. */
+    position: integer("position").notNull(),
+    /** Calendar days to wait after the previous step before sending this one (step 1 usually 0). */
+    delayDays: integer("delay_days").notNull().default(0),
+    type: text("type", { enum: ["initial", "follow_up"] })
+      .notNull()
+      .default("initial"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("sequence_steps_campaign_position_unique").on(t.campaignId, t.position),
+    index("sequence_steps_campaign_idx").on(t.campaignId),
+  ],
+);
+
+export const sequenceStepVariants = pgTable(
+  "sequence_step_variants",
+  {
+    id: id(),
+    stepId: text("step_id")
+      .notNull()
+      .references(() => sequenceSteps.id, { onDelete: "cascade" }),
+    /** A / B / … label for the step rail. */
+    label: text("label").notNull().default("A"),
+    subject: text("subject").notNull().default(""),
+    bodyHtml: text("body_html").notNull().default(""),
+    bodyText: text("body_text").notNull().default(""),
+    /** Equal-weight A/B default 50; unused when only one active variant. */
+    weight: integer("weight").notNull().default(50),
+    pausedAt: text("paused_at"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("sequence_step_variants_step_idx").on(t.stepId),
+    uniqueIndex("sequence_step_variants_step_label_unique").on(t.stepId, t.label),
   ],
 );
 

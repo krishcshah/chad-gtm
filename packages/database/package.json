@@ -10,7 +10,9 @@
     "./crypto": "./src/crypto.ts",
     "./template": "./src/template.ts",
     "./connection": "./src/connection.ts",
-    "./compliance": "./src/compliance.ts"
+    "./compliance": "./src/compliance.ts",
+    "./spintax": "./src/spintax.ts",
+    "./sequence-pick": "./src/sequence-pick.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -70,6 +70,9 @@ export interface JobRow {
   subject: string;
   bodyText: string;
   bodyHtml: string;
+  stepPosition: number;
+  sequenceStepId: string | null;
+  variantId: string | null;
   status: "pending" | "processing" | "sent" | "failed" | "retry" | "bounced" | "cancelled";
   scheduledFor: string;
   attempts: number;

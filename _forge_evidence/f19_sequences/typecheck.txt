@@ -1,0 +1,20 @@
+
+> @smartreach/database@0.1.0 typecheck
+> tsc --noEmit
+
+
+> @smartreach/shared@0.1.0 typecheck
+> tsc --noEmit
+
+
+> @smartreach/validation@0.1.0 typecheck
+> tsc --noEmit
+
+
+> @smartreach/email-engine@0.1.0 typecheck
+> tsc --noEmit
+
+
+> @smartreach/web@0.1.0 typecheck
+> tsc --noEmit
+

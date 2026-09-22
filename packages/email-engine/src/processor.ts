@@ -16,6 +16,7 @@ import type { EngineDb, JobRow, SenderRow } from "./db-port";
 import { makeTransport } from "./mailer";
 import { noteHourlySend, recordSend } from "./rotation";
 import { isEngineDryRun, workerOwnsJob } from "./queue-mode";
+import { advanceSequenceAfterSend, loadCampaignSequenceSteps } from "./sequence";
 
 const BATCH = Number(process.env.ENGINE_BATCH_SIZE ?? 25);
 const STUCK_AFTER_MS = 3 * 60_000;
@@ -152,16 +153,14 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
           updatedAt: nowDry,
         })
         .where(eq(schema.emailJobs.id, job.id));
-      await db
-        .update(schema.campaignLeads)
-        .set({
-          status: "sent",
-          sentAt: nowDry,
-          attempts: sql`${schema.campaignLeads.attempts} + 1`,
-          lastError: null,
-          updatedAt: nowDry,
-        })
-        .where(eq(schema.campaignLeads.id, job.campaignLeadId));
+      const steps = await loadCampaignSequenceSteps(db, job.campaignId);
+      await advanceSequenceAfterSend(db, {
+        campaignId: job.campaignId,
+        campaignLeadId: job.campaignLeadId,
+        stepPosition: job.stepPosition ?? 1,
+        sentAt: nowDry,
+        steps,
+      });
       await db
         .update(schema.leads)
         .set({ status: "contacted", updatedAt: nowDry })
@@ -200,10 +199,14 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
         updatedAt: nowS,
       })
       .where(eq(schema.emailJobs.id, job.id));
-    await db
-      .update(schema.campaignLeads)
-      .set({ status: "sent", sentAt: nowS, attempts: sql`${schema.campaignLeads.attempts} + 1`, lastError: null, updatedAt: nowS })
-      .where(eq(schema.campaignLeads.id, job.campaignLeadId));
+    const steps = await loadCampaignSequenceSteps(db, job.campaignId);
+    await advanceSequenceAfterSend(db, {
+      campaignId: job.campaignId,
+      campaignLeadId: job.campaignLeadId,
+      stepPosition: job.stepPosition ?? 1,
+      sentAt: nowS,
+      steps,
+    });
     await db
       .update(schema.leads)
       .set({ status: "contacted", updatedAt: nowS })

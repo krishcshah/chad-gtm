@@ -1,0 +1,77 @@
+
+> @smartreach/database@0.1.0 test
+> vitest run
+
+
+ RUN  v3.2.7 /workspace/work/smart-reach/wt-forge/packages/database
+
+ ✓ src/__tests__/compliance.test.ts (5 tests) 5ms
+ ✓ src/__tests__/spintax.test.ts (8 tests) 4ms
+ ✓ src/__tests__/template.test.ts (10 tests) 8ms
+
+ Test Files  3 passed (3)
+      Tests  23 passed (23)
+   Start at  00:27:43
+   Duration  328ms (transform 95ms, setup 0ms, collect 169ms, tests 16ms, environment 0ms, prepare 173ms)
+
+
+> @smartreach/validation@0.1.0 test
+> vitest run
+
+
+ RUN  v3.2.7 /workspace/work/smart-reach/wt-forge/packages/validation
+
+ ✓ src/__tests__/lead-create.test.ts (8 tests) 7ms
+ ✓ src/__tests__/lead-status.test.ts (2 tests) 4ms
+ ✓ src/__tests__/unibox-reply-tag.test.ts (2 tests) 4ms
+ ✓ src/__tests__/campaign-draft.test.ts (8 tests) 9ms
+ ✓ src/__tests__/campaign-window.test.ts (2 tests) 6ms
+ ✓ src/__tests__/suppression-import.test.ts (9 tests) 16ms
+ ✓ src/__tests__/sequence.test.ts (4 tests) 11ms
+
+ Test Files  7 passed (7)
+      Tests  35 passed (35)
+   Start at  00:27:44
+   Duration  445ms (transform 243ms, setup 0ms, collect 790ms, tests 57ms, environment 1ms, prepare 483ms)
+
+
+> @smartreach/email-engine@0.1.0 test
+> vitest run
+
+
+ RUN  v3.2.7 /workspace/work/smart-reach/wt-forge/packages/email-engine
+
+ ✓ src/__tests__/sequence.test.ts (3 tests) 3ms
+ ✓ src/__tests__/sync-replies.test.ts (12 tests) 11ms
+ ✓ src/__tests__/engine.test.ts (13 tests) 19ms
+
+ Test Files  3 passed (3)
+      Tests  28 passed (28)
+   Start at  00:27:45
+   Duration  628ms (transform 256ms, setup 0ms, collect 900ms, tests 33ms, environment 0ms, prepare 174ms)
+
+
+> @smartreach/web@0.1.0 test
+> vitest run
+
+
+ RUN  v3.2.7 /workspace/work/smart-reach/wt-forge/apps/web
+
+ ✓ lib/__tests__/auth-trusted-origins.test.ts (5 tests) 5ms
+ ✓ lib/__tests__/lead-custom-fields.test.ts (3 tests) 9ms
+ ✓ lib/__tests__/lead-form.test.ts (6 tests) 7ms
+ ✓ lib/__tests__/unibox-thread.test.ts (4 tests) 5ms
+ ✓ lib/__tests__/sequences.test.ts (2 tests) 4ms
+ ✓ lib/__tests__/campaign-drafts.test.ts (10 tests) 13ms
+ ✓ lib/__tests__/leads.test.ts (14 tests) 12ms
+ ✓ lib/__tests__/zod-action-error.test.ts (2 tests) 4ms
+ ✓ lib/__tests__/senders.test.ts (3 tests) 5ms
+ ✓ lib/__tests__/campaign-start-guard.test.ts (2 tests) 2ms
+ ✓ lib/__tests__/hhmm.test.ts (2 tests) 2ms
+ ✓ lib/__tests__/campaign-wizard-errors.test.ts (2 tests) 2ms
+
+ Test Files  12 passed (12)
+      Tests  55 passed (55)
+   Start at  00:27:46
+   Duration  878ms (transform 543ms, setup 0ms, collect 1.82s, tests 71ms, environment 2ms, prepare 794ms)
+

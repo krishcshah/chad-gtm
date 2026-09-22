@@ -1,0 +1,57 @@
+
+> @smartreach/email-engine@0.1.0 test
+> vitest run
+
+
+ RUN  v3.2.7 /workspace/work/smart-reach/wt-forge/packages/email-engine
+
+ ✓ src/__tests__/sequence.test.ts (3 tests) 3ms
+ ✓ src/__tests__/sync-replies.test.ts (12 tests) 11ms
+ ✓ src/__tests__/engine.test.ts (13 tests) 18ms
+
+ Test Files  3 passed (3)
+      Tests  28 passed (28)
+   Start at  00:27:25
+   Duration  605ms (transform 211ms, setup 0ms, collect 835ms, tests 32ms, environment 0ms, prepare 177ms)
+
+
+> @smartreach/database@0.1.0 test
+> vitest run
+
+
+ RUN  v3.2.7 /workspace/work/smart-reach/wt-forge/packages/database
+
+ ✓ src/__tests__/spintax.test.ts (8 tests) 4ms
+ ✓ src/__tests__/compliance.test.ts (5 tests) 6ms
+ ✓ src/__tests__/template.test.ts (10 tests) 9ms
+
+ Test Files  3 passed (3)
+      Tests  23 passed (23)
+   Start at  00:27:26
+   Duration  329ms (transform 137ms, setup 0ms, collect 192ms, tests 19ms, environment 0ms, prepare 157ms)
+
+
+> @smartreach/web@0.1.0 test
+> vitest run
+
+
+ RUN  v3.2.7 /workspace/work/smart-reach/wt-forge/apps/web
+
+ ✓ lib/__tests__/auth-trusted-origins.test.ts (5 tests) 5ms
+ ✓ lib/__tests__/campaign-wizard-errors.test.ts (2 tests) 3ms
+ ✓ lib/__tests__/lead-form.test.ts (6 tests) 6ms
+ ✓ lib/__tests__/senders.test.ts (3 tests) 4ms
+ ✓ lib/__tests__/sequences.test.ts (2 tests) 6ms
+ ✓ lib/__tests__/campaign-drafts.test.ts (10 tests) 18ms
+ ✓ lib/__tests__/leads.test.ts (14 tests) 18ms
+ ✓ lib/__tests__/lead-custom-fields.test.ts (3 tests) 5ms
+ ✓ lib/__tests__/unibox-thread.test.ts (4 tests) 4ms
+ ✓ lib/__tests__/zod-action-error.test.ts (2 tests) 3ms
+ ✓ lib/__tests__/campaign-start-guard.test.ts (2 tests) 3ms
+ ✓ lib/__tests__/hhmm.test.ts (2 tests) 3ms
+
+ Test Files  12 passed (12)
+      Tests  55 passed (55)
+   Start at  00:27:27
+   Duration  771ms (transform 572ms, setup 0ms, collect 1.57s, tests 78ms, environment 2ms, prepare 757ms)
+

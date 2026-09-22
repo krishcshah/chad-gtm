@@ -30,6 +30,11 @@ import {
 import { and, asc, desc, eq, exists, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { CampaignRow, EngineDb, SenderRow } from "./db-port";
 import {
+  dueQueuedLeadFilter,
+  loadCampaignSequenceSteps,
+  resolveStepContent,
+} from "./sequence";
+import {
   campaignSentToday,
   loadDailyUsage,
   pickSenderIndex,
@@ -115,7 +120,11 @@ export async function scheduleCampaign(
   const activeSenders = senders.filter((s) => s.status !== "paused");
   if (activeSenders.length === 0) return { enqueued: 0, note: "all-paused" };
   // Drafts may omit list/template; scheduler only runs scheduled/running but guard anyway.
-  if (!campaign.leadListId || !campaign.templateId) {
+  if (!campaign.leadListId) {
+    return { enqueued: 0, note: "missing-list" };
+  }
+  const sequenceSteps = await loadCampaignSequenceSteps(db, campaign.id);
+  if (!campaign.templateId && sequenceSteps.length === 0) {
     return { enqueued: 0, note: "missing-list-or-template" };
   }
 
@@ -138,13 +147,17 @@ export async function scheduleCampaign(
 
   // Skip leads that already replied anywhere in this campaign (stopOnReply)
   // and any campaign_leads already scheduled/sent — atomic claim does the rest.
-  const claimable: { id: string; leadId: string }[] = await db
-    .select({ id: schema.campaignLeads.id, leadId: schema.campaignLeads.leadId })
+  const claimable: { id: string; leadId: string; stepPosition: number }[] = await db
+    .select({
+      id: schema.campaignLeads.id,
+      leadId: schema.campaignLeads.leadId,
+      stepPosition: schema.campaignLeads.stepPosition,
+    })
     .from(schema.campaignLeads)
     .where(
       and(
         eq(schema.campaignLeads.campaignId, campaign.id),
-        eq(schema.campaignLeads.status, "queued"),
+        dueQueuedLeadFilter(nowIsoS),
         // stop-after-reply is enforced at claim time and again at send time
         campaign.stopOnReply
           ? notExistsReplied(db, campaign.id)
@@ -182,8 +195,12 @@ export async function scheduleCampaign(
   budget = Math.min(budget, claimed.length);
 
   // Load lead + template data for rendering
-  const claimedRows: { id: string; leadId: string }[] = await db
-    .select({ id: schema.campaignLeads.id, leadId: schema.campaignLeads.leadId })
+  const claimedRows: { id: string; leadId: string; stepPosition: number }[] = await db
+    .select({
+      id: schema.campaignLeads.id,
+      leadId: schema.campaignLeads.leadId,
+      stepPosition: schema.campaignLeads.stepPosition,
+    })
     .from(schema.campaignLeads)
     .where(inArray(schema.campaignLeads.id, claimed.map((c) => c.id)));
   const leadIds = claimedRows.map((r) => r.leadId);
@@ -192,21 +209,6 @@ export async function scheduleCampaign(
     .from(schema.leads)
     .where(inArray(schema.leads.id, leadIds));
   const leadById = new Map<string, any>(leadRows.map((l) => [l.id, l]));
-  const tplRows: any[] = await db
-    .select()
-    .from(schema.emailTemplates)
-    .where(eq(schema.emailTemplates.id, campaign.templateId))
-    .limit(1);
-  const tpl = tplRows[0];
-  if (!tpl) {
-    // Unclaim so the next tick can retry once a template exists — do not leave
-    // campaign_leads stuck in "scheduled" with no email_jobs.
-    await db
-      .update(schema.campaignLeads)
-      .set({ status: "queued", updatedAt: nowIsoS })
-      .where(inArray(schema.campaignLeads.id, claimed.map((c) => c.id)));
-    return { enqueued: 0, note: "template-missing" };
-  }
 
   // F15: load suppressions for this workspace (emails + domains)
   const suppressionRows: { value: string }[] = await db
@@ -274,19 +276,33 @@ export async function scheduleCampaign(
       continue;
     }
 
-    // Resolve {{unsubscribe_url}} only when the template references it — do not auto-inject.
+    // Resolve {{unsubscribe_url}} only when content references it — do not auto-inject.
     const unsubToken = createUnsubscribeToken(campaign.userId, lead.email);
     const unsubUrl = buildUnsubscribeUrl(unsubBase, unsubToken);
     const vars = { ...leadVars(lead), unsubscribe_url: unsubUrl };
-    const subject = renderTemplate(tpl.subject, vars);
+    const content = await resolveStepContent(db, {
+      campaignId: campaign.id,
+      stepPosition: cl.stepPosition ?? 1,
+      templateId: campaign.templateId,
+      vars,
+      steps: sequenceSteps,
+    });
+    if ("error" in content) {
+      await db
+        .update(schema.campaignLeads)
+        .set({ status: "queued", lastError: content.error, updatedAt: nowIsoS })
+        .where(eq(schema.campaignLeads.id, cl.id));
+      handledIds.add(cl.id);
+      continue;
+    }
     let bodyText =
-      tpl.format === "text"
-        ? appendSignature(renderTemplate(tpl.bodyText, vars), pick.sender)
-        : renderTemplate(tpl.bodyText, vars);
+      content.format === "text"
+        ? appendSignature(content.bodyText, pick.sender)
+        : content.bodyText;
     let bodyHtml =
-      tpl.format === "html"
-        ? appendSignature(renderTemplate(tpl.bodyHtml, vars), pick.sender)
-        : renderTemplate(tpl.bodyHtml, vars);
+      content.format === "html"
+        ? appendSignature(content.bodyHtml, pick.sender)
+        : content.bodyHtml;
 
     await db.insert(schema.emailJobs).values({
       id: crypto.randomUUID(),
@@ -295,9 +311,12 @@ export async function scheduleCampaign(
       senderId: pick.sender.id,
       leadId: cl.leadId,
       toEmail: lead.email,
-      subject,
+      subject: content.subject,
       bodyText,
       bodyHtml,
+      stepPosition: content.stepPosition,
+      sequenceStepId: content.sequenceStepId,
+      variantId: content.variantId,
       status: "pending",
       scheduledFor: scheduleAt.toISOString(),
       attempts: 0,

@@ -80,7 +80,12 @@ export const DEFAULTS = {
   engineIntervalMs: 30_000,
   engineSyncMs: 120_000,
   engineBatchSize: 25,
+  /** F19: max steps per campaign sequence */
+  maxSequenceSteps: 20,
 } as const;
+
+export const MAX_SEQUENCE_STEPS = DEFAULTS.maxSequenceSteps;
+
 
 export const SENDER_IMPORT_COLUMNS = [
   "Sender Name",

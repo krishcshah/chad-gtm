@@ -39,6 +39,12 @@ import {
   publishCampaignForUser,
   saveCampaignDraftForUser,
 } from "./campaign-drafts";
+import {
+  getCampaignSequenceForUser,
+  previewSequenceContent,
+  saveCampaignSequenceForUser,
+  type SequenceDTO,
+} from "./sequences";
 import { getDb } from "./db";
 import { requireUser } from "./session";
 import { formatZodActionError } from "./zod-action-error";
@@ -560,6 +566,37 @@ export async function publishCampaign(input: unknown): Promise<ActionResult<{ id
 }
 
 /** Thin wrapper — wizard Start continues to call createCampaign. */
+
+/* ═══ SEQUENCES (F19) ═══ */
+
+export async function getCampaignSequence(
+  campaignId: string,
+): Promise<ActionResult<SequenceDTO>> {
+  const user = await requireUser();
+  return getCampaignSequenceForUser(getDb(), user.id, campaignId);
+}
+
+export async function saveCampaignSequence(
+  input: unknown,
+): Promise<ActionResult<SequenceDTO>> {
+  const user = await requireUser();
+  const result = await saveCampaignSequenceForUser(getDb(), user.id, input);
+  if (result.ok) {
+    const id = result.data?.campaignId;
+    if (id) revalidatePath(`/campaigns/${id}`);
+    revalidatePath("/campaigns");
+  }
+  return result;
+}
+
+/** Preview {{vars}} + spintax for Prism editor (no persistence). */
+export async function previewSequenceStep(
+  input: unknown,
+): Promise<ActionResult<{ subject: string; bodyHtml: string; bodyText: string }>> {
+  await requireUser();
+  return previewSequenceContent(input);
+}
+
 export async function createCampaign(input: unknown): Promise<ActionResult<{ id: string }>> {
   return publishCampaign(input);
 }
