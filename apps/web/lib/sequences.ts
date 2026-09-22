@@ -25,8 +25,28 @@ type Db = {
   update: (...args: any[]) => any;
   delete: (...args: any[]) => any;
   select: (...args: any[]) => any;
+  /**
+   * Interactive transactions. Works on node-postgres. On drizzle neon-http the
+   * method exists and throws "No transactions support in neon-http driver".
+   */
   transaction?: <T>(fn: (tx: Db) => Promise<T>) => Promise<T>;
 };
+
+type QueryLike = PromiseLike<unknown>;
+
+/**
+ * drizzle neon-http `batch` → `@neondatabase/serverless` `sql.transaction(queries)`.
+ * That is one HTTP request (`{ queries: [...] }`) which Neon runs as a single
+ * transaction. Absent on node-postgres.
+ */
+function readNeonHttpBatch(
+  db: Db,
+): ((queries: readonly QueryLike[]) => Promise<unknown>) | null {
+  const batch = (db as { batch?: unknown }).batch;
+  if (typeof batch !== "function") return null;
+  return (queries) =>
+    (batch as (q: readonly QueryLike[]) => Promise<unknown>).call(db, queries);
+}
 
 function zodFail(error: {
   issues: { path: PropertyKey[]; message: string }[];
@@ -116,10 +136,95 @@ export async function getCampaignSequenceForUser(
   };
 }
 
+type PlannedVariant = {
+  row: {
+    id: string;
+    stepId: string;
+    label: string;
+    subject: string;
+    bodyHtml: string;
+    bodyText: string;
+    weight: number;
+    pausedAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+  };
+  dto: SequenceVariantDTO;
+};
+
+type PlannedStep = {
+  row: {
+    id: string;
+    campaignId: string;
+    position: number;
+    delayDays: number;
+    type: "initial" | "follow_up";
+    createdAt: string;
+    updatedAt: string;
+  };
+  variants: PlannedVariant[];
+  dto: SequenceStepDTO;
+};
+
+/**
+ * Statements for a replace-all write, in FK-safe order:
+ * delete steps (variants cascade), then each step, then its variants.
+ * Ids are assigned in JS, so the list does not depend on RETURNING.
+ */
+function replacementQueries(executor: Db, campaignId: string, planned: PlannedStep[]): QueryLike[] {
+  const queries: QueryLike[] = [
+    executor.delete(sequenceSteps).where(eq(sequenceSteps.campaignId, campaignId)),
+  ];
+  for (const step of planned) {
+    queries.push(executor.insert(sequenceSteps).values(step.row));
+    for (const variant of step.variants) {
+      queries.push(executor.insert(sequenceStepVariants).values(variant.row));
+    }
+  }
+  return queries;
+}
+
+/**
+ * Neon HTTP has no interactive transaction. `db.batch` is the atomic primitive
+ * (one neon `sql.transaction` HTTP round-trip). node-postgres uses
+ * `db.transaction`. A driver with neither runs the statements sequentially;
+ * that path is not atomic.
+ */
+async function persistSequenceReplacement(
+  db: Db,
+  campaignId: string,
+  planned: PlannedStep[],
+): Promise<void> {
+  const batch = readNeonHttpBatch(db);
+  if (batch) {
+    await batch(replacementQueries(db, campaignId, planned));
+    return;
+  }
+  if (typeof db.transaction === "function") {
+    await db.transaction(async (tx) => {
+      for (const query of replacementQueries(tx, campaignId, planned)) await query;
+    });
+    return;
+  }
+  for (const query of replacementQueries(db, campaignId, planned)) await query;
+}
+
 /**
  * Replace-all save for the Prism step rail.
- * Deletes existing steps (cascade variants) and inserts the provided tree.
+ * Deletes existing steps (ON DELETE CASCADE removes variants) and inserts the tree.
  * Empty steps[] clears the sequence (engine falls back to campaign.templateId).
+ *
+ * Partial failure:
+ * - Neon HTTP (staging/production): one `db.batch` / neon `sql.transaction`.
+ *   All statements commit or none do. Interactive `db.transaction` throws
+ *   "No transactions support in neon-http driver" and is not used.
+ *   Residual risk: the HTTP response can be lost after the server commits.
+ *   Retry is replace-all, so the same ids are idempotent and new ids still
+ *   converge to the submitted tree.
+ * - node-postgres (local): the same replace-all inside `db.transaction`.
+ * - Neither primitive: sequential statements, not atomic. A failure after
+ *   DELETE can leave the sequence empty or partial until a later save.
+ *   No schema change; cascades stay on the existing foreign keys.
  */
 export async function saveCampaignSequenceForUser(
   db: Db,
@@ -152,18 +257,45 @@ export async function saveCampaignSequenceForUser(
   }
 
   const now = nowIso();
-  const run = async (tx: Db) => {
-    await tx.delete(sequenceSteps).where(eq(sequenceSteps.campaignId, data.campaignId));
-
-    const outSteps: SequenceStepDTO[] = [];
-    for (let i = 0; i < data.steps.length; i++) {
-      const stepIn = data.steps[i]!;
-      const position = i + 1;
-      const stepId = stepIn.id ?? crypto.randomUUID();
-      const type = stepIn.type ?? (position === 1 ? "initial" : "follow_up");
-      const delayDays = stepIn.delayDays ?? 0;
-
-      await tx.insert(sequenceSteps).values({
+  const planned: PlannedStep[] = [];
+  for (let i = 0; i < data.steps.length; i++) {
+    const stepIn = data.steps[i]!;
+    const position = i + 1;
+    const stepId = stepIn.id ?? crypto.randomUUID();
+    const type = (stepIn.type ?? (position === 1 ? "initial" : "follow_up")) as
+      | "initial"
+      | "follow_up";
+    const delayDays = stepIn.delayDays ?? 0;
+    const variants: PlannedVariant[] = [];
+    for (let vi = 0; vi < stepIn.variants.length; vi++) {
+      const vIn = stepIn.variants[vi]!;
+      const variantId = vIn.id ?? crypto.randomUUID();
+      const label =
+        stepIn.variants.length === 2 ? (["A", "B"][vi] as string) : vIn.label || "A";
+      // Equal-weight A/B: force 50/50 when two variants present
+      const weight = stepIn.variants.length === 2 ? 50 : (vIn.weight ?? 50);
+      const pausedAt = vIn.pausedAt ?? null;
+      const dto: SequenceVariantDTO = {
+        id: variantId,
+        label,
+        subject: vIn.subject ?? "",
+        bodyHtml: vIn.bodyHtml ?? "",
+        bodyText: vIn.bodyText ?? "",
+        weight,
+        pausedAt,
+      };
+      variants.push({
+        dto,
+        row: {
+          ...dto,
+          stepId,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+    }
+    planned.push({
+      row: {
         id: stepId,
         campaignId: data.campaignId,
         position,
@@ -171,54 +303,23 @@ export async function saveCampaignSequenceForUser(
         type,
         createdAt: now,
         updatedAt: now,
-      });
-
-      const outVariants: SequenceVariantDTO[] = [];
-      for (let vi = 0; vi < stepIn.variants.length; vi++) {
-        const vIn = stepIn.variants[vi]!;
-        const variantId = vIn.id ?? crypto.randomUUID();
-        const label =
-          stepIn.variants.length === 2
-            ? (["A", "B"][vi] as string)
-            : vIn.label || "A";
-        // Equal-weight A/B: force 50/50 when two variants present
-        const weight = stepIn.variants.length === 2 ? 50 : (vIn.weight ?? 50);
-        const pausedAt = vIn.pausedAt ?? null;
-        await tx.insert(sequenceStepVariants).values({
-          id: variantId,
-          stepId,
-          label,
-          subject: vIn.subject ?? "",
-          bodyHtml: vIn.bodyHtml ?? "",
-          bodyText: vIn.bodyText ?? "",
-          weight,
-          pausedAt,
-          createdAt: now,
-          updatedAt: now,
-        });
-        outVariants.push({
-          id: variantId,
-          label,
-          subject: vIn.subject ?? "",
-          bodyHtml: vIn.bodyHtml ?? "",
-          bodyText: vIn.bodyText ?? "",
-          weight,
-          pausedAt,
-        });
-      }
-      outSteps.push({
+      },
+      variants,
+      dto: {
         id: stepId,
         position,
         delayDays,
-        type: type as "initial" | "follow_up",
-        variants: outVariants,
-      });
-    }
-    return outSteps;
-  };
+        type,
+        variants: variants.map((variant) => variant.dto),
+      },
+    });
+  }
 
-  const steps = db.transaction ? await db.transaction(run) : await run(db);
-  return { ok: true, data: { campaignId: data.campaignId, steps } };
+  await persistSequenceReplacement(db, data.campaignId, planned);
+  return {
+    ok: true,
+    data: { campaignId: data.campaignId, steps: planned.map((step) => step.dto) },
+  };
 }
 
 /** Resolve {{vars}} then expand spintax for Prism preview pane. */
