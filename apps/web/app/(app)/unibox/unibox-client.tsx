@@ -8,7 +8,7 @@ import { Button, EmptyState, Textarea } from "@smartreach/ui";
 import { getUniboxThread, sendUniboxReply } from "@/lib/actions";
 import { messagePreview, threadDayKey, threadDayLabel } from "@/lib/message-body";
 import type { UniboxThreadMessage } from "@/lib/unibox-thread";
-import { MessageBody } from "./message-body";
+import { EmailBody } from "./message-body";
 
 interface ReplyRow {
   id: string; fromName: string; fromEmail: string; subject: string; snippet: string;
@@ -96,7 +96,7 @@ function ThreadBubble({ m }: { m: UniboxThreadMessage }) {
           ) : null}
         </header>
         {m.subject ? <p className="mb-2 text-xs font-medium text-foreground/80">{m.subject}</p> : null}
-        <MessageBody html={m.bodyHtml} text={m.bodyText} />
+        <EmailBody html={m.bodyHtml || null} text={m.bodyText || null} />
       </article>
     </div>
   );

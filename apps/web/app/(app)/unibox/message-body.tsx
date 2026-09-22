@@ -5,7 +5,8 @@ import { useLayoutEffect, useMemo, useState } from "react";
 import { sanitizeEmailHtml, type SanitizedEmail } from "@/lib/email-html";
 import { linkifyPlainText, prepareMessageBody, type TextSegment } from "@/lib/message-body";
 
-export function MessageBody({ html, text }: { html?: string | null; text?: string | null }) {
+/** Prefer `html` (sanitized) and fall back to `text`. */
+export function EmailBody({ html, text }: { html?: string | null; text?: string | null }) {
   const prepared = useMemo(() => prepareMessageBody({ html, text }), [html, text]);
   const [safe, setSafe] = useState<{ key: string; value: SanitizedEmail } | null>(null);
 
