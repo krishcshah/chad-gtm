@@ -1662,7 +1662,7 @@ export async function updateWorkspaceAction(
       .set({
         name,
         description: input.description !== undefined ? input.description.trim() || null : undefined,
-        updatedAt: sql`now()`,
+        updatedAt: nowIso(),
       })
       .where(and(eq(schema.workspaces.id, workspaceId), eq(schema.workspaces.userId, user.id)))
       .returning();

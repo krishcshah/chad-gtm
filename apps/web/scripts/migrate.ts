@@ -12,6 +12,7 @@ import pg from "pg";
 const here = path.dirname(fileURLToPath(import.meta.url));
 config({ path: path.join(here, "..", ".env.local") });
 config({ path: path.join(here, "..", "..", "..", ".env") });
+config({ path: path.join(here, "..", "..", "..", ".env.production.local") });
 
 const url: string = process.env.DATABASE_URL ?? "";
 if (!url) {

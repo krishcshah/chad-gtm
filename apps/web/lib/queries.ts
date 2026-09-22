@@ -20,6 +20,14 @@ const {
 const today = () => new Date().toISOString().slice(0, 10);
 const nowIso = () => new Date().toISOString();
 
+function wsCondition(column: any, workspaceId?: string) {
+  if (!workspaceId) return undefined;
+  if (workspaceId === "primary-default") {
+    return sql`(${column} = ${workspaceId} OR ${column} IS NULL)`;
+  }
+  return eq(column, workspaceId);
+}
+
 export async function getDashboardStats(userId: string, workspaceId?: string) {
   const db = getDb();
   const t = today();
@@ -36,16 +44,19 @@ export async function getDashboardStats(userId: string, workspaceId?: string) {
   `).catch(() => {});
 
   const campaignConds = [eq(campaigns.userId, userId), isNull(campaigns.deletedAt)];
-  if (workspaceId) campaignConds.push(eq(campaigns.workspaceId, workspaceId));
+  const cWs = wsCondition(campaigns.workspaceId, workspaceId);
+  if (cWs) campaignConds.push(cWs);
 
   const leadConds = [eq(leads.userId, userId), isNull(leads.deletedAt)];
-  if (workspaceId) leadConds.push(eq(leads.workspaceId, workspaceId));
+  const lWs = wsCondition(leads.workspaceId, workspaceId);
+  if (lWs) leadConds.push(lWs);
 
   const senderConds = [eq(senderAccounts.userId, userId), isNull(senderAccounts.deletedAt)];
-  if (workspaceId) senderConds.push(eq(senderAccounts.workspaceId, workspaceId));
+  const sWs = wsCondition(senderAccounts.workspaceId, workspaceId);
+  if (sWs) senderConds.push(sWs);
 
   const jobConds = [eq(campaigns.userId, userId), gte(emailJobs.createdAt, `${t}T00:00:00Z`)];
-  if (workspaceId) jobConds.push(eq(campaigns.workspaceId, workspaceId));
+  if (cWs) jobConds.push(cWs);
 
   // Fire all six independent aggregates in parallel — one Neon hop (~120ms)
   // instead of six sequential hops (~720ms). This is the dashboard's hot path.
@@ -135,7 +146,8 @@ export async function getActiveCampaigns(userId: string, workspaceId?: string) {
     isNull(campaigns.deletedAt),
     inArray(campaigns.status, ["running", "scheduled", "paused"]),
   ];
-  if (workspaceId) conds.push(eq(campaigns.workspaceId, workspaceId));
+  const cWs = wsCondition(campaigns.workspaceId, workspaceId);
+  if (cWs) conds.push(cWs);
 
   return db
     .select({
@@ -157,7 +169,8 @@ export async function getActiveCampaigns(userId: string, workspaceId?: string) {
 export async function listLeadLists(userId: string, workspaceId?: string) {
   const db = getDb();
   const conds = [eq(leadLists.userId, userId), isNull(leadLists.deletedAt)];
-  if (workspaceId) conds.push(eq(leadLists.workspaceId, workspaceId));
+  const lWs = wsCondition(leadLists.workspaceId, workspaceId);
+  if (lWs) conds.push(lWs);
 
   return db
     .select({
@@ -192,7 +205,8 @@ export async function listLeads(userId: string, params: LeadsPageParams) {
   const db = getDb();
   const size = Math.min(params.pageSize ?? 50, 200);
   const conds = [eq(leads.userId, userId), isNull(leads.deletedAt)];
-  if (params.workspaceId) conds.push(eq(leads.workspaceId, params.workspaceId));
+  const lWs = wsCondition(leads.workspaceId, params.workspaceId);
+  if (lWs) conds.push(lWs);
   if (params.listId) conds.push(eq(leads.listId, params.listId));
   if (params.status) conds.push(eq(leads.status, params.status as never));
   if (params.search) {
@@ -221,7 +235,8 @@ export async function listSenders(userId: string, workspaceId?: string) {
   const db = getDb();
   const t = today();
   const conds = [eq(senderAccounts.userId, userId), isNull(senderAccounts.deletedAt)];
-  if (workspaceId) conds.push(eq(senderAccounts.workspaceId, workspaceId));
+  const sWs = wsCondition(senderAccounts.workspaceId, workspaceId);
+  if (sWs) conds.push(sWs);
 
   const usage = db.$with("usage").as(
     db
@@ -318,7 +333,8 @@ export interface CampaignRow {
 export async function listCampaigns(userId: string, workspaceId?: string): Promise<CampaignRow[]> {
   const db = getDb();
   const conds = [eq(campaigns.userId, userId), isNull(campaigns.deletedAt)];
-  if (workspaceId) conds.push(eq(campaigns.workspaceId, workspaceId));
+  const cWs = wsCondition(campaigns.workspaceId, workspaceId);
+  if (cWs) conds.push(cWs);
 
   const rows = await db
     .select({
@@ -464,7 +480,8 @@ export async function listSuppressions(userId: string, params: SuppressionsPageP
   const db = getDb();
   const size = Math.min(params.limit ?? 50, 200);
   const conds = [eq(suppressions.userId, userId)];
-  if (params.workspaceId) conds.push(eq(suppressions.workspaceId, params.workspaceId));
+  const sWs = wsCondition(suppressions.workspaceId, params.workspaceId);
+  if (sWs) conds.push(sWs);
   if (params.kind) conds.push(eq(suppressions.kind, params.kind));
   if (params.search) {
     const q = `%${params.search}%`;

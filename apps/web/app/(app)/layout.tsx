@@ -3,20 +3,31 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { CommandPalette } from "@/components/command-palette";
 import { NavigationProgress } from "@/components/navigation-progress";
 import { ImportJobProvider } from "@/components/import-job-provider";
-import { requireWorkspace } from "@/lib/session";
-import { listUserWorkspaces } from "@/lib/workspaces";
+import { getSession } from "@/lib/session";
+import { getActiveWorkspace, getFallbackWorkspace, listUserWorkspaces, type WorkspaceItem } from "@/lib/workspaces";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  let user, workspace;
-  try {
-    const res = await requireWorkspace();
-    user = res.user;
-    workspace = res.workspace;
-  } catch {
+  const session = await getSession();
+  if (!session?.user) {
     redirect("/login");
   }
 
-  const workspaces = await listUserWorkspaces(user.id);
+  const user = session.user;
+  let workspace: WorkspaceItem;
+  try {
+    workspace = await getActiveWorkspace(user.id);
+  } catch (err) {
+    console.error("[AppLayout] Failed to get active workspace:", err);
+    workspace = getFallbackWorkspace(user.id);
+  }
+
+  let workspaces: WorkspaceItem[] = [workspace];
+  try {
+    workspaces = await listUserWorkspaces(user.id);
+    if (!workspaces.length) workspaces = [workspace];
+  } catch (err) {
+    console.error("[AppLayout] Failed to list workspaces:", err);
+  }
 
   return (
     <ImportJobProvider>

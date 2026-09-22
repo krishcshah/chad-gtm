@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 import { auth } from "./auth";
 import { isDbConfigured } from "./env";
-import { getActiveWorkspace, type WorkspaceItem } from "./workspaces";
+import { getActiveWorkspace, getFallbackWorkspace, type WorkspaceItem } from "./workspaces";
 
 /** Request-scoped session lookup (deduped per render via React cache). */
 export const getSession = cache(async () => {
@@ -21,13 +21,17 @@ export async function requireUser() {
   return session.user;
 }
 
-/** Guard for (app) pages — returns authenticated user and their active workspace. */
+/** Guard for (app) pages — returns authenticated user and their active workspace. Never redirects logged-in users. */
 export async function requireWorkspace(): Promise<{
   user: NonNullable<Awaited<ReturnType<typeof getSession>>>["user"];
   workspace: WorkspaceItem;
 }> {
   const user = await requireUser();
-  const workspace = await getActiveWorkspace(user.id);
-  return { user, workspace };
+  try {
+    const workspace = await getActiveWorkspace(user.id);
+    return { user, workspace };
+  } catch (err) {
+    console.error("[requireWorkspace] fallback:", err);
+    return { user, workspace: getFallbackWorkspace(user.id) };
+  }
 }
-
