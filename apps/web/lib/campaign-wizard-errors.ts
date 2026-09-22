@@ -1,25 +1,27 @@
 import { CAMPAIGN_POSTAL_REQUIRED_ERROR } from "./campaign-start-guard";
 
-/** Zod / action keys → wizard step (1 name … 6 sending settings). */
+/** Zod / action keys → wizard step (1 name, 2 leads, 3 senders, 4 sequence, 5 schedule & settings, 6 preview). */
 export const CAMPAIGN_FIELD_STEP: Record<string, number> = {
   name: 1,
   leadListId: 2,
   senderIds: 3,
   templateId: 4,
+  sequence: 4,
+  steps: 4,
   startMode: 5,
   scheduledAt: 5,
   businessDaysOnly: 5,
   sendingTimezone: 5,
   sendingWindowStart: 5,
   sendingWindowEnd: 5,
-  dailyLimit: 6,
-  minDelaySec: 6,
-  maxDelaySec: 6,
-  maxEmailsPerSenderPerDay: 6,
-  stopOnReply: 6,
-  retryFailed: 6,
-  retryCount: 6,
-  postalAddress: 6,
+  dailyLimit: 5,
+  minDelaySec: 5,
+  maxDelaySec: 5,
+  maxEmailsPerSenderPerDay: 5,
+  stopOnReply: 5,
+  retryFailed: 5,
+  retryCount: 5,
+  postalAddress: 5,
 };
 
 const FIELD_ORDER = [

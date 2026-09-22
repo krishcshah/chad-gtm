@@ -20,6 +20,7 @@ vi.mock("next/link", () => ({
 vi.mock("@/lib/actions", () => ({
   publishCampaign: vi.fn(),
   saveCampaignDraft: vi.fn(),
+  saveCampaignSequence: vi.fn(),
 }));
 
 import { CampaignWizard, type CampaignDraftSeed } from "../../app/(app)/campaigns/new/campaign-wizard";
@@ -82,14 +83,13 @@ async function renderWizard(props: Partial<ComponentProps<typeof CampaignWizard>
   };
 }
 
-describe("CampaignWizard selection-only", () => {
-  it("selects an existing lead list and does not offer inline create or CSV upload", async () => {
+describe("CampaignWizard", () => {
+  it("selects an existing lead list on Step 2", async () => {
     const { host, unmount } = await renderWizard({
       initialDraft: draft({ wizardStep: 2, leadListId: null }),
     });
     expect(host.textContent).not.toContain("New list");
     expect(host.textContent).not.toContain("Import leads");
-    expect(host.textContent).not.toContain("Upload");
     const buttons = [...host.querySelectorAll("button")];
     const founders = buttons.find((el) => el.textContent?.includes("Founders"));
     expect(founders?.getAttribute("aria-pressed")).toBe("false");
@@ -101,39 +101,48 @@ describe("CampaignWizard selection-only", () => {
     await unmount();
   });
 
-  it("selects an existing template with a checkmark and a non-selectable Preview panel", async () => {
+  it("configures sequences in Step 4 with initial/follow-up steps and formatted/plain toggle", async () => {
     const { host, unmount } = await renderWizard({
-      initialDraft: draft({ wizardStep: 4 }),
+      initialDraft: draft({ wizardStep: 4, templateId: "tpl-1" }),
     });
-    expect(host.textContent).not.toContain("New template");
-    expect(host.querySelector("[aria-label='Preview']")).toBeNull();
+    expect(host.textContent).toContain("Sequence");
+    expect(host.textContent).toContain("Initial");
+    expect(host.textContent).toContain("Quick question");
 
-    const intro = [...host.querySelectorAll("button")].find((el) => el.textContent?.includes("Intro"));
+    // Check formatted vs plain toggle exists
+    expect(host.textContent).toContain("Formatted");
+    expect(host.textContent).toContain("Plain text");
+
+    // Toggle to plain text
+    const plainBtn = [...host.querySelectorAll("button")].find((el) => el.textContent === "Plain text");
+    expect(plainBtn).toBeTruthy();
     await act(async () => {
-      intro?.click();
+      plainBtn?.click();
     });
+    expect(host.textContent).toContain("Standard plain text");
 
-    expect(intro?.getAttribute("aria-pressed")).toBe("true");
-    expect(intro?.querySelector("svg")).toBeTruthy();
+    // Add step button adds follow-up
+    const addStepBtn = [...host.querySelectorAll("button")].find((el) => el.textContent?.includes("Add step"));
+    expect(addStepBtn).toBeTruthy();
+    await act(async () => {
+      addStepBtn?.click();
+    });
+    expect(host.textContent).toContain("Follow-up 1");
 
-    const preview = host.querySelector("[aria-label='Preview']");
-    expect(preview).toBeTruthy();
-    expect(preview?.tagName).not.toBe("BUTTON");
-    expect(preview?.querySelector("button")).toBeNull();
-    expect(preview?.querySelector("svg")).toBeNull();
-    expect(preview?.textContent).toContain("Preview");
-    expect(preview?.textContent).toContain("Quick question");
-    expect(preview?.textContent).toContain("Hi {{first_name}}");
-    expect(host.textContent).toContain("Save as Draft");
     await unmount();
   });
 
-  it("keeps Save as Draft and publish on the last step", async () => {
+  it("renders information-dense preview and action buttons on Step 6", async () => {
     const { host, unmount } = await renderWizard({
       initialDraft: draft({ wizardStep: 6, templateId: "tpl-1", startMode: "later" }),
     });
+    expect(host.textContent).toContain("Ready to publish");
+    expect(host.textContent).toContain("Target Leads");
+    expect(host.textContent).toContain("Connected Senders");
+    expect(host.textContent).toContain("Audience & Senders");
+    expect(host.textContent).toContain("Sequence Steps");
     expect(host.textContent).toContain("Save as Draft");
-    expect(host.textContent).toContain("Publish");
+    expect(host.textContent).toContain("Publish Campaign");
     await unmount();
   });
 });

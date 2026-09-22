@@ -31,6 +31,8 @@ export interface SendParams {
   subject: string;
   text?: string;
   html?: string;
+  inReplyTo?: string;
+  references?: string;
 }
 
 export async function sendMail(
@@ -49,6 +51,8 @@ export async function sendMail(
       subject: params.subject,
       text: params.text || undefined,
       html: params.html || undefined,
+      inReplyTo: params.inReplyTo || undefined,
+      references: params.references || undefined,
     });
     return { messageId: String(info.messageId ?? "") };
   } finally {

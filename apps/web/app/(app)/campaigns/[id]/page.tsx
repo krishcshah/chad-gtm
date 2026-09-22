@@ -107,6 +107,67 @@ export default async function CampaignDetailPage({
               ))}
             </div>
 
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card>
+                <CardContent className="p-5">
+                  <h3 className="text-sm font-semibold text-foreground">Sending Schedule & Pace</h3>
+                  <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Daily Limit</span>
+                      <p className="mt-0.5 font-medium">{c.dailyLimit ? `${c.dailyLimit.toLocaleString()} emails/day` : "Unlimited"}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Sending Window</span>
+                      <p className="mt-0.5 font-medium">{c.sendingWindowStart || "09:00"} – {c.sendingWindowEnd || "17:00"}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Timezone</span>
+                      <p className="mt-0.5 font-medium">{c.sendingTimezone || "UTC"}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Schedule Mode</span>
+                      <p className="mt-0.5 font-medium">{c.businessDaysOnly ? "Weekdays only (Mon–Fri)" : "All 7 days"}</p>
+                    </div>
+                  </div>
+                  {c.dailyLimit && c.dailyLimit > 0 && total > sent ? (
+                    <p className="mt-3 border-t border-border/60 pt-2 text-xs text-muted-foreground">
+                      Remaining {(total - sent).toLocaleString()} leads estimated to complete in ~{Math.ceil((total - sent) / c.dailyLimit)} days.
+                    </p>
+                  ) : null}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-foreground">Connected Inboxes ({c.senders.length})</h3>
+                    <span className="text-xs text-muted-foreground">
+                      {c.senders.filter((s) => s.status === "active").length} active
+                    </span>
+                  </div>
+                  {c.senders.length === 0 ? (
+                    <p className="mt-3 text-xs text-muted-foreground">No senders attached to this campaign.</p>
+                  ) : (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {c.senders.map((s) => (
+                        <div
+                          key={s.id}
+                          className="flex items-center gap-2 rounded-lg border border-border/80 bg-muted/40 px-2.5 py-1.5 text-xs"
+                        >
+                          <span className={`inline-block h-2 w-2 rounded-full ${s.status === "active" ? "bg-emerald-500" : "bg-muted-foreground"}`} />
+                          <span className="font-medium">{s.senderName || s.email}</span>
+                          <span className="text-[11px] text-muted-foreground">{s.email}</span>
+                          <Badge variant={s.status === "active" ? "default" : "secondary"} className="text-[10px] px-1.5 py-0">
+                            {s.status}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
             <AnalyticsSectionLoader
               campaignId={c.id}
               from={sp.from}

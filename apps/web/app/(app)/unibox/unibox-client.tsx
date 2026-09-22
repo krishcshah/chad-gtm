@@ -1,6 +1,6 @@
 "use client";
 import { format, formatDistanceToNow } from "date-fns";
-import { Inbox, RefreshCw, SendHorizonal, X } from "lucide-react";
+import { ChevronRight, Inbox, RefreshCw, SendHorizonal, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
   Textarea,
+  cn,
 } from "@smartreach/ui";
 import { getUniboxThread, sendUniboxReply, setUniboxReplyTag } from "@/lib/actions";
 import { messagePreview, prepareMessageBody, resolveBubbleSide, threadDayKey, threadDayLabel } from "@/lib/message-body";
@@ -170,6 +171,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
   const [refreshing, startRefresh] = useTransition();
   const [thread, setThread] = useState<ThreadState | null>(null);
   const [threadLoading, setThreadLoading] = useState(false);
+  const [showQuotedPreview, setShowQuotedPreview] = useState(false);
   const fetchGen = useRef(0);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const unread = conversations.filter((c) => c.unread).length;
@@ -424,13 +426,91 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
                       <ThreadTranscript messages={shown} />
                     )}
                   </div>
-                  <div className="border-t border-border/60 px-5 py-3">
-                    <label htmlFor="unibox-reply" className="mb-2 block text-xs font-medium text-muted-foreground">Reply via {r.senderEmail ?? "your sender"}</label>
-                    <Textarea id="unibox-reply" rows={4} value={body} onChange={(e) => setBody(e.target.value)} placeholder={`Hi ${name.split(" ")[0]},…`} />
-                    <div className="mt-2.5 flex items-center gap-2">
-                      <Button onClick={() => send(r)} disabled={pending} size="sm">
-                        <SendHorizonal className="size-4" /> {pending ? "Sending…" : "Send reply"}
-                      </Button>
+                  <div className="border-t border-border/60 bg-muted/20 p-4">
+                    <div className="rounded-lg border border-border/80 bg-background shadow-xs">
+                      <div className="space-y-1.5 border-b border-border/50 bg-muted/30 px-3.5 py-2.5 text-xs text-muted-foreground">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="flex items-center gap-1.5 truncate">
+                            <span className="font-semibold text-foreground/80">From:</span>
+                            <span className="font-medium text-foreground">{r.senderName || "Sender"}</span>
+                            <span className="text-muted-foreground">&lt;{r.senderEmail ?? "sender"}&gt;</span>
+                          </span>
+                          <span className="hidden text-[11px] text-muted-foreground/75 sm:inline">Press ⌘+Enter to send</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="font-semibold text-foreground/80">To:</span>
+                          <span className="font-medium text-foreground">{name}</span>
+                          <span className="text-muted-foreground">&lt;{r.fromEmail}&gt;</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="font-semibold text-foreground/80">Subject:</span>
+                          <span className="truncate font-medium text-foreground">
+                            {r.subject?.startsWith("Re:") ? r.subject : `Re: ${r.subject || "(no subject)"}`}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-3">
+                        <Textarea
+                          id="unibox-reply"
+                          rows={5}
+                          value={body}
+                          onChange={(e) => setBody(e.target.value)}
+                          onKeyDown={(e) => {
+                            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                              e.preventDefault();
+                              send(r);
+                            }
+                          }}
+                          placeholder={`Write your email reply to ${name.split(" ")[0]}…`}
+                          className="min-h-[120px] resize-y border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                        />
+                      </div>
+
+                      <div className="border-t border-border/40 bg-muted/10 px-3.5 py-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowQuotedPreview(!showQuotedPreview)}
+                          className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          <ChevronRight className={cn("size-3.5 transition-transform", showQuotedPreview && "rotate-90")} />
+                          <span>{showQuotedPreview ? "Hide quoted message" : "Show quoted message"}</span>
+                        </button>
+
+                        {showQuotedPreview ? (
+                          <div className="mt-2 rounded-md border-l-2 border-primary/40 bg-muted/40 p-2.5 text-xs text-muted-foreground">
+                            <p className="font-medium text-foreground/80">
+                              On {r.receivedAt ? format(new Date(r.receivedAt), "EEE, MMM d, yyyy 'at' h:mm a") : "earlier"} {r.fromName || r.fromEmail} &lt;{r.fromEmail}&gt; wrote:
+                            </p>
+                            <p className="mt-1 line-clamp-6 whitespace-pre-wrap font-mono text-[11px] text-muted-foreground/90">
+                              {r.bodyText || r.snippet || "(No content)"}
+                            </p>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className="flex items-center justify-between border-t border-border/50 bg-muted/20 px-3.5 py-2">
+                        <div className="flex items-center gap-2">
+                          <Button onClick={() => send(r)} disabled={pending || !body.trim()} size="sm">
+                            <SendHorizonal className="size-4" />
+                            {pending ? "Sending email…" : "Send email"}
+                          </Button>
+                          {body.trim() ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setBody("")}
+                              className="text-xs text-muted-foreground hover:text-destructive"
+                            >
+                              Discard
+                            </Button>
+                          ) : null}
+                        </div>
+                        <span className="text-[11px] text-muted-foreground">
+                          Thread headers preserved
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </>

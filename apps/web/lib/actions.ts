@@ -812,6 +812,8 @@ export async function sendUniboxReply(input: {
       subject: outbound.subject,
       text: outbound.text,
       html: outbound.html,
+      inReplyTo: reply.messageId || undefined,
+      references: reply.messageId || undefined,
     });
 
     const sentAt = nowIso();

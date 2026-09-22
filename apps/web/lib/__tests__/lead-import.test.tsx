@@ -30,6 +30,7 @@ vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
 
+import { importLeads } from "../actions";
 import { EMAIL_MAPPING_REQUIRED_MESSAGE, LeadImport } from "../../app/(app)/leads/import/lead-import";
 
 function buttonByText(host: HTMLElement, text: string) {
@@ -152,6 +153,47 @@ describe("LeadImport column mapping", () => {
     const scroll = host.querySelector("[data-testid='column-mapping-scroll']")!;
     expect(scroll.contains(confirm)).toBe(false);
     expect(scroll.innerHTML).toContain("min-w-[40rem]");
+
+    await unmount(root, host);
+  });
+
+  it("chunks large uploads into batches of 1000 rows and aggregates results", async () => {
+    const mockImport = vi.mocked(importLeads);
+    mockImport.mockReset();
+    mockImport
+      .mockResolvedValueOnce({
+        ok: true,
+        data: { imported: 1000, skipped: 0, invalid: 0, listId: "list-1" },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: { imported: 450, skipped: 50, invalid: 0, listId: "list-1" },
+      });
+
+    const rows = Array.from({ length: 1500 }, (_, i) => `lead${i}@example.com,Company${i}`);
+    const csvContent = ["Email,Company", ...rows].join("\n");
+
+    const { host, root } = await renderImport();
+    await upload(host, csvContent, "large.csv");
+    await openMapping(host);
+
+    const confirm = buttonByText(host, "Confirm") as HTMLButtonElement;
+    expect(confirm.disabled).toBe(false);
+
+    await act(async () => {
+      confirm.click();
+    });
+
+    expect(mockImport).toHaveBeenCalledTimes(2);
+    expect(mockImport.mock.calls[0]![0]).toMatchObject({
+      listId: "list-1",
+      rows: expect.any(Array),
+    });
+    expect((mockImport.mock.calls[0]![0] as any).rows.length).toBe(1000);
+    expect((mockImport.mock.calls[1]![0] as any).rows.length).toBe(500);
+
+    expect(host.textContent).toContain("1,450 imported");
+    expect(host.textContent).toContain("50 duplicates skipped");
 
     await unmount(root, host);
   });

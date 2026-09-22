@@ -301,11 +301,12 @@ export async function getCampaign(userId: string, id: string) {
     .where(and(eq(campaigns.id, id), eq(campaigns.userId, userId), isNull(campaigns.deletedAt)))
     .limit(1);
   if (!c) return null;
-  // Parallel: these two reads are independent of one another.
-  const [[stats], senders] = await Promise.all([
+  // Parallel: reads are independent of one another.
+  const [[stats], senders, [leadListRow]] = await Promise.all([
     db
       .select({
         total: count(campaignLeads.id),
+        pending: count(sql`case when ${campaignLeads.status} = 'pending' then 1 end`),
         sent: count(sql`case when ${campaignLeads.status} in ('sent','replied') then 1 end`),
         replied: count(sql`case when ${campaignLeads.status} = 'replied' then 1 end`),
         failed: count(sql`case when ${campaignLeads.status} = 'failed' then 1 end`),
@@ -327,12 +328,20 @@ export async function getCampaign(userId: string, id: string) {
       .from(campaignSenders)
       .innerJoin(senderAccounts, eq(senderAccounts.id, campaignSenders.senderId))
       .where(eq(campaignSenders.campaignId, id)),
+    c.leadListId
+      ? db
+          .select({ name: leadLists.name })
+          .from(leadLists)
+          .where(and(eq(leadLists.id, c.leadListId), eq(leadLists.userId, userId)))
+          .limit(1)
+      : Promise.resolve([]),
   ]);
   return {
     ...c,
+    leadListName: leadListRow?.name ?? null,
     stats: stats
-      ? { ...stats, bounced: Number(stats.bounced ?? 0) }
-      : { total: 0, sent: 0, replied: 0, failed: 0, bounced: 0 },
+      ? { ...stats, pending: Number(stats.pending ?? 0), bounced: Number(stats.bounced ?? 0) }
+      : { total: 0, pending: 0, sent: 0, replied: 0, failed: 0, bounced: 0 },
     senders,
   };
 }

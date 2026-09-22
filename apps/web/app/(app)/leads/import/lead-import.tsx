@@ -8,6 +8,7 @@ import { STANDARD_LEAD_FIELDS } from "@smartreach/shared";
 import {
   Button,
   Input,
+  Progress,
   Select,
   SelectContent,
   SelectItem,
@@ -54,12 +55,17 @@ export function LeadImport({
   });
   const [newListName, setNewListName] = useState("");
   const [result, setResult] = useState<{ imported: number; skipped: number; invalid: number } | null>(null);
+  const [importProgress, setImportProgress] = useState<{
+    processed: number;
+    total: number;
+    percent: number;
+  } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const emailMapped = useMemo(() => Object.values(mapping).includes("email"), [mapping]);
 
   const reset = () => {
-    setCsv(null); setFileName(""); setMapping({}); setCustomKeys({}); setResult(null); setStep(1);
+    setCsv(null); setFileName(""); setMapping({}); setCustomKeys({}); setResult(null); setImportProgress(null); setStep(1);
     if (lists[0]) setTargetList(lists[0].id);
   };
 
@@ -75,6 +81,7 @@ export function LeadImport({
     setMapping(autoMapHeaders(parsed.headers, LEAD_FIELDS));
     setNewListName(file.name.replace(/\.csv$/i, ""));
     setResult(null);
+    setImportProgress(null);
     setStep(1);
   }, []);
 
@@ -101,32 +108,80 @@ export function LeadImport({
     return out;
   }, [csv, mapping, customKeys]);
 
+  const IMPORT_CHUNK_SIZE = 1000;
+
   const doImport = () =>
     start(async () => {
-      if (!csv) return;
-      const res = await importLeads({
-        listId: targetList,
-        listName: targetList === "__new__" ? newListName : undefined,
-        mapping: finalMapping,
-        rows: csv.rows,
-      });
-      if (!res.ok) {
-        toast.error(res.error);
-        return;
-      }
-      if (res.data && onImported) {
-        const listName =
-          targetList === "__new__"
-            ? newListName.trim()
-            : (lists.find((l) => l.id === res.data!.listId)?.name ??
-              lists.find((l) => l.id === targetList)?.name ??
-              "Lead list");
-        onImported({ listId: res.data.listId, listName, imported: res.data.imported });
-        return;
-      }
-      if (res.data) {
-        setResult(res.data);
-        toast.success("Import complete");
+      if (!csv || csv.rows.length === 0) return;
+      const total = csv.rows.length;
+      let currentListId = targetList;
+      let totalImported = 0;
+      let totalSkipped = 0;
+      let totalInvalid = 0;
+      const resolvedListName =
+        targetList === "__new__"
+          ? newListName.trim()
+          : (lists.find((l) => l.id === targetList)?.name ?? "Lead list");
+
+      setImportProgress({ processed: 0, total, percent: 0 });
+
+      try {
+        for (let i = 0; i < total; i += IMPORT_CHUNK_SIZE) {
+          const chunk = csv.rows.slice(i, i + IMPORT_CHUNK_SIZE);
+          const isFirstChunk = i === 0;
+
+          const res = await importLeads({
+            listId: currentListId,
+            listName: isFirstChunk && currentListId === "__new__" ? newListName.trim() : undefined,
+            mapping: finalMapping,
+            rows: chunk,
+          });
+
+          if (!res.ok) {
+            toast.error(res.error || "Failed to import leads chunk");
+            setImportProgress(null);
+            return;
+          }
+          if (!res.data) {
+            toast.error("Failed to import leads chunk");
+            setImportProgress(null);
+            return;
+          }
+
+          if (isFirstChunk && currentListId === "__new__") {
+            currentListId = res.data.listId;
+          }
+
+          totalImported += res.data.imported;
+          totalSkipped += res.data.skipped;
+          totalInvalid += res.data.invalid;
+
+          const processed = Math.min(i + chunk.length, total);
+          setImportProgress({
+            processed,
+            total,
+            percent: Math.round((processed / total) * 100),
+          });
+        }
+
+        const finalResult = {
+          imported: totalImported,
+          skipped: totalSkipped,
+          invalid: totalInvalid,
+        };
+
+        if (onImported) {
+          onImported({ listId: currentListId, listName: resolvedListName, imported: totalImported });
+          return;
+        }
+
+        setResult(finalResult);
+        toast.success(`Import complete: ${totalImported.toLocaleString()} leads imported`);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Failed to import leads. Please try again.";
+        toast.error(message);
+      } finally {
+        setImportProgress(null);
       }
     });
 
@@ -307,9 +362,24 @@ export function LeadImport({
 
           {result && (
             <div className="flex flex-wrap gap-4 rounded-xl border bg-muted/30 p-4 text-sm">
-              <span className="text-success-foreground font-medium">{result.imported} imported</span>
-              <span className="text-amber-500">{result.skipped} duplicates skipped</span>
-              <span className="text-destructive">{result.invalid} invalid emails</span>
+              <span className="text-success-foreground font-medium">{result.imported.toLocaleString()} imported</span>
+              <span className="text-amber-500">{result.skipped.toLocaleString()} duplicates skipped</span>
+              <span className="text-destructive">{result.invalid.toLocaleString()} invalid emails</span>
+            </div>
+          )}
+
+          {importProgress && (
+            <div className="space-y-2 rounded-xl border bg-muted/40 p-4">
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2 font-medium">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  Importing leads...
+                </span>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {importProgress.processed.toLocaleString()} / {importProgress.total.toLocaleString()} ({importProgress.percent}%)
+                </span>
+              </div>
+              <Progress value={importProgress.percent} className="h-2" />
             </div>
           )}
 

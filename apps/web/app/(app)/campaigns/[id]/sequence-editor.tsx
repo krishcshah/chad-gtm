@@ -435,6 +435,7 @@ export function SequenceEditor({
   const [linkError, setLinkError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [previewPending, startPreview] = useTransition();
+  const [bodyMode, setBodyMode] = useState<"formatted" | "plain">("formatted");
 
   const subjectRef = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
@@ -665,31 +666,114 @@ export function SequenceEditor({
                 const current = index === selected;
                 const subject = item.variants[0]?.subject?.trim() || "No subject";
                 return (
-                  <li key={item.key} className="min-w-[11rem] shrink-0 lg:min-w-0">
-                    <button
-                      type="button"
+                  <li key={item.key} className="min-w-[13rem] shrink-0 lg:min-w-0">
+                    <div
+                      role="button"
+                      tabIndex={0}
                       aria-current={current ? "step" : undefined}
                       onClick={() => setSelected(index)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelected(index);
+                        }
+                      }}
                       className={cn(
-                        "flex w-full flex-col gap-1 rounded-lg border px-3 py-2.5 text-left text-sm",
+                        "flex w-full cursor-pointer flex-col gap-1.5 rounded-lg border p-3 text-left text-sm transition-colors",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         current
-                          ? "border-primary/40 bg-accent text-accent-foreground"
+                          ? "border-primary/40 bg-accent text-accent-foreground shadow-xs"
                           : "border-border bg-card hover:bg-accent/40",
                       )}
                     >
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="font-medium">Step {index + 1}</span>
-                        <Badge variant={item.type === "initial" ? "default" : "secondary"}>
-                          {item.type === "initial" ? "Initial" : "Follow-up"}
-                        </Badge>
-                      </span>
-                      <span className="text-xs text-muted-foreground">{waitLabel(item.delayDays, index)}</span>
-                      <span className="truncate text-xs">{subject}</span>
-                      {item.variants.length === 2 ? (
-                        <span className="text-xs text-muted-foreground">A/B · equal split</span>
-                      ) : null}
-                    </button>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">
+                          {index === 0 ? "Initial" : `Follow-up ${index}`}
+                        </span>
+                        <span className="text-[11px] font-medium text-muted-foreground">
+                          Step {index + 1}
+                        </span>
+                      </div>
+
+                      {index === 0 ? (
+                        <span className="text-xs text-muted-foreground">Sends immediately</span>
+                      ) : (
+                        <div
+                          className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <span>Wait</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={365}
+                            aria-label={`Step ${index + 1} wait days`}
+                            value={item.delayDays}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value, 10);
+                              patchStep(index, {
+                                delayDays: clampDelayDays(Number.isNaN(val) ? 0 : val),
+                              });
+                            }}
+                            className="w-12 rounded border border-border bg-background px-1.5 py-0.5 text-center font-mono text-xs text-foreground focus:ring-1 focus:ring-primary"
+                          />
+                          <span>days</span>
+                        </div>
+                      )}
+
+                      <span className="truncate text-xs font-medium text-foreground/90">{subject}</span>
+
+                      <div
+                        className="mt-1 flex items-center justify-between gap-1 border-t border-border/40 pt-1.5"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-center gap-1">
+                          {item.variants.map((v, vi) => (
+                            <button
+                              key={v.key}
+                              type="button"
+                              onClick={() => {
+                                setSelected(index);
+                                setVariantIndex(vi);
+                              }}
+                              className={cn(
+                                "h-5 rounded px-2 text-[10px] font-medium transition-colors",
+                                current && vi === activeVariantIndex
+                                  ? "bg-primary text-primary-foreground font-semibold"
+                                  : "bg-muted text-muted-foreground hover:bg-muted/80",
+                              )}
+                            >
+                              {v.label}
+                            </button>
+                          ))}
+                        </div>
+                        {item.variants.length < 2 ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelected(index);
+                              patchStep(index, addVariant(item));
+                              setVariantIndex(1);
+                            }}
+                            className="flex items-center gap-0.5 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                          >
+                            <Plus className="h-3 w-3" /> A/B
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelected(index);
+                              patchStep(index, removeVariant(item, 1));
+                              setVariantIndex(0);
+                            }}
+                            className="text-[10px] font-medium text-destructive hover:underline"
+                          >
+                            Remove B
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </li>
                 );
               })}
@@ -755,116 +839,39 @@ export function SequenceEditor({
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor={delayId}>Wait (calendar days)</Label>
-                  <Input
-                    id={delayId}
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    max={365}
-                    step={1}
-                    value={step.delayDays}
-                    onChange={(e) => {
-                      const value = e.target.valueAsNumber;
-                      patchStep(selected, {
-                        delayDays: clampDelayDays(Number.isNaN(value) ? 0 : value),
-                      });
-                    }}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor={typeId}>Step type</Label>
-                  <Select
-                    value={step.type}
-                    onValueChange={(value) => patchStep(selected, { type: value as StepType })}
-                  >
-                    <SelectTrigger id={typeId} aria-label="Step type">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="initial">Initial email</SelectItem>
-                      <SelectItem value="follow_up">Follow-up</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div role="tablist" aria-label="Variants" className="flex flex-wrap gap-1">
-                    {step.variants.map((item, index) => (
-                      <button
-                        key={item.key}
-                        type="button"
-                        role="tab"
-                        aria-selected={index === activeVariantIndex}
-                        className={cn(
-                          "rounded-md px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                          index === activeVariantIndex
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground hover:text-foreground",
-                        )}
-                        onClick={() => setVariantIndex(index)}
-                      >
-                        Variant {item.label}
-                        {item.pausedAt ? " · Paused" : ""}
-                      </button>
-                    ))}
-                  </div>
-                  {step.variants.length < 2 ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        patchStep(selected, addVariant(step));
-                        setVariantIndex(1);
-                      }}
-                    >
-                      <Plus /> Add variant B
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        const next = removeVariant(step, activeVariantIndex);
-                        patchStep(selected, next);
-                        setVariantIndex(0);
-                      }}
-                    >
-                      Remove variant {variant.label}
-                    </Button>
+              <div className="flex items-center justify-between gap-3 border-b border-border/60 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-sm">
+                    {selected === 0 ? "Initial Email" : `Follow-up ${selected}`}
+                  </span>
+                  {step.variants.length > 1 && (
+                    <Badge variant="outline" className="text-xs">
+                      Variant {variant.label}
+                    </Badge>
+                  )}
+                  {variant.pausedAt && (
+                    <Badge variant="secondary" className="text-xs text-amber-500">
+                      Paused
+                    </Badge>
                   )}
                 </div>
-                {step.variants.length === 2 ? (
-                  <p className="text-sm text-muted-foreground">Equal split. Each active variant sends about half the time.</p>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    One variant sends every time. Add variant B to test a second version at 50/50.
-                  </p>
+                {step.variants.length > 1 && (
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id={pauseId}
+                      checked={Boolean(variant.pausedAt)}
+                      aria-label={`Pause variant ${variant.label}`}
+                      onCheckedChange={(checked) =>
+                        patchVariant(activeVariantIndex, {
+                          pausedAt: checked ? new Date().toISOString() : null,
+                        })
+                      }
+                    />
+                    <Label htmlFor={pauseId} className="text-xs text-muted-foreground">
+                      Pause variant {variant.label}
+                    </Label>
+                  </div>
                 )}
-                <div className="flex items-center gap-3">
-                  <Switch
-                    id={pauseId}
-                    checked={Boolean(variant.pausedAt)}
-                    aria-label={`Pause variant ${variant.label}`}
-                    onCheckedChange={(checked) =>
-                      patchVariant(activeVariantIndex, {
-                        pausedAt: checked ? new Date().toISOString() : null,
-                      })
-                    }
-                  />
-                  <Label htmlFor={pauseId} className="text-sm font-normal">
-                    Pause variant {variant.label}
-                  </Label>
-                </div>
-                {step.variants.every((item) => item.pausedAt) ? (
-                  <Alert variant="warning">Both variants are paused, so this step will not send until one is resumed.</Alert>
-                ) : null}
               </div>
 
               <div className="space-y-2">
@@ -891,137 +898,175 @@ export function SequenceEditor({
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p id={bodyLabelId} className="text-sm font-medium">
-                    Formatted body
+                    {bodyMode === "formatted" ? "Formatted body" : "Plain-text version"}
                   </p>
-                  <div role="toolbar" aria-label="Body formatting" className="flex flex-wrap gap-1">
+                  {bodyMode === "formatted" ? (
+                    <div role="toolbar" aria-label="Body formatting" className="flex flex-wrap gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Bold"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => visualRef.current?.command("bold")}
+                      >
+                        <Bold />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Italic"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => visualRef.current?.command("italic")}
+                      >
+                        <Italic />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Bulleted list"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => visualRef.current?.command("insertUnorderedList")}
+                      >
+                        <List />
+                      </Button>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="Insert link"
+                            onMouseDown={(e) => e.preventDefault()}
+                          >
+                            <Link2 />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="end" className="w-72">
+                          <Label htmlFor={`${bodyLabelId}-link`}>Link URL</Label>
+                          <Input
+                            id={`${bodyLabelId}-link`}
+                            className="mt-2"
+                            value={linkUrl}
+                            onChange={(e) => setLinkUrl(e.target.value)}
+                            placeholder="https://"
+                          />
+                          {linkError ? (
+                            <p role="alert" className="mt-2 text-xs text-destructive">
+                              {linkError}
+                            </p>
+                          ) : null}
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="mt-3"
+                            onClick={() => {
+                              const url = safeUrl(linkUrl);
+                              if (!url) {
+                                setLinkError("Enter an http, https, or mailto link.");
+                                return;
+                              }
+                              setLinkError(null);
+                              visualRef.current?.link(url);
+                            }}
+                          >
+                            Add link
+                          </Button>
+                        </PopoverContent>
+                      </Popover>
+                      <SpinButton onInsert={(token) => visualRef.current?.insertText(token)} />
+                    </div>
+                  ) : (
                     <Button
                       type="button"
                       variant="ghost"
-                      size="icon-sm"
-                      aria-label="Bold"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => visualRef.current?.command("bold")}
+                      size="sm"
+                      className="text-xs"
+                      onClick={() =>
+                        patchVariant(activeVariantIndex, {
+                          bodyText: plainFromHtml(variant.bodyHtml),
+                          plainEdited: false,
+                        })
+                      }
                     >
-                      <Bold />
+                      Match formatted body
                     </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="Italic"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => visualRef.current?.command("italic")}
-                    >
-                      <Italic />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="Bulleted list"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => visualRef.current?.command("insertUnorderedList")}
-                    >
-                      <List />
-                    </Button>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label="Insert link"
-                          onMouseDown={(e) => e.preventDefault()}
-                        >
-                          <Link2 />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent align="end" className="w-72">
-                        <Label htmlFor={`${bodyLabelId}-link`}>Link URL</Label>
-                        <Input
-                          id={`${bodyLabelId}-link`}
-                          className="mt-2"
-                          value={linkUrl}
-                          onChange={(e) => setLinkUrl(e.target.value)}
-                          placeholder="https://"
-                        />
-                        {linkError ? (
-                          <p role="alert" className="mt-2 text-xs text-destructive">
-                            {linkError}
-                          </p>
-                        ) : null}
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="mt-3"
-                          onClick={() => {
-                            const url = safeUrl(linkUrl);
-                            if (!url) {
-                              setLinkError("Enter an http, https, or mailto link.");
-                              return;
-                            }
-                            setLinkError(null);
-                            visualRef.current?.link(url);
-                          }}
-                        >
-                          Add link
-                        </Button>
-                      </PopoverContent>
-                    </Popover>
-                    <SpinButton onInsert={(token) => visualRef.current?.insertText(token)} />
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-border bg-background shadow-xs focus-within:ring-2 focus-within:ring-ring">
+                  {bodyMode === "formatted" ? (
+                    <div className="p-1">
+                      <VisualBody
+                        key={`${step.key}:${variant.key}`}
+                        mountKey={`${step.key}:${variant.key}`}
+                        initialHtml={variant.bodyHtml}
+                        labelledBy={bodyLabelId}
+                        handleRef={visualRef}
+                        onChangeRef={visualChangeRef}
+                      />
+                    </div>
+                  ) : (
+                    <Textarea
+                      ref={textRef}
+                      id={plainId}
+                      rows={8}
+                      value={variant.bodyText}
+                      className="w-full border-0 bg-transparent p-4 font-mono text-sm shadow-none focus-visible:ring-0"
+                      placeholder={"Hi {{first_name}},\n\nI noticed {{company}}."}
+                      onChange={(e) =>
+                        patchVariant(activeVariantIndex, { bodyText: e.target.value, plainEdited: true })
+                      }
+                      onSelect={(e) => {
+                        const el = e.currentTarget;
+                        textCaret.current = { start: el.selectionStart ?? 0, end: el.selectionEnd ?? 0 };
+                      }}
+                    />
+                  )}
+
+                  {/* Single compose footer with VarChips and bottom-right Formatted / Plain text toggle */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 bg-muted/20 px-3 py-2">
+                    <VarChips idPrefix={`${bodyLabelId}-vars`} onInsert={insertBody} />
+                    <div className="flex items-center rounded-md border border-border bg-background p-0.5 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setBodyMode("formatted")}
+                        className={cn(
+                          "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                          bodyMode === "formatted"
+                            ? "bg-primary text-primary-foreground shadow-xs"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        Formatted
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!variant.plainEdited && variant.bodyHtml.trim()) {
+                            patchVariant(activeVariantIndex, {
+                              bodyText: plainFromHtml(variant.bodyHtml),
+                            });
+                          }
+                          setBodyMode("plain");
+                        }}
+                        className={cn(
+                          "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                          bodyMode === "plain"
+                            ? "bg-primary text-primary-foreground shadow-xs"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        Plain text
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <VisualBody
-                  key={`${step.key}:${variant.key}`}
-                  mountKey={`${step.key}:${variant.key}`}
-                  initialHtml={variant.bodyHtml}
-                  labelledBy={bodyLabelId}
-                  handleRef={visualRef}
-                  onChangeRef={visualChangeRef}
-                />
-                <VarChips idPrefix={`${bodyLabelId}-vars`} onInsert={insertBody} />
+
                 <p className="text-xs text-muted-foreground">
                   Type {"{Hi|Hello}"} in the body to rotate a phrase. Variables use {"{{company}}"}.
-                  {!variant.bodyHtml.trim() && variant.bodyText.trim()
-                    ? " The formatted body is still empty, so this step sends as plain text until you edit it here."
-                    : ""}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <Label htmlFor={plainId}>Plain-text version</Label>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      patchVariant(activeVariantIndex, {
-                        bodyText: plainFromHtml(variant.bodyHtml),
-                        plainEdited: false,
-                      })
-                    }
-                  >
-                    Match formatted body
-                  </Button>
-                </div>
-                <Textarea
-                  ref={textRef}
-                  id={plainId}
-                  rows={6}
-                  value={variant.bodyText}
-                  className="font-mono text-sm"
-                  placeholder={"Hi {{first_name}},\n\nI noticed {{company}}."}
-                  onChange={(e) =>
-                    patchVariant(activeVariantIndex, { bodyText: e.target.value, plainEdited: true })
-                  }
-                  onSelect={(e) => {
-                    const el = e.currentTarget;
-                    textCaret.current = { start: el.selectionStart ?? 0, end: el.selectionEnd ?? 0 };
-                  }}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Sent with the formatted body. Edit it when the plain version should read differently.
                 </p>
               </div>
 

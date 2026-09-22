@@ -143,7 +143,7 @@ export async function getAnalyticsSummaryForUser(
         ),
       ),
     db
-      .select({ n: count() })
+      .select({ n: sql<number>`count(distinct coalesce(${replies.leadId}, ${replies.fromEmail}))` })
       .from(replies)
       .where(
         and(
@@ -231,7 +231,7 @@ export async function getAnalyticsSeriesForUser(
     db
       .select({
         date: dayExpr(replies.receivedAt),
-        n: count(),
+        n: sql<number>`count(distinct coalesce(${replies.leadId}, ${replies.fromEmail}))`,
       })
       .from(replies)
       .where(

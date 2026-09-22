@@ -19,12 +19,12 @@ export interface UniboxOutboundMime {
   text: string;
   /** text/html: new text, then a Gmail-style quote block. */
   html: string;
-  /** Persisted / in-app operator body. New text only. */
+  /** Persisted / in-app operator body. Includes quote so UI displays thread via EmailBody. */
   storedBodyText: string;
   storedBodyHtml: string;
 }
 
-/** SMTP fields for sendMail. Threading headers are intentionally absent. */
+/** SMTP fields for sendMail. */
 export interface UniboxReplyMail {
   to: string;
   subject: string;
@@ -38,17 +38,17 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
 
 export function composeUniboxOutbound(newText: string, prior: PriorOutboundMessage): UniboxOutboundMime {
-  const storedBodyText = newText.replace(/\r\n/g, "\n").trim();
+  const freshText = newText.replace(/\r\n/g, "\n").trim();
   const attribution = formatReplyAttribution(prior);
   const plainPrior = priorPlain(prior);
   const quote = plainPrior ? `${attribution}\n${quotePlainText(plainPrior)}` : "";
-  const text = quote ? `${storedBodyText}\n\n${quote}\n` : storedBodyText;
-  const html = buildHtml(storedBodyText, attribution, prior, plainPrior);
+  const text = quote ? `${freshText}\n\n${quote}\n` : freshText;
+  const html = buildHtml(freshText, attribution, prior, plainPrior);
   return {
     text,
     html,
-    storedBodyText,
-    storedBodyHtml: "",
+    storedBodyText: text,
+    storedBodyHtml: html,
   };
 }
 

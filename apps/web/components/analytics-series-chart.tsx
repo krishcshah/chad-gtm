@@ -18,9 +18,32 @@ const SERIES = [
   { key: "bounces", label: "Bounces", color: "var(--warning)", dash: "9 3 2 3" },
 ] as const;
 
+function buildSmoothPath(pts: { x: number; y: number }[]): string {
+  if (pts.length === 0) return "";
+  if (pts.length === 1) return `M ${pts[0]!.x} ${pts[0]!.y}`;
+  if (pts.length === 2) return `M ${pts[0]!.x} ${pts[0]!.y} L ${pts[1]!.x} ${pts[1]!.y}`;
+
+  let d = `M ${pts[0]!.x.toFixed(1)} ${pts[0]!.y.toFixed(1)}`;
+  const tension = 0.16;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)]!;
+    const p1 = pts[i]!;
+    const p2 = pts[i + 1]!;
+    const p3 = pts[Math.min(pts.length - 1, i + 2)]!;
+
+    const cp1x = p1.x + (p2.x - p0.x) * tension;
+    const cp1y = p1.y + (p2.y - p0.y) * tension;
+    const cp2x = p2.x - (p3.x - p1.x) * tension;
+    const cp2y = p2.y - (p3.y - p1.y) * tension;
+
+    d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  }
+  return d;
+}
+
 /**
- * One daily series chart drawn in pixel space so dashes stay even at 375px and 1440px.
- * No chart library is in the repo; this SVG is the lightest fit and uses design tokens.
+ * Daily series chart with smooth Bézier interpolation, responsive layout,
+ * and an interactive date-hover crosshair with bold dots and metric tooltips.
  */
 export function AnalyticsSeriesChart({
   points,
@@ -34,6 +57,7 @@ export function AnalyticsSeriesChart({
   const plotRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [height, setHeight] = useState(0);
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
   useEffect(() => {
     const plot = plotRef.current;
@@ -54,7 +78,7 @@ export function AnalyticsSeriesChart({
   const count = points.length;
   const labels = xLabelIndexes(count);
   const caption = `Daily sent, contacted, replies, and bounces from ${formatRangeDate(from)} to ${formatRangeDate(to)}.`;
-  const padY = 12;
+  const padY = 14;
 
   function xAt(index: number) {
     if (count <= 1) return width / 2;
@@ -66,6 +90,8 @@ export function AnalyticsSeriesChart({
     const t = max <= 0 ? 0 : Math.min(1, Math.max(0, value / max));
     return padY + (1 - t) * span;
   }
+
+  const hoveredPoint = hoverIndex !== null ? points[hoverIndex] : null;
 
   return (
     <figure aria-label={caption} className="min-w-0">
@@ -84,7 +110,19 @@ export function AnalyticsSeriesChart({
               ))
             : null}
         </div>
-        <div ref={plotRef} className="h-52 min-w-0 flex-1 sm:h-64">
+        <div
+          ref={plotRef}
+          className="relative h-52 min-w-0 flex-1 cursor-crosshair sm:h-64"
+          onPointerMove={(e) => {
+            if (count === 0) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const frac = Math.max(0, Math.min(1, mouseX / rect.width));
+            const idx = Math.min(Math.max(0, Math.round(frac * (count - 1))), count - 1);
+            setHoverIndex(idx);
+          }}
+          onPointerLeave={() => setHoverIndex(null)}
+        >
           {width > 0 && height > 0 ? (
             <svg
               width={width}
@@ -92,7 +130,7 @@ export function AnalyticsSeriesChart({
               viewBox={`0 0 ${width} ${height}`}
               role="presentation"
               aria-hidden="true"
-              className="block"
+              className="block overflow-visible"
             >
               {ticks.map((tick) => (
                 <line
@@ -105,18 +143,24 @@ export function AnalyticsSeriesChart({
                   strokeWidth="1"
                 />
               ))}
-              {SERIES.map((series) => (
-                <polyline
-                  key={series.key}
-                  fill="none"
-                  stroke={series.color}
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeDasharray={series.dash}
-                  points={points.map((point, index) => `${xAt(index)},${yAt(point[series.key])}`).join(" ")}
-                />
-              ))}
+              {SERIES.map((series) => {
+                const pts = points.map((point, index) => ({
+                  x: xAt(index),
+                  y: yAt(point[series.key]),
+                }));
+                return (
+                  <path
+                    key={series.key}
+                    fill="none"
+                    stroke={series.color}
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeDasharray={series.dash}
+                    d={buildSmoothPath(pts)}
+                  />
+                );
+              })}
               {count === 1
                 ? SERIES.map((series) => (
                     <circle
@@ -128,8 +172,83 @@ export function AnalyticsSeriesChart({
                     />
                   ))
                 : null}
+
+              {/* Hover vertical crosshair line and bold circular dots */}
+              {hoverIndex !== null && hoveredPoint && (
+                <g className="transition-opacity duration-150">
+                  <line
+                    x1={xAt(hoverIndex)}
+                    x2={xAt(hoverIndex)}
+                    y1={padY - 4}
+                    y2={height - padY + 4}
+                    stroke="var(--foreground)"
+                    strokeOpacity="0.2"
+                    strokeDasharray="3 3"
+                    strokeWidth="1.5"
+                  />
+                  {SERIES.map((series) => {
+                    const cx = xAt(hoverIndex);
+                    const cy = yAt(hoveredPoint[series.key]);
+                    return (
+                      <g key={series.key}>
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r="7"
+                          fill={series.color}
+                          fillOpacity="0.2"
+                        />
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r="4.5"
+                          fill={series.color}
+                          stroke="var(--card)"
+                          strokeWidth="2"
+                        />
+                      </g>
+                    );
+                  })}
+                </g>
+              )}
             </svg>
           ) : null}
+
+          {/* Interactive Tooltip Card */}
+          {hoverIndex !== null && hoveredPoint && width > 0 && (
+            <div
+              className="pointer-events-none absolute top-2 z-20 min-w-[10rem] -translate-x-1/2 rounded-lg border border-border bg-popover/95 p-2.5 text-popover-foreground shadow-lg backdrop-blur transition-all duration-75"
+              style={{
+                left: `${Math.max(16, Math.min(width - 16, xAt(hoverIndex)))}px`,
+                transform:
+                  hoverIndex > count * 0.65
+                    ? "translateX(-95%)"
+                    : hoverIndex < count * 0.35
+                      ? "translateX(-5%)"
+                      : "translateX(-50%)",
+              }}
+            >
+              <p className="border-b border-border/60 pb-1 text-xs font-semibold">
+                {formatChartDate(hoveredPoint.date)}
+              </p>
+              <div className="mt-1.5 space-y-1 text-xs">
+                {SERIES.map((series) => (
+                  <div key={series.key} className="flex items-center justify-between gap-3">
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <span
+                        className="inline-block h-2 w-2 rounded-full"
+                        style={{ backgroundColor: series.color }}
+                      />
+                      {series.label}
+                    </span>
+                    <span className="font-semibold tabular-nums">
+                      {hoveredPoint[series.key].toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
       <div className="relative ml-14 mt-1 h-5" aria-hidden="true">
