@@ -6,7 +6,6 @@ import { ChevronDown, Download, Plus, Search, Tag, Trash2, UserPlus, X } from "l
 import { toast } from "sonner";
 import { LEAD_STATUSES } from "@smartreach/shared";
 import {
-  Badge, statusVariant,
   Button,
   Checkbox,
   EmptyState,
@@ -27,7 +26,7 @@ import {
   TableRow,
   cn,
 } from "@smartreach/ui";
-import { bulkTagLeads, createLeadTag, fetchLeadsPage } from "@/lib/actions";
+import { bulkTagLeads, createLeadTag, fetchLeadsPage, updateLeadStatus } from "@/lib/actions";
 import { asCustomFields, isNextRedirect, isPermissionError } from "@/lib/lead-form";
 import { LeadFormDialog, type LeadFormLead } from "./lead-form-dialog";
 import { DeleteLeadsDialog, RenameListDialog } from "./lead-manage-dialogs";
@@ -159,6 +158,29 @@ export function LeadTable({
     });
     setEditor(null);
     router.refresh();
+  };
+
+  const changeStatus = (leadId: string, next: string) => {
+    start(async () => {
+      const res = await updateLeadStatus({ leadId, status: next });
+      if (!res.ok || !res.data) {
+        toast.error(res.ok ? "Could not update status" : res.error);
+        return;
+      }
+      const saved = res.data.status;
+      setRows((prev) => {
+        const updated = prev.map((row) => (row.id === leadId ? { ...row, status: saved } : row));
+        if (status && saved !== status) return updated.filter((row) => row.id !== leadId);
+        return updated;
+      });
+      setSelected((prev) => {
+        if (!status || saved === status || !prev.has(leadId)) return prev;
+        const nextSelected = new Set(prev);
+        nextSelected.delete(leadId);
+        return nextSelected;
+      });
+      toast.success(res.message ?? "Status updated");
+    });
   };
 
   const toggleAll = (checked: boolean) =>
@@ -359,7 +381,14 @@ export function LeadTable({
                   <TableCell className="font-medium">{r.email}</TableCell>
                   <TableCell>{[r.firstName, r.lastName].filter(Boolean).join(" ") || "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{r.company ?? "—"}</TableCell>
-                  <TableCell><StatusBadge status={r.status} /></TableCell>
+                  <TableCell>
+                    <LeadStatusSelect
+                      status={r.status}
+                      email={r.email}
+                      disabled={pending}
+                      onChange={(next) => changeStatus(r.id, next)}
+                    />
+                  </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {(r.tags ?? []).map((tId) => {
@@ -458,8 +487,31 @@ export function LeadTable({
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  return <Badge variant={statusVariant(status)}>{status}</Badge>;
+function LeadStatusSelect({
+  status,
+  email,
+  disabled,
+  onChange,
+}: {
+  status: string;
+  email: string;
+  disabled: boolean;
+  onChange: (status: string) => void;
+}) {
+  const known = (LEAD_STATUSES as readonly string[]).includes(status);
+  return (
+    <Select value={status} onValueChange={onChange} disabled={disabled}>
+      <SelectTrigger className="h-8 w-[9.5rem]" aria-label={`Status for ${email}`}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {!known && status ? <SelectItem value={status}>{status}</SelectItem> : null}
+        {LEAD_STATUSES.map((s) => (
+          <SelectItem key={s} value={s}>{s}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 }
 
 function TagDropdown({ tags, onTag, onNew }: { tags: TagOpt[]; onTag: (id: string, m: "add" | "remove") => void; onNew: () => void }) {

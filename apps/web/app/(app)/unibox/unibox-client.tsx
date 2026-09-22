@@ -1,18 +1,42 @@
 "use client";
 import { format, formatDistanceToNow } from "date-fns";
-import { Inbox, SendHorizonal, X } from "lucide-react";
+import { Inbox, RefreshCw, SendHorizonal, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Button, EmptyState, Textarea } from "@smartreach/ui";
-import { getUniboxThread, sendUniboxReply } from "@/lib/actions";
+import { UNIBOX_REPLY_TAGS, type UniboxReplyTag } from "@smartreach/shared";
+import {
+  Button,
+  EmptyState,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Textarea,
+} from "@smartreach/ui";
+import { getUniboxThread, sendUniboxReply, setUniboxReplyTag } from "@/lib/actions";
 import { messagePreview, prepareMessageBody, resolveBubbleSide, threadDayKey, threadDayLabel } from "@/lib/message-body";
 import type { UniboxThreadMessage } from "@/lib/unibox-thread";
 import { EmailBody } from "./message-body";
 
+const TAG_LABEL: Record<UniboxReplyTag, string> = {
+  out_of_office: "Out of office",
+  not_interested: "Not interested",
+  interested: "Interested",
+  meeting_booked: "Meeting booked",
+  won: "Won",
+  lost: "Lost",
+};
+
+function tagLabel(tag: string): string {
+  return TAG_LABEL[tag as UniboxReplyTag] ?? tag;
+}
+
 interface ReplyRow {
   id: string; fromName: string; fromEmail: string; subject: string; snippet: string;
   bodyText: string; bodyHtml: string; receivedAt: string; readAt: string | null;
+  tag: string | null;
   campaignName: string | null; senderEmail: string | null; senderName: string | null;
 }
 
@@ -66,6 +90,7 @@ function replyAsMessage(r: ReplyRow): UniboxThreadMessage {
     bodyHtml: r.bodyHtml || "",
     bodyText: r.bodyText || r.snippet || "",
     sentAt: r.receivedAt,
+    tag: (r.tag as UniboxReplyTag | null) ?? null,
   };
 }
 
@@ -129,17 +154,26 @@ function ThreadTranscript({ messages }: { messages: UniboxThreadMessage[] }) {
   return <>{nodes}</>;
 }
 
-export function UniboxClient({ initial }: { initial: ReplyRow[] }) {
+export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]; initialTag?: string }) {
   const router = useRouter();
+  const [rows, setRows] = useState<ReplyRow[]>(initial);
+  const [tagFilter, setTagFilter] = useState(initialTag);
   const [activeId, setActiveId] = useState<string | null>(initial[0]?.id ?? null);
   const [body, setBody] = useState("");
   const [pending, start] = useTransition();
+  const [tagPending, startTag] = useTransition();
+  const [refreshing, startRefresh] = useTransition();
   const [thread, setThread] = useState<ThreadState | null>(null);
   const [threadLoading, setThreadLoading] = useState(false);
   const fetchGen = useRef(0);
   const scrollerRef = useRef<HTMLDivElement>(null);
-  const unread = initial.filter((r) => !r.readAt).length;
+  const unread = rows.filter((r) => !r.readAt).length;
   const messages = thread?.replyId === activeId ? thread.messages : [];
+
+  useEffect(() => {
+    setRows(initial);
+    setTagFilter(initialTag);
+  }, [initial, initialTag]);
 
   useEffect(() => {
     if (!activeId) {
@@ -216,27 +250,98 @@ export function UniboxClient({ initial }: { initial: ReplyRow[] }) {
     });
   };
 
+  const refresh = () => {
+    startRefresh(async () => {
+      if (activeId) {
+        const res = await getUniboxThread({ replyId: activeId });
+        if (res.ok && res.data?.messages) {
+          const fetched = res.data.messages;
+          setThread((prev) => {
+            const optimistic =
+              prev?.replyId === activeId
+                ? prev.messages.filter((m) => m.id.startsWith("operator:pending:") && !fetched.some((f) => f.id === m.id))
+                : [];
+            return { replyId: activeId, messages: mergeThread(fetched, optimistic) };
+          });
+        } else if (!res.ok) {
+          toast.error(res.error);
+        }
+      }
+      router.refresh();
+    });
+  };
+
+  const onTagFilter = (value: string) => {
+    const tag = value === "all" ? "" : value;
+    setTagFilter(tag);
+    router.replace(tag ? `/unibox?tag=${encodeURIComponent(tag)}` : "/unibox");
+  };
+
+  const applyTag = (replyId: string, tag: UniboxReplyTag | null) => {
+    startTag(async () => {
+      const res = await setUniboxReplyTag({ replyId, tag });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      const next = res.data?.tag ?? tag;
+      setRows((prev) => prev.map((row) => (row.id === replyId ? { ...row, tag: next } : row)));
+      setThread((prev) => {
+        if (!prev || prev.replyId !== replyId) return prev;
+        return {
+          ...prev,
+          messages: prev.messages.map((m) =>
+            m.id === `inbound:${replyId}` ? { ...m, tag: (next as UniboxReplyTag | null) ?? null } : m,
+          ),
+        };
+      });
+      toast.success(res.message ?? (next ? "Tag updated" : "Tag cleared"));
+      router.refresh();
+    });
+  };
+
   return (
     <div className="unibox-root flex h-dvh flex-col lg:-ml-60 lg:pl-60">
-      <header className="flex items-center justify-between pb-3">
+      <header className="flex flex-wrap items-center justify-between gap-2 pb-3">
         <h1 className="flex items-center gap-2 text-lg font-semibold">
           <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary"><Inbox className="size-4" aria-hidden /></span>
           Unibox
         </h1>
-        <span className="rounded-md border px-2 py-1 text-[11px] text-muted-foreground">{unread} unread</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={tagFilter || "all"} onValueChange={onTagFilter}>
+            <SelectTrigger className="h-8 w-[11.5rem]" aria-label="Filter by reply tag">
+              <SelectValue placeholder="All tags" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All tags</SelectItem>
+              {UNIBOX_REPLY_TAGS.map((tag) => (
+                <SelectItem key={tag} value={tag}>{tagLabel(tag)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button type="button" variant="outline" size="sm" onClick={refresh} disabled={refreshing}>
+            <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </Button>
+          <span className="rounded-md border px-2 py-1 text-[11px] text-muted-foreground">{unread} unread</span>
+        </div>
       </header>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(240px,320px)_1fr] overflow-hidden rounded-xl border bg-card">
         <div className={`min-h-0 overflow-y-auto border-r border-border/60 ${activeId ? "hidden md:block" : "block"}`}>
-          {initial.length === 0 && (
+          {rows.length === 0 && (
             <EmptyState
               icon={Inbox}
-              title="No replies yet"
-              description="When prospects reply to your campaigns, conversations appear here in Unibox."
+              title={tagFilter ? "No replies with this tag" : "No replies yet"}
+              description={
+                tagFilter
+                  ? "Choose another tag, or show every reply."
+                  : "When prospects reply to your campaigns, conversations appear here in Unibox."
+              }
               className="m-4 border-0 bg-transparent py-10"
             />
           )}
-          {initial.map((r) => {
+          {rows.map((r) => {
             const name = r.fromName || r.fromEmail.split("@")[0];
             const isUnread = !r.readAt;
             const isActive = activeId === r.id;
@@ -248,6 +353,11 @@ export function UniboxClient({ initial }: { initial: ReplyRow[] }) {
                   <span className="shrink-0 text-[11px] text-muted-foreground">{r.receivedAt ? formatDistanceToNow(new Date(r.receivedAt), { addSuffix: true }) : ""}</span>
                 </span>
                 <span className={`truncate text-xs ${isUnread ? "text-foreground" : "text-muted-foreground"}`}>{r.subject || "(no subject)"}</span>
+                {r.tag ? (
+                  <span className="mt-1 inline-flex w-fit rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+                    {tagLabel(r.tag)}
+                  </span>
+                ) : null}
                 <span className="line-clamp-1 text-[11px] text-muted-foreground/80">{messagePreview(r.snippet || r.bodyText)}</span>
               </button>
             );
@@ -257,7 +367,7 @@ export function UniboxClient({ initial }: { initial: ReplyRow[] }) {
         <div className={`flex min-h-0 flex-col bg-card/40 ${activeId ? "flex" : "hidden md:flex"}`}>
           {activeId ? (
             (() => {
-              const r = initial.find((x) => x.id === activeId);
+              const r = rows.find((x) => x.id === activeId);
               if (!r) {
                 return (
                   <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
@@ -278,7 +388,24 @@ export function UniboxClient({ initial }: { initial: ReplyRow[] }) {
                       </p>
                       {r.campaignName && <span className="mt-2 inline-block rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">{r.campaignName}</span>}
                     </div>
-                    <button type="button" aria-label="Back to conversations" onClick={() => setActiveId(null)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent"><X className="size-4" /></button>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Select
+                        value={r.tag ?? "none"}
+                        onValueChange={(value) => applyTag(r.id, value === "none" ? null : (value as UniboxReplyTag))}
+                        disabled={tagPending}
+                      >
+                        <SelectTrigger className="h-8 w-[11.5rem]" aria-label="Reply tag">
+                          <SelectValue placeholder="No tag" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No tag</SelectItem>
+                          {UNIBOX_REPLY_TAGS.map((tag) => (
+                            <SelectItem key={tag} value={tag}>{tagLabel(tag)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <button type="button" aria-label="Back to conversations" onClick={() => setActiveId(null)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent"><X className="size-4" /></button>
+                    </div>
                   </div>
                   <div ref={scrollerRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 py-3 sm:px-4">
                     {threadLoading && messages.length === 0 ? (
