@@ -24,21 +24,14 @@ export default async function LeadListPage({
   ]);
 
   return (
-    <div className="p-6 lg:p-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">{list.name}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {items.length}{nextCursor ? "+" : ""} leads · search, filter, select for bulk actions.
-        </p>
-      </div>
-      <LeadTable
-        listId={id}
-        initialRows={items as unknown as LeadRow[]}
-        initialCursor={nextCursor}
-        initialSearch={sp.search ?? ""}
-        initialStatus={sp.status ?? ""}
-        tags={tags.map((t) => ({ id: t.id, name: t.name, color: t.color }))}
-      />
-    </div>
+    <LeadTable
+      listName={list.name}
+      listId={id}
+      initialRows={items as unknown as LeadRow[]}
+      initialCursor={nextCursor}
+      initialSearch={sp.search ?? ""}
+      initialStatus={sp.status ?? ""}
+      tags={tags.map((t) => ({ id: t.id, name: t.name, color: t.color }))}
+    />
   );
 }

@@ -1,14 +1,19 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { ChevronDown, Download, Search, Tag, Trash2, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronDown, Download, Plus, Search, Tag, Trash2, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { LEAD_STATUSES } from "@smartreach/shared";
 import {
   Badge, statusVariant,
   Button,
   Checkbox,
+  EmptyState,
+  ErrorState,
   Input,
+  PageHeader,
+  PermissionDenied,
   Select,
   SelectContent,
   SelectItem,
@@ -23,6 +28,8 @@ import {
   cn,
 } from "@smartreach/ui";
 import { bulkDeleteLeads, bulkTagLeads, createLeadTag, fetchLeadsPage } from "@/lib/actions";
+import { asCustomFields, isNextRedirect, isPermissionError } from "@/lib/lead-form";
+import { LeadFormDialog, type LeadFormLead } from "./lead-form-dialog";
 
 export interface LeadRow {
   id: string;
@@ -32,11 +39,17 @@ export interface LeadRow {
   company: string | null;
   status: string;
   tags: string[] | null;
+  customFields?: Record<string, string> | null;
+}
+
+function normalizeRow(row: LeadRow): LeadRow {
+  return { ...row, customFields: asCustomFields(row.customFields) };
 }
 
 interface TagOpt { id: string; name: string; color: string }
 
 export function LeadTable({
+  listName,
   listId,
   initialRows,
   initialCursor,
@@ -44,6 +57,7 @@ export function LeadTable({
   initialStatus,
   tags,
 }: {
+  listName: string;
   listId: string;
   initialRows: LeadRow[];
   initialCursor?: string;
@@ -51,23 +65,37 @@ export function LeadTable({
   initialStatus: string;
   tags: TagOpt[];
 }) {
-  const [rows, setRows] = useState<LeadRow[]>(initialRows);
+  const router = useRouter();
+  const [rows, setRows] = useState<LeadRow[]>(() => initialRows.map(normalizeRow));
   const [cursor, setCursor] = useState<string | undefined>(initialCursor);
   const [search, setSearch] = useState(initialSearch);
   const [status, setStatus] = useState(initialStatus);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [tagList, setTagList] = useState(tags);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [denied, setDenied] = useState(false);
+  const [editor, setEditor] = useState<{ mode: "create" | "edit"; lead: LeadRow | null; nonce: number } | null>(null);
   const [pending, start] = useTransition();
+  const [listPending, startList] = useTransition();
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const tagById = useMemo(() => Object.fromEntries(tagList.map((t) => [t.id, t])), [tagList]);
 
   const applyFilters = (q: string, s: string) => {
-    start(async () => {
-      const res = await fetchLeadsPage({ listId, search: q || undefined, status: s || undefined, pageSize: 50 });
-      setRows(res.items as LeadRow[]);
-      setCursor(res.nextCursor);
-      setSelected(new Set());
+    startList(async () => {
+      try {
+        const res = await fetchLeadsPage({ listId, search: q || undefined, status: s || undefined, pageSize: 50 });
+        setRows((res.items as LeadRow[]).map(normalizeRow));
+        setCursor(res.nextCursor);
+        setSelected(new Set());
+        setLoadError(null);
+        setDenied(false);
+      } catch (error) {
+        if (isNextRedirect(error)) throw error;
+        const message = error instanceof Error ? error.message : "Could not load leads";
+        if (isPermissionError(message)) setDenied(true);
+        else setLoadError(message);
+      }
     });
   };
 
@@ -78,12 +106,36 @@ export function LeadTable({
   };
 
   const loadMore = () =>
-    start(async () => {
+    startList(async () => {
       if (!cursor) return;
-      const res = await fetchLeadsPage({ listId, search: search || undefined, status: status || undefined, cursor, pageSize: 50 });
-      setRows((r) => [...r, ...(res.items as LeadRow[])]);
-      setCursor(res.nextCursor);
+      try {
+        const res = await fetchLeadsPage({ listId, search: search || undefined, status: status || undefined, cursor, pageSize: 50 });
+        setRows((r) => [...r, ...(res.items as LeadRow[]).map(normalizeRow)]);
+        setCursor(res.nextCursor);
+        setLoadError(null);
+      } catch (error) {
+        if (isNextRedirect(error)) throw error;
+        const message = error instanceof Error ? error.message : "Could not load leads";
+        if (isPermissionError(message)) setDenied(true);
+        else setLoadError(message);
+      }
     });
+
+  const openCreate = () => setEditor({ mode: "create", lead: null, nonce: Date.now() });
+  const openEdit = (lead: LeadRow) => setEditor({ mode: "edit", lead, nonce: Date.now() });
+
+  const onSaved = (row: LeadFormLead) => {
+    const next = normalizeRow(row);
+    setRows((current) => {
+      const index = current.findIndex((item) => item.id === next.id);
+      if (index === -1) return [next, ...current];
+      return current.map((item) =>
+        item.id === next.id ? { ...item, ...next, status: item.status, tags: item.tags } : item,
+      );
+    });
+    setEditor(null);
+    router.refresh();
+  };
 
   const toggleAll = (checked: boolean) =>
     setSelected(checked ? new Set(rows.map((r) => r.id)) : new Set());
@@ -155,15 +207,35 @@ export function LeadTable({
   };
 
   const allSelected = rows.length > 0 && selected.size === rows.length;
+  const filtered = Boolean(search || status);
+  const countLabel = `${rows.length}${cursor ? "+" : ""}`;
 
   return (
-    <div className="space-y-4">
+    <div className="page-stack">
+      <PageHeader
+        title={listName}
+        description={
+          filtered
+            ? `${countLabel} matching ${rows.length === 1 ? "lead" : "leads"}.`
+            : `${countLabel} ${rows.length === 1 ? "lead" : "leads"} in this list.`
+        }
+        actions={
+          <Button size="sm" onClick={openCreate}>
+            <Plus className="h-4 w-4" /> Add Lead
+          </Button>
+        }
+      />
+
+      {denied ? (
+        <PermissionDenied />
+      ) : (
+      <>
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative">
+        <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={(e) => onSearch(e.target.value)} placeholder="Search email, name, company…"
-            className="w-72 pl-9" />
+            className="w-full pl-9" aria-label="Search leads" />
         </div>
         <Select value={status || "all"} onValueChange={(v) => { const s = v === "all" ? "" : v; setStatus(s); applyFilters(search, s); }}>
           <SelectTrigger className="w-40"><SelectValue placeholder="All statuses" /></SelectTrigger>
@@ -190,8 +262,33 @@ export function LeadTable({
         </div>
       </div>
 
-      {/* Table */}
-      <div className="rounded-xl border">
+      {listPending ? (
+        <p className="text-sm text-muted-foreground" role="status">
+          Loading leads…
+        </p>
+      ) : null}
+
+      {loadError ? (
+        <ErrorState
+          title="Could not load leads"
+          description={loadError}
+          onRetry={() => applyFilters(search, status)}
+        />
+      ) : null}
+
+      {rows.length === 0 && !filtered && !loadError ? (
+        <EmptyState
+          icon={UserPlus}
+          title="No leads in this list"
+          description="Add a lead by email, or upload a CSV from the Leads page."
+          action={
+            <Button size="sm" onClick={openCreate}>
+              <Plus className="h-4 w-4" /> Add Lead
+            </Button>
+          }
+        />
+      ) : rows.length > 0 || filtered ? (
+      <div className={cn("overflow-x-auto rounded-xl border", listPending && "opacity-60")} aria-busy={listPending}>
         <Table>
           <TableHeader>
             <TableRow>
@@ -203,13 +300,14 @@ export function LeadTable({
               <TableHead>Company</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Tags</TableHead>
+              <TableHead className="w-28"><span className="sr-only">Actions</span></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-16 text-center text-muted-foreground">
-                  No leads match. Import a CSV or adjust your filters.
+                <TableCell colSpan={7} className="py-16 text-center text-muted-foreground">
+                  No leads match these filters.
                 </TableCell>
               </TableRow>
             ) : (
@@ -236,20 +334,48 @@ export function LeadTable({
                       })}
                     </div>
                   </TableCell>
+                  <TableCell>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openEdit(r)}
+                      aria-label={`Edit Lead ${r.email}`}
+                    >
+                      Edit Lead
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))
             )}
           </TableBody>
         </Table>
       </div>
+      ) : null}
 
-      {cursor && (
+      {cursor && !loadError && (rows.length > 0 || filtered) && (
         <div className="flex justify-center">
-          <Button variant="outline" size="sm" onClick={loadMore} disabled={pending}>
-            Load more
+          <Button variant="outline" size="sm" onClick={loadMore} disabled={listPending}>
+            {listPending ? "Loading leads…" : "Load more"}
           </Button>
         </div>
       )}
+      </>
+      )}
+
+      {editor ? (
+        <LeadFormDialog
+          key={editor.nonce}
+          open
+          mode={editor.mode}
+          listId={listId}
+          lead={editor.lead}
+          onOpenChange={(next) => {
+            if (!next) setEditor(null);
+          }}
+          onSaved={onSaved}
+        />
+      ) : null}
     </div>
   );
 }

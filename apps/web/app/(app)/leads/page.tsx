@@ -15,7 +15,7 @@ export default async function LeadsPage() {
     <div className="page-stack">
       <PageHeader
         title="Leads"
-        description="Upload a CSV to create a list and import contacts."
+        description="Upload a CSV to create a list, then add or edit contacts."
         actions={
           <Button size="sm" asChild>
             <Link href="/leads/import">
@@ -29,7 +29,7 @@ export default async function LeadsPage() {
         <EmptyState
           icon={Users}
           title="No lead lists yet"
-          description="Upload a CSV to create your first list and import leads."
+          description="Upload a CSV to create your first list. Map the email column, then review contacts."
           action={
             <Button size="sm" asChild>
               <Link href="/leads/import">
