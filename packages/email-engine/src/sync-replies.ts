@@ -2,6 +2,9 @@
  * Reply detection — poll INBOX over IMAP, find new replies, thread them to
  * leads (via In-Reply-To / References against our sent Message-IDs, falling
  * back to from-address matching) and stop future sends for replied leads.
+ *
+ * Bodies: store plain (`bodyText`) and HTML (`bodyHtml`) separately. Decode
+ * quoted-printable as UTF-8 (never latin1 char codes) to avoid mojibake.
  */
 import { schema } from "@smartreach/database";
 import { parseSenderAddress } from "@smartreach/shared";
@@ -13,6 +16,185 @@ export interface SyncResult {
   checked: number;
   repliesFound: number;
   errors: string[];
+}
+
+/** Decode quoted-printable octets as UTF-8 (not latin1 / fromCharCode). */
+export function decodeQuotedPrintable(input: string): string {
+  const soft = input.replace(/=\r?\n/g, "");
+  const bytes: number[] = [];
+  for (let i = 0; i < soft.length; i++) {
+    if (soft[i] === "=" && i + 2 < soft.length && /^[0-9A-Fa-f]{2}$/.test(soft.slice(i + 1, i + 3))) {
+      bytes.push(parseInt(soft.slice(i + 1, i + 3), 16));
+      i += 2;
+    } else {
+      bytes.push(soft.charCodeAt(i) & 0xff);
+    }
+  }
+  return Buffer.from(bytes).toString("utf8");
+}
+
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+};
+
+/** Decode common HTML entities (named + numeric) without double-encoding. */
+export function decodeHtmlEntities(input: string): string {
+  return input
+    .replace(/&#x([0-9a-fA-F]+);/g, (_m, h) => {
+      const cp = parseInt(h, 16);
+      return Number.isFinite(cp) ? String.fromCodePoint(cp) : _m;
+    })
+    .replace(/&#(\d+);/g, (_m, d) => {
+      const cp = parseInt(d, 10);
+      return Number.isFinite(cp) ? String.fromCodePoint(cp) : _m;
+    })
+    .replace(/&([a-zA-Z]+);/g, (m, name: string) => NAMED_ENTITIES[name.toLowerCase()] ?? m);
+}
+
+/** Strip MIME boundary lines and Content-* header lines that leak into parts. */
+export function stripMimeNoise(raw: string): string {
+  let s = raw.replace(/\r\n/g, "\n");
+  // Mid-body MIME boundaries + their Content-* headers
+  s = s.replace(/^\s*--[0-9A-Za-z=_-]{8,}.*$/gm, "");
+  s = s.replace(/^\s*content-(?:type|transfer-encoding|disposition|id|description):[^\n]*\n/gim, "");
+  // Leading header block before first blank line
+  if (/^[A-Za-z-]+:\s/m.test(s.slice(0, 400))) {
+    const firstBlank = s.search(/\n\n/);
+    if (firstBlank > 0) s = s.slice(firstBlank + 2);
+  }
+  // Do not paste List-Unsubscribe header lines into body
+  s = s.replace(/^\s*List-Unsubscribe(?:-Post)?:\s*[^\n]*\n?/gim, "");
+  return s.trim();
+}
+
+/**
+ * Remove compliance / staging leakage from stored reply bodies:
+ * - bare unsubscribe token URLs (`/api/unsubscribe?token=` or `/unsubscribe?token=`)
+ * - angle-bracketed List-Unsubscribe URLs
+ * - trailing SmartReach postal / unsub footers (`-- physical address --`, data-sr-*)
+ * Does not invent replacement content.
+ */
+export function stripLeakageFromBody(body: string): string {
+  let s = body;
+  // Angle-bracketed List-Unsubscribe style URLs
+  s = s.replace(/<https?:\/\/[^>\s]*unsubscribe[^>\s]*>/gi, "");
+  // Bare token URLs (staging + prod paths)
+  s = s.replace(/https?:\/\/[^\s<>"']*\/api\/unsubscribe\?token=[^\s<>"']+/gi, "");
+  s = s.replace(/https?:\/\/[^\s<>"']*\/unsubscribe\?token=[^\s<>"']+/gi, "");
+  // Relative token URLs that sometimes leak
+  s = s.replace(/(?:^|\s)\/api\/unsubscribe\?token=[^\s<>"']+/gim, "");
+  s = s.replace(/(?:^|\s)\/unsubscribe\?token=[^\s<>"']+/gim, "");
+  // "Unsubscribe: <url>" plaintext footer line
+  s = s.replace(/\n*Unsubscribe:\s*\S*/gi, "");
+  // HTML SmartReach unsub / postal blocks
+  s = s.replace(/<p[^>]*data-sr-unsub[^>]*>[\s\S]*?<\/p>/gi, "");
+  s = s.replace(/<p[^>]*data-sr-postal[^>]*>[\s\S]*?<\/p>/gi, "");
+  // Plaintext postal marker + trailing lines until end (auto-appended pattern)
+  s = s.replace(/\n*-- physical address --[\s\S]*$/i, "");
+  // Collapse leftover blank runs
+  s = s.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  return s;
+}
+
+/** Convert HTML to plain text for bodyText/snippet when no text part exists. */
+export function htmlToPlainText(html: string): string {
+  let s = html;
+  s = s.replace(/<(script|style)[\s\S]*?<\/\1>/gi, "");
+  s = s.replace(/<br\s*\/?>/gi, "\n");
+  s = s.replace(/<\/(p|div|li|tr|h[1-6])>/gi, "\n");
+  s = s.replace(/<[^>]+>/g, "");
+  s = decodeHtmlEntities(s);
+  s = s.replace(/\r\n/g, "\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  return s;
+}
+
+function looksLikeHtml(s: string): boolean {
+  return /<\/?[a-z][\s\S]*?>/i.test(s);
+}
+
+function getRawPart(msg: any, ...keys: string[]): string {
+  for (const k of keys) {
+    const buf = msg.bodyParts?.get?.(k);
+    if (!buf) continue;
+    // QP/base64 payloads are ASCII; utf8 is safe. Already-decoded UTF-8 parts stay correct.
+    const v = typeof buf === "string" ? buf : Buffer.isBuffer(buf) ? buf.toString("utf8") : buf.toString?.("utf8") ?? buf.toString?.() ?? "";
+    if (v) return v;
+  }
+  return "";
+}
+
+function classifyPart(raw: string): { kind: "html" | "text" | "empty"; content: string } {
+  if (!raw || !raw.trim()) return { kind: "empty", content: "" };
+  let s = stripMimeNoise(raw);
+  // Detect CTE before decoding if header leaked
+  const cteMatch = raw.match(/content-transfer-encoding:\s*([^\r\n]+)/i);
+  const cte = (cteMatch?.[1] ?? "").trim().toLowerCase();
+  if (cte.includes("quoted-printable") || /=[0-9A-Fa-f]{2}/.test(s)) {
+    s = decodeQuotedPrintable(s);
+  } else if (cte.includes("base64")) {
+    try {
+      s = Buffer.from(s.replace(/\s+/g, ""), "base64").toString("utf8");
+    } catch {
+      /* keep as-is */
+    }
+  }
+  s = stripMimeNoise(s);
+  if (looksLikeHtml(s)) {
+    return { kind: "html", content: decodeHtmlEntities(s) };
+  }
+  return { kind: "text", content: decodeHtmlEntities(s) };
+}
+
+/**
+ * Pull text + html body parts separately from an imapflow message.
+ * Prefers dedicated text/html; never dumps a mishmash into one field.
+ */
+export function extractTextAndHtml(msg: any): { text: string; html: string } {
+  const candidates = [
+    getRawPart(msg, "text"),
+    getRawPart(msg, "1"),
+    getRawPart(msg, "1.1"),
+    getRawPart(msg, "1.2"),
+    getRawPart(msg, "2"),
+    getRawPart(msg, "2.1"),
+    getRawPart(msg, "2.2"),
+  ].filter(Boolean);
+
+  let text = "";
+  let html = "";
+  for (const raw of candidates) {
+    const { kind, content } = classifyPart(raw);
+    if (kind === "html" && !html) html = content;
+    else if (kind === "text" && !text) text = content;
+  }
+  // If imapflow's "text" was HTML-only, classifyPart already assigned html.
+  // If we only got HTML, leave text empty for prepareReplyBodies to derive.
+  return { text, html };
+}
+
+export interface PreparedBodies {
+  bodyText: string;
+  bodyHtml: string;
+  snippet: string;
+}
+
+/** Normalize, strip leakage, derive snippet from plain text only. Caps length. */
+export function prepareReplyBodies(rawText: string, rawHtml: string): PreparedBodies {
+  let bodyHtml = stripLeakageFromBody(rawHtml.trim());
+  let bodyText = stripLeakageFromBody(rawText.trim());
+  if (!bodyText && bodyHtml) {
+    bodyText = stripLeakageFromBody(htmlToPlainText(bodyHtml));
+  }
+  // Cap stored bodies
+  bodyHtml = bodyHtml.slice(0, 100_000);
+  bodyText = bodyText.slice(0, 50_000);
+  const snippet = bodyText.replace(/\s+/g, " ").trim().slice(0, 280);
+  return { bodyText, bodyHtml, snippet };
 }
 
 /** Sync one sender's inbox. Returns count of new replies recorded. */
@@ -34,7 +216,8 @@ export async function syncSenderReplies(db: EngineDb, sender: SenderRow): Promis
     if (list.length > 0) {
       for await (const msg of client.fetch(
         list,
-        { uid: true, envelope: true, bodyParts: ["text", "1", "1.1", "2", "2.1"] },
+        // Fetch text + common multipart part numbers for text/html split
+        { uid: true, envelope: true, bodyParts: ["text", "1", "1.1", "1.2", "2", "2.1", "2.2"] },
         { uid: true },
       )) {
         try {
@@ -64,33 +247,6 @@ export async function syncSenderReplies(db: EngineDb, sender: SenderRow): Promis
       /* noop */
     }
   }
-}
-
-/** Strip MIME boundaries, headers, and quoted-printable escapes so the thread
- * shows the human text, not raw envelope noise. */
-function cleanEmailBody(raw: string): string {
-  let s = raw;
-  // decode quoted-printable (=3D, =\n, =XX) — cheap but effective
-  s = s
-    .replace(/=\r?\n/g, "")
-    .replace(/=([0-9A-Fa-f]{2})/g, (_m, h) => String.fromCharCode(parseInt(h, 16)));
-  // cut at first MIME boundary marker / html part
-  const boundaryIdx = s.search(/^--[0-9a-zA-Z=_-]{8,}/m);
-  if (boundaryIdx > 0) s = s.slice(0, boundaryIdx);
-  // drop any residual header block before a blank line
-  if (/^[A-Za-z-]+:\s/m.test(s.slice(0, 400))) {
-    const firstBlank = s.search(/\r?\n\r?\n/);
-    if (firstBlank > 0) s = s.slice(firstBlank + 2);
-  }
-  // strip tags that survive
-  s = s.replace(/<[^>]+>/g, (m) => (/div|p|br|li/i.test(m) ? "\n" : ""));
-  // normalize whitespace lines, trim, cap
-  s = s
-    .replace(/\r\n/g, "\n")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-  return s.slice(0, 3000);
 }
 
 async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any): Promise<boolean> {
@@ -147,36 +303,8 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any): Prom
   }
   if (!lead) return false; // not a campaign recipient — ignore
 
-  // Pull the actual message body parts. Prefer the HTML body (rendered in
-  // the client), fall back to the text part, else envelope's text.
-  const getPart = (...keys: string[]): string => {
-    for (const k of keys) {
-      const v = msg.bodyParts?.get?.(k)?.toString?.();
-      if (v) return v;
-    }
-    return "";
-  };
-  let payload = getPart("text", "1.2", "2.1", "1.1");
-  // strip any leading MIME header lines (Content-Type/Transfer-Encoding/etc.)
-  // that leak through when a part is fetched raw
-  payload = payload.replace(/^(?:content-[\w-]+:\s*[^\n]*\r?\n)+/i, "").trim();
-  // decode quoted-printable + HTML entities
-  payload = payload
-    // remove any MIME boundary lines + their embedded Content-Type headers so
-    // only human-readable content remains (mid-body junk disappears)
-    .replace(/^\s*--[0-9A-Za-z=_-]{8,}.*$/gm, "")
-    .replace(/^\s*content-type:[^\n]*\r?\n/gim, "")
-    .replace(/^\s*content-transfer-encoding:[^\n]*\r?\n/gim, "")
-    .replace(/=\r?\n/g, "")
-    .replace(/=([0-9A-Fa-f]{2})/g, (_m, h) => String.fromCharCode(parseInt(h, 16)))
-    .replace(/</g, "<")
-    .replace(/>/g, ">")
-    .replace(/&/g, "&")
-    .replace(/"/g, '"')
-    .replace(/&#39;|'/g, "'")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-  const snippet = payload.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 280);
+  const { text, html } = extractTextAndHtml(msg);
+  const { bodyText, bodyHtml, snippet } = prepareReplyBodies(text, html);
   const receivedAt = (env.date ? new Date(env.date) : new Date()).toISOString();
   const nowS = new Date().toISOString();
 
@@ -191,7 +319,8 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any): Prom
       fromEmail,
       subject: env.subject ?? "",
       snippet,
-      bodyText: payload,
+      bodyText,
+      bodyHtml,
       messageId,
       receivedAt,
     });

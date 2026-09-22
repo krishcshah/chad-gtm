@@ -363,6 +363,7 @@ export const replies = pgTable(
     subject: text("subject").notNull().default(""),
     snippet: text("snippet").notNull().default(""),
     bodyText: text("body_text").notNull().default(""),
+    bodyHtml: text("body_html").notNull().default(""),
     messageId: text("message_id"),
     receivedAt: text("received_at").notNull(),
     readAt: text("read_at"),

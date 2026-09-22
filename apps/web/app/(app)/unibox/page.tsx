@@ -19,6 +19,7 @@ export default async function UniboxPage() {
       subject: t.replies.subject,
       snippet: t.replies.snippet,
       bodyText: t.replies.bodyText,
+      bodyHtml: t.replies.bodyHtml,
       receivedAt: t.replies.receivedAt,
       readAt: t.replies.readAt,
       campaignName: t.campaigns.name,

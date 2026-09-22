@@ -9,7 +9,7 @@ import { sendUniboxReply } from "@/lib/actions";
 
 interface ReplyRow {
   id: string; fromName: string; fromEmail: string; subject: string; snippet: string;
-  bodyText: string; receivedAt: string; readAt: string | null;
+  bodyText: string; bodyHtml: string; receivedAt: string; readAt: string | null;
   campaignName: string | null; senderEmail: string | null; senderName: string | null;
 }
 
@@ -114,7 +114,7 @@ export function UniboxClient({ initial }: { initial: ReplyRow[] }) {
                     <button type="button" aria-label="Back to conversations" onClick={() => setActiveId(null)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent md:aria-[label]:content-auto"><X className="size-4" /></button>
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-                    <EmailBody html={r.bodyText || r.snippet || ""} />
+                    <EmailBody html={r.bodyHtml || r.bodyText || r.snippet || ""} />
                   </div>
                   <div className="border-t border-border/60 px-5 py-3">
                     <label className="mb-2 block text-xs font-medium text-muted-foreground">Reply via {r.senderEmail ?? "your sender"}</label>
