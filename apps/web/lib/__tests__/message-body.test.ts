@@ -75,6 +75,46 @@ describe("prepareMessageBody", () => {
     expect(prepared.body).toContain("On purpose I wrote: this stays.");
   });
 
+  it("keeps only the new reply when a Gmail On-wrote block is on its own lines", () => {
+    const prepared = prepareMessageBody({
+      text: "Yes?\n\nOn Tue, 22 Sept 2026, 02:22 Hello1, wrote:\n> yoo",
+    });
+    expect(prepared.body).toBe("Yes?");
+    expect(prepared.quoted).toContain("On Tue, 22 Sept 2026, 02:22 Hello1, wrote:");
+    expect(prepared.quoted).toContain("> yoo");
+    expect(prepared.body).not.toContain("wrote:");
+    expect(prepared.body).not.toContain("yoo");
+  });
+
+  it("splits an inline Gmail attribution so the bubble is only the new reply", () => {
+    const what = prepareMessageBody({
+      text: "What? On Tue, 22 Sept 2026, 02:00 Hello1, wrote: > YOOO > What?",
+    });
+    expect(what.body).toBe("What?");
+    expect(what.quoted).toContain("On Tue, 22 Sept 2026, 02:00 Hello1, wrote:");
+    expect(what.quoted).toContain("YOOO");
+    expect(what.body).not.toContain("YOOO");
+    expect(what.body).not.toContain("wrote:");
+
+    const yes = prepareMessageBody({
+      text: "Yes? On Tue, 22 Sept 2026, 02:22 Hello1, wrote: > yoo > Yes?",
+    });
+    expect(yes.body).toBe("Yes?");
+    expect(yes.quoted).toContain("On Tue, 22 Sept 2026, 02:22 Hello1, wrote:");
+    expect(yes.quoted).toContain("yoo");
+    expect(yes.body).not.toContain("yoo");
+    expect(yes.body).not.toContain("wrote:");
+  });
+
+  it("drops a bare duplicate of the new reply after the quote block", () => {
+    const prepared = prepareMessageBody({
+      text: "Yes? On Tue, 22 Sept 2026, 02:22 Hello1, wrote: > yoo >\nYes?",
+    });
+    expect(prepared.body).toBe("Yes?");
+    expect(prepared.quoted).toContain("> yoo");
+    expect(prepared.quoted?.trim().endsWith("Yes?")).toBe(false);
+  });
+
   it("linkifies unsubscribe urls and strips tracking footer lines", () => {
     const token = "a".repeat(50);
     const prepared = prepareMessageBody({

@@ -38,7 +38,8 @@ const CP1252_TO_BYTE = new Map<number, number>([
 const MOJIBAKE_MARK = /[\u00c2\u00c3\u00e2]/g;
 const HTML_TAG =
   /<(?:!doctype|html|body|head|div|p|br|table|thead|tbody|span|a|blockquote|img|td|tr|h[1-6]|ul|ol|li|style|font|center|section|article)\b/i;
-const ON_WROTE = /^On\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun|\d).{0,240}\bwrote:\s*$/i;
+/** Gmail/Outlook attribution, full-line or mid-line: "On Tue, 22 Sept 2026, 02:22 Hello1, wrote:" */
+const ON_WROTE_INLINE = /\bOn\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun|\d)[\s\S]{0,240}?\bwrote:/i;
 
 export interface TextSegment {
   type: "text" | "link";
@@ -432,29 +433,66 @@ function htmlToText(html: string): string {
 }
 
 function splitQuotedPlain(text: string): { body: string; quoted: string | null } {
-  const lines = text.replace(/\r\n/g, "\n").split("\n");
-  const cut = findQuoteStart(lines);
-  if (cut < 0) return { body: text.trim(), quoted: null };
-  const body = lines.slice(0, cut).join("\n").trim();
-  const quoted = lines.slice(cut).join("\n").trim();
-  if (!quoted) return { body: text.trim(), quoted: null };
-  return { body, quoted };
+  const normalized = text.replace(/\r\n/g, "\n");
+  const cut = indexOfQuotedReply(normalized);
+  if (cut < 0) return { body: normalized.trim(), quoted: null };
+  const body = normalized.slice(0, cut).trim();
+  let quoted = normalized.slice(cut).trim();
+  if (!quoted) return { body: normalized.trim(), quoted: null };
+  quoted = dropTrailingReplyDuplicate(body, quoted);
+  return { body, quoted: quoted || null };
 }
 
-function findQuoteStart(lines: string[]): number {
+/**
+ * Index of the first quoted region in plain text.
+ * Cuts at a Gmail/Outlook "On … wrote:" attribution (even mid-line) and at
+ * the usual banner / ">" quote markers. Everything from the index onward is quoted.
+ */
+export function indexOfQuotedReply(text: string): number {
+  let best = -1;
+  const consider = (i: number) => {
+    if (i >= 0 && (best < 0 || i < best)) best = i;
+  };
+
+  const inline = text.match(ON_WROTE_INLINE);
+  if (inline?.index !== undefined) consider(inline.index);
+
+  const lines = text.split("\n");
+  let offset = 0;
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (ON_WROTE.test(line)) return i;
-    if (/^-{2,}\s*original message\s*-{2,}$/i.test(line)) return i;
-    if (/^-{2,}\s*forwarded message\s*-{2,}$/i.test(line)) return i;
-    if (/^begin forwarded message:\s*$/i.test(line)) return i;
-    if (/^_{10,}$/.test(line)) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (/^-{2,}\s*original message\s*-{2,}$/i.test(trimmed)) consider(offset);
+    else if (/^-{2,}\s*forwarded message\s*-{2,}$/i.test(trimmed)) consider(offset);
+    else if (/^begin forwarded message:\s*$/i.test(trimmed)) consider(offset);
+    else if (/^_{10,}$/.test(trimmed)) {
       const window = lines.slice(i + 1, i + 5).map((l) => l.trim());
-      if (window.some((l) => /^from:\s/i.test(l))) return i;
-    }
-    if (/^\s*>/.test(lines[i]) && isMostlyQuoted(lines, i)) return i;
+      if (window.some((l) => /^from:\s/i.test(l))) consider(offset);
+    } else if (/^\s*>/.test(line) && isMostlyQuoted(lines, i)) consider(offset);
+    offset += line.length + 1;
   }
-  return -1;
+  return best;
+}
+
+/** A bare copy of the new reply after the quote block is not part of the prior mail. */
+function dropTrailingReplyDuplicate(body: string, quoted: string): string {
+  const reply = body.trim();
+  if (!reply) return quoted;
+  const lines = quoted.split("\n");
+  while (lines.length > 0) {
+    const last = lines[lines.length - 1].trim();
+    if (!last) {
+      lines.pop();
+      continue;
+    }
+    if (/^>/.test(last)) break;
+    if (last === reply) {
+      lines.pop();
+      continue;
+    }
+    break;
+  }
+  return lines.join("\n").trim();
 }
 
 function isMostlyQuoted(lines: string[], start: number): boolean {

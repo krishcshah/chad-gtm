@@ -5,7 +5,7 @@
  */
 import createDOMPurify from "dompurify";
 import type { Config, DOMPurify } from "dompurify";
-import { classifyHttpUrl, linkifyPlainText } from "./message-body";
+import { classifyHttpUrl, indexOfQuotedReply, linkifyPlainText } from "./message-body";
 
 export interface SanitizedEmail {
   main: string;
@@ -126,8 +126,76 @@ function partitionEmailHtml(cleanHtml: string): { main: string; quoted: string |
   const last = [...root.children].reverse().find((el) => (el.textContent || "").trim() || el.querySelector("img"));
   if (last && last.tagName === "BLOCKQUOTE" && root.contains(last)) take(last);
 
+  peelInlineAttribution(root, quoted);
+
   const quotedHtml = quoted.innerHTML.trim();
   return { main: root.innerHTML.trim(), quoted: quotedHtml || null };
+}
+
+/** "On … wrote:" can sit mid-text. EmailBody renders this HTML, so the plain splitter is not enough. */
+function peelInlineAttribution(root: HTMLElement, quoted: HTMLElement) {
+  const text = root.textContent ?? "";
+  const cut = indexOfQuotedReply(text);
+  if (cut < 0) return;
+  const start = textNodeAt(root, cut);
+  if (!start) return;
+  const tail = text.slice(cut);
+  if (attributionAlreadyQuoted(quoted.textContent ?? "", tail)) detachFrom(start, root);
+  else moveFrom(start, root, quoted);
+}
+
+function attributionAlreadyQuoted(existing: string, tail: string): boolean {
+  const have = existing.replace(/\s+/g, " ").toLowerCase();
+  const incoming = tail.replace(/\s+/g, " ").toLowerCase();
+  if (!have || !incoming.includes("wrote:")) return false;
+  const marker = incoming.match(/\bon\s+.{12,48}?\bwrote:/i)?.[0];
+  if (!marker) return false;
+  const head = marker.replace(/\s+/g, " ").toLowerCase().slice(0, 22);
+  return head.length >= 12 && have.includes(head);
+}
+
+function textNodeAt(root: HTMLElement, index: number): Text | null {
+  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let seen = 0;
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text;
+    const value = node.nodeValue ?? "";
+    if (seen + value.length > index) {
+      const offset = index - seen;
+      if (offset <= 0) return node;
+      const tail = node.splitText(offset);
+      node.nodeValue = (node.nodeValue ?? "").replace(/\s+$/, "");
+      return tail;
+    }
+    seen += value.length;
+  }
+  return null;
+}
+
+function moveFrom(start: Node, root: HTMLElement, dest: HTMLElement) {
+  let node: Node | null = start;
+  while (node && node !== root) {
+    const parent: Node | null = node.parentNode;
+    while (node) {
+      const next: Node | null = node.nextSibling;
+      dest.appendChild(node);
+      node = next;
+    }
+    node = parent && parent !== root ? parent.nextSibling : null;
+  }
+}
+
+function detachFrom(start: Node, root: HTMLElement) {
+  let node: Node | null = start;
+  while (node && node !== root) {
+    const parent: Node | null = node.parentNode;
+    while (node) {
+      const next: Node | null = node.nextSibling;
+      node.parentNode?.removeChild(node);
+      node = next;
+    }
+    node = parent && parent !== root ? parent.nextSibling : null;
+  }
 }
 
 function rewriteAnchors(root: HTMLElement) {
