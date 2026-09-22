@@ -54,6 +54,7 @@ import {
   type AnalyticsSeriesPoint,
   type AnalyticsSummary,
 } from "./analytics";
+import { uniboxReplyMail } from "./outbound-quote";
 import {
   buildOperatorThreadMessage,
   loadUniboxThreadMessages,
@@ -793,10 +794,24 @@ export async function sendUniboxReply(input: {
     const { sendMail } = await import("@smartreach/email-engine/mailer");
     const subject = reply.subject?.startsWith("Re:") ? reply.subject : `Re: ${reply.subject ?? ""}`.trim();
     const finalSubject = subject === "Re:" ? "Re: Your email" : subject;
-    await sendMail(sender as never, {
+    // Client sends new text only. Quote is appended here; threading headers are not set.
+    const outbound = uniboxReplyMail({
       to: reply.fromEmail,
       subject: finalSubject,
-      text: body,
+      newText: body,
+      prior: {
+        fromName: reply.fromName || "",
+        fromEmail: reply.fromEmail,
+        sentAt: reply.receivedAt,
+        bodyText: reply.bodyText || "",
+        bodyHtml: reply.bodyHtml || "",
+      },
+    });
+    await sendMail(sender as never, {
+      to: outbound.to,
+      subject: outbound.subject,
+      text: outbound.text,
+      html: outbound.html,
     });
 
     const sentAt = nowIso();
@@ -815,8 +830,8 @@ export async function sendUniboxReply(input: {
       fromName,
       fromEmail,
       subject: finalSubject,
-      bodyText: body,
-      bodyHtml: "",
+      bodyText: outbound.storedBodyText,
+      bodyHtml: outbound.storedBodyHtml,
       sentAt,
     });
 
@@ -825,8 +840,8 @@ export async function sendUniboxReply(input: {
       fromName,
       fromEmail,
       subject: finalSubject,
-      bodyText: body,
-      bodyHtml: "",
+      bodyText: outbound.storedBodyText,
+      bodyHtml: outbound.storedBodyHtml,
       sentAt,
     });
 
