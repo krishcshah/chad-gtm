@@ -60,7 +60,10 @@ export default async function CampaignsPage() {
                 return (
                   <tr key={c.id} className="border-b last:border-0 hover:bg-accent/30 transition-colors">
                     <td className="px-4 py-3">
-                      <Link href={`/campaigns/${c.id}`} className="font-medium hover:underline">
+                      <Link
+                        href={c.status === "draft" ? `/campaigns/new?draft=${c.id}` : `/campaigns/${c.id}`}
+                        className="font-medium hover:underline"
+                      >
                         {c.name}
                       </Link>
                       <p className="text-xs text-muted-foreground">
@@ -69,7 +72,7 @@ export default async function CampaignsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <Badge variant={statusVariant(c.status)} dot={c.status === "running"}>
-                        {c.status}
+                        {c.status === "draft" ? "Draft" : c.status}
                       </Badge>
                     </td>
                     <td className="px-4 py-3">
@@ -83,7 +86,14 @@ export default async function CampaignsPage() {
                     <td className="px-4 py-3 text-right tabular-nums">{c.bounced}</td>
                     <td className="px-4 py-3 text-muted-foreground">{formatDate(c.createdAt)}</td>
                     <td className="px-4 py-3 text-right">
-                      <CampaignActions id={c.id} status={c.status} />
+                      <div className="flex items-center justify-end gap-2">
+                        {c.status === "draft" ? (
+                          <Button variant="outline" size="sm" asChild>
+                            <Link href={`/campaigns/new?draft=${c.id}`}>Resume</Link>
+                          </Button>
+                        ) : null}
+                        <CampaignActions id={c.id} status={c.status} />
+                      </div>
                     </td>
                   </tr>
                 );

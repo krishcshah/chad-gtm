@@ -3,10 +3,17 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Check, Clock, FileText, Mail, Rocket, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Clock, FileText, Mail, Plus, Rocket, Upload, Users } from "lucide-react";
+import { toast } from "sonner";
 import { TIMEZONES } from "@smartreach/shared";
 import {
   Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   EmptyState,
   Input,
   Label,
@@ -17,18 +24,18 @@ import {
   SelectTrigger,
   SelectValue,
   Switch,
+  Textarea,
   cn,
 } from "@smartreach/ui";
-import { createCampaign } from "@/lib/actions";
-import { CAMPAIGN_POSTAL_REQUIRED_ERROR } from "@/lib/campaign-start-guard";
+import { createLeadList, publishCampaign, saveCampaignDraft, upsertTemplate } from "@/lib/actions";
 import {
   CAMPAIGN_FIELD_CONTROL_ID,
   CAMPAIGN_FIELD_STEP,
   firstFailingCampaignField,
   firstFailingCampaignStep,
-  isPostalComplianceError,
 } from "@/lib/campaign-wizard-errors";
 import { normalizeHhMm } from "@/lib/hhmm";
+import { LeadImport } from "../../leads/import/lead-import";
 
 interface LeadListOpt { id: string; name: string; leadCount: number }
 interface SenderOpt { id: string; senderName: string; email: string; status: string; dailyLimit: number; usedToday: number }
@@ -45,44 +52,88 @@ const STEPS = [
 
 const INVALID = "border-destructive ring-2 ring-destructive/40";
 
+export interface CampaignDraftSeed {
+  id: string;
+  name: string;
+  leadListId: string | null;
+  templateId: string | null;
+  senderIds: string[];
+  wizardStep: number | null;
+  scheduledAt: string | null;
+  businessDaysOnly: boolean;
+  sendingTimezone: string;
+  sendingWindowStart: string;
+  sendingWindowEnd: string;
+  dailyLimit: number;
+  minDelaySec: number;
+  maxDelaySec: number;
+  maxEmailsPerSenderPerDay: number;
+  stopOnReply: boolean;
+  retryFailed: boolean;
+  retryCount: number;
+  startMode: "now" | "later";
+}
+
+function clampStep(step: number | null | undefined) {
+  if (!step || step < 1) return 1;
+  return Math.min(6, step);
+}
+
+function isoToDatetimeLocal(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function CampaignWizard({
   leadLists,
   senders,
   templates,
-  hasPostalAddress,
+  initialDraft,
+  draftLoadError,
 }: {
   leadLists: LeadListOpt[];
   senders: SenderOpt[];
   templates: TemplateOpt[];
-  /** False when workspace postal is blank — Create & Start is blocked (CAN-SPAM). */
-  hasPostalAddress: boolean;
+  initialDraft?: CampaignDraftSeed | null;
+  draftLoadError?: string | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [step, setStep] = useState(1);
+  const [pendingKind, setPendingKind] = useState<"draft" | "publish" | null>(null);
+  const [step, setStep] = useState(() => clampStep(initialDraft?.wizardStep));
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [stepHint, setStepHint] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const focusId = useRef<string | null>(null);
+  const [draftId, setDraftId] = useState<string | null>(initialDraft?.id ?? null);
+  const [listOpen, setListOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [templateOpen, setTemplateOpen] = useState(false);
 
-  // Form state
-  const [name, setName] = useState("");
-  const [leadListId, setLeadListId] = useState("");
-  const [senderIds, setSenderIds] = useState<Set<string>>(new Set());
-  const [templateId, setTemplateId] = useState("");
-  const [startMode, setStartMode] = useState<"now" | "later">("now");
-  const [scheduledAt, setScheduledAt] = useState("");
-  const [businessDaysOnly, setBusinessDaysOnly] = useState(false);
-  const [sendingTimezone, setSendingTimezone] = useState("UTC");
-  const [windowStart, setWindowStart] = useState("09:00");
-  const [windowEnd, setWindowEnd] = useState("17:00");
-  const [dailyLimit, setDailyLimit] = useState(500);
-  const [minDelay, setMinDelay] = useState(90);
-  const [maxDelay, setMaxDelay] = useState(240);
-  const [perSender, setPerSender] = useState(50);
-  const [stopOnReply, setStopOnReply] = useState(true);
-  const [retryFailed, setRetryFailed] = useState(true);
-  const [retryCount, setRetryCount] = useState(2);
+  // Form state — hydrated from /campaigns/new?draft=
+  const [name, setName] = useState(initialDraft?.name ?? "");
+  const [lists, setLists] = useState(leadLists);
+  const [leadListId, setLeadListId] = useState(initialDraft?.leadListId ?? "");
+  const [senderIds, setSenderIds] = useState<Set<string>>(() => new Set(initialDraft?.senderIds ?? []));
+  const [templateOpts, setTemplateOpts] = useState(templates);
+  const [templateId, setTemplateId] = useState(initialDraft?.templateId ?? "");
+  const [startMode, setStartMode] = useState<"now" | "later">(initialDraft?.startMode ?? "now");
+  const [scheduledAt, setScheduledAt] = useState(isoToDatetimeLocal(initialDraft?.scheduledAt ?? null));
+  const [businessDaysOnly, setBusinessDaysOnly] = useState(initialDraft?.businessDaysOnly ?? false);
+  const [sendingTimezone, setSendingTimezone] = useState(initialDraft?.sendingTimezone ?? "UTC");
+  const [windowStart, setWindowStart] = useState(initialDraft?.sendingWindowStart ?? "09:00");
+  const [windowEnd, setWindowEnd] = useState(initialDraft?.sendingWindowEnd ?? "17:00");
+  const [dailyLimit, setDailyLimit] = useState(initialDraft?.dailyLimit ?? 500);
+  const [minDelay, setMinDelay] = useState(initialDraft?.minDelaySec ?? 90);
+  const [maxDelay, setMaxDelay] = useState(initialDraft?.maxDelaySec ?? 240);
+  const [perSender, setPerSender] = useState(initialDraft?.maxEmailsPerSenderPerDay ?? 50);
+  const [stopOnReply, setStopOnReply] = useState(initialDraft?.stopOnReply ?? true);
+  const [retryFailed, setRetryFailed] = useState(initialDraft?.retryFailed ?? true);
+  const [retryCount, setRetryCount] = useState(initialDraft?.retryCount ?? 2);
 
   const toggleSender = (id: string) =>
     setSenderIds((prev) => {
@@ -92,8 +143,8 @@ export function CampaignWizard({
       return next;
     });
 
-  const selectedTemplate = useMemo(() => templates.find((t) => t.id === templateId), [templates, templateId]);
-  const listLeadCount = leadLists.find((l) => l.id === leadListId)?.leadCount ?? 0;
+  const selectedTemplate = useMemo(() => templateOpts.find((t) => t.id === templateId), [templateOpts, templateId]);
+  const listLeadCount = lists.find((l) => l.id === leadListId)?.leadCount ?? 0;
 
   const fieldMessage = (key: string) => fieldErrors[key]?.[0];
   const clearField = (key: string) =>
@@ -138,6 +189,7 @@ export function CampaignWizard({
 
   const next = () => {
     setError(null);
+    setNotice(null);
     setFieldErrors({});
     if (!stepValid(step)) { setStepHint(STEP_HINT[step] ?? "Complete this step to continue."); return; }
     setStepHint(null);
@@ -145,61 +197,127 @@ export function CampaignWizard({
   };
   const back = () => {
     setError(null);
+    setNotice(null);
     setStepHint(null);
     setFieldErrors({});
     setStep((s) => Math.max(1, s - 1));
   };
 
-  const submit = () =>
-    start(async () => {
-      setError(null);
-      setStepHint(null);
-      setFieldErrors({});
-      const sendingWindowStart = normalizeHhMm(windowStart);
-      const sendingWindowEnd = normalizeHhMm(windowEnd);
-      if (sendingWindowStart !== windowStart) setWindowStart(sendingWindowStart);
-      if (sendingWindowEnd !== windowEnd) setWindowEnd(sendingWindowEnd);
-      const res = await createCampaign({
-        name: name.trim(),
-        leadListId,
-        senderIds: [...senderIds],
-        templateId,
-        startMode,
-        scheduledAt: startMode === "later" && scheduledAt ? new Date(scheduledAt).toISOString() : null,
-        businessDaysOnly,
-        sendingTimezone,
-        sendingWindowStart,
-        sendingWindowEnd,
-        dailyLimit: Number(dailyLimit),
-        minDelaySec: Number(minDelay),
-        maxDelaySec: Number(maxDelay),
-        maxEmailsPerSenderPerDay: Number(perSender),
-        stopOnReply,
-        retryFailed,
-        retryCount: Number(retryCount),
-      });
-      if (res.ok && res.data?.id) {
-        router.push(`/campaigns/${res.data.id}`);
-        return;
-      }
-      const message = res.ok ? "Unknown error" : res.error;
-      const fe = res.ok ? {} : (res.fieldErrors ?? {});
-      setFieldErrors(fe);
-      setError(message);
-      const postal = isPostalComplianceError(message, fe);
-      const jump = firstFailingCampaignStep(fe) ?? (postal ? 6 : null);
-      if (jump) setStep(jump);
-      const field = firstFailingCampaignField(fe);
-      focusId.current = field
-        ? (CAMPAIGN_FIELD_CONTROL_ID[field] ?? null)
-        : postal
-          ? "postal-required-alert"
-          : null;
-    });
+  const scheduledIso = () => {
+    if (startMode !== "later" || !scheduledAt) return null;
+    const d = new Date(scheduledAt);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString();
+  };
 
-  const postalBanner =
-    (error && isPostalComplianceError(error, fieldErrors) ? error : null) ??
-    (step === 6 && startMode === "now" && !hasPostalAddress ? CAMPAIGN_POSTAL_REQUIRED_ERROR : null);
+  const rememberDraft = (id: string) => {
+    setDraftId(id);
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("draft") !== id) {
+      url.searchParams.set("draft", id);
+      window.history.replaceState(null, "", `${url.pathname}?${url.searchParams.toString()}`);
+    }
+  };
+
+  const applyFailure = (message: string, fe: Record<string, string[]>) => {
+    setNotice(null);
+    setFieldErrors(fe);
+    setError(message);
+    const jump = firstFailingCampaignStep(fe);
+    if (jump) setStep(jump);
+    const field = firstFailingCampaignField(fe);
+    focusId.current = field ? (CAMPAIGN_FIELD_CONTROL_ID[field] ?? null) : null;
+  };
+
+  const normalizedWindows = () => {
+    const sendingWindowStart = normalizeHhMm(windowStart);
+    const sendingWindowEnd = normalizeHhMm(windowEnd);
+    if (sendingWindowStart !== windowStart) setWindowStart(sendingWindowStart);
+    if (sendingWindowEnd !== windowEnd) setWindowEnd(sendingWindowEnd);
+    return { sendingWindowStart, sendingWindowEnd };
+  };
+
+  const saveDraft = () => {
+    setPendingKind("draft");
+    start(async () => {
+      try {
+        setError(null);
+        setStepHint(null);
+        setNotice(null);
+        setFieldErrors({});
+        const { sendingWindowStart, sendingWindowEnd } = normalizedWindows();
+        const res = await saveCampaignDraft({
+          ...(draftId ? { id: draftId } : {}),
+          name: name.trim(),
+          leadListId: leadListId || null,
+          templateId: templateId || null,
+          senderIds: [...senderIds],
+          startMode,
+          scheduledAt: scheduledIso(),
+          businessDaysOnly,
+          sendingTimezone,
+          sendingWindowStart,
+          sendingWindowEnd,
+          dailyLimit: Number(dailyLimit),
+          minDelaySec: Number(minDelay),
+          maxDelaySec: Number(maxDelay),
+          maxEmailsPerSenderPerDay: Number(perSender),
+          stopOnReply,
+          retryFailed,
+          retryCount: Number(retryCount),
+          wizardStep: step,
+        });
+        if (res.ok && res.data?.id) {
+          rememberDraft(res.data.id);
+          setNotice("Draft saved. Resume it anytime from Campaigns.");
+          return;
+        }
+        applyFailure(res.ok ? "Could not save draft" : res.error, res.ok ? {} : (res.fieldErrors ?? {}));
+      } finally {
+        setPendingKind(null);
+      }
+    });
+  };
+
+  const submit = () => {
+    setPendingKind("publish");
+    start(async () => {
+      try {
+        setError(null);
+        setStepHint(null);
+        setNotice(null);
+        setFieldErrors({});
+        const { sendingWindowStart, sendingWindowEnd } = normalizedWindows();
+        const res = await publishCampaign({
+          ...(draftId ? { id: draftId } : {}),
+          name: name.trim(),
+          leadListId,
+          senderIds: [...senderIds],
+          templateId,
+          startMode,
+          scheduledAt: scheduledIso(),
+          businessDaysOnly,
+          sendingTimezone,
+          sendingWindowStart,
+          sendingWindowEnd,
+          dailyLimit: Number(dailyLimit),
+          minDelaySec: Number(minDelay),
+          maxDelaySec: Number(maxDelay),
+          maxEmailsPerSenderPerDay: Number(perSender),
+          stopOnReply,
+          retryFailed,
+          retryCount: Number(retryCount),
+        });
+        if (res.ok && res.data?.id) {
+          router.push(`/campaigns/${res.data.id}`);
+          return;
+        }
+        applyFailure(res.ok ? "Could not publish campaign" : res.error, res.ok ? {} : (res.fieldErrors ?? {}));
+      } finally {
+        setPendingKind(null);
+      }
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -214,7 +332,7 @@ export function CampaignWizard({
             <li key={s.id} className="flex items-center gap-1.5 sm:gap-2">
               <button
                 type="button"
-                onClick={() => { if (s.id < step) { setStepHint(null); setError(null); setFieldErrors({}); setStep(s.id); } }}
+                onClick={() => { if (s.id < step) { setStepHint(null); setError(null); setNotice(null); setFieldErrors({}); setStep(s.id); } }}
                 disabled={s.id > step}
                 aria-current={s.id === step ? "step" : undefined}
                 aria-invalid={stepHasError(s.id) || undefined}
@@ -267,21 +385,26 @@ export function CampaignWizard({
 
         {step === 2 && (
           <div className="space-y-4">
-            <div>
-              <h2 className="text-lg font-semibold">Choose a lead list</h2>
-              <p className="text-sm text-muted-foreground">Pending leads from this list will be queued.</p>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">Choose a lead list</h2>
+                <p className="text-sm text-muted-foreground">Pending leads from this list will be queued.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={() => setListOpen(true)}>
+                  <Plus className="size-4" aria-hidden /> New list
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => setImportOpen(true)}>
+                  <Upload className="size-4" aria-hidden /> Import leads
+                </Button>
+              </div>
             </div>
-            {leadLists.length === 0 ? (
+            {lists.length === 0 ? (
               <EmptyState
                 icon={Users}
                 title="No lead lists yet"
-                description="Import a CSV of prospects first, then return here to launch your campaign."
+                description="Create a list or import a CSV without leaving this campaign."
                 className="py-10"
-                action={
-                  <Button size="sm" variant="outline" asChild>
-                    <Link href="/leads/import">Import leads</Link>
-                  </Button>
-                }
               />
             ) : (
               <div
@@ -293,7 +416,7 @@ export function CampaignWizard({
                 aria-describedby={fieldMessage("leadListId") ? "err-leadListId" : undefined}
                 className={cn("space-y-2 rounded-lg outline-none", fieldMessage("leadListId") && "ring-2 ring-destructive/40")}
               >
-                {leadLists.map((l) => {
+                {lists.map((l) => {
                   const selected = leadListId === l.id;
                   return (
                     <button
@@ -398,21 +521,21 @@ export function CampaignWizard({
 
         {step === 4 && (
           <div className="space-y-4">
-            <div>
-              <h2 className="text-lg font-semibold">Choose an email template</h2>
-              <p className="text-sm text-muted-foreground">Preview shown on the right once selected.</p>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">Choose an email template</h2>
+                <p className="text-sm text-muted-foreground">Preview shown once selected.</p>
+              </div>
+              <Button type="button" size="sm" variant="outline" onClick={() => setTemplateOpen(true)}>
+                <Plus className="size-4" aria-hidden /> New template
+              </Button>
             </div>
-            {templates.length === 0 ? (
+            {templateOpts.length === 0 ? (
               <EmptyState
                 icon={FileText}
                 title="No templates yet"
-                description="Create a template with your outreach copy, then pick it here."
+                description="Write a template here. It is selected as soon as you save it."
                 className="py-10"
-                action={
-                  <Button size="sm" variant="outline" asChild>
-                    <Link href="/templates/new">Create template</Link>
-                  </Button>
-                }
               />
             ) : (
               <>
@@ -425,7 +548,7 @@ export function CampaignWizard({
                   aria-describedby={fieldMessage("templateId") ? "err-templateId" : undefined}
                   className={cn("space-y-2 rounded-lg outline-none", fieldMessage("templateId") && "ring-2 ring-destructive/40")}
                 >
-                  {templates.map((t) => (
+                  {templateOpts.map((t) => (
                     <button key={t.id} type="button" onClick={() => { setTemplateId(t.id); clearField("templateId"); }}
                       className={cn(
                         "flex w-full flex-col rounded-lg border p-4 text-left transition-colors",
@@ -636,42 +759,94 @@ export function CampaignWizard({
         )}
       </div>
 
-      {postalBanner ? (
-        <div
-          id="postal-required-alert"
-          tabIndex={-1}
-          role="alert"
-          className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm text-destructive outline-none"
-        >
-          <p>{postalBanner}</p>
-          <Link
-            href="/settings"
-            className="mt-1 inline-flex rounded-sm font-medium underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            Open Settings
-          </Link>
-        </div>
-      ) : (stepHint || error) ? (
+      {draftLoadError && !draftId ? (
         <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
-          {error ?? stepHint}
+          Could not open that draft ({draftLoadError}). You can start a new campaign here.
         </p>
       ) : null}
 
-      <div className="flex items-center justify-between gap-3">
-        <Button variant="ghost" onClick={back} disabled={step === 1 || pending}>
+      {(stepHint || error) ? (
+        <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+          {error ?? stepHint}
+        </p>
+      ) : notice ? (
+        <p role="status" className="rounded-lg border border-border bg-muted/50 px-4 py-2.5 text-sm text-foreground">
+          {notice}
+        </p>
+      ) : null}
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Button type="button" variant="ghost" onClick={back} disabled={step === 1 || pending}>
           <ArrowLeft className="size-4" aria-hidden /> Back
         </Button>
-        {step < 6 ? (
-          <Button onClick={next} disabled={pending}>
-            Next <ArrowRight className="size-4" aria-hidden />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button type="button" variant="outline" onClick={saveDraft} disabled={pending}>
+            {pending && pendingKind === "draft" ? "Saving…" : "Save as Draft"}
           </Button>
-        ) : (
-          <Button onClick={submit} disabled={pending || !stepValid(6)}>
-            {pending ? "Creating…" : startMode === "now" ? "Create & Start" : "Create & Schedule"}
-            <Rocket className="size-4" aria-hidden />
-          </Button>
-        )}
+          {step < 6 ? (
+            <Button type="button" onClick={next} disabled={pending}>
+              Next <ArrowRight className="size-4" aria-hidden />
+            </Button>
+          ) : (
+            <Button type="button" onClick={submit} disabled={pending}>
+              {pending && pendingKind === "publish" ? "Publishing…" : startMode === "now" ? "Start" : "Publish"}
+              <Rocket className="size-4" aria-hidden />
+            </Button>
+          )}
+        </div>
       </div>
+
+      <NewListDialog
+        open={listOpen}
+        onOpenChange={setListOpen}
+        onCreated={(list) => {
+          setLists((prev) => prev.some((l) => l.id === list.id) ? prev : [...prev, { ...list, leadCount: 0 }]);
+          setLeadListId(list.id);
+          clearField("leadListId");
+          setListOpen(false);
+          toast.success(`List “${list.name}” selected`);
+        }}
+      />
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Import leads</DialogTitle>
+            <DialogDescription>
+              Upload a CSV. The list stays selected in this campaign.
+            </DialogDescription>
+          </DialogHeader>
+          {importOpen ? (
+            <LeadImport
+              lists={lists.map((l) => ({ id: l.id, name: l.name }))}
+              initialListId={leadListId || "__new__"}
+              onImported={({ listId, listName, imported }) => {
+                setLists((prev) => {
+                  const existing = prev.find((l) => l.id === listId);
+                  if (!existing) return [...prev, { id: listId, name: listName, leadCount: imported }];
+                  return prev.map((l) =>
+                    l.id === listId ? { ...l, name: listName || l.name, leadCount: l.leadCount + imported } : l,
+                  );
+                });
+                setLeadListId(listId);
+                clearField("leadListId");
+                setImportOpen(false);
+                toast.success(`Imported ${imported} leads into ${listName}`);
+              }}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+      <NewTemplateDialog
+        open={templateOpen}
+        onOpenChange={setTemplateOpen}
+        onCreated={(template) => {
+          setTemplateOpts((prev) => prev.some((t) => t.id === template.id) ? prev : [...prev, template]);
+          setTemplateId(template.id);
+          clearField("templateId");
+          setTemplateOpen(false);
+          toast.success(`Template “${template.name}” selected`);
+        }}
+      />
     </div>
   );
 }
@@ -700,5 +875,184 @@ function Field({
         </p>
       ) : null}
     </div>
+  );
+}
+
+function NewListDialog({
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreated: (list: { id: string; name: string }) => void;
+}) {
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  useEffect(() => {
+    if (!open) {
+      setName("");
+      setError(null);
+    }
+  }, [open]);
+
+  const submit = () => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("Give the list a name");
+      return;
+    }
+    start(async () => {
+      setError(null);
+      const res = await createLeadList({ name: trimmed });
+      if (res.ok && res.data?.id) {
+        onCreated({ id: res.data.id, name: trimmed });
+        return;
+      }
+      setError(res.ok ? "Could not create list" : res.error);
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New lead list</DialogTitle>
+          <DialogDescription>The list is selected in this campaign as soon as you create it.</DialogDescription>
+        </DialogHeader>
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
+        >
+          <div className="space-y-2">
+            <Label htmlFor="inline-list-name">List name</Label>
+            <Input
+              id="inline-list-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Q1 SaaS founders"
+              autoFocus
+              aria-invalid={!!error}
+              aria-describedby={error ? "inline-list-error" : undefined}
+            />
+            {error ? (
+              <p id="inline-list-error" role="alert" className="text-sm text-destructive">{error}</p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={pending || !name.trim()}>
+              {pending ? "Creating…" : "Create list"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function NewTemplateDialog({
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreated: (template: TemplateOpt) => void;
+}) {
+  const [name, setName] = useState("");
+  const [subject, setSubject] = useState("");
+  const [bodyText, setBodyText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  useEffect(() => {
+    if (!open) {
+      setName("");
+      setSubject("");
+      setBodyText("");
+      setError(null);
+    }
+  }, [open]);
+
+  const submit = () =>
+    start(async () => {
+      setError(null);
+      const res = await upsertTemplate({
+        name: name.trim(),
+        subject: subject.trim(),
+        bodyText,
+        bodyHtml: "",
+        format: "text",
+      });
+      if (res.ok && res.data?.id) {
+        onCreated({ id: res.data.id, name: name.trim(), subject: subject.trim() });
+        return;
+      }
+      setError(res.ok ? "Could not create template" : res.error);
+    });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New template</DialogTitle>
+          <DialogDescription>Saved templates are selected in this campaign immediately.</DialogDescription>
+        </DialogHeader>
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
+        >
+          <div className="space-y-2">
+            <Label htmlFor="inline-template-name">Template name</Label>
+            <Input
+              id="inline-template-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Founder outreach v1"
+              autoFocus
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="inline-template-subject">Subject</Label>
+            <Input
+              id="inline-template-subject"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              placeholder="Quick question, {{first_name}}"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="inline-template-body">Body</Label>
+            <Textarea
+              id="inline-template-body"
+              rows={6}
+              value={bodyText}
+              onChange={(e) => setBodyText(e.target.value)}
+              placeholder={"Hi {{first_name}},\n\nI noticed {{company}}…"}
+            />
+          </div>
+          {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={pending || !name.trim() || !subject.trim()}>
+              {pending ? "Saving…" : "Save template"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

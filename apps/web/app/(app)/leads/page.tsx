@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Upload, Users } from "lucide-react";
+import { Upload, Users } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { listLeadLists } from "@/lib/queries";
 import { Badge, Button, Card, CardContent, EmptyState, PageHeader } from "@smartreach/ui";
@@ -15,20 +15,13 @@ export default async function LeadsPage() {
     <div className="page-stack">
       <PageHeader
         title="Leads"
-        description="Organize contacts into lists, then import via CSV."
+        description="Upload a CSV to create a list and import contacts."
         actions={
-          <>
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/leads/import">
-                <Upload className="h-4 w-4" /> Import CSV
-              </Link>
-            </Button>
-            <Button size="sm" asChild>
-              <Link href="/leads/new">
-                <Plus className="h-4 w-4" /> New list
-              </Link>
-            </Button>
-          </>
+          <Button size="sm" asChild>
+            <Link href="/leads/import">
+              <Upload className="h-4 w-4" /> Upload New List
+            </Link>
+          </Button>
         }
       />
 
@@ -36,11 +29,11 @@ export default async function LeadsPage() {
         <EmptyState
           icon={Users}
           title="No lead lists yet"
-          description="Create a list and import your first CSV of leads to get started."
+          description="Upload a CSV to create your first list and import leads."
           action={
             <Button size="sm" asChild>
               <Link href="/leads/import">
-                <Upload className="h-4 w-4" /> Import leads
+                <Upload className="h-4 w-4" /> Upload New List
               </Link>
             </Button>
           }

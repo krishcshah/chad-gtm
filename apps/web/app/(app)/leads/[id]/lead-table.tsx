@@ -1,14 +1,21 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
-import { ChevronDown, Download, Search, Tag, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { ChevronDown, Download, Plus, Search, Tag, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { LEAD_STATUSES } from "@smartreach/shared";
 import {
   Badge, statusVariant,
   Button,
   Checkbox,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   Input,
+  Label,
   Select,
   SelectContent,
   SelectItem,
@@ -20,9 +27,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  cn,
 } from "@smartreach/ui";
-import { bulkDeleteLeads, bulkTagLeads, createLeadTag, fetchLeadsPage } from "@/lib/actions";
+import { bulkDeleteLeads, bulkTagLeads, createLead, createLeadTag, fetchLeadsPage, updateLead } from "@/lib/actions";
 
 export interface LeadRow {
   id: string;
@@ -30,6 +36,8 @@ export interface LeadRow {
   firstName: string | null;
   lastName: string | null;
   company: string | null;
+  jobTitle?: string | null;
+  customFields?: Record<string, string> | null;
   status: string;
   tags: string[] | null;
 }
@@ -57,6 +65,7 @@ export function LeadTable({
   const [status, setStatus] = useState(initialStatus);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [tagList, setTagList] = useState(tags);
+  const [editor, setEditor] = useState<null | { mode: "create" } | { mode: "edit"; lead: LeadRow }>(null);
   const [pending, start] = useTransition();
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -176,6 +185,9 @@ export function LeadTable({
           {selected.size > 0 && (
             <span className="text-sm text-muted-foreground">{selected.size} selected</span>
           )}
+          <Button size="sm" onClick={() => setEditor({ mode: "create" })}>
+            <Plus className="h-4 w-4" /> Add Lead
+          </Button>
           <Button variant="outline" size="sm" onClick={doExport}>
             <Download className="h-4 w-4" /> Export
           </Button>
@@ -203,13 +215,14 @@ export function LeadTable({
               <TableHead>Company</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Tags</TableHead>
+              <TableHead className="w-16"><span className="sr-only">Actions</span></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-16 text-center text-muted-foreground">
-                  No leads match. Import a CSV or adjust your filters.
+                <TableCell colSpan={7} className="py-16 text-center text-muted-foreground">
+                  No leads match. Add a lead or adjust your filters.
                 </TableCell>
               </TableRow>
             ) : (
@@ -236,6 +249,17 @@ export function LeadTable({
                       })}
                     </div>
                   </TableCell>
+                  <TableCell>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setEditor({ mode: "edit", lead: r })}
+                      aria-label={`Edit ${r.email}`}
+                    >
+                      Edit
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))
             )}
@@ -250,7 +274,191 @@ export function LeadTable({
           </Button>
         </div>
       )}
+
+      <LeadEditorDialog
+        listId={listId}
+        editor={editor}
+        onOpenChange={(open) => { if (!open) setEditor(null); }}
+        onSaved={() => {
+          setEditor(null);
+          applyFilters(search, status);
+        }}
+      />
     </div>
+  );
+}
+
+function joinName(first: string | null | undefined, last: string | null | undefined) {
+  return [first, last].filter(Boolean).join(" ");
+}
+
+function splitName(name: string): { firstName: string; lastName: string } {
+  const trimmed = name.trim();
+  if (!trimmed) return { firstName: "", lastName: "" };
+  const [first, ...rest] = trimmed.split(/\s+/);
+  return { firstName: first ?? "", lastName: rest.join(" ") };
+}
+
+function LeadEditorDialog({
+  listId,
+  editor,
+  onOpenChange,
+  onSaved,
+}: {
+  listId: string;
+  editor: null | { mode: "create" } | { mode: "edit"; lead: LeadRow };
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => void;
+}) {
+  const lead = editor?.mode === "edit" ? editor.lead : null;
+  const initialCustom = lead?.customFields ? Object.entries(lead.customFields)[0] : undefined;
+  const [email, setEmail] = useState(lead?.email ?? "");
+  const [name, setName] = useState(joinName(lead?.firstName, lead?.lastName));
+  const [company, setCompany] = useState(lead?.company ?? "");
+  const [title, setTitle] = useState(lead?.jobTitle ?? "");
+  const [customName, setCustomName] = useState(initialCustom?.[0] ?? "");
+  const [customValue, setCustomValue] = useState(initialCustom?.[1] ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const originalCustomKey = initialCustom?.[0] ?? "";
+
+  useEffect(() => {
+    const next = editor?.mode === "edit" ? editor.lead : null;
+    const custom = next?.customFields ? Object.entries(next.customFields)[0] : undefined;
+    setEmail(next?.email ?? "");
+    setName(joinName(next?.firstName, next?.lastName));
+    setCompany(next?.company ?? "");
+    setTitle(next?.jobTitle ?? "");
+    setCustomName(custom?.[0] ?? "");
+    setCustomValue(custom?.[1] ?? "");
+    setError(null);
+  }, [editor]);
+
+  const submit = () => {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setError("Email is required");
+      return;
+    }
+    if (customValue.trim() && !customName.trim()) {
+      setError("Name the custom field or clear its value");
+      return;
+    }
+    start(async () => {
+      setError(null);
+      const { firstName, lastName } = splitName(name);
+      const customKey = customName.trim();
+      if (!lead) {
+        const customFields: Record<string, string> = {};
+        if (customKey) customFields[customKey] = customValue.trim();
+        const res = await createLead({
+          listId,
+          email: trimmedEmail,
+          firstName: firstName || null,
+          lastName: lastName || null,
+          company: company.trim() || null,
+          jobTitle: title.trim() || null,
+          ...(customKey ? { customFields } : {}),
+        });
+        if (!res.ok) {
+          setError(res.error);
+          return;
+        }
+        toast.success(res.message ?? "Lead added");
+        onSaved();
+        return;
+      }
+      const customFields: Record<string, string | null> = {};
+      if (customKey) customFields[customKey] = customValue.trim();
+      if (originalCustomKey && originalCustomKey !== customKey) customFields[originalCustomKey] = null;
+      const res = await updateLead(lead.id, {
+        email: trimmedEmail,
+        firstName: firstName || null,
+        lastName: lastName || null,
+        company: company.trim() || null,
+        jobTitle: title.trim() || null,
+        customFields,
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      toast.success(res.message ?? "Lead updated");
+      onSaved();
+    });
+  };
+
+  return (
+    <Dialog open={!!editor} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{lead ? "Edit lead" : "Add lead"}</DialogTitle>
+          <DialogDescription>
+            Email is required. Name, company, title, and one custom field are optional.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
+        >
+          <div className="space-y-2">
+            <Label htmlFor="lead-email">Email</Label>
+            <Input
+              id="lead-email"
+              type="email"
+              required
+              autoFocus
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="ada@example.com"
+              aria-invalid={!!error}
+              aria-describedby={error ? "lead-form-error" : undefined}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="lead-name">Name</Label>
+            <Input id="lead-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ada Lovelace" />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="lead-company">Company</Label>
+              <Input id="lead-company" value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Analytical Engines" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="lead-title">Title</Label>
+              <Input id="lead-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Founder" />
+            </div>
+          </div>
+          {lead && Object.keys(lead.customFields ?? {}).length > 1 ? (
+            <p className="text-xs text-muted-foreground">Other custom fields on this lead stay as they are.</p>
+          ) : null}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="lead-custom-name">Custom field name</Label>
+              <Input id="lead-custom-name" value={customName} onChange={(e) => setCustomName(e.target.value)} placeholder="icebreaker" maxLength={64} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="lead-custom-value">Custom field value</Label>
+              <Input id="lead-custom-value" value={customValue} onChange={(e) => setCustomValue(e.target.value)} placeholder="loved your recent post" maxLength={2000} />
+            </div>
+          </div>
+          {error ? (
+            <p id="lead-form-error" role="alert" className="text-sm text-destructive">{error}</p>
+          ) : null}
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={pending}>
+              {pending ? "Saving…" : lead ? "Save lead" : "Add lead"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -40,7 +40,17 @@ function autoMap(headers: string[]): Mapping {
   return m;
 }
 
-export function LeadImport({ lists }: { lists: { id: string; name: string }[] }) {
+export function LeadImport({
+  lists,
+  initialListId,
+  onImported,
+}: {
+  lists: { id: string; name: string }[];
+  /** Preselect a list, or "__new__" to create one during import. */
+  initialListId?: string;
+  /** Stay on the current screen and hand back the list (campaign wizard). */
+  onImported?: (result: { listId: string; listName: string; imported: number }) => void;
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [step, setStep] = useState<1 | 2>(1);
@@ -49,7 +59,11 @@ export function LeadImport({ lists }: { lists: { id: string; name: string }[] })
   const [dragOver, setDragOver] = useState(false);
   const [mapping, setMapping] = useState<Mapping>({});
   const [customKeys, setCustomKeys] = useState<Record<string, string>>({});
-  const [targetList, setTargetList] = useState<string>(lists[0]?.id ?? "__new__");
+  const [targetList, setTargetList] = useState<string>(() => {
+    if (initialListId === "__new__") return "__new__";
+    if (initialListId && lists.some((l) => l.id === initialListId)) return initialListId;
+    return lists[0]?.id ?? "__new__";
+  });
   const [newListName, setNewListName] = useState("");
   const [result, setResult] = useState<{ imported: number; skipped: number; invalid: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -112,6 +126,16 @@ export function LeadImport({ lists }: { lists: { id: string; name: string }[] })
         toast.error(res.error);
         return;
       }
+      if (res.data && onImported) {
+        const listName =
+          targetList === "__new__"
+            ? newListName.trim()
+            : (lists.find((l) => l.id === res.data!.listId)?.name ??
+              lists.find((l) => l.id === targetList)?.name ??
+              "Lead list");
+        onImported({ listId: res.data.listId, listName, imported: res.data.imported });
+        return;
+      }
       if (res.data) {
         setResult(res.data);
         toast.success("Import complete");
@@ -126,8 +150,18 @@ export function LeadImport({ lists }: { lists: { id: string; name: string }[] })
         onDragLeave={() => setDragOver(false)}
         onDrop={onDrop}
         onClick={() => inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-label="Upload leads CSV"
         className={cn(
-          "flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-20 text-center transition-colors",
+          "flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          onImported ? "p-8" : "p-20",
           dragOver ? "border-primary bg-primary/5" : "border-border hover:border-foreground/30",
         )}
       >
@@ -280,7 +314,7 @@ export function LeadImport({ lists }: { lists: { id: string; name: string }[] })
           <div className="flex items-center justify-between">
             <Button variant="ghost" onClick={() => setStep(1)}><ArrowLeft className="h-4 w-4" /> Back</Button>
             <div className="flex gap-3">
-              {result ? (
+              {result && !onImported ? (
                 <Button onClick={() => router.push("/leads")}>View leads <ArrowRight className="h-4 w-4" /></Button>
               ) : (
                 <Button onClick={doImport} disabled={pending || !emailMapped || (targetList === "__new__" && !newListName.trim())}>

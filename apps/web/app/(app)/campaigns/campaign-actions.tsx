@@ -13,7 +13,6 @@ import {
   DropdownMenuTrigger,
 } from "@smartreach/ui";
 import { campaignAction } from "@/lib/actions";
-import { isPostalComplianceError } from "@/lib/campaign-wizard-errors";
 
 export function CampaignActions({ id, status }: { id: string; status: string }) {
   const [pending, start] = useTransition();
@@ -25,10 +24,6 @@ export function CampaignActions({ id, status }: { id: string; status: string }) 
       if (res.ok) {
         toast.success(res.message ?? "Done");
         if (action === "duplicate") router.refresh();
-      } else if (isPostalComplianceError(res.error, res.fieldErrors)) {
-        toast.error(res.error, {
-          action: { label: "Settings", onClick: () => router.push("/settings") },
-        });
       } else toast.error(res.error);
     });
 
@@ -42,7 +37,11 @@ export function CampaignActions({ id, status }: { id: string; status: string }) 
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {running ? (
+        {status === "draft" ? (
+          <DropdownMenuItem onClick={() => router.push(`/campaigns/new?draft=${id}`)}>
+            <Play className="h-4 w-4" /> Resume
+          </DropdownMenuItem>
+        ) : running ? (
           <DropdownMenuItem onClick={() => run("pause")}>
             <Pause className="h-4 w-4" /> Pause
           </DropdownMenuItem>

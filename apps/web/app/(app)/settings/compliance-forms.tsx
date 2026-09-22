@@ -37,10 +37,10 @@ export function ComplianceForms({
       <Card>
         <CardContent className="space-y-4 p-6">
           <div>
-            <h2 className="font-medium">Compliance (CAN-SPAM)</h2>
+            <h2 className="font-medium">Compliance</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Physical postal address is appended to every outbound campaign email. Unsubscribe links
-              and List-Unsubscribe headers are added automatically.
+              Optional company name, postal address, and unsubscribe base URL. Stored with your
+              workspace and not required to start or send campaigns.
             </p>
           </div>
           <div className="space-y-2">
@@ -60,14 +60,11 @@ export function ComplianceForms({
               onChange={(e) => setSettings((s) => ({ ...s, postalAddress: e.target.value }))}
               placeholder={"123 Market St\nSan Francisco, CA 94105\nUSA"}
               rows={3}
-              required
+              aria-describedby="postal-optional-hint"
             />
-            {!settings.postalAddress.trim() ? (
-              <p className="text-sm text-destructive">
-                Required for live sends (CAN-SPAM / F17). Empty address blocks enqueue and SMTP.
-                Dry-run may still proceed with a warning.
-              </p>
-            ) : null}
+            <p id="postal-optional-hint" className="text-xs text-muted-foreground">
+              Optional. Not required to start or send campaigns.
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="unsubscribeBaseUrl">Unsubscribe base URL (optional)</Label>
