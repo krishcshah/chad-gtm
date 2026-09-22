@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button, EmptyState, Textarea } from "@smartreach/ui";
 import { getUniboxThread, sendUniboxReply } from "@/lib/actions";
-import { messagePreview, threadDayKey, threadDayLabel } from "@/lib/message-body";
+import { messagePreview, prepareMessageBody, resolveBubbleSide, threadDayKey, threadDayLabel } from "@/lib/message-body";
 import type { UniboxThreadMessage } from "@/lib/unibox-thread";
 import { EmailBody } from "./message-body";
 
@@ -39,15 +39,14 @@ function mergeThread(fetched: UniboxThreadMessage[], optimistic: UniboxThreadMes
 }
 
 function senderLabel(m: UniboxThreadMessage): string {
-  if (m.direction === "operator") return m.fromName || "You";
-  if (m.direction === "campaign") return m.fromName || m.fromEmail || "Campaign";
+  if (resolveBubbleSide(m) === "right") return m.fromName || "You";
+  if (m.direction === "campaign" || m.fromRole === "automation") return m.fromName || m.fromEmail || "Campaign";
   return m.fromName || m.fromEmail || "Lead";
 }
 
-function directionLabel(m: UniboxThreadMessage): string {
-  if (m.direction === "operator") return "You";
-  if (m.direction === "campaign") return "Campaign";
-  return "Lead";
+function roleHint(m: UniboxThreadMessage): string {
+  if (m.direction === "campaign" || m.fromRole === "automation") return "Campaign";
+  return "";
 }
 
 function clockTime(iso: string): string {
@@ -71,32 +70,35 @@ function replyAsMessage(r: ReplyRow): UniboxThreadMessage {
 }
 
 function ThreadBubble({ m }: { m: UniboxThreadMessage }) {
-  const right = m.direction === "operator";
+  const right = resolveBubbleSide(m) === "right";
+  const rich = prepareMessageBody({ html: m.bodyHtml, text: m.bodyText }).kind === "html";
   const time = clockTime(m.sentAt);
+  const hint = roleHint(m);
+  const initial = (senderLabel(m).trim()[0] || "?").toUpperCase();
+  const bubble = rich
+    ? ""
+    : right
+      ? "rounded-2xl rounded-br-sm bg-[#312e81] px-3.5 py-2.5 text-white shadow-sm"
+      : m.direction === "campaign" || m.fromRole === "automation"
+        ? "rounded-2xl rounded-bl-sm border border-border bg-muted px-3.5 py-2.5 text-foreground shadow-sm"
+        : "rounded-2xl rounded-bl-sm border border-border bg-card px-3.5 py-2.5 text-foreground shadow-sm";
+
   return (
-    <div className={`flex w-full ${right ? "justify-end" : "justify-start"}`}>
-      <article
-        className={`w-full max-w-[min(100%,34rem)] rounded-2xl border px-3 py-2.5 shadow-sm ${
-          right
-            ? "rounded-br-md border-primary/35 bg-primary/10"
-            : "rounded-bl-md border-border bg-card"
-        }`}
-      >
-        <header className="mb-2 flex items-baseline justify-between gap-3">
-          <p className="min-w-0 truncate text-sm font-medium text-foreground">
-            {senderLabel(m)}
-            <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {directionLabel(m)}
-            </span>
-          </p>
-          {time ? (
-            <time dateTime={m.sentAt} className="shrink-0 text-[11px] text-muted-foreground">
-              {time}
-            </time>
-          ) : null}
-        </header>
-        {m.subject ? <p className="mb-2 text-xs font-medium text-foreground/80">{m.subject}</p> : null}
-        <EmailBody html={m.bodyHtml || null} text={m.bodyText || null} />
+    <div className={`flex w-full items-end gap-2 ${right ? "justify-end" : "justify-start"}`}>
+      {!right ? (
+        <span className="mb-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-secondary text-[11px] font-semibold text-secondary-foreground" aria-hidden>
+          {initial}
+        </span>
+      ) : null}
+      <article className={`flex min-w-0 flex-col gap-1 ${right ? "items-end" : "items-start"} ${rich ? "max-w-[min(92%,40rem)]" : "max-w-[min(85%,28rem)]"}`}>
+        <p className={`flex items-baseline gap-2 text-[11px] text-muted-foreground ${right ? "flex-row-reverse" : ""}`}>
+          <span className="truncate font-medium text-foreground">{senderLabel(m)}</span>
+          {hint && hint !== senderLabel(m) ? <span>{hint}</span> : null}
+          {time ? <time dateTime={m.sentAt}>{time}</time> : null}
+        </p>
+        <div className={bubble}>
+          <EmailBody html={m.bodyHtml || null} text={m.bodyText || null} tone={right && !rich ? "inverse" : "default"} />
+        </div>
       </article>
     </div>
   );
@@ -176,20 +178,41 @@ export function UniboxClient({ initial }: { initial: ReplyRow[] }) {
   const send = (row: ReplyRow) => {
     const text = body.trim();
     if (!text) { toast.error("Write a message first"); return; }
+    const tempId = `operator:pending:${crypto.randomUUID()}`;
+    const optimistic: UniboxThreadMessage = {
+      id: tempId,
+      direction: "operator",
+      fromRole: "operator",
+      fromName: row.senderName || "You",
+      fromEmail: row.senderEmail || "",
+      subject: row.subject ? (row.subject.startsWith("Re:") ? row.subject : `Re: ${row.subject}`) : null,
+      bodyHtml: "",
+      bodyText: text,
+      sentAt: new Date().toISOString(),
+    };
+    setBody("");
+    setThread((prev) => {
+      const base = prev?.replyId === row.id ? prev.messages : [];
+      return { replyId: row.id, messages: mergeThread([optimistic], base) };
+    });
     start(async () => {
       const res = await sendUniboxReply({ replyId: row.id, body: text });
-      if (res.ok) {
+      if (res.ok && res.data?.message) {
+        const message = res.data.message;
         toast.success(res.message ?? "Reply sent");
-        setBody("");
-        const message = res.data?.message;
-        if (message) {
-          setThread((prev) => {
-            const base = prev?.replyId === row.id ? prev.messages : [];
-            return { replyId: row.id, messages: mergeThread([message], base) };
-          });
-        }
+        setThread((prev) => {
+          const base = (prev?.replyId === row.id ? prev.messages : []).filter((m) => m.id !== tempId);
+          return { replyId: row.id, messages: mergeThread([message], base) };
+        });
         router.refresh();
-      } else toast.error(res.error);
+      } else {
+        setThread((prev) => ({
+          replyId: row.id,
+          messages: (prev?.replyId === row.id ? prev.messages : []).filter((m) => m.id !== tempId),
+        }));
+        setBody(text);
+        toast.error(res.ok ? "Send failed" : res.error);
+      }
     });
   };
 

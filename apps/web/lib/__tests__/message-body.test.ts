@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fixMojibake, linkifyPlainText, messagePreview, prepareMessageBody, threadDayLabel } from "../message-body";
+import { fixMojibake, linkifyPlainText, messagePreview, prepareMessageBody, resolveBubbleSide, threadDayLabel } from "../message-body";
 
 describe("prepareMessageBody", () => {
   it("prefers html over plain text", () => {
@@ -110,6 +110,22 @@ describe("prepareMessageBody", () => {
     const prepared = prepareMessageBody({ text: "&lt;p&gt;Hello team&lt;/p&gt;" });
     expect(prepared.kind).toBe("html");
     expect(prepared.html).toContain("<p>Hello team</p>");
+  });
+});
+
+describe("resolveBubbleSide", () => {
+  it("keeps automation and inbound on the left and operator replies on the right", () => {
+    expect(resolveBubbleSide({ direction: "campaign", fromRole: "automation" })).toBe("left");
+    expect(resolveBubbleSide({ direction: "inbound", fromRole: "lead" })).toBe("left");
+    expect(resolveBubbleSide({ direction: "operator", fromRole: "operator" })).toBe("right");
+  });
+
+  it("falls back when direction is missing and leaves unknown rows on the left", () => {
+    expect(resolveBubbleSide({ fromRole: "operator" })).toBe("right");
+    expect(resolveBubbleSide({ folder: "operator" })).toBe("right");
+    expect(resolveBubbleSide({ fromRole: "automation", isOutbound: true, folder: "sent" })).toBe("left");
+    expect(resolveBubbleSide({ isOutbound: true, folder: "inbox" })).toBe("left");
+    expect(resolveBubbleSide({})).toBe("left");
   });
 });
 

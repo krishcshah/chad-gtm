@@ -146,6 +146,38 @@ export function threadDayKey(iso: string): string {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * Chat side for a thread row.
+ * Operator (human) replies sit on the right. Campaign automation and inbound
+ * replies sit on the left. The live contract always sends `direction`;
+ * `fromRole`, `isOutbound`, and `folder` are best-effort fallbacks.
+ * Unknown rows stay on the left so campaign mail is not placed as a human reply.
+ */
+export function resolveBubbleSide(message: {
+  direction?: string | null;
+  fromRole?: string | null;
+  isOutbound?: boolean | null;
+  folder?: string | null;
+}): "left" | "right" {
+  const direction = (message.direction ?? "").trim().toLowerCase();
+  const role = (message.fromRole ?? "").trim().toLowerCase();
+  const folder = (message.folder ?? "").trim().toLowerCase();
+
+  if (direction === "operator" || role === "operator" || folder === "operator") return "right";
+  if (
+    direction === "campaign" ||
+    direction === "inbound" ||
+    role === "automation" ||
+    role === "lead" ||
+    folder === "inbox" ||
+    folder === "campaign"
+  ) {
+    return "left";
+  }
+  if (message.isOutbound === true && folder === "sent" && role !== "lead") return "left";
+  return "left";
+}
+
 export function threadDayLabel(iso: string, now = new Date()): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
