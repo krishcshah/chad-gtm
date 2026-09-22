@@ -117,6 +117,14 @@ export function AppSidebar({ user }: { user: { name?: string | null; email?: str
             <LogOut className="size-4" />
           </button>
         </div>
+
+        {/* Subtle Made in Germany Corner Branding */}
+        <div className="border-t border-border/30 px-4 py-2 flex items-center justify-between text-[10px] text-muted-foreground/60 select-none">
+          <span className="flex items-center gap-1.5 font-medium tracking-tight">
+            <span>🇩🇪</span> Made in Germany
+          </span>
+          <span className="tracking-widest uppercase text-[9px] text-muted-foreground/40 font-mono">EU Cloud</span>
+        </div>
       </aside>
 
       {/* Mobile Top Bar */}

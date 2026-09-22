@@ -17,8 +17,10 @@ export type AnalyticsSummaryView = {
   bounceCount: number;
   replyRate: number;
   bounceRate: number;
-  openRate: null;
-  clickRate: null;
+  openRate: number | null;
+  clickRate: number | null;
+  openCount?: number;
+  clickCount?: number;
 };
 
 export type AnalyticsPointView = {
@@ -113,7 +115,13 @@ export function analyticsProblem(
 }
 
 export function isAnalyticsEmpty(summary: AnalyticsSummaryView, points: AnalyticsPointView[]): boolean {
-  if (summary.leadsContacted > 0 || summary.replyCount > 0 || summary.bounceCount > 0) return false;
+  if (
+    summary.leadsContacted > 0 ||
+    summary.replyCount > 0 ||
+    summary.bounceCount > 0 ||
+    (summary.openCount != null && summary.openCount > 0) ||
+    (summary.clickCount != null && summary.clickCount > 0)
+  ) return false;
   return points.every((point) => point.sent === 0 && point.contacted === 0 && point.replies === 0 && point.bounces === 0);
 }
 

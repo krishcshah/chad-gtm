@@ -141,7 +141,7 @@ export function AnalyticsSection({
       return;
     }
     setAnnouncement(
-      `Leads contacted ${formatCount(summary.leadsContacted)}. Reply rate ${formatAnalyticsRate(summary.replyRate)}, ${plural(summary.replyCount, "reply", "replies")}. Bounce rate ${formatAnalyticsRate(summary.bounceRate)}, ${plural(summary.bounceCount, "bounce", "bounces")}. Open rate not tracked. Click rate not tracked.`,
+      `Leads contacted ${formatCount(summary.leadsContacted)}. Open rate ${formatAnalyticsRate(summary.openRate)}. Click rate ${formatAnalyticsRate(summary.clickRate)}. Reply rate ${formatAnalyticsRate(summary.replyRate)}, ${plural(summary.replyCount, "reply", "replies")}. Bounce rate ${formatAnalyticsRate(summary.bounceRate)}, ${plural(summary.bounceCount, "bounce", "bounces")}.`,
     );
   }, [from, loading, noActivity, problem, rangeError, summary, to]);
 
@@ -306,20 +306,32 @@ export function AnalyticsSection({
 
       {!loading && !problem && !rangeError && summary && points ? (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-            <Kpi label="Leads contacted" value={formatCount(summary.leadsContacted)} />
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <Kpi label="Leads Contacted" value={formatCount(summary.leadsContacted)} hint="Emails delivered" />
             <Kpi
-              label="Reply rate"
-              value={formatAnalyticsRate(summary.replyRate)}
-              hint={plural(summary.replyCount, "reply", "replies")}
+              label="Open Rate"
+              value={formatAnalyticsRate(summary.openRate)}
+              hint={`${summary.openCount ?? 0} opens`}
+              highlight={summary.openRate && summary.openRate > 0 ? "emerald" : undefined}
             />
             <Kpi
-              label="Bounce rate"
+              label="Click Rate"
+              value={formatAnalyticsRate(summary.clickRate)}
+              hint={`${summary.clickCount ?? 0} clicks`}
+              highlight={summary.clickRate && summary.clickRate > 0 ? "emerald" : undefined}
+            />
+            <Kpi
+              label="Reply Rate"
+              value={formatAnalyticsRate(summary.replyRate)}
+              hint={plural(summary.replyCount, "unique reply", "unique replies")}
+              highlight="emerald"
+            />
+            <Kpi
+              label="Bounce Rate"
               value={formatAnalyticsRate(summary.bounceRate)}
               hint={plural(summary.bounceCount, "bounce", "bounces")}
+              highlight={summary.bounceCount > 0 ? "destructive" : undefined}
             />
-            <UntrackedKpi label="Open rate" />
-            <UntrackedKpi label="Click rate" />
           </div>
 
           <Card>
@@ -349,13 +361,33 @@ export function AnalyticsSection({
   );
 }
 
-function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function Kpi({
+  label,
+  value,
+  hint,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  highlight?: "emerald" | "destructive";
+}) {
   return (
-    <Card>
+    <Card className={cn(
+      "border-border/70 transition-colors",
+      highlight === "emerald" && "border-emerald-500/30 bg-emerald-500/[0.02]",
+      highlight === "destructive" && "border-destructive/30 bg-destructive/[0.02]"
+    )}>
       <CardContent className="p-4">
         <dl>
           <dt className="text-[13px] text-muted-foreground">{label}</dt>
-          <dd className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">{value}</dd>
+          <dd className={cn(
+            "mt-1 text-2xl font-semibold tracking-tight tabular-nums",
+            highlight === "emerald" && "text-emerald-400",
+            highlight === "destructive" && "text-destructive"
+          )}>
+            {value}
+          </dd>
           {hint ? <dd className="mt-0.5 text-[11px] tabular-nums text-muted-foreground">{hint}</dd> : null}
         </dl>
       </CardContent>

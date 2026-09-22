@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { pickSenderIndex, todayKey } from "../rotation";
 import { isInSendingWindow, leadVars } from "../scheduler";
-import { claimDueJobs } from "../processor";
+import { claimDueJobs, injectEmailTracking } from "../processor";
 import { isEngineDryRun, workerOwnsJob } from "../queue-mode";
 import type { CampaignRow, JobRow, SenderRow } from "../db-port";
 
@@ -226,5 +226,35 @@ describe("dry/live queue isolation", () => {
 
     delete process.env.ENGINE_DRY_RUN;
     expect((await claimDueJobs(db as any, now, 10)).map((j) => j.id)).toEqual(["live"]);
+  });
+});
+
+describe("injectEmailTracking", () => {
+  const baseUrl = "https://app.smartreach.io";
+
+  it("appends open tracking pixel to html body", () => {
+    const raw = "<p>Hello world</p>";
+    const out = injectEmailTracking(raw, "job-123", baseUrl);
+    expect(out).toContain(`<img src="https://app.smartreach.io/api/track/open?jid=job-123"`);
+    expect(out).toContain(`width="1" height="1"`);
+  });
+
+  it("places tracking pixel right before </body> if present", () => {
+    const raw = "<html><body><p>Hello world</p></body></html>";
+    const out = injectEmailTracking(raw, "job-123", baseUrl);
+    expect(out).toContain(`<img src="https://app.smartreach.io/api/track/open?jid=job-123" width="1" height="1" alt="" style="display:none;width:1px;height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;" /></body></html>`);
+  });
+
+  it("rewrites outbound web links for click tracking while preserving non-http links", () => {
+    const raw = `<p>Check our <a href="https://example.com/demo">demo</a> or email us at <a href="mailto:test@example.com">email</a></p>`;
+    const out = injectEmailTracking(raw, "job-456", baseUrl);
+    expect(out).toContain(`href="https://app.smartreach.io/api/track/click?jid=job-456&url=https%3A%2F%2Fexample.com%2Fdemo"`);
+    expect(out).toContain(`href="mailto:test@example.com"`);
+  });
+
+  it("does not double-wrap tracking links", () => {
+    const raw = `<p><a href="https://app.smartreach.io/api/track/click?jid=abc&url=xyz">click</a></p>`;
+    const out = injectEmailTracking(raw, "job-789", baseUrl);
+    expect(out).toContain(`href="https://app.smartreach.io/api/track/click?jid=abc&url=xyz"`);
   });
 });

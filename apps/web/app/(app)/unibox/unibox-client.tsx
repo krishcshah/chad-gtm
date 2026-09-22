@@ -1,6 +1,6 @@
 "use client";
 import { format, formatDistanceToNow } from "date-fns";
-import { ChevronRight, Inbox, RefreshCw, SendHorizonal, X } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, Inbox, RefreshCw, SendHorizonal, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -172,12 +172,23 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
   const [thread, setThread] = useState<ThreadState | null>(null);
   const [threadLoading, setThreadLoading] = useState(false);
   const [showQuotedPreview, setShowQuotedPreview] = useState(false);
+  const [composerCollapsed, setComposerCollapsed] = useState(false);
   const fetchGen = useRef(0);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const bottomAnchorRef = useRef<HTMLDivElement>(null);
   const unread = conversations.filter((c) => c.unread).length;
   const activeConversation =
     conversations.find((c) => activeId != null && (c.latest.id === activeId || c.memberIds.includes(activeId))) ?? null;
   const messages = thread?.replyId === activeId ? thread.messages : [];
+
+  const scrollToBottom = (instant = false) => {
+    requestAnimationFrame(() => {
+      if (scrollerRef.current) {
+        scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight;
+      }
+      bottomAnchorRef.current?.scrollIntoView({ behavior: instant ? "auto" : "smooth", block: "end" });
+    });
+  };
 
   useEffect(() => {
     setRows(initial);
@@ -206,6 +217,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
         return { replyId: activeId, messages: mergeThread(fetched, optimistic) };
       });
       setThreadLoading(false);
+      scrollToBottom(true);
     })();
     return () => {
       cancelled = true;
@@ -213,10 +225,10 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
   }, [activeId]);
 
   useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [activeId, messages.length]);
+    scrollToBottom(true);
+    const timer = setTimeout(() => scrollToBottom(true), 60);
+    return () => clearTimeout(timer);
+  }, [activeId, messages.length, composerCollapsed]);
 
   const send = (row: ReplyRow) => {
     const text = body.trim();
@@ -467,99 +479,159 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
                       <button type="button" aria-label="Back to conversations" onClick={() => setActiveId(null)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent"><X className="size-4" /></button>
                     </div>
                   </div>
-                  <div ref={scrollerRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 py-3 sm:px-4">
+                  <div ref={scrollerRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 pt-3 pb-12 sm:px-4 sm:pb-16">
                     {threadLoading && messages.length === 0 ? (
                       <p className="text-sm text-muted-foreground">Loading conversation…</p>
                     ) : (
-                      <ThreadTranscript messages={shown} />
+                      <>
+                        <ThreadTranscript messages={shown} />
+                        <div ref={bottomAnchorRef} className="h-2 shrink-0" aria-hidden />
+                      </>
                     )}
                   </div>
-                  <div className="border-t border-border/60 bg-muted/20 p-4">
-                    <div className="rounded-lg border border-border/80 bg-background shadow-xs">
-                      <div className="space-y-1.5 border-b border-border/50 bg-muted/30 px-3.5 py-2.5 text-xs text-muted-foreground">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="flex items-center gap-1.5 truncate">
-                            <span className="font-semibold text-foreground/80">From:</span>
-                            <span className="font-medium text-foreground">{r.senderName || "Sender"}</span>
-                            <span className="text-muted-foreground">&lt;{r.senderEmail ?? "sender"}&gt;</span>
-                          </span>
-                          <span className="hidden text-[11px] text-muted-foreground/75 sm:inline">Press ⌘+Enter to send</span>
+                  <div className="border-t border-border/60 bg-muted/20 p-3 sm:p-4 shrink-0 transition-all duration-200">
+                    {composerCollapsed ? (
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          setComposerCollapsed(false);
+                          setTimeout(() => scrollToBottom(), 50);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setComposerCollapsed(false);
+                          }
+                        }}
+                        className="group flex items-center justify-between rounded-lg border border-border/80 bg-background px-3.5 py-2.5 shadow-xs cursor-pointer hover:bg-muted/30 hover:border-primary/40 transition-all"
+                      >
+                        <div className="flex items-center gap-2.5 text-xs text-muted-foreground truncate">
+                          <SendHorizonal className="size-3.5 shrink-0 text-muted-foreground group-hover:text-primary transition-colors" />
+                          <span className="font-medium text-foreground truncate">Reply to {name}</span>
+                          <span className="hidden sm:inline text-muted-foreground/80 truncate">&lt;{r.fromEmail}&gt;</span>
+                          {body.trim() ? (
+                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary shrink-0">
+                              Draft saved
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-muted-foreground/70 hidden md:inline truncate">
+                              Click to write reply…
+                            </span>
+                          )}
                         </div>
-                        <div className="flex items-center gap-1.5 truncate">
-                          <span className="font-semibold text-foreground/80">To:</span>
-                          <span className="font-medium text-foreground">{name}</span>
-                          <span className="text-muted-foreground">&lt;{r.fromEmail}&gt;</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 truncate">
-                          <span className="font-semibold text-foreground/80">Subject:</span>
-                          <span className="truncate font-medium text-foreground">
-                            {r.subject?.startsWith("Re:") ? r.subject : `Re: ${r.subject || "(no subject)"}`}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="p-3">
-                        <Textarea
-                          id="unibox-reply"
-                          rows={5}
-                          value={body}
-                          onChange={(e) => setBody(e.target.value)}
-                          onKeyDown={(e) => {
-                            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                              e.preventDefault();
-                              send(r);
-                            }
-                          }}
-                          placeholder={`Write your email reply to ${name.split(" ")[0]}…`}
-                          className="min-h-[120px] resize-y border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-                        />
-                      </div>
-
-                      <div className="border-t border-border/40 bg-muted/10 px-3.5 py-2">
                         <button
                           type="button"
-                          onClick={() => setShowQuotedPreview(!showQuotedPreview)}
-                          className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setComposerCollapsed(false);
+                            setTimeout(() => scrollToBottom(), 50);
+                          }}
+                          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
+                          title="Expand composer"
+                          aria-label="Expand composer"
                         >
-                          <ChevronRight className={cn("size-3.5 transition-transform", showQuotedPreview && "rotate-90")} />
-                          <span>{showQuotedPreview ? "Hide quoted message" : "Show quoted message"}</span>
+                          <ChevronUp className="size-4" />
                         </button>
-
-                        {showQuotedPreview ? (
-                          <div className="mt-2 rounded-md border-l-2 border-primary/40 bg-muted/40 p-2.5 text-xs text-muted-foreground">
-                            <p className="font-medium text-foreground/80">
-                              On {r.receivedAt ? format(new Date(r.receivedAt), "EEE, MMM d, yyyy 'at' h:mm a") : "earlier"} {r.fromName || r.fromEmail} &lt;{r.fromEmail}&gt; wrote:
-                            </p>
-                            <p className="mt-1 line-clamp-6 whitespace-pre-wrap font-mono text-[11px] text-muted-foreground/90">
-                              {r.bodyText || r.snippet || "(No content)"}
-                            </p>
-                          </div>
-                        ) : null}
                       </div>
+                    ) : (
+                      <div className="rounded-lg border border-border/80 bg-background shadow-xs">
+                        <div className="space-y-1.5 border-b border-border/50 bg-muted/30 px-3.5 py-2.5 text-xs text-muted-foreground">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="flex items-center gap-1.5 truncate">
+                              <span className="font-semibold text-foreground/80">From:</span>
+                              <span className="font-medium text-foreground">{r.senderName || "Sender"}</span>
+                              <span className="text-muted-foreground">&lt;{r.senderEmail ?? "sender"}&gt;</span>
+                            </span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="hidden text-[11px] text-muted-foreground/75 sm:inline">Press ⌘+Enter to send</span>
+                              <button
+                                type="button"
+                                onClick={() => setComposerCollapsed(true)}
+                                className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                                title="Collapse composer"
+                                aria-label="Collapse composer"
+                              >
+                                <ChevronDown className="size-4" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className="font-semibold text-foreground/80">To:</span>
+                            <span className="font-medium text-foreground">{name}</span>
+                            <span className="text-muted-foreground">&lt;{r.fromEmail}&gt;</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className="font-semibold text-foreground/80">Subject:</span>
+                            <span className="truncate font-medium text-foreground">
+                              {r.subject?.startsWith("Re:") ? r.subject : `Re: ${r.subject || "(no subject)"}`}
+                            </span>
+                          </div>
+                        </div>
 
-                      <div className="flex items-center justify-between border-t border-border/50 bg-muted/20 px-3.5 py-2">
-                        <div className="flex items-center gap-2">
-                          <Button onClick={() => send(r)} disabled={pending || !body.trim()} size="sm">
-                            <SendHorizonal className="size-4" />
-                            {pending ? "Sending email…" : "Send email"}
-                          </Button>
-                          {body.trim() ? (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setBody("")}
-                              className="text-xs text-muted-foreground hover:text-destructive"
-                            >
-                              Discard
-                            </Button>
+                        <div className="p-3">
+                          <Textarea
+                            id="unibox-reply"
+                            rows={5}
+                            value={body}
+                            onChange={(e) => setBody(e.target.value)}
+                            onKeyDown={(e) => {
+                              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                                e.preventDefault();
+                                send(r);
+                              }
+                            }}
+                            placeholder={`Write your email reply to ${name.split(" ")[0]}…`}
+                            className="min-h-[120px] resize-y border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                          />
+                        </div>
+
+                        <div className="border-t border-border/40 bg-muted/10 px-3.5 py-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowQuotedPreview(!showQuotedPreview)}
+                            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                          >
+                            <ChevronRight className={cn("size-3.5 transition-transform", showQuotedPreview && "rotate-90")} />
+                            <span>{showQuotedPreview ? "Hide quoted message" : "Show quoted message"}</span>
+                          </button>
+
+                          {showQuotedPreview ? (
+                            <div className="mt-2 rounded-md border-l-2 border-primary/40 bg-muted/40 p-2.5 text-xs text-muted-foreground">
+                              <p className="font-medium text-foreground/80">
+                                On {r.receivedAt ? format(new Date(r.receivedAt), "EEE, MMM d, yyyy 'at' h:mm a") : "earlier"} {r.fromName || r.fromEmail} &lt;{r.fromEmail}&gt; wrote:
+                              </p>
+                              <p className="mt-1 line-clamp-6 whitespace-pre-wrap font-mono text-[11px] text-muted-foreground/90">
+                                {r.bodyText || r.snippet || "(No content)"}
+                              </p>
+                            </div>
                           ) : null}
                         </div>
-                        <span className="text-[11px] text-muted-foreground">
-                          Thread headers preserved
-                        </span>
+
+                        <div className="flex items-center justify-between border-t border-border/50 bg-muted/20 px-3.5 py-2">
+                          <div className="flex items-center gap-2">
+                            <Button onClick={() => send(r)} disabled={pending || !body.trim()} size="sm">
+                              <SendHorizonal className="size-4" />
+                              {pending ? "Sending email…" : "Send email"}
+                            </Button>
+                            {body.trim() ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setBody("")}
+                                className="text-xs text-muted-foreground hover:text-destructive"
+                              >
+                                Discard
+                              </Button>
+                            ) : null}
+                          </div>
+                          <span className="text-[11px] text-muted-foreground">
+                            Thread headers preserved
+                          </span>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </>
               );

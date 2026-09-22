@@ -41,6 +41,13 @@ export const PRESET_SEQUENCES: ReusableSequence[] = [
               "Hi {{first_name}},\n\nI was looking at {{company}} and noticed you're scaling outreach this quarter. Most founders I speak with struggle with mailbox deliverability and high tool costs.\n\nWe built an automated system that handles sender rotation and humanized pacing without monthly seat caps.\n\nWorth a 4-minute chat this Thursday?",
             bodyHtml: "",
           },
+          {
+            label: "B",
+            subject: "Scaling {{company}}'s cold email infrastructure (quick question)",
+            bodyText:
+              "Hey {{first_name}},\n\nSaw what your team is building at {{company}}—stellar momentum.\n\nCurious if you've run into deliverability bottlenecks or domain burn lately? We built an open infrastructure that gives you unlimited rotating mailboxes without the $1,000s/mo price gouging.\n\nOpen to exploring if this could optimize your pipeline?",
+            bodyHtml: "",
+          },
         ],
       },
       {

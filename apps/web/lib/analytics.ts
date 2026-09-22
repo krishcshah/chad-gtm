@@ -2,7 +2,7 @@ import { and, count, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { getDb } from "./db";
 
-const { campaigns, emailJobs, replies } = schema;
+const { campaigns, emailJobs, replies, emailTrackingEvents } = schema;
 
 export type AnalyticsRangeInput = {
   campaignId?: string;
@@ -16,8 +16,10 @@ export type AnalyticsSummary = {
   bounceCount: number;
   replyRate: number; // percent 0–100; 0 if contacted=0
   bounceRate: number;
-  openRate: null;
-  clickRate: null;
+  openRate: number | null;
+  clickRate: number | null;
+  openCount?: number;
+  clickCount?: number;
 };
 
 export type AnalyticsSeriesPoint = {
@@ -63,19 +65,23 @@ export function eachDateInclusive(from: string, to: string): string[] {
   return out;
 }
 
-/** Pure rate helpers — open/click always null (no tracking pixels). */
+/** Pure rate helpers — calculate reply, bounce, open, and click rates. */
 export function computeAnalyticsRates(
   leadsContacted: number,
   replyCount: number,
   bounceCount: number,
+  openCount: number = 0,
+  clickCount: number = 0,
 ): Pick<AnalyticsSummary, "replyRate" | "bounceRate" | "openRate" | "clickRate"> {
   const replyRate = leadsContacted === 0 ? 0 : (replyCount / leadsContacted) * 100;
   const bounceRate = leadsContacted === 0 ? 0 : (bounceCount / leadsContacted) * 100;
+  const openRate = leadsContacted === 0 ? 0 : Math.min(100, (openCount / leadsContacted) * 100);
+  const clickRate = leadsContacted === 0 ? 0 : Math.min(100, (clickCount / leadsContacted) * 100);
   return {
     replyRate,
     bounceRate,
-    openRate: null,
-    clickRate: null,
+    openRate,
+    clickRate,
   };
 }
 
@@ -83,12 +89,24 @@ export function buildAnalyticsSummary(counts: {
   leadsContacted: number;
   replyCount: number;
   bounceCount: number;
+  openCount?: number;
+  clickCount?: number;
 }): AnalyticsSummary {
-  const rates = computeAnalyticsRates(counts.leadsContacted, counts.replyCount, counts.bounceCount);
+  const openCount = counts.openCount ?? 0;
+  const clickCount = counts.clickCount ?? 0;
+  const rates = computeAnalyticsRates(
+    counts.leadsContacted,
+    counts.replyCount,
+    counts.bounceCount,
+    openCount,
+    clickCount,
+  );
   return {
     leadsContacted: counts.leadsContacted,
     replyCount: counts.replyCount,
     bounceCount: counts.bounceCount,
+    openCount,
+    clickCount,
     ...rates,
   };
 }
@@ -127,7 +145,14 @@ export async function getAnalyticsSummaryForUser(
     campaignId ? eq(emailJobs.campaignId, campaignId) : undefined,
   );
 
-  const [[contactedRow], [replyRow], [bounceRow]] = await Promise.all([
+  const trackingBase = and(
+    eq(emailTrackingEvents.userId, userId),
+    campaignId ? eq(emailTrackingEvents.campaignId, campaignId) : undefined,
+    gte(emailTrackingEvents.createdAt, fromIso),
+    lte(emailTrackingEvents.createdAt, toIso),
+  );
+
+  const [[contactedRow], [replyRow], [bounceRow], [openRow], [clickRow]] = await Promise.all([
     db
       .select({
         n: sql<number>`count(distinct ${emailJobs.leadId})`,
@@ -166,12 +191,28 @@ export async function getAnalyticsSummaryForUser(
           lte(emailJobs.updatedAt, toIso),
         ),
       ),
+    db
+      .select({
+        n: sql<number>`count(distinct coalesce(${emailTrackingEvents.leadId}, ${emailTrackingEvents.jobId}))`,
+      })
+      .from(emailTrackingEvents)
+      .where(and(trackingBase, eq(emailTrackingEvents.type, "open")))
+      .catch(() => [{ n: 0 }]),
+    db
+      .select({
+        n: sql<number>`count(distinct coalesce(${emailTrackingEvents.leadId}, ${emailTrackingEvents.jobId}))`,
+      })
+      .from(emailTrackingEvents)
+      .where(and(trackingBase, eq(emailTrackingEvents.type, "click")))
+      .catch(() => [{ n: 0 }]),
   ]);
 
   return buildAnalyticsSummary({
     leadsContacted: Number(contactedRow?.n ?? 0),
     replyCount: Number(replyRow?.n ?? 0),
     bounceCount: Number(bounceRow?.n ?? 0),
+    openCount: Number(openRow?.n ?? 0),
+    clickCount: Number(clickRow?.n ?? 0),
   });
 }
 

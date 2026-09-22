@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@smartreach/ui";
-import { campaignAction } from "@/lib/actions";
+import { campaignAction, duplicateCampaignToDraft } from "@/lib/actions";
 
 export function CampaignActions({ id, status }: { id: string; status: string }) {
   const [pending, start] = useTransition();
@@ -23,8 +23,19 @@ export function CampaignActions({ id, status }: { id: string; status: string }) 
       const res = await campaignAction(id, action);
       if (res.ok) {
         toast.success(res.message ?? "Done");
-        if (action === "duplicate") router.refresh();
+        router.refresh();
       } else toast.error(res.error);
+    });
+
+  const handleDuplicate = () =>
+    start(async () => {
+      const res = await duplicateCampaignToDraft(id);
+      if (res.ok && res.data?.draftId) {
+        toast.success("Campaign duplicated into editor");
+        router.push(`/campaigns/new?draft=${res.data.draftId}`);
+      } else {
+        toast.error(res.ok ? "Duplicate failed" : res.error);
+      }
     });
 
   const running = status === "running";
@@ -50,7 +61,7 @@ export function CampaignActions({ id, status }: { id: string; status: string }) 
             <Play className="h-4 w-4" /> {status === "paused" ? "Resume" : "Start"}
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem onClick={() => run("duplicate")}>
+        <DropdownMenuItem onClick={handleDuplicate}>
           <Copy className="h-4 w-4" /> Duplicate
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => run("archive")}>

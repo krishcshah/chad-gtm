@@ -29,6 +29,38 @@ export interface ProcessResult {
   skipped: number;
 }
 
+export function injectEmailTracking(html: string, jobId: string, baseUrl: string): string {
+  if (!html) return html;
+  const cleanBaseUrl = baseUrl.replace(/\/+$/, "");
+
+  // Rewrite standard web links for click tracking (ignore mailto:, tel:, #, and already tracked links)
+  const trackedHtml = html.replace(
+    /<a\b([^>]*?)href=(["'])(https?:\/\/[^"'\s>]+)\2([^>]*)>/gi,
+    (match, prefix, quote, originalUrl, suffix) => {
+      if (originalUrl.includes("/api/track/")) {
+        return match;
+      }
+      const trackingUrl = `${cleanBaseUrl}/api/track/click?jid=${encodeURIComponent(jobId)}&url=${encodeURIComponent(originalUrl)}`;
+      return `<a${prefix}href=${quote}${trackingUrl}${quote}${suffix}>`;
+    }
+  );
+
+  // Append 1x1 transparent open pixel
+  const openPixel = `<img src="${cleanBaseUrl}/api/track/open?jid=${encodeURIComponent(jobId)}" width="1" height="1" alt="" style="display:none;width:1px;height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;" />`;
+
+  if (/<\/body>/i.test(trackedHtml)) {
+    return trackedHtml.replace(/<\/body>/i, `${openPixel}</body>`);
+  }
+  return `${trackedHtml}\n${openPixel}`;
+}
+
+const trackingAppUrl = (
+  process.env.APP_URL ||
+  process.env.NEXT_PUBLIC_APP_URL ||
+  process.env.BETTER_AUTH_URL ||
+  "https://smart-reach-staging.vercel.app"
+).replace(/\/+$/, "");
+
 /** Claim due jobs: conditional CAS update makes it safe across overlapping workers. */
 export async function claimDueJobs(db: EngineDb, now = new Date(), limit = BATCH): Promise<JobRow[]> {
   const dryRun = isEngineDryRun();
@@ -134,7 +166,8 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
     // Send bodies as enqueued — no auto postal/unsub footer or List-Unsubscribe header.
     // {{unsubscribe_url}} is resolved at schedule time when the template includes it.
     const textBody = job.bodyText || "";
-    const htmlBody = job.bodyHtml || job.bodyText || "";
+    const rawHtml = job.bodyHtml || job.bodyText || "";
+    const htmlBody = injectEmailTracking(rawHtml, job.id, trackingAppUrl);
     const dryRun = isEngineDryRun();
 
     // Dry-run: prove enqueue→process path without live SMTP

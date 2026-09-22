@@ -539,5 +539,30 @@ export const uniboxMessages = pgTable(
   ],
 );
 
+/* ─── Email tracking events (open pixel & link click tracking) ────────── */
+
+export const emailTrackingEvents = pgTable(
+  "email_tracking_events",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    campaignId: text("campaign_id").references(() => campaigns.id, { onDelete: "cascade" }),
+    jobId: text("job_id").references(() => emailJobs.id, { onDelete: "cascade" }),
+    leadId: text("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    type: text("type", { enum: ["open", "click"] }).notNull(),
+    targetUrl: text("target_url"),
+    ip: text("ip"),
+    userAgent: text("user_agent"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("email_tracking_user_type_idx").on(t.userId, t.type, t.createdAt),
+    index("email_tracking_campaign_type_idx").on(t.campaignId, t.type, t.createdAt),
+    index("email_tracking_job_idx").on(t.jobId, t.type),
+  ],
+);
+
 /* ─── Re-export auth tables so drizzle sees the whole graph ────────────── */
 export * from "./schema-auth";

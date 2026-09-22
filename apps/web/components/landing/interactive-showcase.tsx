@@ -40,7 +40,7 @@ export function InteractiveShowcase() {
           {[
             { key: "sequence", label: "Visual Sequences", icon: GitBranch },
             { key: "senders", label: "Sender Rotation", icon: Mail },
-            { key: "unibox", label: "UniBox (Threaded)", icon: Inbox },
+            { key: "unibox", label: "Unified Inbox", icon: Inbox },
             { key: "analytics", label: "Live Deliverability", icon: Activity },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -203,7 +203,7 @@ export function InteractiveShowcase() {
                   Assuming you&apos;re heads down right now! If timing isn&apos;t right, I will leave you alone. Best of luck with {"{{company}}"}!
                 </div>
                 <div className="rounded bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary flex items-center gap-1">
-                  <Sparkles className="size-3" /> Includes 1-click opt-out token
+                  <Sparkles className="size-3" /> Includes 1-click unsubscribe option
                 </div>
               </div>
             </div>
@@ -226,7 +226,7 @@ export function InteractiveShowcase() {
                 12 Inboxes Connected
               </Badge>
               <Badge variant="outline" className="text-emerald-500 border-emerald-500/30 bg-emerald-500/10">
-                Round-Robin Algorithm
+                Smart Auto-Rotation
               </Badge>
             </div>
           </div>

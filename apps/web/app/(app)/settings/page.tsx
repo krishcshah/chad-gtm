@@ -100,6 +100,17 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Subtle Made in Germany System Card */}
+      <div className="rounded-xl border border-border/50 bg-card/30 p-4 text-center">
+        <div className="flex items-center justify-center gap-2 text-xs font-semibold text-foreground">
+          <span>🇩🇪</span>
+          <span>Made in Germany · 100% EU Hosted</span>
+        </div>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Engineered with German precision in Frankfurt, Germany. Strict GDPR compliance by design, zero third-party telemetry, and sovereign European cloud infrastructure.
+        </p>
+      </div>
+
       <p className="text-center text-xs text-muted-foreground">
         {APP_NAME} · Everything you need. Nothing you don&apos;t.
       </p>

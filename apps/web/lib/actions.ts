@@ -132,11 +132,17 @@ export async function deleteLeadList(listId: string): Promise<ActionResult> {
   const user = await requireUser();
   const db = getDb();
   try {
+    const now = nowIso();
     await db
       .update(leadLists)
-      .set({ deletedAt: nowIso() })
+      .set({ deletedAt: now })
       .where(and(eq(leadLists.id, listId), eq(leadLists.userId, user.id)));
+    await db
+      .update(leads)
+      .set({ deletedAt: now })
+      .where(and(eq(leads.listId, listId), eq(leads.userId, user.id), isNull(leads.deletedAt)));
     revalidatePath("/leads");
+    revalidatePath("/dashboard");
     return { ok: true, message: "List deleted" };
   } catch (e) {
     return err(e);
@@ -738,6 +744,42 @@ export async function saveSequenceAsTemplate(
   }
 }
 
+export async function updateSequenceTemplate(
+  id: string,
+  name: string,
+  description: string,
+  steps: TemplateStepItem[],
+): Promise<ActionResult<{ id: string }>> {
+  const user = await requireUser();
+  const db = getDb();
+  const trimmedName = name?.trim() || "Untitled Sequence";
+  const firstSubject = steps[0]?.variants[0]?.subject?.trim() || trimmedName;
+  const serialized = serializeSequenceTemplate(trimmedName, description?.trim() || "", steps);
+
+  try {
+    const [row] = await db
+      .update(emailTemplates)
+      .set({
+        name: trimmedName,
+        subject: firstSubject,
+        bodyText: serialized,
+        updatedAt: nowIso(),
+      })
+      .where(and(eq(emailTemplates.id, id), eq(emailTemplates.userId, user.id)))
+      .returning({ id: emailTemplates.id });
+
+    if (!row) {
+      return { ok: false, error: "Sequence not found or you don't have permission to edit it" };
+    }
+
+    await logActivity(user.id, "template.updated", `Updated sequence template "${trimmedName}"`);
+    revalidatePath("/templates");
+    return { ok: true, data: { id: row.id }, message: `Sequence "${trimmedName}" updated` };
+  } catch (e) {
+    return err(e);
+  }
+}
+
 /* ═══ CAMPAIGNS ═══ */
 
 export async function saveCampaignDraft(input: unknown): Promise<ActionResult<{ id: string }>> {
@@ -895,6 +937,140 @@ export async function campaignAction(
     revalidatePath("/campaigns");
     revalidatePath("/dashboard");
     return { ok: true, message: `Campaign ${action === "start" ? "started" : `${action}d`}` };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+/**
+ * Duplicate an existing campaign into a prefilled new draft.
+ * Copies schedule, senders, daily limits, and sequence steps & variants.
+ */
+export async function duplicateCampaignToDraft(
+  campaignId: string,
+): Promise<ActionResult<{ draftId: string }>> {
+  const user = await requireUser();
+  const db = getDb();
+  try {
+    const [c] = await db
+      .select()
+      .from(campaigns)
+      .where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, user.id), isNull(campaigns.deletedAt)));
+    if (!c) return { ok: false, error: "Campaign not found" };
+
+    const copyName = `${c.name} (Copy)`;
+    const [copy] = await db
+      .insert(campaigns)
+      .values({
+        userId: user.id,
+        name: copyName,
+        status: "draft",
+        leadListId: c.leadListId,
+        templateId: c.templateId,
+        businessDaysOnly: c.businessDaysOnly,
+        sendingTimezone: c.sendingTimezone,
+        sendingWindowStart: c.sendingWindowStart,
+        sendingWindowEnd: c.sendingWindowEnd,
+        dailyLimit: c.dailyLimit,
+        minDelaySec: c.minDelaySec,
+        maxDelaySec: c.maxDelaySec,
+        maxEmailsPerSenderPerDay: c.maxEmailsPerSenderPerDay,
+        stopOnReply: c.stopOnReply,
+        retryFailed: c.retryFailed,
+        retryCount: c.retryCount,
+        wizardStep: 1,
+      })
+      .returning({ id: campaigns.id });
+
+    // Copy attached senders
+    const senders = await db
+      .select({ senderId: campaignSenders.senderId })
+      .from(campaignSenders)
+      .where(eq(campaignSenders.campaignId, campaignId));
+    if (senders.length) {
+      await db
+        .insert(campaignSenders)
+        .values(senders.map((s) => ({ campaignId: copy.id, senderId: s.senderId })));
+    }
+
+    // Clone sequence steps & variants
+    const seq = await getCampaignSequenceForUser(db, user.id, campaignId);
+    if (seq.ok && seq.data && seq.data.steps.length > 0) {
+      await saveCampaignSequenceForUser(db, user.id, {
+        campaignId: copy.id,
+        steps: seq.data.steps,
+      });
+    }
+
+    await logActivity(user.id, "campaign.duplicate", `Duplicated campaign "${c.name}" into new draft`, copy.id);
+    revalidatePath("/campaigns");
+    revalidatePath("/dashboard");
+    return { ok: true, message: "Campaign cloned into editor", data: { draftId: copy.id } };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+/**
+ * Edit settings on an existing campaign (name, daily limit, sending window, senders, etc.).
+ */
+export async function updateCampaignSettings(
+  campaignId: string,
+  input: {
+    name?: string;
+    dailyLimit?: number;
+    sendingWindowStart?: string;
+    sendingWindowEnd?: string;
+    sendingTimezone?: string;
+    businessDaysOnly?: boolean;
+    stopOnReply?: boolean;
+    minDelaySec?: number;
+    maxDelaySec?: number;
+    senderIds?: string[];
+  },
+): Promise<ActionResult> {
+  const user = await requireUser();
+  const db = getDb();
+  try {
+    const [c] = await db
+      .select()
+      .from(campaigns)
+      .where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, user.id), isNull(campaigns.deletedAt)));
+    if (!c) return { ok: false, error: "Campaign not found" };
+
+    const updateData: Record<string, unknown> = { updatedAt: nowIso() };
+    if (typeof input.name === "string" && input.name.trim()) updateData.name = input.name.trim();
+    if (typeof input.dailyLimit === "number") updateData.dailyLimit = Math.max(1, input.dailyLimit);
+    if (typeof input.sendingWindowStart === "string") updateData.sendingWindowStart = input.sendingWindowStart;
+    if (typeof input.sendingWindowEnd === "string") updateData.sendingWindowEnd = input.sendingWindowEnd;
+    if (typeof input.sendingTimezone === "string") updateData.sendingTimezone = input.sendingTimezone;
+    if (typeof input.businessDaysOnly === "boolean") updateData.businessDaysOnly = input.businessDaysOnly;
+    if (typeof input.stopOnReply === "boolean") updateData.stopOnReply = input.stopOnReply;
+    if (typeof input.minDelaySec === "number") updateData.minDelaySec = input.minDelaySec;
+    if (typeof input.maxDelaySec === "number") updateData.maxDelaySec = input.maxDelaySec;
+
+    await db.update(campaigns).set(updateData).where(eq(campaigns.id, campaignId));
+
+    if (Array.isArray(input.senderIds)) {
+      const validSenders = await db
+        .select({ id: senderAccounts.id })
+        .from(senderAccounts)
+        .where(and(eq(senderAccounts.userId, user.id), isNull(senderAccounts.deletedAt)));
+      const validSet = new Set(validSenders.map((s) => s.id));
+      const targetSenderIds = input.senderIds.filter((id) => validSet.has(id));
+
+      await db.delete(campaignSenders).where(eq(campaignSenders.campaignId, campaignId));
+      if (targetSenderIds.length > 0) {
+        await db
+          .insert(campaignSenders)
+          .values(targetSenderIds.map((sId) => ({ campaignId, senderId: sId })));
+      }
+    }
+
+    await logActivity(user.id, "campaign.update", `Updated settings for campaign "${c.name}"`, campaignId);
+    revalidatePath(`/campaigns/${campaignId}`);
+    revalidatePath("/campaigns");
+    return { ok: true, message: "Campaign settings saved successfully" };
   } catch (e) {
     return err(e);
   }

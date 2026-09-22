@@ -18,10 +18,22 @@ const {
 } = schema;
 
 const today = () => new Date().toISOString().slice(0, 10);
+const nowIso = () => new Date().toISOString();
 
 export async function getDashboardStats(userId: string) {
   const db = getDb();
   const t = today();
+
+  // Lazy sync: ensure orphaned leads from deleted lists have deletedAt set
+  db.execute(sql`
+    UPDATE leads
+    SET deleted_at = coalesce(leads.deleted_at, ${nowIso()})
+    FROM lead_lists
+    WHERE leads.list_id = lead_lists.id
+      AND lead_lists.deleted_at IS NOT NULL
+      AND leads.deleted_at IS NULL
+      AND leads.user_id = ${userId}
+  `).catch(() => {});
 
   // Fire all six independent aggregates in parallel — one Neon hop (~120ms)
   // instead of six sequential hops (~720ms). This is the dashboard's hot path.
@@ -59,8 +71,9 @@ export async function getDashboardStats(userId: string) {
       .innerJoin(campaigns, eq(emailJobs.campaignId, campaigns.id))
       .where(and(eq(campaigns.userId, userId), gte(emailJobs.createdAt, `${t}T00:00:00Z`))),
     db
-      .select({ total: count() })
+      .select({ total: count(leads.id) })
       .from(leads)
+      .innerJoin(leadLists, and(eq(leads.listId, leadLists.id), isNull(leadLists.deletedAt)))
       .where(and(eq(leads.userId, userId), isNull(leads.deletedAt))),
     db
       .select({

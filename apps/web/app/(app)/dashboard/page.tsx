@@ -199,7 +199,15 @@ export default async function DashboardPage({
         </Card>
       </div>
 
-      {/* Secondary Status Strip */}
+      {/* 2. Analytics Chart Section */}
+      <AnalyticsSectionLoader
+        from={sp.from}
+        to={sp.to}
+        heading="Campaign Outreach & Delivery Trajectory"
+        description="Leads contacted, unique replies, and deliverability performance over time."
+      />
+
+      {/* 3. Operational Pulse & Secondary Metrics (Under Graph) */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="flex items-center gap-3 rounded-xl border border-border/50 bg-card/30 px-3.5 py-2.5 backdrop-blur">
           <TrendingUp className="size-4 text-primary shrink-0" />
@@ -245,14 +253,6 @@ export default async function DashboardPage({
           </div>
         </div>
       </div>
-
-      {/* Analytics Chart Section */}
-      <AnalyticsSectionLoader
-        from={sp.from}
-        to={sp.to}
-        heading="Campaign Outreach & Delivery Trajectory"
-        description="Leads contacted, unique replies, and deliverability performance over time."
-      />
 
       {/* Main Grid: Active Campaigns + Revamped Intelligent Activity Feed */}
       <div className="grid gap-6 lg:grid-cols-12 items-stretch">

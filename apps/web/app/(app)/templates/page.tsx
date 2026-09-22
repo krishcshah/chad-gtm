@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { requireUser } from "@/lib/session";
 import { listTemplates } from "@/lib/queries";
 import { TemplatesHub } from "./templates-hub";
@@ -18,5 +19,9 @@ export default async function TemplatesPage() {
     updatedAt: t.updatedAt,
   }));
 
-  return <TemplatesHub templates={templates} />;
+  return (
+    <Suspense fallback={null}>
+      <TemplatesHub templates={templates} />
+    </Suspense>
+  );
 }

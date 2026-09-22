@@ -155,20 +155,34 @@ export function BulkEditDialog({
         </DialogHeader>
 
         <Tabs defaultValue="warmup" className="w-full mt-2">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="warmup" className="gap-1.5 text-xs">
-              <Flame className="size-3.5 text-amber-500" /> Warmup & Limits
+          <TabsList className="grid w-full grid-cols-3 rounded-xl border border-border/80 bg-muted/60 p-1.5 gap-1.5 shadow-2xs">
+            <TabsTrigger
+              value="warmup"
+              className="gap-2 rounded-lg py-2.5 text-xs font-medium text-muted-foreground transition-all hover:text-foreground hover:bg-background/40 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border"
+            >
+              <Flame className="size-3.5 text-amber-500" />
+              <span>Warmup & Limits</span>
             </TabsTrigger>
-            <TabsTrigger value="servers" className="gap-1.5 text-xs">
-              <Server className="size-3.5 text-blue-500" /> SMTP & IMAP
+            <TabsTrigger
+              value="servers"
+              className="gap-2 rounded-lg py-2.5 text-xs font-medium text-muted-foreground transition-all hover:text-foreground hover:bg-background/40 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border"
+            >
+              <Server className="size-3.5 text-blue-500" />
+              <span>SMTP & IMAP</span>
             </TabsTrigger>
-            <TabsTrigger value="profile" className="gap-1.5 text-xs">
-              <Mail className="size-3.5 text-violet-500" /> Profile & Pacing
+            <TabsTrigger
+              value="profile"
+              className="gap-2 rounded-lg py-2.5 text-xs font-medium text-muted-foreground transition-all hover:text-foreground hover:bg-background/40 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border"
+            >
+              <Mail className="size-3.5 text-violet-500" />
+              <span>Profile & Pacing</span>
             </TabsTrigger>
           </TabsList>
 
-          {/* TAB 1: Warmup & Limits */}
-          <TabsContent value="warmup" className="space-y-4 pt-3">
+          {/* Consistent Fixed-Height Container to prevent jarring layout jumps */}
+          <div className="min-h-[385px] pt-3 flex flex-col justify-start">
+            {/* TAB 1: Warmup & Limits */}
+            <TabsContent value="warmup" className="space-y-4 m-0">
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
@@ -263,7 +277,7 @@ export function BulkEditDialog({
           </TabsContent>
 
           {/* TAB 2: SMTP & IMAP */}
-          <TabsContent value="servers" className="space-y-4 pt-3">
+          <TabsContent value="servers" className="space-y-4 m-0">
             <div className="space-y-3 rounded-xl border border-border/70 bg-card/60 p-4">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
                 <Server className="size-3.5 text-primary" /> SMTP Outbound Host & Security
@@ -358,7 +372,7 @@ export function BulkEditDialog({
           </TabsContent>
 
           {/* TAB 3: Profile & Pacing */}
-          <TabsContent value="profile" className="space-y-4 pt-3">
+          <TabsContent value="profile" className="space-y-4 m-0">
             <div className="space-y-3 rounded-xl border border-border/70 bg-card/60 p-4">
               <div className="space-y-1">
                 <Label className="text-xs">Display Sender Name</Label>
@@ -398,6 +412,7 @@ export function BulkEditDialog({
               </div>
             </div>
           </TabsContent>
+          </div>
         </Tabs>
 
         <DialogFooter className="mt-3 gap-2">
