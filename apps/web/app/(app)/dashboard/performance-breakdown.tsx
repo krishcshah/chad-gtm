@@ -116,7 +116,10 @@ export function PerformanceBreakdown({ campaigns, senders }: PerformanceBreakdow
                   return (
                     <tr key={c.id} className="hover:bg-muted/20 transition-colors">
                       <td className="px-5 py-3.5 font-medium text-foreground">
-                        <Link href={`/campaigns/${c.id}`} className="hover:text-primary transition-colors flex items-center gap-1.5">
+                        <Link
+                          href={c.status === "draft" ? `/campaigns/new?draft=${c.id}` : `/campaigns/${c.id}`}
+                          className="hover:text-primary transition-colors flex items-center gap-1.5"
+                        >
                           <span>{c.name}</span>
                           <ArrowUpRight className="size-3 opacity-0 group-hover:opacity-100 text-muted-foreground" />
                         </Link>
@@ -128,6 +131,8 @@ export function PerformanceBreakdown({ campaigns, senders }: PerformanceBreakdow
                             c.status === "running" && "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
                             c.status === "scheduled" && "bg-blue-500/10 text-blue-400 border border-blue-500/20",
                             c.status === "paused" && "bg-amber-500/10 text-amber-400 border border-amber-500/20",
+                            c.status === "draft" && "bg-muted text-muted-foreground border border-border/60",
+                            c.status === "completed" && "bg-purple-500/10 text-purple-400 border border-purple-500/20",
                           )}
                         >
                           <span
@@ -136,6 +141,8 @@ export function PerformanceBreakdown({ campaigns, senders }: PerformanceBreakdow
                               c.status === "running" && "bg-emerald-400 animate-pulse",
                               c.status === "scheduled" && "bg-blue-400",
                               c.status === "paused" && "bg-amber-400",
+                              c.status === "draft" && "bg-muted-foreground",
+                              c.status === "completed" && "bg-purple-400",
                             )}
                           />
                           {c.status}
@@ -149,7 +156,7 @@ export function PerformanceBreakdown({ campaigns, senders }: PerformanceBreakdow
                         <span className="text-[11px] text-muted-foreground">({replyRate}%)</span>
                       </td>
                       <td className="px-4 py-3.5 text-right text-muted-foreground tabular-nums">
-                        {c.sent.toLocaleString()}
+                        {c.total > 0 ? `${c.sent}/${c.total}` : c.sent.toLocaleString()}
                       </td>
                       <td className="px-4 py-3.5 text-right">
                         {isHighReply ? (
@@ -158,6 +165,8 @@ export function PerformanceBreakdown({ campaigns, senders }: PerformanceBreakdow
                           </Badge>
                         ) : c.status === "running" ? (
                           <span className="text-[11px] text-muted-foreground">Active delivery</span>
+                        ) : c.status === "draft" ? (
+                          <span className="text-[11px] text-muted-foreground">Draft setup</span>
                         ) : (
                           <span className="text-[11px] text-muted-foreground">—</span>
                         )}

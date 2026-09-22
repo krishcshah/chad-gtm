@@ -20,15 +20,15 @@ const {
 const today = () => new Date().toISOString().slice(0, 10);
 const nowIso = () => new Date().toISOString();
 
-function wsCondition(column: any, workspaceId?: string) {
+function wsCondition(column: any, workspaceId?: string, isDefault = false) {
   if (!workspaceId) return undefined;
-  if (workspaceId === "primary-default") {
+  if (workspaceId === "primary-default" || isDefault) {
     return sql`(${column} = ${workspaceId} OR ${column} IS NULL)`;
   }
   return eq(column, workspaceId);
 }
 
-export async function getDashboardStats(userId: string, workspaceId?: string) {
+export async function getDashboardStats(userId: string, workspaceId?: string, isDefault = false) {
   const db = getDb();
   const t = today();
 
@@ -44,15 +44,15 @@ export async function getDashboardStats(userId: string, workspaceId?: string) {
   `).catch(() => {});
 
   const campaignConds = [eq(campaigns.userId, userId), isNull(campaigns.deletedAt)];
-  const cWs = wsCondition(campaigns.workspaceId, workspaceId);
+  const cWs = wsCondition(campaigns.workspaceId, workspaceId, isDefault);
   if (cWs) campaignConds.push(cWs);
 
   const leadConds = [eq(leads.userId, userId), isNull(leads.deletedAt)];
-  const lWs = wsCondition(leads.workspaceId, workspaceId);
+  const lWs = wsCondition(leads.workspaceId, workspaceId, isDefault);
   if (lWs) leadConds.push(lWs);
 
   const senderConds = [eq(senderAccounts.userId, userId), isNull(senderAccounts.deletedAt)];
-  const sWs = wsCondition(senderAccounts.workspaceId, workspaceId);
+  const sWs = wsCondition(senderAccounts.workspaceId, workspaceId, isDefault);
   if (sWs) senderConds.push(sWs);
 
   const jobConds = [eq(campaigns.userId, userId), gte(emailJobs.createdAt, `${t}T00:00:00Z`)];
@@ -60,7 +60,7 @@ export async function getDashboardStats(userId: string, workspaceId?: string) {
 
   const replyConds = [eq(replies.userId, userId)];
   if (workspaceId) {
-    if (workspaceId === "primary-default") {
+    if (workspaceId === "primary-default" || isDefault) {
       replyConds.push(
         sql`(${campaigns.workspaceId} = ${workspaceId} OR ${campaigns.workspaceId} IS NULL OR ${senderAccounts.workspaceId} = ${workspaceId} OR ${senderAccounts.workspaceId} IS NULL)`
       );
@@ -195,14 +195,13 @@ export async function getRecentActivity(userId: string, limit = 20) {
 
 /* ─── List pages ───────────────────────────────────────────────────────── */
 
-export async function getActiveCampaigns(userId: string, workspaceId?: string) {
+export async function getActiveCampaigns(userId: string, workspaceId?: string, isDefault = false) {
   const db = getDb();
   const conds = [
     eq(campaigns.userId, userId),
     isNull(campaigns.deletedAt),
-    inArray(campaigns.status, ["running", "scheduled", "paused"]),
   ];
-  const cWs = wsCondition(campaigns.workspaceId, workspaceId);
+  const cWs = wsCondition(campaigns.workspaceId, workspaceId, isDefault);
   if (cWs) conds.push(cWs);
 
   return db
@@ -219,7 +218,7 @@ export async function getActiveCampaigns(userId: string, workspaceId?: string) {
     .where(and(...conds))
     .groupBy(campaigns.id)
     .orderBy(desc(campaigns.createdAt))
-    .limit(8);
+    .limit(20);
 }
 
 export async function listLeadLists(userId: string, workspaceId?: string) {
@@ -287,11 +286,11 @@ export async function listLeads(userId: string, params: LeadsPageParams) {
   return { items, nextCursor: hasMore ? items[items.length - 1]?.id : undefined };
 }
 
-export async function listSenders(userId: string, workspaceId?: string) {
+export async function listSenders(userId: string, workspaceId?: string, isDefault = false) {
   const db = getDb();
   const t = today();
   const conds = [eq(senderAccounts.userId, userId), isNull(senderAccounts.deletedAt)];
-  const sWs = wsCondition(senderAccounts.workspaceId, workspaceId);
+  const sWs = wsCondition(senderAccounts.workspaceId, workspaceId, isDefault);
   if (sWs) conds.push(sWs);
 
   const usage = db.$with("usage").as(
@@ -386,10 +385,10 @@ export interface CampaignRow {
   bounced: number;
 }
 
-export async function listCampaigns(userId: string, workspaceId?: string): Promise<CampaignRow[]> {
+export async function listCampaigns(userId: string, workspaceId?: string, isDefault = false): Promise<CampaignRow[]> {
   const db = getDb();
   const conds = [eq(campaigns.userId, userId), isNull(campaigns.deletedAt)];
-  const cWs = wsCondition(campaigns.workspaceId, workspaceId);
+  const cWs = wsCondition(campaigns.workspaceId, workspaceId, isDefault);
   if (cWs) conds.push(cWs);
 
   const rows = await db

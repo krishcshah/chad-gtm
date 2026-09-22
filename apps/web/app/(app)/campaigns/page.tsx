@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function CampaignsPage() {
   const { user, workspace } = await requireWorkspace();
-  const campaigns = await listCampaigns(user.id, workspace.id);
+  const campaigns = await listCampaigns(user.id, workspace.id, workspace.isDefault);
 
   return (
     <div className="page-stack">

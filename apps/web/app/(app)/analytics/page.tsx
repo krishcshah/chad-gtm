@@ -16,8 +16,8 @@ export default async function AnalyticsPage({
   const { user, workspace } = await requireWorkspace();
   const sp = await searchParams;
   const [activeCampaigns, senders] = await Promise.all([
-    getActiveCampaigns(user.id, workspace.id),
-    listSenders(user.id, workspace.id),
+    getActiveCampaigns(user.id, workspace.id, workspace.isDefault),
+    listSenders(user.id, workspace.id, workspace.isDefault),
   ]);
 
   return (

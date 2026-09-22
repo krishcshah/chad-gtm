@@ -120,7 +120,7 @@ function ThreadBubble({ m }: { m: UniboxThreadMessage }) {
           {initial}
         </span>
       ) : null}
-      <article className={`flex min-w-0 flex-col gap-1 ${right ? "items-end" : "items-start"} ${rich ? "max-w-[min(96%,64rem)]" : "max-w-[min(92%,54rem)]"}`}>
+      <article className={`flex min-w-0 flex-col gap-1 ${right ? "items-end" : "items-start"} ${rich ? "max-w-[min(96%,58rem)]" : "max-w-[min(92%,50rem)]"}`}>
         <p className={`flex items-baseline gap-2 text-[11px] text-muted-foreground ${right ? "flex-row-reverse" : ""}`}>
           <span className="truncate font-medium text-foreground">{senderLabel(m)}</span>
           {hint && hint !== senderLabel(m) ? <span>{hint}</span> : null}
@@ -322,7 +322,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
   };
 
   return (
-    <div className="unibox-root flex h-[calc(100dvh-3.5rem)] lg:h-dvh flex-col p-2 sm:p-4 lg:p-5 gap-3 w-full max-w-none overflow-hidden flex-1">
+    <div className="unibox-root flex h-[calc(100dvh-6.5rem)] min-h-[580px] max-h-[920px] flex-col gap-3.5 w-full max-w-none overflow-hidden flex-1">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-xs">
@@ -361,7 +361,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
       </header>
 
       <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-xl border border-border/70 bg-card shadow-xs">
-        <div className={`w-full md:w-[320px] lg:w-[350px] shrink-0 min-h-0 flex-col border-r border-border/60 ${activeId ? "hidden md:flex" : "flex"}`}>
+        <div className={`w-full md:w-[300px] lg:w-[330px] shrink-0 min-h-0 flex flex-col border-r border-border/60 ${activeId ? "hidden md:flex" : "flex"}`}>
           {/* List Sub-header with Filter & Count */}
           <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/30 px-3.5 py-2.5 shrink-0">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -434,7 +434,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
           </div>
         </div>
 
-        <div className={`flex min-h-0 flex-col bg-card/40 ${activeId ? "flex" : "hidden md:flex"}`}>
+        <div className={`flex-1 min-w-0 w-full flex min-h-0 flex-col bg-card/40 ${activeId ? "flex" : "hidden md:flex"}`}>
           {activeConversation ? (
             (() => {
               const r = activeConversation.latest;

@@ -227,13 +227,13 @@ export function WorkspaceSettingsCard({
                       <Edit2 className="size-3.5" />
                     </Button>
 
-                    {!ws.isDefault && (
+                    {workspaces.length > 1 && (
                       <Button
                         size="sm"
                         variant="ghost"
                         className="size-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                         onClick={() => setDeletingId(ws.id)}
-                        title="Delete Workspace"
+                        title={`Delete Workspace "${ws.name}"`}
                       >
                         <Trash2 className="size-3.5" />
                       </Button>
@@ -242,6 +242,35 @@ export function WorkspaceSettingsCard({
                 </div>
               );
             })}
+          </div>
+
+          {/* Danger Zone: Delete Workspace */}
+          <div className="mt-8 rounded-xl border border-destructive/30 bg-destructive/5 p-4 sm:p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h3 className="text-sm font-semibold text-destructive flex items-center gap-1.5">
+                  <Trash2 className="size-4" /> Danger Zone: Delete Workspace
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Permanently delete a client workspace and remove all of its isolated mailboxes, leads, sequences, and campaigns.
+                </p>
+              </div>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="shrink-0 text-xs gap-1.5 font-medium self-start sm:self-auto"
+                disabled={workspaces.length <= 1}
+                onClick={() => setDeletingId(activeWorkspaceId)}
+              >
+                <Trash2 className="size-3.5" />
+                {workspaces.length <= 1 ? "Cannot delete only workspace" : "Delete Current Workspace"}
+              </Button>
+            </div>
+            {workspaces.length <= 1 && (
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                You must have at least one other workspace before deleting this one.
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -320,7 +349,12 @@ export function WorkspaceSettingsCard({
           <DialogHeader>
             <DialogTitle>Delete Workspace</DialogTitle>
             <DialogDescription>
-              Are you sure you want to permanently delete this workspace and all its isolated client data (leads, mailboxes, and campaigns)? This action cannot be undone.
+              {(() => {
+                const ws = workspaces.find((w) => w.id === deletingId);
+                return ws
+                  ? `Are you sure you want to permanently delete "${ws.name}" and all its isolated client data (leads, mailboxes, and campaigns)? This action cannot be undone.`
+                  : "Are you sure you want to permanently delete this workspace and all its isolated client data (leads, mailboxes, and campaigns)? This action cannot be undone.";
+              })()}
             </DialogDescription>
           </DialogHeader>
 

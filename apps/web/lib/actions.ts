@@ -1696,10 +1696,6 @@ export async function deleteWorkspaceAction(
       return { ok: false, error: "Workspace not found" };
     }
 
-    if (workspace.isDefault) {
-      return { ok: false, error: "Cannot delete your primary default workspace" };
-    }
-
     // Check count of user workspaces
     const allWorkspaces = await db
       .select({ id: schema.workspaces.id, isDefault: schema.workspaces.isDefault })
@@ -1707,7 +1703,18 @@ export async function deleteWorkspaceAction(
       .where(eq(schema.workspaces.userId, user.id));
 
     if (allWorkspaces.length <= 1) {
-      return { ok: false, error: "You must have at least one workspace" };
+      return { ok: false, error: "You cannot delete your only workspace. Create another workspace first before deleting this one." };
+    }
+
+    // If the workspace being deleted was default, promote another workspace to default
+    if (workspace.isDefault) {
+      const nextDefault = allWorkspaces.find((w) => w.id !== workspaceId);
+      if (nextDefault) {
+        await db
+          .update(schema.workspaces)
+          .set({ isDefault: true, updatedAt: new Date().toISOString() })
+          .where(eq(schema.workspaces.id, nextDefault.id));
+      }
     }
 
     // Delete workspace
@@ -1715,11 +1722,12 @@ export async function deleteWorkspaceAction(
       .delete(schema.workspaces)
       .where(and(eq(schema.workspaces.id, workspaceId), eq(schema.workspaces.userId, user.id)));
 
-    // If active workspace was deleted, reset cookie to default workspace
-    const defaultWs = allWorkspaces.find((w) => w.isDefault) || allWorkspaces.find((w) => w.id !== workspaceId);
-    if (defaultWs) {
+    // Reset active workspace cookie to remaining default workspace
+    const remaining = allWorkspaces.filter((w) => w.id !== workspaceId);
+    const fallbackWs = remaining.find((w) => w.isDefault) || remaining[0];
+    if (fallbackWs) {
       const cookieStore = await cookies();
-      cookieStore.set(ACTIVE_WORKSPACE_COOKIE, defaultWs.id, {
+      cookieStore.set(ACTIVE_WORKSPACE_COOKIE, fallbackWs.id, {
         path: "/",
         maxAge: 60 * 60 * 24 * 365,
         sameSite: "lax",

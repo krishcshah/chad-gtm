@@ -36,10 +36,10 @@ export default async function DashboardPage({
   const sp = await searchParams;
 
   const [stats, activity, activeCampaigns, senders] = await Promise.all([
-    getDashboardStats(user.id, workspace.id),
+    getDashboardStats(user.id, workspace.id, workspace.isDefault),
     getRecentActivity(user.id, 50),
-    getActiveCampaigns(user.id, workspace.id),
-    listSenders(user.id, workspace.id),
+    getActiveCampaigns(user.id, workspace.id, workspace.isDefault),
+    listSenders(user.id, workspace.id, workspace.isDefault),
   ]);
 
   const firstName = user.name?.split(" ")[0] ?? "there";

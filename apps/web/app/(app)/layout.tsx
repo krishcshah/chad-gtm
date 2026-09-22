@@ -40,7 +40,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           activeWorkspace={workspace}
         />
         <main className="flex-1 min-w-0 pt-14 lg:pt-0 lg:pl-64 flex flex-col group">
-          <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 [&:has(.unibox-root)]:max-w-none [&:has(.unibox-root)]:p-0 [&:has(.unibox-root)]:m-0 flex-1 flex flex-col">
+          <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 [&:has(.unibox-root)]:max-w-none [&:has(.unibox-root)]:px-4 [&:has(.unibox-root)]:py-4 sm:[&:has(.unibox-root)]:px-6 lg:[&:has(.unibox-root)]:px-8 flex-1 flex flex-col">
             <div className="flex-1 flex flex-col min-h-0 w-full">
               {children}
             </div>

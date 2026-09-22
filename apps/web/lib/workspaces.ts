@@ -96,12 +96,8 @@ export async function ensureDefaultWorkspace(userId: string): Promise<WorkspaceI
       .orderBy(desc(schema.workspaces.isDefault), schema.workspaces.createdAt)
       .limit(1);
 
-    if (existing.length > 0) {
-      return existing[0] as WorkspaceItem;
-    }
-
-    // Provision initial default workspace
-    const [created] = await db
+    const targetWs = existing.length > 0 ? (existing[0] as WorkspaceItem) : null;
+    const defaultWs = targetWs ?? ((await db
       .insert(schema.workspaces)
       .values({
         userId,
@@ -109,41 +105,41 @@ export async function ensureDefaultWorkspace(userId: string): Promise<WorkspaceI
         description: "Default workspace for your outreach and client operations",
         isDefault: true,
       })
-      .returning();
+      .returning())[0] as WorkspaceItem);
 
-    // Backfill existing orphaned records so existing user data is seamlessly preserved
+    // Backfill existing orphaned records so user data is seamlessly preserved in the default workspace
     try {
       await Promise.allSettled([
         db
           .update(schema.leadLists)
-          .set({ workspaceId: created.id })
+          .set({ workspaceId: defaultWs.id })
           .where(and(eq(schema.leadLists.userId, userId), isNull(schema.leadLists.workspaceId))),
         db
           .update(schema.leads)
-          .set({ workspaceId: created.id })
+          .set({ workspaceId: defaultWs.id })
           .where(and(eq(schema.leads.userId, userId), isNull(schema.leads.workspaceId))),
         db
           .update(schema.senderAccounts)
-          .set({ workspaceId: created.id })
+          .set({ workspaceId: defaultWs.id })
           .where(and(eq(schema.senderAccounts.userId, userId), isNull(schema.senderAccounts.workspaceId))),
         db
           .update(schema.campaigns)
-          .set({ workspaceId: created.id })
+          .set({ workspaceId: defaultWs.id })
           .where(and(eq(schema.campaigns.userId, userId), isNull(schema.campaigns.workspaceId))),
         db
           .update(schema.suppressions)
-          .set({ workspaceId: created.id })
+          .set({ workspaceId: defaultWs.id })
           .where(and(eq(schema.suppressions.userId, userId), isNull(schema.suppressions.workspaceId))),
         db
           .update(schema.uniboxMessages)
-          .set({ workspaceId: created.id })
+          .set({ workspaceId: defaultWs.id })
           .where(and(eq(schema.uniboxMessages.userId, userId), isNull(schema.uniboxMessages.workspaceId))),
       ]);
     } catch {
       // Non-blocking backfill
     }
 
-    return created as WorkspaceItem;
+    return defaultWs;
   } catch (err) {
     console.error("[ensureDefaultWorkspace] error:", err);
     return getFallbackWorkspace(userId);
