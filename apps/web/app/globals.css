@@ -269,3 +269,44 @@ body {
   transform: translateX(20px);
   background: var(--primary-foreground);
 }
+
+/* Unibox message sheet — light reading surface inside the dark app shell.
+   #0f172a on #fff ≈ 16:1; #1e40af links on #fff ≈ 8:1 (WCAG AA). */
+.email-sheet {
+  background: #ffffff;
+  color: #0f172a;
+  overflow-wrap: break-word;
+  overflow-x: auto;
+}
+.email-sheet a {
+  color: #1e40af;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.email-sheet .email-sheet-html p {
+  margin: 0 0 0.75em;
+}
+.email-sheet .email-sheet-html p:last-child {
+  margin-bottom: 0;
+}
+.email-sheet .email-sheet-html img {
+  max-width: 100%;
+  height: auto;
+}
+.email-sheet .email-sheet-html img[width="1"],
+.email-sheet .email-sheet-html img[height="1"] {
+  display: none !important;
+}
+.email-sheet .email-sheet-html table {
+  max-width: 100%;
+  border-collapse: collapse;
+}
+.email-sheet .email-sheet-html blockquote {
+  margin: 0.5em 0;
+  padding-left: 0.75em;
+  border-left: 3px solid #cbd5e1;
+  color: #334155;
+}
+.email-sheet .email-quoted {
+  color: #334155;
+}
