@@ -21,15 +21,16 @@ import {
 } from "lucide-react";
 import { Badge, Button } from "@smartreach/ui";
 import { Logo } from "@/components/logo";
+import { GermanFlag } from "@/components/german-flag";
 import { getSession } from "@/lib/session";
 import { InteractiveShowcase } from "@/components/landing/interactive-showcase";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "SmartReach · 100% Free & Open Source Cold Email Platform",
+  title: "SmartReach · 100% Free Cold Email Platform · Unlimited Mailboxes · Source Available",
   description:
-    "Cold email with zero limits. Unlimited mailboxes, automated multi-step sequences, unified two-way inbox, and deliverability protection. 100% Free Forever & Open Source.",
+    "Cold email with zero limits. Unlimited mailboxes, automated multi-step sequences, unified two-way inbox, and deliverability protection. 100% Free Forever & Source Available.",
 };
 
 export default async function LandingPage() {
@@ -101,12 +102,12 @@ export default async function LandingPage() {
             {/* Pill Banner */}
             <div className="inline-flex flex-wrap items-center justify-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-xs font-semibold text-foreground backdrop-blur-md mb-6 shadow-xs">
               <span className="flex items-center gap-1.5 text-amber-300">
-                <span className="text-sm">🇩🇪</span> Made in Germany
+                <GermanFlag className="h-3 w-4.5" /> Made in Germany
               </span>
               <span className="text-muted-foreground/50">·</span>
-              <span className="text-primary font-medium">100% EU Hosted</span>
+              <span className="text-primary font-medium">100% Source Available</span>
               <span className="text-muted-foreground/50">·</span>
-              <span className="text-emerald-400 font-medium">100% Free Forever & Open Source</span>
+              <span className="text-emerald-400 font-medium">100% Free Forever & Unlimited</span>
             </div>
 
             {/* Main Headline */}
@@ -148,8 +149,8 @@ export default async function LandingPage() {
             {/* Value Proof Badges */}
             <div className="mt-10 flex flex-wrap items-center justify-center gap-6 text-xs text-muted-foreground">
               <div className="flex items-center gap-1.5 font-medium text-foreground">
-                <span className="text-sm">🇩🇪</span>
-                <span>Made in Germany · EU Hosted</span>
+                <GermanFlag className="h-3 w-4.5" />
+                <span>Made in Germany</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="size-4 text-emerald-400" />
@@ -157,7 +158,7 @@ export default async function LandingPage() {
               </div>
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="size-4 text-emerald-400" />
-                <span>100% Open source</span>
+                <span>100% Source Available</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="size-4 text-emerald-400" />
@@ -165,7 +166,7 @@ export default async function LandingPage() {
               </div>
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="size-4 text-emerald-400" />
-                <span>GDPR compliant by design</span>
+                <span>Zero credit card required</span>
               </div>
             </div>
 
@@ -181,99 +182,87 @@ export default async function LandingPage() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="text-center max-w-3xl mx-auto mb-16">
               <h2 className="text-xs font-semibold uppercase tracking-wider text-primary">
-                Built for High Deliverability & Conversions
+                Uncompromising Outbound Engine
               </h2>
               <p className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl text-foreground">
-                Everything required to land directly in the Primary inbox
+                Everything required to scale outbound. Zero fluff.
               </p>
               <p className="mt-3 text-muted-foreground text-sm sm:text-base">
-                Professional cold email infrastructure designed to protect your sender reputation, maximize open rates, and book meetings.
+                Architected from first principles for deliverability, human sending behavior, and effortless sales workflows.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Bento 1: Sender Rotation */}
-              <div className="rounded-2xl border border-border/60 bg-card/60 p-6 backdrop-blur transition-all hover:border-border hover:bg-card/80">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {/* Feature 1: Workspaces */}
+              <div className="group rounded-2xl border border-border/60 bg-card/50 p-6 transition-all duration-300 hover:border-primary/50 hover:bg-card/80">
+                <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary mb-4 group-hover:scale-110 transition-transform">
+                  <Layers className="size-5" />
+                </div>
+                <h3 className="text-lg font-semibold text-foreground">Multi-Client Workspaces</h3>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  Complete blank-slate data isolation for agencies and serial founders. Each client gets dedicated leads, mailboxes, campaigns, and inbox threads that never overlap.
+                </p>
+              </div>
+
+              {/* Feature 2: Unlimited Rotation */}
+              <div className="group rounded-2xl border border-border/60 bg-card/50 p-6 transition-all duration-300 hover:border-primary/50 hover:bg-card/80">
+                <div className="flex size-10 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400 mb-4 group-hover:scale-110 transition-transform">
                   <Mail className="size-5" />
                 </div>
-                <h3 className="text-base font-semibold text-foreground">
-                  Unlimited Mailbox Smart Rotation
-                </h3>
+                <h3 className="text-lg font-semibold text-foreground">Unlimited Mailbox Rotation</h3>
                 <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  Connect Google Workspace, Microsoft 365, or any custom mailboxes. SmartReach automatically cycles through accounts to spread sending volume safely and protect inbox health.
+                  Connect dozens or hundreds of SMTP/IMAP inboxes. Sends are distributed evenly with strict per-inbox daily and hourly caps to preserve domain health.
                 </p>
               </div>
 
-              {/* Bento 2: Unified Two-Way Inbox */}
-              <div className="rounded-2xl border border-border/60 bg-card/60 p-6 backdrop-blur transition-all hover:border-border hover:bg-card/80">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mb-4">
+              {/* Feature 3: UniBox */}
+              <div className="group rounded-2xl border border-border/60 bg-card/50 p-6 transition-all duration-300 hover:border-primary/50 hover:bg-card/80">
+                <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400 mb-4 group-hover:scale-110 transition-transform">
                   <Inbox className="size-5" />
                 </div>
-                <h3 className="text-base font-semibold text-foreground">
-                  Unified Two-Way Inbox (UniBox)
-                </h3>
+                <h3 className="text-lg font-semibold text-foreground">Unified Two-Way UniBox</h3>
                 <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  Manage prospect conversations across all your inboxes in one central place. Reply with preserved email threads, add tags (Interested, Booked, Out of Office), and never miss a lead.
+                  Reply management across all mailboxes in one high-speed stream. Instant thread history, sentiment tags, lead status updates, and direct email responses.
                 </p>
               </div>
 
-              {/* Bento 3: Lead Lists */}
-              <div className="rounded-2xl border border-border/60 bg-card/60 p-6 backdrop-blur transition-all hover:border-border hover:bg-card/80">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 mb-4">
-                  <Users className="size-5" />
+              {/* Feature 4: Human Pacing */}
+              <div className="group rounded-2xl border border-border/60 bg-card/50 p-6 transition-all duration-300 hover:border-primary/50 hover:bg-card/80">
+                <div className="flex size-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400 mb-4 group-hover:scale-110 transition-transform">
+                  <Zap className="size-5" />
                 </div>
-                <h3 className="text-base font-semibold text-foreground">
-                  Unlimited Lead Lists & Contacts
-                </h3>
+                <h3 className="text-lg font-semibold text-foreground">Intelligent Human Pacing</h3>
                 <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  Upload your target audience with instant CSV importing, automatic column mapping, and automatic duplicate detection. No contact caps or paywalls.
+                  Randomized delay intervals inside your custom windows, timezone-aware scheduling, and strict business-day parameters so emails look 100% organic to ESPs.
                 </p>
               </div>
 
-              {/* Bento 4: Multi-Step Sequences */}
-              <div className="rounded-2xl border border-border/60 bg-card/60 p-6 backdrop-blur transition-all hover:border-border hover:bg-card/80">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-violet-500/10 text-violet-400 border border-violet-500/20 mb-4">
+              {/* Feature 5: Multi-Step Sequences & A/B Testing */}
+              <div className="group rounded-2xl border border-border/60 bg-card/50 p-6 transition-all duration-300 hover:border-primary/50 hover:bg-card/80">
+                <div className="flex size-10 items-center justify-center rounded-xl bg-violet-500/10 text-violet-400 mb-4 group-hover:scale-110 transition-transform">
                   <Rocket className="size-5" />
                 </div>
-                <h3 className="text-base font-semibold text-foreground">
-                  Automated Multi-Stage Follow-Ups
-                </h3>
+                <h3 className="text-lg font-semibold text-foreground">Sequences & A/B Testing</h3>
                 <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  Schedule multi-touch follow-up campaigns with customizable day delays and A/B test variations. Automatically stops follow-ups the moment a prospect replies.
+                  Multi-stage follow-up sequences with dynamic fallback variables (`first_name`, `company`). Test variant subjects and copy to discover winning hooks.
                 </p>
               </div>
 
-              {/* Bento 5: Human Rhythm & Pacing */}
-              <div className="rounded-2xl border border-border/60 bg-card/60 p-6 backdrop-blur transition-all hover:border-border hover:bg-card/80">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 mb-4">
-                  <Flame className="size-5" />
+              {/* Feature 6: AES-256 Security */}
+              <div className="group rounded-2xl border border-border/60 bg-card/50 p-6 transition-all duration-300 hover:border-primary/50 hover:bg-card/80">
+                <div className="flex size-10 items-center justify-center rounded-xl bg-rose-500/10 text-rose-400 mb-4 group-hover:scale-110 transition-transform">
+                  <Lock className="size-5" />
                 </div>
-                <h3 className="text-base font-semibold text-foreground">
-                  Natural Humanized Pacing
-                </h3>
+                <h3 className="text-lg font-semibold text-foreground">Hardware-Grade Security</h3>
                 <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  Spam filters penalize robotic blast spikes. SmartReach uses randomized intervals, daily mailbox sending caps, and custom business hours to ensure your outreach mimics real human activity.
-                </p>
-              </div>
-
-              {/* Bento 6: Real-Time Analytics */}
-              <div className="rounded-2xl border border-border/60 bg-card/60 p-6 backdrop-blur transition-all hover:border-border hover:bg-card/80">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 mb-4">
-                  <BarChart3 className="size-5" />
-                </div>
-                <h3 className="text-base font-semibold text-foreground">
-                  Actionable Conversion Analytics
-                </h3>
-                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  Interactive trajectory charts, delivery velocity tracking, and genuine lead reply rates give you full transparency into what messaging generates pipeline.
+                  Credentials encrypted with AES-256-GCM before reaching the database. Zero plain-text secrets, strict Zod schema validation, and secure session management.
                 </p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Made in Germany & EU Hosted Highlight Section */}
+        {/* Made in Germany Highlight Section */}
         <section className="py-16 border-t border-border/40 bg-gradient-to-r from-amber-500/5 via-card/50 to-primary/5">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="rounded-3xl border border-border/80 bg-card/70 p-8 sm:p-12 shadow-xl backdrop-blur relative overflow-hidden">
@@ -281,31 +270,31 @@ export default async function LandingPage() {
               <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
                 <div className="max-w-2xl">
                   <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3.5 py-1 text-xs font-semibold text-amber-400 mb-3 shadow-xs">
-                    <span className="text-sm">🇩🇪</span>
-                    <span>MADE IN GERMANY · EU HOSTED & SECURE</span>
+                    <GermanFlag className="h-3 w-4.5" />
+                    <span>MADE IN GERMANY · SOURCE AVAILABLE & SECURE</span>
                   </div>
                   <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-foreground">
                     Engineered with German Precision.{" "}
                     <span className="bg-gradient-to-r from-amber-400 via-primary to-cyan-400 bg-clip-text text-transparent">
-                      100% EU Hosted.
+                      100% Free & Source Available.
                     </span>
                   </h2>
                   <p className="mt-3 text-sm sm:text-base leading-relaxed text-muted-foreground">
-                    Forget US-based cold email tools subject to foreign surveillance and data resale. SmartReach is proudly engineered with German standards and hosted entirely on sovereign European cloud infrastructure. Complete GDPR compliance, native privacy protection, zero third-party telemetry, and absolute security for your company and lead data.
+                    Forget expensive closed-source platforms subject to surprise monthly price hikes and hidden data tracking. SmartReach is proudly engineered with German standards of precision, privacy, and architectural cleanliness. Enjoy complete GDPR compliance, native privacy protection, zero third-party telemetry, hardware-grade AES-256 encryption, and an auditable source-available engine.
                   </p>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full lg:w-auto shrink-0">
                   <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[200px]">
-                    <div className="text-xs text-muted-foreground font-medium">Server Jurisdiction</div>
+                    <div className="text-xs text-muted-foreground font-medium">Code Transparency</div>
                     <div className="mt-1 text-sm font-bold text-foreground flex items-center gap-1.5">
-                      <span>🇩🇪 Frankfurt, Germany</span>
+                      <span>⚡ 100% Source Available</span>
                     </div>
-                    <p className="mt-1 text-[11px] text-emerald-400">100% EU cloud infrastructure</p>
+                    <p className="mt-1 text-[11px] text-emerald-400">Auditable, no proprietary lock-in</p>
                   </div>
                   <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[200px]">
                     <div className="text-xs text-muted-foreground font-medium">Privacy Protection</div>
                     <div className="mt-1 text-sm font-bold text-foreground flex items-center gap-1.5">
-                      <span>🛡️ Strict EU GDPR</span>
+                      <span>🛡️ Strict Privacy by Design</span>
                     </div>
                     <p className="mt-1 text-[11px] text-emerald-400">Zero data selling or profiling</p>
                   </div>
@@ -314,14 +303,14 @@ export default async function LandingPage() {
                     <div className="mt-1 text-sm font-bold text-foreground flex items-center gap-1.5">
                       <span>🔒 AES-256 GCM</span>
                     </div>
-                    <p className="mt-1 text-[11px] text-emerald-400">Encrypted at rest in the EU</p>
+                    <p className="mt-1 text-[11px] text-emerald-400">Encrypted at rest</p>
                   </div>
                   <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[200px]">
-                    <div className="text-xs text-muted-foreground font-medium">Code Transparency</div>
+                    <div className="text-xs text-muted-foreground font-medium">Pricing Model</div>
                     <div className="mt-1 text-sm font-bold text-foreground flex items-center gap-1.5">
-                      <span>⚡ Open Source</span>
+                      <span>💎 100% Free Forever</span>
                     </div>
-                    <p className="mt-1 text-[11px] text-emerald-400">100% auditable codebase</p>
+                    <p className="mt-1 text-[11px] text-emerald-400">Zero monthly subscription fees</p>
                   </div>
                 </div>
               </div>
@@ -366,11 +355,13 @@ export default async function LandingPage() {
                     <td className="p-4 sm:p-5 text-muted-foreground">$119 / mo</td>
                   </tr>
                   <tr>
-                    <td className="p-4 sm:p-5 font-medium">Hosting & Jurisdiction</td>
-                    <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5">🇩🇪 Made in Germany · EU Hosted</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">US Cloud</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">US Cloud</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">Proprietary Cloud</td>
+                    <td className="p-4 sm:p-5 font-medium">Engineering & Standards</td>
+                    <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5 flex items-center gap-1.5">
+                      <GermanFlag className="h-3 w-4.5" /> Made in Germany
+                    </td>
+                    <td className="p-4 sm:p-5 text-muted-foreground">US SaaS</td>
+                    <td className="p-4 sm:p-5 text-muted-foreground">US SaaS</td>
+                    <td className="p-4 sm:p-5 text-muted-foreground">Proprietary SaaS</td>
                   </tr>
                   <tr>
                     <td className="p-4 sm:p-5 font-medium">Mailboxes & Senders Allowed</td>
@@ -409,7 +400,7 @@ export default async function LandingPage() {
                   </tr>
                   <tr>
                     <td className="p-4 sm:p-5 font-medium">Platform Architecture</td>
-                    <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5">100% Open Source</td>
+                    <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5">100% Source Available</td>
                     <td className="p-4 sm:p-5 text-muted-foreground">Closed SaaS</td>
                     <td className="p-4 sm:p-5 text-muted-foreground">Closed SaaS</td>
                     <td className="p-4 sm:p-5 text-muted-foreground">Closed SaaS</td>
@@ -442,7 +433,7 @@ export default async function LandingPage() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 border-b border-border/60 pb-8">
                 <div>
                   <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 bg-emerald-500/10 mb-2">
-                    Open Source Edition
+                    Source Available Edition
                   </Badge>
                   <h3 className="text-2xl font-bold text-foreground">Unlimited Access</h3>
                   <p className="text-xs text-muted-foreground mt-1">
@@ -464,12 +455,12 @@ export default async function LandingPage() {
                   "Unlimited email sender inboxes",
                   "Unlimited lead & contact storage",
                   "Unlimited automated follow-up sequences",
-                  "Unlimited campaign launches & scheduling",
+                  "Multi-client isolated workspaces",
                   "Unified two-way inbox (UniBox)",
                   "Smart mailbox rotation & rate pacing",
                   "Automatic stop-on-reply protection",
                   "Real-time deliverability & reply stats",
-                  "100% Open source with zero lock-in",
+                  "100% Source Available codebase",
                   "Zero hidden subscription fees or markups",
                 ].map((feature) => (
                   <div key={feature} className="flex items-center gap-2.5 text-xs text-foreground">
@@ -519,7 +510,7 @@ export default async function LandingPage() {
               {[
                 {
                   q: "Is SmartReach really 100% free forever?",
-                  a: "Yes, absolutely. SmartReach is an open source platform built to give founders and sales teams access to professional cold outreach without paying exorbitant monthly fees. You connect your own mailboxes, and the entire engine is yours to use with zero cost.",
+                  a: "Yes, absolutely! The entire software is 100% free and source-available. Our business model is selling managed mailboxes and deliverability infrastructure, so this software tool is completely free for you to use forever with zero artificial limits.",
                 },
                 {
                   q: "Can I connect Google Workspace and Microsoft 365 inboxes?",
@@ -530,8 +521,8 @@ export default async function LandingPage() {
                   a: "SmartReach checks your incoming mailboxes automatically. As soon as a prospect replies, their campaign status is updated to 'Replied', future follow-ups are frozen immediately, and the full thread appears in your UniBox for you to respond.",
                 },
                 {
-                  q: "Is there a limit on how many leads I can upload?",
-                  a: "No! There are no artificial paywalls or lead caps. You can import extensive CSV lists with your prospect contacts, map custom attributes, and launch targeted outreach seamlessly.",
+                  q: "Is there a limit on how many leads or mailboxes I can add?",
+                  a: "No! There are no artificial paywalls, mailbox limits, or lead caps. You can import extensive CSV lists with your prospect contacts, map custom attributes, and connect as many mailboxes as your campaign requires.",
                 },
                 {
                   q: "How does SmartReach protect email deliverability?",
@@ -585,7 +576,7 @@ export default async function LandingPage() {
             <Logo compact />
             <span>© {new Date().getFullYear()} SmartReach.</span>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-2.5 py-0.5 text-[11px] font-medium text-foreground shadow-xs">
-              <span className="text-xs">🇩🇪</span> Made in Germany · 100% EU Hosted
+              <GermanFlag className="h-2.5 w-3.5" /> Made in Germany
             </span>
           </div>
           <div className="flex items-center gap-6">

@@ -50,6 +50,30 @@ export const workspaces = pgTable(
   ],
 );
 
+/* ─── Subscriptions & Billing ─────────────────────────────────────────── */
+
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    stripeCustomerId: text("stripe_customer_id"),
+    stripeSubscriptionId: text("stripe_subscription_id"),
+    stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+    status: text("status").notNull().default("trialing"), // trialing, active, past_due, canceled, lifetime
+    plan: text("plan").notNull().default("lifetime_trial"),
+    currentPeriodEnd: text("current_period_end"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("subscriptions_user_idx").on(t.userId),
+    uniqueIndex("subscriptions_user_unique").on(t.userId),
+  ],
+);
+
 /* ─── Lead lists & leads ───────────────────────────────────────────────── */
 
 export const leadLists = pgTable(

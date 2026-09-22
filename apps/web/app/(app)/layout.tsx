@@ -3,6 +3,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { CommandPalette } from "@/components/command-palette";
 import { NavigationProgress } from "@/components/navigation-progress";
 import { ImportJobProvider } from "@/components/import-job-provider";
+import { GermanFlag } from "@/components/german-flag";
 import { getSession } from "@/lib/session";
 import { getActiveWorkspace, getFallbackWorkspace, listUserWorkspaces, type WorkspaceItem } from "@/lib/workspaces";
 
@@ -39,13 +40,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           activeWorkspace={workspace}
         />
         <main className="flex-1 min-w-0 pt-14 lg:pt-0 lg:pl-64 flex flex-col group">
-          <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 [&:has(>.unibox-root)]:max-w-none [&:has(>.unibox-root)]:p-0 flex-1 flex flex-col">
-            <div className="flex-1">
+          <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 [&:has(.unibox-root)]:max-w-none [&:has(.unibox-root)]:p-0 [&:has(.unibox-root)]:m-0 flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col min-h-0 w-full">
               {children}
             </div>
             <footer className="mt-auto pt-8 pb-2 text-center text-[10px] text-muted-foreground/40 flex items-center justify-center gap-1.5 select-none group-has-[.unibox-root]:hidden">
-              <span>🇩🇪</span>
-              <span>Made in Germany · EU Hosted</span>
+              <GermanFlag className="h-2.5 w-3.5" />
+              <span>Made in Germany</span>
             </footer>
           </div>
         </main>

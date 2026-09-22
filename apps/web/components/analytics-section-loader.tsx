@@ -18,12 +18,14 @@ export async function AnalyticsSectionLoader({
   campaignId,
   heading,
   description,
+  hideKpis = false,
 }: {
   from?: string;
   to?: string;
   campaignId?: string;
   heading?: string;
   description?: string;
+  hideKpis?: boolean;
 }) {
   const now = new Date();
   const today = utcToday(now);
@@ -54,6 +56,7 @@ export async function AnalyticsSectionLoader({
       today={today}
       heading={heading}
       description={description}
+      hideKpis={hideKpis}
       initialFrom={range.from}
       initialTo={range.to}
       initialRangeError={range.ok ? null : range.error}

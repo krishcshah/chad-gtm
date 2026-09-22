@@ -20,6 +20,7 @@ import { authClient } from "@/lib/auth-client";
 import { Logo } from "./logo";
 import { ThemeToggle } from "./theme-toggle";
 import { WorkspaceSwitcher } from "./workspace-switcher";
+import { GermanFlag } from "./german-flag";
 import type { WorkspaceItem } from "@/lib/workspaces";
 
 const nav = [
@@ -141,9 +142,8 @@ export function AppSidebar({
         {/* Subtle Made in Germany Corner Branding */}
         <div className="border-t border-border/30 px-4 py-2 flex items-center justify-between text-[10px] text-muted-foreground/60 select-none">
           <span className="flex items-center gap-1.5 font-medium tracking-tight">
-            <span>🇩🇪</span> Made in Germany
+            <GermanFlag className="h-2.5 w-3.5" /> Made in Germany
           </span>
-          <span className="tracking-widest uppercase text-[9px] text-muted-foreground/40 font-mono">EU Cloud</span>
         </div>
       </aside>
 

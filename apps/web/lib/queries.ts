@@ -58,8 +58,33 @@ export async function getDashboardStats(userId: string, workspaceId?: string) {
   const jobConds = [eq(campaigns.userId, userId), gte(emailJobs.createdAt, `${t}T00:00:00Z`)];
   if (cWs) jobConds.push(cWs);
 
-  // Fire all six independent aggregates in parallel — one Neon hop (~120ms)
-  // instead of six sequential hops (~720ms). This is the dashboard's hot path.
+  const replyConds = [eq(replies.userId, userId)];
+  if (workspaceId) {
+    if (workspaceId === "primary-default") {
+      replyConds.push(
+        sql`(${campaigns.workspaceId} = ${workspaceId} OR ${campaigns.workspaceId} IS NULL OR ${senderAccounts.workspaceId} = ${workspaceId} OR ${senderAccounts.workspaceId} IS NULL)`
+      );
+    } else {
+      replyConds.push(
+        sql`(${campaigns.workspaceId} = ${workspaceId} OR ${senderAccounts.workspaceId} = ${workspaceId})`
+      );
+    }
+  }
+
+  const contactedConds = [
+    eq(campaigns.userId, userId),
+    eq(emailJobs.status, "sent"),
+    eq(emailJobs.dryRun, false),
+  ];
+  if (cWs) contactedConds.push(cWs);
+
+  const bounceConds = [
+    eq(campaigns.userId, userId),
+    eq(emailJobs.status, "bounced"),
+  ];
+  if (cWs) bounceConds.push(cWs);
+
+  // Fire aggregates in parallel
   const [
     [campaignRows],
     [usageRows],
@@ -67,6 +92,8 @@ export async function getDashboardStats(userId: string, workspaceId?: string) {
     [leadRows],
     [senderRows],
     [replyRows],
+    [contactedRows],
+    [bounceRows],
   ] = await Promise.all([
     db
       .select({
@@ -104,23 +131,52 @@ export async function getDashboardStats(userId: string, workspaceId?: string) {
       .from(senderAccounts)
       .where(and(...senderConds)),
     db
-      .select({ total: count() })
+      .select({
+        total: sql<number>`count(distinct coalesce(${replies.leadId}, lower(${replies.fromEmail})))`,
+      })
       .from(replies)
-      .where(eq(replies.userId, userId)),
+      .leftJoin(campaigns, eq(replies.campaignId, campaigns.id))
+      .leftJoin(senderAccounts, eq(replies.senderId, senderAccounts.id))
+      .where(and(...replyConds)),
+    db
+      .select({
+        leadsContacted: sql<number>`count(distinct ${emailJobs.leadId})`,
+        totalSent: count(),
+      })
+      .from(emailJobs)
+      .innerJoin(campaigns, eq(emailJobs.campaignId, campaigns.id))
+      .where(and(...contactedConds)),
+    db
+      .select({ total: count() })
+      .from(emailJobs)
+      .innerJoin(campaigns, eq(emailJobs.campaignId, campaigns.id))
+      .where(and(...bounceConds)),
   ]);
 
-  // usageRows.sentToday cross-checks job-row sent count (both should agree after recordSend).
+  // usageRows.sentToday cross-checks job-row sent count
   const sentFromJobs = Number(jobsToday?.sent ?? 0);
   const sentFromUsage = Number(usageRows?.sentToday ?? 0);
+  const leadsContacted = Number(contactedRows?.leadsContacted ?? 0);
+  const totalSent = Number(contactedRows?.totalSent ?? 0);
+  const replyCount = Number(replyRows?.total ?? 0);
+  const bounceCount = Number(bounceRows?.total ?? 0);
+  const replyRate = leadsContacted > 0 ? ((replyCount / leadsContacted) * 100).toFixed(1) : "0.0";
+  const bounceRate = totalSent > 0 ? ((bounceCount / totalSent) * 100).toFixed(1) : "0.0";
+
   return {
     activeCampaigns: Number(campaignRows?.active ?? 0),
     scheduledCampaigns: Number(campaignRows?.scheduled ?? 0),
     emailsQueuedToday: Number(jobsToday?.queued ?? 0),
     emailsSentToday: Math.max(sentFromJobs, sentFromUsage),
+    totalSent,
+    leadsContacted,
     failedToday: Number(jobsToday?.failed ?? 0),
     bouncedToday: Number(jobsToday?.bounced ?? 0),
+    bounceCount,
+    bounceRate,
     totalLeads: Number(leadRows?.total ?? 0),
-    replyCount: Number(replyRows?.total ?? 0),
+    replyCount,
+    replyRate,
     senderTotal: Number(senderRows?.total ?? 0),
     senderActive: Number(senderRows?.active ?? 0),
   };

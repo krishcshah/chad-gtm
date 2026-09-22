@@ -8,6 +8,7 @@ import { signUpSchema, type SignUpInput } from "@smartreach/validation";
 import {
   Alert,
   AlertDescription,
+  Badge,
   Button,
   Card,
   CardContent,
@@ -18,6 +19,8 @@ import {
   Label,
 } from "@smartreach/ui";
 import { authClient } from "@/lib/auth-client";
+import { GermanFlag } from "@/components/german-flag";
+import { ArrowRight, CheckCircle2 } from "lucide-react";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -36,9 +39,19 @@ export default function SignupPage() {
 
   return (
     <Card className="w-full max-w-sm shadow-md">
-      <CardHeader>
+      <CardHeader className="pb-4">
+        <div className="flex items-center justify-between gap-2 mb-1.5">
+          <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 bg-emerald-500/10 text-[10px] py-0.5">
+            100% Free Forever
+          </Badge>
+          <span className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+            <GermanFlag className="h-2.5 w-3.5" /> Made in Germany
+          </span>
+        </div>
         <CardTitle className="text-xl">Create your account</CardTitle>
-        <CardDescription>Start sending cold email in under five minutes</CardDescription>
+        <CardDescription className="text-xs">
+          Start sending cold email in under five minutes. Zero limits, forever.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
@@ -62,8 +75,21 @@ export default function SignupPage() {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          <Button className="w-full" disabled={formState.isSubmitting}>
-            {formState.isSubmitting ? "Creating…" : "Create account"}
+
+          <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 space-y-1.5 text-[11px] text-muted-foreground">
+            <div className="flex items-center gap-1.5 text-foreground font-medium">
+              <CheckCircle2 className="size-3 text-emerald-400 shrink-0" />
+              <span>Unlimited mailboxes, leads, & sequences</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <CheckCircle2 className="size-3 text-emerald-400 shrink-0" />
+              <span>$0/month · No credit card required</span>
+            </div>
+          </div>
+
+          <Button className="w-full gap-1.5 font-semibold" disabled={formState.isSubmitting}>
+            {formState.isSubmitting ? "Creating account…" : "Start Sending Free Forever"}
+            <ArrowRight className="size-3.5" />
           </Button>
         </form>
         <p className="mt-5 text-center text-[13px] text-muted-foreground">

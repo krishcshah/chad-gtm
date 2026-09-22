@@ -51,6 +51,7 @@ export function AnalyticsSection({
   initialSummary,
   initialPoints,
   initialProblem,
+  hideKpis = false,
 }: {
   campaignId?: string;
   today: string;
@@ -62,6 +63,7 @@ export function AnalyticsSection({
   initialSummary: AnalyticsSummaryView | null;
   initialPoints: AnalyticsPointView[] | null;
   initialProblem: AnalyticsProblem | null;
+  hideKpis?: boolean;
 }) {
   const headingId = useId();
   const errorId = useId();
@@ -306,33 +308,35 @@ export function AnalyticsSection({
 
       {!loading && !problem && !rangeError && summary && points ? (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            <Kpi label="Leads Contacted" value={formatCount(summary.leadsContacted)} hint="Emails delivered" />
-            <Kpi
-              label="Open Rate"
-              value={formatAnalyticsRate(summary.openRate)}
-              hint={`${summary.openCount ?? 0} opens`}
-              highlight={summary.openRate && summary.openRate > 0 ? "emerald" : undefined}
-            />
-            <Kpi
-              label="Click Rate"
-              value={formatAnalyticsRate(summary.clickRate)}
-              hint={`${summary.clickCount ?? 0} clicks`}
-              highlight={summary.clickRate && summary.clickRate > 0 ? "emerald" : undefined}
-            />
-            <Kpi
-              label="Reply Rate"
-              value={formatAnalyticsRate(summary.replyRate)}
-              hint={plural(summary.replyCount, "unique reply", "unique replies")}
-              highlight="emerald"
-            />
-            <Kpi
-              label="Bounce Rate"
-              value={formatAnalyticsRate(summary.bounceRate)}
-              hint={plural(summary.bounceCount, "bounce", "bounces")}
-              highlight={summary.bounceCount > 0 ? "destructive" : undefined}
-            />
-          </div>
+          {!hideKpis && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <Kpi label="Leads Contacted" value={formatCount(summary.leadsContacted)} hint="Emails delivered" />
+              <Kpi
+                label="Open Rate"
+                value={formatAnalyticsRate(summary.openRate)}
+                hint={`${summary.openCount ?? 0} opens`}
+                highlight={summary.openRate && summary.openRate > 0 ? "emerald" : undefined}
+              />
+              <Kpi
+                label="Click Rate"
+                value={formatAnalyticsRate(summary.clickRate)}
+                hint={`${summary.clickCount ?? 0} clicks`}
+                highlight={summary.clickRate && summary.clickRate > 0 ? "emerald" : undefined}
+              />
+              <Kpi
+                label="Reply Rate"
+                value={formatAnalyticsRate(summary.replyRate)}
+                hint={plural(summary.replyCount, "unique reply", "unique replies")}
+                highlight="emerald"
+              />
+              <Kpi
+                label="Bounce Rate"
+                value={formatAnalyticsRate(summary.bounceRate)}
+                hint={plural(summary.bounceCount, "bounce", "bounces")}
+                highlight={summary.bounceCount > 0 ? "destructive" : undefined}
+              />
+            </div>
+          )}
 
           <Card>
             <CardContent className="p-4 pt-4 sm:p-5 sm:pt-5">
