@@ -43,7 +43,7 @@ export default async function NewCampaignPage({
         senders={senders
           .filter((s) => s.status !== "failed")
           .map((s) => ({ id: s.id, senderName: s.senderName, email: s.email, status: s.status, dailyLimit: s.dailyLimit, usedToday: Number(s.usedToday) }))}
-        templates={templates.map((t) => ({ id: t.id, name: t.name, subject: t.subject }))}
+        templates={templates.map((t) => ({ id: t.id, name: t.name, subject: t.subject, bodyText: t.bodyText }))}
       />
     </div>
   );

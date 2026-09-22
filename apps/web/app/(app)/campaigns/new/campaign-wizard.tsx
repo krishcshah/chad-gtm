@@ -3,17 +3,10 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Check, Clock, FileText, Mail, Plus, Rocket, Upload, Users } from "lucide-react";
-import { toast } from "sonner";
+import { ArrowLeft, ArrowRight, Check, Clock, FileText, Mail, Rocket, Users } from "lucide-react";
 import { TIMEZONES } from "@smartreach/shared";
 import {
   Button,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
   EmptyState,
   Input,
   Label,
@@ -24,10 +17,9 @@ import {
   SelectTrigger,
   SelectValue,
   Switch,
-  Textarea,
   cn,
 } from "@smartreach/ui";
-import { createLeadList, publishCampaign, saveCampaignDraft, upsertTemplate } from "@/lib/actions";
+import { publishCampaign, saveCampaignDraft } from "@/lib/actions";
 import {
   CAMPAIGN_FIELD_CONTROL_ID,
   CAMPAIGN_FIELD_STEP,
@@ -35,11 +27,10 @@ import {
   firstFailingCampaignStep,
 } from "@/lib/campaign-wizard-errors";
 import { normalizeHhMm } from "@/lib/hhmm";
-import { LeadImport } from "../../leads/import/lead-import";
 
 interface LeadListOpt { id: string; name: string; leadCount: number }
 interface SenderOpt { id: string; senderName: string; email: string; status: string; dailyLimit: number; usedToday: number }
-interface TemplateOpt { id: string; name: string; subject: string }
+interface TemplateOpt { id: string; name: string; subject: string; bodyText: string }
 
 const STEPS = [
   { id: 1, label: "Name" },
@@ -110,16 +101,11 @@ export function CampaignWizard({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const focusId = useRef<string | null>(null);
   const [draftId, setDraftId] = useState<string | null>(initialDraft?.id ?? null);
-  const [listOpen, setListOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
-  const [templateOpen, setTemplateOpen] = useState(false);
 
   // Form state — hydrated from /campaigns/new?draft=
   const [name, setName] = useState(initialDraft?.name ?? "");
-  const [lists, setLists] = useState(leadLists);
   const [leadListId, setLeadListId] = useState(initialDraft?.leadListId ?? "");
   const [senderIds, setSenderIds] = useState<Set<string>>(() => new Set(initialDraft?.senderIds ?? []));
-  const [templateOpts, setTemplateOpts] = useState(templates);
   const [templateId, setTemplateId] = useState(initialDraft?.templateId ?? "");
   const [startMode, setStartMode] = useState<"now" | "later">(initialDraft?.startMode ?? "now");
   const [scheduledAt, setScheduledAt] = useState(isoToDatetimeLocal(initialDraft?.scheduledAt ?? null));
@@ -143,8 +129,8 @@ export function CampaignWizard({
       return next;
     });
 
-  const selectedTemplate = useMemo(() => templateOpts.find((t) => t.id === templateId), [templateOpts, templateId]);
-  const listLeadCount = lists.find((l) => l.id === leadListId)?.leadCount ?? 0;
+  const selectedTemplate = useMemo(() => templates.find((t) => t.id === templateId), [templates, templateId]);
+  const listLeadCount = leadLists.find((l) => l.id === leadListId)?.leadCount ?? 0;
 
   const fieldMessage = (key: string) => fieldErrors[key]?.[0];
   const clearField = (key: string) =>
@@ -385,26 +371,21 @@ export function CampaignWizard({
 
         {step === 2 && (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold">Choose a lead list</h2>
-                <p className="text-sm text-muted-foreground">Pending leads from this list will be queued.</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" size="sm" variant="outline" onClick={() => setListOpen(true)}>
-                  <Plus className="size-4" aria-hidden /> New list
-                </Button>
-                <Button type="button" size="sm" variant="outline" onClick={() => setImportOpen(true)}>
-                  <Upload className="size-4" aria-hidden /> Import leads
-                </Button>
-              </div>
+            <div>
+              <h2 className="text-lg font-semibold">Choose a lead list</h2>
+              <p className="text-sm text-muted-foreground">Select an existing list. Pending leads from it will be queued.</p>
             </div>
-            {lists.length === 0 ? (
+            {leadLists.length === 0 ? (
               <EmptyState
                 icon={Users}
                 title="No lead lists yet"
-                description="Create a list or import a CSV without leaving this campaign."
+                description="Create a lead list first, then return here to select it."
                 className="py-10"
+                action={
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href="/leads">Go to lead lists</Link>
+                  </Button>
+                }
               />
             ) : (
               <div
@@ -416,7 +397,7 @@ export function CampaignWizard({
                 aria-describedby={fieldMessage("leadListId") ? "err-leadListId" : undefined}
                 className={cn("space-y-2 rounded-lg outline-none", fieldMessage("leadListId") && "ring-2 ring-destructive/40")}
               >
-                {lists.map((l) => {
+                {leadLists.map((l) => {
                   const selected = leadListId === l.id;
                   return (
                     <button
@@ -521,21 +502,21 @@ export function CampaignWizard({
 
         {step === 4 && (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold">Choose an email template</h2>
-                <p className="text-sm text-muted-foreground">Preview shown once selected.</p>
-              </div>
-              <Button type="button" size="sm" variant="outline" onClick={() => setTemplateOpen(true)}>
-                <Plus className="size-4" aria-hidden /> New template
-              </Button>
+            <div>
+              <h2 className="text-lg font-semibold">Choose an email template</h2>
+              <p className="text-sm text-muted-foreground">Select an existing template. A preview appears below.</p>
             </div>
-            {templateOpts.length === 0 ? (
+            {templates.length === 0 ? (
               <EmptyState
                 icon={FileText}
                 title="No templates yet"
-                description="Write a template here. It is selected as soon as you save it."
+                description="Create a template first, then return here to select it."
                 className="py-10"
+                action={
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href="/templates">Go to templates</Link>
+                  </Button>
+                }
               />
             ) : (
               <>
@@ -548,27 +529,55 @@ export function CampaignWizard({
                   aria-describedby={fieldMessage("templateId") ? "err-templateId" : undefined}
                   className={cn("space-y-2 rounded-lg outline-none", fieldMessage("templateId") && "ring-2 ring-destructive/40")}
                 >
-                  {templateOpts.map((t) => (
-                    <button key={t.id} type="button" onClick={() => { setTemplateId(t.id); clearField("templateId"); }}
-                      className={cn(
-                        "flex w-full flex-col rounded-lg border p-4 text-left transition-colors",
-                        templateId === t.id ? "border-primary bg-primary/5" : "hover:bg-accent/50",
-                        fieldMessage("templateId") && templateId !== t.id && "border-destructive",
-                      )}>
-                      <span className="font-medium">{t.name}</span>
-                      <span className="truncate text-xs text-muted-foreground">{t.subject}</span>
-                    </button>
-                  ))}
+                  {templates.map((t) => {
+                    const selected = templateId === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => { setTemplateId(t.id); clearField("templateId"); }}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-lg p-4 text-left transition-colors",
+                          selected
+                            ? "border-2 border-primary bg-primary/10 ring-2 ring-primary/20"
+                            : "border hover:bg-accent/50",
+                          fieldMessage("templateId") && !selected && "border-destructive",
+                        )}
+                      >
+                        <span className="min-w-0">
+                          <span className="flex min-w-0 items-center gap-2 font-medium">
+                            {selected ? (
+                              <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                            ) : null}
+                            <span className="truncate">{t.name}</span>
+                          </span>
+                          <span className="block truncate text-xs text-muted-foreground">{t.subject}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
                   {fieldMessage("templateId") ? (
                     <p id="err-templateId" className="text-sm text-destructive">{fieldMessage("templateId")}</p>
                   ) : null}
                 </div>
-                {selectedTemplate && (
-                  <div className="rounded-lg border bg-muted/30 p-4">
-                    <p className="text-xs font-medium text-muted-foreground">Subject preview</p>
-                    <p className="mt-1 text-sm">{selectedTemplate.subject}</p>
-                  </div>
-                )}
+                {selectedTemplate ? (
+                  <section
+                    aria-label="Preview"
+                    className="rounded-md border border-dashed border-muted-foreground/40 bg-muted px-4 py-3"
+                  >
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Preview</p>
+                    <p className="mt-2 text-sm">
+                      <span className="text-muted-foreground">Subject · </span>
+                      {selectedTemplate.subject}
+                    </p>
+                    {selectedTemplate.bodyText ? (
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-foreground/90">{selectedTemplate.bodyText}</p>
+                    ) : (
+                      <p className="mt-2 text-sm text-muted-foreground">This template has no body text.</p>
+                    )}
+                  </section>
+                ) : null}
               </>
             )}
           </div>
@@ -796,57 +805,6 @@ export function CampaignWizard({
         </div>
       </div>
 
-      <NewListDialog
-        open={listOpen}
-        onOpenChange={setListOpen}
-        onCreated={(list) => {
-          setLists((prev) => prev.some((l) => l.id === list.id) ? prev : [...prev, { ...list, leadCount: 0 }]);
-          setLeadListId(list.id);
-          clearField("leadListId");
-          setListOpen(false);
-          toast.success(`List “${list.name}” selected`);
-        }}
-      />
-      <Dialog open={importOpen} onOpenChange={setImportOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Import leads</DialogTitle>
-            <DialogDescription>
-              Upload a CSV. The list stays selected in this campaign.
-            </DialogDescription>
-          </DialogHeader>
-          {importOpen ? (
-            <LeadImport
-              lists={lists.map((l) => ({ id: l.id, name: l.name }))}
-              initialListId={leadListId || "__new__"}
-              onImported={({ listId, listName, imported }) => {
-                setLists((prev) => {
-                  const existing = prev.find((l) => l.id === listId);
-                  if (!existing) return [...prev, { id: listId, name: listName, leadCount: imported }];
-                  return prev.map((l) =>
-                    l.id === listId ? { ...l, name: listName || l.name, leadCount: l.leadCount + imported } : l,
-                  );
-                });
-                setLeadListId(listId);
-                clearField("leadListId");
-                setImportOpen(false);
-                toast.success(`Imported ${imported} leads into ${listName}`);
-              }}
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
-      <NewTemplateDialog
-        open={templateOpen}
-        onOpenChange={setTemplateOpen}
-        onCreated={(template) => {
-          setTemplateOpts((prev) => prev.some((t) => t.id === template.id) ? prev : [...prev, template]);
-          setTemplateId(template.id);
-          clearField("templateId");
-          setTemplateOpen(false);
-          toast.success(`Template “${template.name}” selected`);
-        }}
-      />
     </div>
   );
 }
@@ -878,181 +836,3 @@ function Field({
   );
 }
 
-function NewListDialog({
-  open,
-  onOpenChange,
-  onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCreated: (list: { id: string; name: string }) => void;
-}) {
-  const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-
-  useEffect(() => {
-    if (!open) {
-      setName("");
-      setError(null);
-    }
-  }, [open]);
-
-  const submit = () => {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      setError("Give the list a name");
-      return;
-    }
-    start(async () => {
-      setError(null);
-      const res = await createLeadList({ name: trimmed });
-      if (res.ok && res.data?.id) {
-        onCreated({ id: res.data.id, name: trimmed });
-        return;
-      }
-      setError(res.ok ? "Could not create list" : res.error);
-    });
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>New lead list</DialogTitle>
-          <DialogDescription>The list is selected in this campaign as soon as you create it.</DialogDescription>
-        </DialogHeader>
-        <form
-          className="space-y-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit();
-          }}
-        >
-          <div className="space-y-2">
-            <Label htmlFor="inline-list-name">List name</Label>
-            <Input
-              id="inline-list-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Q1 SaaS founders"
-              autoFocus
-              aria-invalid={!!error}
-              aria-describedby={error ? "inline-list-error" : undefined}
-            />
-            {error ? (
-              <p id="inline-list-error" role="alert" className="text-sm text-destructive">{error}</p>
-            ) : null}
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={pending || !name.trim()}>
-              {pending ? "Creating…" : "Create list"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function NewTemplateDialog({
-  open,
-  onOpenChange,
-  onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCreated: (template: TemplateOpt) => void;
-}) {
-  const [name, setName] = useState("");
-  const [subject, setSubject] = useState("");
-  const [bodyText, setBodyText] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-
-  useEffect(() => {
-    if (!open) {
-      setName("");
-      setSubject("");
-      setBodyText("");
-      setError(null);
-    }
-  }, [open]);
-
-  const submit = () =>
-    start(async () => {
-      setError(null);
-      const res = await upsertTemplate({
-        name: name.trim(),
-        subject: subject.trim(),
-        bodyText,
-        bodyHtml: "",
-        format: "text",
-      });
-      if (res.ok && res.data?.id) {
-        onCreated({ id: res.data.id, name: name.trim(), subject: subject.trim() });
-        return;
-      }
-      setError(res.ok ? "Could not create template" : res.error);
-    });
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>New template</DialogTitle>
-          <DialogDescription>Saved templates are selected in this campaign immediately.</DialogDescription>
-        </DialogHeader>
-        <form
-          className="space-y-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit();
-          }}
-        >
-          <div className="space-y-2">
-            <Label htmlFor="inline-template-name">Template name</Label>
-            <Input
-              id="inline-template-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Founder outreach v1"
-              autoFocus
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="inline-template-subject">Subject</Label>
-            <Input
-              id="inline-template-subject"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder="Quick question, {{first_name}}"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="inline-template-body">Body</Label>
-            <Textarea
-              id="inline-template-body"
-              rows={6}
-              value={bodyText}
-              onChange={(e) => setBodyText(e.target.value)}
-              placeholder={"Hi {{first_name}},\n\nI noticed {{company}}…"}
-            />
-          </div>
-          {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={pending || !name.trim() || !subject.trim()}>
-              {pending ? "Saving…" : "Save template"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
