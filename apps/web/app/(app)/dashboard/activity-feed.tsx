@@ -208,7 +208,7 @@ export function ActivityFeed({ initialActivities }: ActivityFeedProps) {
   }, [grouped, filter]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col shrink-0">
       {/* Feed Category Filter Tabs */}
       <div className="flex items-center gap-1 border-b border-border/40 pb-2 mb-3 shrink-0">
         {(

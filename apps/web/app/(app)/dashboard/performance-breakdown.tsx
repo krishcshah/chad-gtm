@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, CheckCircle2, Flame, Inbox, Mail, ShieldCheck, Zap } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, Flame, Inbox, Mail, Rocket, ShieldCheck, Zap } from "lucide-react";
 import { Badge, Button, Progress, cn } from "@smartreach/ui";
 
 interface CampaignItem {
@@ -31,13 +31,13 @@ interface PerformanceBreakdownProps {
   senders: SenderItem[];
 }
 
-export function PerformanceBreakdown({ campaigns, senders }: PerformanceBreakdownProps) {
+export function PerformanceBreakdown({ campaigns = [], senders = [] }: PerformanceBreakdownProps) {
   const [activeTab, setActiveTab] = useState<"campaigns" | "senders">("campaigns");
 
   return (
-    <div className="rounded-2xl border border-border/70 bg-card/60 backdrop-blur shadow-xs overflow-hidden">
+    <div className="rounded-2xl border border-border/70 bg-card/60 backdrop-blur shadow-xs overflow-hidden shrink-0">
       {/* ReachInbox / Instantly Header & Tab Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/60 bg-muted/20 px-5 py-3.5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/60 bg-muted/20 px-5 py-3.5 shrink-0">
         <div className="flex items-center gap-2">
           <div className="flex items-center rounded-xl bg-background/80 p-1 border border-border/70 shadow-2xs">
             <button
@@ -88,13 +88,21 @@ export function PerformanceBreakdown({ campaigns, senders }: PerformanceBreakdow
 
       {/* Campaigns Table */}
       {activeTab === "campaigns" && (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto min-h-[140px]">
           {campaigns.length === 0 ? (
-            <div className="p-8 text-center text-xs text-muted-foreground">
-              No active campaigns found in this workspace.{" "}
-              <Link href="/campaigns/new" className="text-primary font-medium hover:underline">
-                Create your first campaign
-              </Link>
+            <div className="py-12 px-6 text-center text-xs text-muted-foreground flex flex-col items-center justify-center gap-2.5">
+              <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Rocket className="size-5" />
+              </div>
+              <div className="space-y-0.5">
+                <p className="font-semibold text-foreground text-sm">No campaigns yet</p>
+                <p className="text-muted-foreground text-xs">Create your first cold outreach campaign to track delivery and reply performance.</p>
+              </div>
+              <Button size="sm" asChild className="h-8 text-xs font-semibold gap-1.5 mt-1 shadow-xs">
+                <Link href="/campaigns/new">
+                  <Rocket className="size-3.5" /> Create Campaign
+                </Link>
+              </Button>
             </div>
           ) : (
             <table className="w-full text-left text-xs">
@@ -110,7 +118,10 @@ export function PerformanceBreakdown({ campaigns, senders }: PerformanceBreakdow
               </thead>
               <tbody className="divide-y divide-border/40">
                 {campaigns.map((c) => {
-                  const replyRate = c.sent > 0 ? ((c.replied / c.sent) * 100).toFixed(1) : "0.0";
+                  const sent = Number(c.sent || 0);
+                  const replied = Number(c.replied || 0);
+                  const total = Number(c.total || 0);
+                  const replyRate = sent > 0 ? ((replied / sent) * 100).toFixed(1) : "0.0";
                   const isHighReply = Number(replyRate) >= 3.0;
 
                   return (
@@ -149,14 +160,14 @@ export function PerformanceBreakdown({ campaigns, senders }: PerformanceBreakdow
                         </span>
                       </td>
                       <td className="px-4 py-3.5 text-right font-medium text-foreground tabular-nums">
-                        {c.sent.toLocaleString()}
+                        {sent.toLocaleString()}
                       </td>
                       <td className="px-4 py-3.5 text-right tabular-nums">
-                        <span className="font-semibold text-emerald-400">{c.replied}</span>{" "}
+                        <span className="font-semibold text-emerald-400">{replied}</span>{" "}
                         <span className="text-[11px] text-muted-foreground">({replyRate}%)</span>
                       </td>
                       <td className="px-4 py-3.5 text-right text-muted-foreground tabular-nums">
-                        {c.total > 0 ? `${c.sent}/${c.total}` : c.sent.toLocaleString()}
+                        {total > 0 ? `${sent}/${total}` : sent.toLocaleString()}
                       </td>
                       <td className="px-4 py-3.5 text-right">
                         {isHighReply ? (
@@ -182,13 +193,21 @@ export function PerformanceBreakdown({ campaigns, senders }: PerformanceBreakdow
 
       {/* Email Accounts Table */}
       {activeTab === "senders" && (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto min-h-[140px]">
           {senders.length === 0 ? (
-            <div className="p-8 text-center text-xs text-muted-foreground">
-              No sender inboxes connected.{" "}
-              <Link href="/senders/new" className="text-primary font-medium hover:underline">
-                Connect your first mailbox
-              </Link>
+            <div className="py-12 px-6 text-center text-xs text-muted-foreground flex flex-col items-center justify-center gap-2.5">
+              <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Mail className="size-5" />
+              </div>
+              <div className="space-y-0.5">
+                <p className="font-semibold text-foreground text-sm">No email accounts connected</p>
+                <p className="text-muted-foreground text-xs">Connect your first mailbox to start sending campaigns and tracking deliverability.</p>
+              </div>
+              <Button size="sm" asChild className="h-8 text-xs font-semibold gap-1.5 mt-1 shadow-xs">
+                <Link href="/senders/new">
+                  <Mail className="size-3.5" /> Connect Mailbox
+                </Link>
+              </Button>
             </div>
           ) : (
             <table className="w-full text-left text-xs">
@@ -203,8 +222,9 @@ export function PerformanceBreakdown({ campaigns, senders }: PerformanceBreakdow
               </thead>
               <tbody className="divide-y divide-border/40">
                 {senders.map((s) => {
-                  const sent = s.usedToday ?? 0;
-                  const limit = s.dailyLimit || 50;
+                  const sent = Number(s.usedToday || 0);
+                  const limit = Number(s.dailyLimit || 50);
+                  const replied = Number(s.repliedCount || 0);
                   const pct = Math.min(100, Math.round((sent / limit) * 100));
 
                   return (
@@ -255,7 +275,7 @@ export function PerformanceBreakdown({ campaigns, senders }: PerformanceBreakdow
                         </div>
                       </td>
                       <td className="px-4 py-3.5 text-right font-medium text-foreground tabular-nums">
-                        {s.repliedCount ?? 0}
+                        {replied}
                       </td>
                     </tr>
                   );

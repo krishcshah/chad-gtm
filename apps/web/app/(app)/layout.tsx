@@ -41,7 +41,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         />
         <main className="flex-1 min-w-0 pt-14 lg:pt-0 lg:pl-64 flex flex-col group">
           <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 [&:has(.unibox-root)]:max-w-none [&:has(.unibox-root)]:px-4 [&:has(.unibox-root)]:py-4 sm:[&:has(.unibox-root)]:px-6 lg:[&:has(.unibox-root)]:px-8 flex-1 flex flex-col">
-            <div className="flex-1 flex flex-col min-h-0 w-full">
+            <div className="flex-1 w-full group-has-[.unibox-root]:flex group-has-[.unibox-root]:flex-col group-has-[.unibox-root]:min-h-0">
               {children}
             </div>
             <footer className="mt-auto pt-8 pb-2 text-center text-[10px] text-muted-foreground/40 flex items-center justify-center gap-1.5 select-none group-has-[.unibox-root]:hidden">
