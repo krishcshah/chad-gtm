@@ -22,6 +22,7 @@ import {
 import { Badge, Button } from "@smartreach/ui";
 import { Logo } from "@/components/logo";
 import { GermanFlag } from "@/components/german-flag";
+import { EuFlag } from "@/components/eu-flag";
 import { getSession } from "@/lib/session";
 import { InteractiveShowcase } from "@/components/landing/interactive-showcase";
 
@@ -99,15 +100,19 @@ export default async function LandingPage() {
         {/* Hero Section */}
         <section className="relative overflow-hidden pt-16 pb-12 sm:pt-24 sm:pb-20">
           <div className="mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
-            {/* Pill Banner */}
-            <div className="inline-flex flex-wrap items-center justify-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-xs font-semibold text-foreground backdrop-blur-md mb-6 shadow-xs">
-              <span className="flex items-center gap-1.5 text-amber-300">
-                <GermanFlag className="h-3 w-4.5" /> 100% EU-Hosted (Frankfurt, Germany)
-              </span>
-              <span className="text-muted-foreground/50">·</span>
-              <span className="text-primary font-medium">Strict GDPR Data Sovereignty</span>
-              <span className="text-muted-foreground/50">·</span>
-              <span className="text-emerald-400 font-medium">100% Free Forever & Unlimited</span>
+            {/* Trust & Quality Badges */}
+            <div className="inline-flex flex-wrap items-center justify-center gap-2 mb-6">
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-300 backdrop-blur-md shadow-xs">
+                <GermanFlag className="h-3 w-4.5" />
+                <span>Made in Germany</span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-medium text-sky-400 backdrop-blur-md shadow-xs">
+                <EuFlag className="h-3 w-4.5" />
+                <span>100% EU-Hosted</span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-400 backdrop-blur-md shadow-xs">
+                <span>100% Free Forever</span>
+              </div>
             </div>
 
             {/* Main Headline */}
@@ -147,10 +152,14 @@ export default async function LandingPage() {
             </div>
 
             {/* Value Proof Badges */}
-            <div className="mt-10 flex flex-wrap items-center justify-center gap-6 text-xs text-muted-foreground">
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-xs text-muted-foreground">
               <div className="flex items-center gap-1.5 font-medium text-foreground">
                 <GermanFlag className="h-3 w-4.5" />
-                <span>100% EU-Hosted in Frankfurt</span>
+                <span>Made in Germany</span>
+              </div>
+              <div className="flex items-center gap-1.5 font-medium text-foreground">
+                <EuFlag className="h-3 w-4.5" />
+                <span>100% EU-Hosted (Frankfurt)</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="size-4 text-emerald-400" />
@@ -158,15 +167,11 @@ export default async function LandingPage() {
               </div>
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="size-4 text-emerald-400" />
-                <span>100% Source Available</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="size-4 text-emerald-400" />
                 <span>Unlimited mailboxes</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="size-4 text-emerald-400" />
-                <span>Zero credit card required</span>
+                <span>100% Source Available</span>
               </div>
             </div>
 
@@ -269,9 +274,15 @@ export default async function LandingPage() {
               <div className="pointer-events-none absolute -right-16 -bottom-16 size-72 rounded-full bg-amber-500/10 blur-3xl" />
               <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
                 <div className="max-w-2xl">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3.5 py-1 text-xs font-semibold text-amber-400 mb-3 shadow-xs">
-                    <GermanFlag className="h-3 w-4.5" />
-                    <span>100% EU-HOSTED IN FRANKFURT · STRICT GDPR DATA SOVEREIGNTY</span>
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-400 shadow-xs">
+                      <GermanFlag className="h-3 w-4.5" />
+                      <span>MADE IN GERMANY</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-400 shadow-xs">
+                      <EuFlag className="h-3 w-4.5" />
+                      <span>100% EU-HOSTED</span>
+                    </span>
                   </div>
                   <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-foreground">
                     Engineered with German Precision.{" "}
@@ -280,37 +291,43 @@ export default async function LandingPage() {
                     </span>
                   </h2>
                   <p className="mt-3 text-sm sm:text-base leading-relaxed text-muted-foreground">
-                    Forget expensive closed-source US platforms subject to surprise monthly price hikes, cross-border surveillance, and hidden data tracking. SmartReach is 100% hosted on enterprise cloud infrastructure in Frankfurt, Germany (EU). Every campaign, lead database, and background worker operates with strict European GDPR compliance, zero third-party telemetry, hardware-grade AES-256 encryption, and an auditable source-available engine.
+                    SmartReach combines German software engineering excellence with dedicated European cloud infrastructure. Avoid closed-source US platforms with surveillance risks, surprise monthly price hikes, and vendor lock-in. Your campaigns, lead directories, and sender credentials run in Frankfurt, Germany under strict GDPR data sovereignty.
                   </p>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full lg:w-auto shrink-0">
-                  <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[200px]">
-                    <div className="text-xs text-muted-foreground font-medium">Datacenter & Location</div>
-                    <div className="mt-1 text-sm font-bold text-foreground flex items-center gap-1.5">
-                      <span>🇩🇪 Frankfurt, Germany</span>
+                  <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[210px]">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                      <GermanFlag className="h-3 w-4.5" />
+                      <span>Engineering Standard</span>
                     </div>
-                    <p className="mt-1 text-[11px] text-emerald-400">100% EU-Hosted (eu-frankfurt-1)</p>
-                  </div>
-                  <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[200px]">
-                    <div className="text-xs text-muted-foreground font-medium">Privacy & Compliance</div>
-                    <div className="mt-1 text-sm font-bold text-foreground flex items-center gap-1.5">
-                      <span>🛡️ Strict GDPR Sovereignty</span>
+                    <div className="mt-1.5 text-sm font-bold text-foreground">
+                      Made in Germany
                     </div>
-                    <p className="mt-1 text-[11px] text-emerald-400">Zero cross-border US data transfers</p>
+                    <p className="mt-1 text-[11px] text-emerald-400">100% Source Available, zero bloat</p>
                   </div>
-                  <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[200px]">
-                    <div className="text-xs text-muted-foreground font-medium">Database & Credentials</div>
-                    <div className="mt-1 text-sm font-bold text-foreground flex items-center gap-1.5">
-                      <span>🔒 Local PostgreSQL & AES-256</span>
+                  <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[210px]">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                      <EuFlag className="h-3 w-4.5" />
+                      <span>Cloud Infrastructure</span>
                     </div>
-                    <p className="mt-1 text-[11px] text-emerald-400">Encrypted on local EU storage</p>
+                    <div className="mt-1.5 text-sm font-bold text-foreground">
+                      100% EU-Hosted
+                    </div>
+                    <p className="mt-1 text-[11px] text-emerald-400">Frankfurt Datacenter (eu-frankfurt-1)</p>
                   </div>
-                  <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[200px]">
+                  <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[210px]">
+                    <div className="text-xs text-muted-foreground font-medium">Data Sovereignty</div>
+                    <div className="mt-1.5 text-sm font-bold text-foreground flex items-center gap-1.5">
+                      <span>🛡️ Strict GDPR Privacy</span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-emerald-400">Zero US CLOUD Act exposure</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[210px]">
                     <div className="text-xs text-muted-foreground font-medium">Pricing Model</div>
-                    <div className="mt-1 text-sm font-bold text-foreground flex items-center gap-1.5">
+                    <div className="mt-1.5 text-sm font-bold text-foreground flex items-center gap-1.5">
                       <span>💎 100% Free Forever</span>
                     </div>
-                    <p className="mt-1 text-[11px] text-emerald-400">Zero monthly subscription fees</p>
+                    <p className="mt-1 text-[11px] text-emerald-400">Unlimited mailboxes, $0/month</p>
                   </div>
                 </div>
               </div>
@@ -357,7 +374,7 @@ export default async function LandingPage() {
                   <tr>
                     <td className="p-4 sm:p-5 font-medium">Hosting & Data Residency</td>
                     <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5 flex items-center gap-1.5">
-                      <GermanFlag className="h-3 w-4.5" /> 100% EU-Hosted (Frankfurt, DE)
+                      <EuFlag className="h-3 w-4.5" /> 100% EU-Hosted (Frankfurt, DE)
                     </td>
                     <td className="p-4 sm:p-5 text-muted-foreground">US Cloud (AWS/GCP)</td>
                     <td className="p-4 sm:p-5 text-muted-foreground">US Cloud (AWS)</td>
@@ -592,11 +609,14 @@ export default async function LandingPage() {
       {/* Footer */}
       <footer className="border-t border-border/40 py-10 bg-card/20">
         <div className="mx-auto max-w-7xl px-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground sm:px-6 lg:px-8">
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
             <Logo compact />
             <span>© {new Date().getFullYear()} SmartReach.</span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-2.5 py-0.5 text-[11px] font-medium text-foreground shadow-xs">
-              <GermanFlag className="h-2.5 w-3.5" /> 100% EU-Hosted · Frankfurt, Germany
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-300">
+              <GermanFlag className="h-2.5 w-3.5" /> Made in Germany
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-400">
+              <EuFlag className="h-2.5 w-3.5" /> 100% EU-Hosted
             </span>
           </div>
           <div className="flex items-center gap-6">

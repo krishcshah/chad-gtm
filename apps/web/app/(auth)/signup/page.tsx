@@ -20,6 +20,7 @@ import {
 } from "@smartreach/ui";
 import { authClient } from "@/lib/auth-client";
 import { GermanFlag } from "@/components/german-flag";
+import { EuFlag } from "@/components/eu-flag";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 
 export default function SignupPage() {
@@ -40,13 +41,18 @@ export default function SignupPage() {
   return (
     <Card className="w-full max-w-sm shadow-md">
       <CardHeader className="pb-4">
-        <div className="flex items-center justify-between gap-2 mb-1.5">
+        <div className="flex items-center justify-between gap-2 mb-2">
           <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 bg-emerald-500/10 text-[10px] py-0.5">
             100% Free Forever
           </Badge>
-          <span className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
-            <GermanFlag className="h-2.5 w-3.5" /> 100% EU-Hosted
-          </span>
+          <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+            <span className="inline-flex items-center gap-1" title="Made in Germany">
+              <GermanFlag className="h-2.5 w-3.5" /> DE
+            </span>
+            <span className="inline-flex items-center gap-1" title="100% EU-Hosted">
+              <EuFlag className="h-2.5 w-3.5" /> EU-Hosted
+            </span>
+          </div>
         </div>
         <CardTitle className="text-xl">Create your account</CardTitle>
         <CardDescription className="text-xs">
