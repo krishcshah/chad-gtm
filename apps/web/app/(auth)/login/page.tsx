@@ -61,7 +61,7 @@ export default function LoginPage() {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          <Button className="w-full" disabled={formState.isSubmitting}>
+          <Button type="submit" className="w-full" disabled={formState.isSubmitting}>
             {formState.isSubmitting ? "Signing in…" : "Sign in"}
           </Button>
         </form>

@@ -87,7 +87,7 @@ export default function SignupPage() {
             </div>
           </div>
 
-          <Button className="w-full gap-1.5 font-semibold" disabled={formState.isSubmitting}>
+          <Button type="submit" className="w-full gap-1.5 font-semibold" disabled={formState.isSubmitting}>
             {formState.isSubmitting ? "Creating account…" : "Start Sending Free Forever"}
             <ArrowRight className="size-3.5" />
           </Button>

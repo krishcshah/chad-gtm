@@ -116,22 +116,22 @@ export function SenderForm() {
       {/* Identity */}
       <Section title="Identity">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Sender name" required><Input value={f.senderName ?? ""} onChange={set("senderName")} placeholder="Krish Shah" /></Field>
-          <Field label="Email address" required><Input type="email" value={f.email ?? ""} onChange={set("email")} placeholder="krish@yourdomain.com" /></Field>
-          <Field label="From name"><Input value={f.fromName ?? ""} onChange={set("fromName")} placeholder="Krish from SmartReach" /></Field>
-          <Field label="Reply-To"><Input type="email" value={f.replyTo ?? ""} onChange={set("replyTo")} placeholder="replies@yourdomain.com" /></Field>
+          <Field label="Sender name" required><Input id="senderName" name="senderName" value={f.senderName ?? ""} onChange={set("senderName")} placeholder="Krish Shah" /></Field>
+          <Field label="Email address" required><Input id="email" name="email" type="email" value={f.email ?? ""} onChange={set("email")} placeholder="krish@yourdomain.com" /></Field>
+          <Field label="From name"><Input id="fromName" name="fromName" value={f.fromName ?? ""} onChange={set("fromName")} placeholder="Krish from SmartReach" /></Field>
+          <Field label="Reply-To"><Input id="replyTo" name="replyTo" type="email" value={f.replyTo ?? ""} onChange={set("replyTo")} placeholder="replies@yourdomain.com" /></Field>
         </div>
       </Section>
 
       {/* SMTP */}
       <Section title="SMTP (sending)">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="SMTP host" required><Input value={f.smtpHost ?? ""} onChange={set("smtpHost")} placeholder="smtp.gmail.com" /></Field>
+          <Field label="SMTP host" required><Input id="smtpHost" name="smtpHost" value={f.smtpHost ?? ""} onChange={set("smtpHost")} placeholder="smtp.gmail.com" /></Field>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Port"><Input type="number" value={f.smtpPort ?? "587"} onChange={set("smtpPort")} /></Field>
+            <Field label="Port"><Input id="smtpPort" name="smtpPort" type="number" value={f.smtpPort ?? "587"} onChange={set("smtpPort")} /></Field>
             <Field label="Security">
               <Select value={f.smtpSecurity ?? "tls"} onValueChange={(v) => setF((p) => ({ ...p, smtpSecurity: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="smtpSecurity"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="tls">TLS (STARTTLS)</SelectItem>
                   <SelectItem value="ssl">SSL</SelectItem>
@@ -140,18 +140,18 @@ export function SenderForm() {
               </Select>
             </Field>
           </div>
-          <Field label="Username" required><Input value={f.smtpUsername ?? ""} onChange={set("smtpUsername")} placeholder="krish@yourdomain.com" /></Field>
-          <Field label="Password / App password" required><Input type="password" value={f.smtpPassword ?? ""} onChange={set("smtpPassword")} placeholder="••••••••" /></Field>
+          <Field label="Username" required><Input id="smtpUsername" name="smtpUsername" value={f.smtpUsername ?? ""} onChange={set("smtpUsername")} placeholder="krish@yourdomain.com" /></Field>
+          <Field label="Password / App password" required><Input id="smtpPassword" name="smtpPassword" type="password" value={f.smtpPassword ?? ""} onChange={set("smtpPassword")} placeholder="••••••••" /></Field>
         </div>
       </Section>
 
       {/* IMAP */}
       <Section title="IMAP (reply detection)" hint="Optional, but required to detect replies and auto-stop follow-ups.">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="IMAP host"><Input value={f.imapHost ?? ""} onChange={set("imapHost")} placeholder="imap.gmail.com" /></Field>
-          <Field label="IMAP port"><Input type="number" value={f.imapPort ?? "993"} onChange={set("imapPort")} /></Field>
-          <Field label="IMAP username"><Input value={f.imapUsername ?? ""} onChange={set("imapUsername")} placeholder="krish@yourdomain.com" /></Field>
-          <Field label="IMAP password"><Input type="password" value={f.imapPassword ?? ""} onChange={set("imapPassword")} placeholder="••••••••" /></Field>
+          <Field label="IMAP host"><Input id="imapHost" name="imapHost" value={f.imapHost ?? ""} onChange={set("imapHost")} placeholder="imap.gmail.com" /></Field>
+          <Field label="IMAP port"><Input id="imapPort" name="imapPort" type="number" value={f.imapPort ?? "993"} onChange={set("imapPort")} /></Field>
+          <Field label="IMAP username"><Input id="imapUsername" name="imapUsername" value={f.imapUsername ?? ""} onChange={set("imapUsername")} placeholder="krish@yourdomain.com" /></Field>
+          <Field label="IMAP password"><Input id="imapPassword" name="imapPassword" type="password" value={f.imapPassword ?? ""} onChange={set("imapPassword")} placeholder="••••••••" /></Field>
         </div>
       </Section>
 
