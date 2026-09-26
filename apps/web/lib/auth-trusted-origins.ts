@@ -37,8 +37,10 @@ export function resolveTrustedOrigins(opts: {
     }
   }
   if (opts.includeDevLoopback) {
-    set.add("http://localhost:3000");
-    set.add("http://127.0.0.1:3000");
+    for (const port of ["", ":3000", ":3001", ":3002", ":3003", ":3004", ":3005", ":3006"]) {
+      set.add(`http://localhost${port}`);
+      set.add(`http://127.0.0.1${port}`);
+    }
   }
   return [...set];
 }

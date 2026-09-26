@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 
 const SCREENSHOTS_DIR = 'C:\\Users\\Krish Shah\\.gemini\\antigravity\\brain\\679bc895-7913-4e7c-8b06-3d1273091630\\screenshots';
-const BASE_URL = 'http://localhost:3005';
+const BASE_URL = 'https://smart-reach-staging.vercel.app';
 
 if (!fs.existsSync(SCREENSHOTS_DIR)) {
   fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
@@ -36,6 +36,7 @@ async function run() {
 
   console.log(`2. Navigating to ${BASE_URL}/signup...`);
   await page.goto(`${BASE_URL}/signup`, { waitUntil: 'networkidle2' });
+  await page.waitForSelector('#name', { timeout: 10000 });
   await page.type('#name', testUser.name);
   await page.type('#email', testUser.email);
   await page.type('#password', testUser.password);
@@ -110,18 +111,26 @@ async function run() {
   }
 
   console.log("Waiting for query results...");
-  await new Promise(r => setTimeout(r, 2000));
+  try {
+    await page.waitForFunction(
+      () => !document.querySelector('.animate-pulse') && document.querySelectorAll('table tbody tr').length > 0,
+      { timeout: 15000 }
+    );
+  } catch {
+    console.log("Wait timed out, continuing...");
+  }
+  await new Promise(r => setTimeout(r, 1000));
 
   await page.screenshot({ path: path.join(SCREENSHOTS_DIR, '35_apollo_leads_filtered.png') });
   console.log("Saved 35_apollo_leads_filtered.png");
 
   // 7. Inspect Lead Details Sheet
   console.log("7. Testing Lead Details Sheet inspection...");
-  const inspectBtns = await page.$$('button');
+  const inspectBtns = await page.$$('table tbody tr button');
   let inspectClicked = false;
   for (const btn of inspectBtns) {
     const text = await page.evaluate(el => el.textContent || '', btn);
-    if (text.trim() === 'Inspect') {
+    if (text.includes('Inspect')) {
       await btn.click();
       inspectClicked = true;
       console.log("Clicked Inspect button on lead!");
@@ -130,22 +139,19 @@ async function run() {
   }
 
   if (inspectClicked) {
-    await new Promise(r => setTimeout(r, 1200));
+    await new Promise(r => setTimeout(r, 1500));
     await page.screenshot({ path: path.join(SCREENSHOTS_DIR, '36_apollo_lead_details_sheet.png') });
     console.log("Saved 36_apollo_lead_details_sheet.png");
 
-    // Close the sheet
-    const closeBtn = await page.$('button[data-state="open"], [data-radix-dialog-content] button');
-    if (closeBtn) {
-      await page.keyboard.press('Escape');
-      await new Promise(r => setTimeout(r, 600));
-    }
+    // Close the sheet via Escape
+    await page.keyboard.press('Escape');
+    await new Promise(r => setTimeout(r, 800));
   }
 
   // 8. Test Add Selected to Campaign List
   console.log("8. Testing lead selection and Add to Campaign List...");
   // Select table rows via checkboxes
-  const tableCheckboxes = await page.$$('table tbody input[type="checkbox"], table tbody button[role="checkbox"]');
+  const tableCheckboxes = await page.$$('table tbody tr input[type="checkbox"], table tbody tr button[role="checkbox"]');
   console.log(`Found ${tableCheckboxes.length} table row checkboxes`);
   if (tableCheckboxes.length >= 2) {
     await tableCheckboxes[0].click();
@@ -165,12 +171,12 @@ async function run() {
     }
   }
 
-  await new Promise(r => setTimeout(r, 800));
+  await new Promise(r => setTimeout(r, 1000));
 
   // Type list name in dialog
   const listNameInput = await page.$('input[placeholder*="Restaurant"]');
   if (listNameInput) {
-    await listNameInput.type('Verified Apollo Outreach Segment');
+    await listNameInput.type('Verified US Restaurant Founders');
     await new Promise(r => setTimeout(r, 300));
 
     // Click confirm Add Leads
@@ -185,7 +191,7 @@ async function run() {
     }
   }
 
-  await new Promise(r => setTimeout(r, 2000));
+  await new Promise(r => setTimeout(r, 2500));
 
   // Switch to "My Campaign Lists" tab
   console.log("9. Switching to 'My Campaign Lists' tab...");

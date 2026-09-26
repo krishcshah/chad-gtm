@@ -1,0 +1,16 @@
+# Ignore uncompressed database files
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+*.db
+
+# Only allow compressed database
+!data/leads.db.gz
+
+.git
+.github
+node_modules
+.next
+.next-build
+*.log
