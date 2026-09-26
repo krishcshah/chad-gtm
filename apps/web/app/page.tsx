@@ -108,7 +108,7 @@ export default async function LandingPage() {
               </div>
               <div className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-medium text-sky-400 backdrop-blur-md shadow-xs">
                 <EuFlag className="h-3 w-4.5" />
-                <span>100% EU-Hosted</span>
+                <span>EU-Hosted</span>
               </div>
               <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-400 backdrop-blur-md shadow-xs">
                 <span>100% Free Forever</span>
@@ -116,9 +116,9 @@ export default async function LandingPage() {
             </div>
 
             {/* Main Headline */}
-            <h1 className="mx-auto max-w-5xl text-balance text-4xl font-extrabold tracking-tight sm:text-6xl lg:text-7xl leading-[1.08]">
+            <h1 className="mx-auto max-w-6xl text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-[64px] leading-[1.1]">
               Cold Email Software That’s Completely Free.{" "}
-              <span className="sm:block bg-gradient-to-r from-primary via-info to-cyan-400 bg-clip-text text-transparent">
+              <span className="sm:block mt-1 sm:mt-2 bg-gradient-to-r from-primary via-info to-cyan-400 bg-clip-text text-transparent">
                 Unlimited Everything, Zero Limits.
               </span>
             </h1>
