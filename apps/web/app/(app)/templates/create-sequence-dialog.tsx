@@ -20,6 +20,7 @@ import {
 } from "@smartreach/ui";
 import { saveSequenceAsTemplate, updateSequenceTemplate } from "@/lib/actions";
 import type { ReusableSequence, TemplateStepItem, TemplateVariantItem } from "@/lib/sequence-templates";
+import { AiAssistantPopover } from "@/components/ai/ai-assistant-popover";
 
 interface CreateSequenceDialogProps {
   open: boolean;
@@ -463,9 +464,19 @@ export function CreateSequenceDialog({
                     {/* Subject Line Field */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <Label className="text-xs font-medium text-foreground">
-                          Subject Line <span className="text-primary font-bold">({activeVar.label})</span>
-                        </Label>
+                        <div className="flex items-center gap-2">
+                          <Label className="text-xs font-medium text-foreground">
+                            Subject Line <span className="text-primary font-bold">({activeVar.label})</span>
+                          </Label>
+                          <AiAssistantPopover
+                            subject={activeVar.subject}
+                            bodyText={activeVar.bodyText}
+                            onApply={(improved) => {
+                              updateStepSubject(i, currentVarIdx, improved.subject);
+                              updateStepBody(i, currentVarIdx, improved.bodyText);
+                            }}
+                          />
+                        </div>
                         <span className="text-[10px] text-muted-foreground">
                           {activeVar.subject.length > 0 ? `${activeVar.subject.length} chars` : "Required"}
                         </span>

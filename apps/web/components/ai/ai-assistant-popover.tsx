@@ -107,7 +107,8 @@ export function AiAssistantPopover({
             size="sm"
             disabled={disabled || pending}
             className="h-7 gap-1.5 px-2.5 text-xs font-medium border-primary/30 text-primary hover:bg-primary/10 hover:text-primary transition-all"
-            title="AI Copywriting Assistant"
+            title="AI Assistant - Copy Enhancement"
+            aria-label="AI Assistant Copy Enhancement"
           >
             <Sparkles className={cn("size-3.5", pending && "animate-spin text-primary")} />
             {pending ? "Enhancing…" : "AI Assistant"}

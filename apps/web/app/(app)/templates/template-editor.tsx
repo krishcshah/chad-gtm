@@ -16,6 +16,7 @@ import {
   cn,
 } from "@smartreach/ui";
 import { upsertTemplate } from "@/lib/actions";
+import { AiAssistantPopover } from "@/components/ai/ai-assistant-popover";
 
 const SAMPLE_VARS: Record<string, string> = {
   first_name: "Ada",
@@ -107,7 +108,21 @@ export function TemplateEditor({ initial }: TemplateEditorProps) {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="t-subject">Subject</Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="t-subject">Subject</Label>
+            <AiAssistantPopover
+              subject={subject}
+              bodyText={format === "html" ? bodyHtml : bodyText}
+              onApply={(improved) => {
+                setSubject(improved.subject);
+                if (format === "html") {
+                  setBodyHtml(improved.bodyHtml || improved.bodyText);
+                } else {
+                  setBodyText(improved.bodyText);
+                }
+              }}
+            />
+          </div>
           <Input
             id="t-subject"
             value={subject}
