@@ -12,18 +12,13 @@ import * as schema from "./schema";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type SmartReachDb = any;
 
-function isLocalPostgres(url: string): boolean {
-  try {
-    const u = new URL(url);
-    return u.hostname === "localhost" || u.hostname === "127.0.0.1" || u.hostname === "::1";
-  } catch {
-    return /@(localhost|127\.0\.0\.1)[:/]/.test(url);
-  }
+function isStandardPostgres(url: string): boolean {
+  return !url.includes("neon.tech");
 }
 
 export function createDb(rawUrl: string): { db: SmartReachDb; close?: () => Promise<void> } {
   const url = (rawUrl || "").trim().replace(/^["']|["']$/g, "");
-  if (isLocalPostgres(url)) {
+  if (isStandardPostgres(url)) {
     const pool = new pg.Pool({ connectionString: url });
     // Cast: nested @types/pg copies disagree on PoolClient signatures.
     const db = drizzlePg(pool as any, { schema });
