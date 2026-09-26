@@ -1,0 +1,38 @@
+name: Deploy to Oracle Cloud Always-Free
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to Oracle Cloud
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Execute remote deployment over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd /home/ubuntu/smart-reach
+            echo "📥 Pulling latest commits from GitHub..."
+            git pull origin main
+
+            echo "📦 Installing workspace dependencies..."
+            npm install --no-audit
+
+            echo "🏗️ Building Next.js web application..."
+            npm run build --workspace=@smartreach/web
+
+            echo "🔄 Reloading PM2 processes with zero downtime..."
+            pm2 reload all --update-env
+
+            echo "✅ Deployment successful! Live status:"
+            pm2 status
