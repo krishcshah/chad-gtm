@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, FileSpreadsheet, Loader2, Trash2 } from "lucide-react";
+import { ArrowRight, FileSpreadsheet, Loader2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import {
   Alert,
@@ -84,6 +84,23 @@ export function LeadListCard({ id, name, leadCount, createdAt }: LeadListCardPro
                   <Badge variant="secondary" className="font-semibold tabular-nums">
                     {leadCount.toLocaleString()} {leadCount === 1 ? "lead" : "leads"}
                   </Badge>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    asChild
+                    className="size-8 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                    title={`Import CSV to ${name}`}
+                  >
+                    <Link
+                      href={`/leads/import?listId=${id}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                      }}
+                    >
+                      <Upload className="size-3.5" />
+                    </Link>
+                  </Button>
                   <Button
                     type="button"
                     variant="ghost"

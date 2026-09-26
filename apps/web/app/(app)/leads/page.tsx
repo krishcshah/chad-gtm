@@ -7,8 +7,14 @@ export const dynamic = "force-dynamic";
 
 export const metadata = { title: "B2B Leads & Contact Intelligence · SmartReach" };
 
-export default async function LeadsPage() {
+export default async function LeadsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ tab?: string }>;
+}) {
   const { user, workspace } = await requireWorkspace();
+  const sp = searchParams ? await searchParams : {};
+  const defaultTab = sp.tab === "saved-lists" ? "saved-lists" : "directory";
 
   // Fetch campaign lists, aggregated facets, and initial page of directory leads in parallel
   const [lists, facets, initialResult] = await Promise.all([
@@ -38,6 +44,7 @@ export default async function LeadsPage() {
         initialFacets={facets}
         existingLists={existingLists}
         workspaceName={workspace.name}
+        defaultTab={defaultTab}
       />
     </div>
   );

@@ -63,6 +63,14 @@ export function LeadImport({
   const [dragOver, setDragOver] = useState(false);
   const [mapping, setMapping] = useState<Mapping>({});
   const [customKeys, setCustomKeys] = useState<Record<string, string>>({});
+  const [targetMode, setTargetMode] = useState<"new" | "existing">(() => {
+    if (initialListId && lists.some((l) => l.id === initialListId)) return "existing";
+    return "new";
+  });
+  const [selectedListId, setSelectedListId] = useState<string>(() => {
+    if (initialListId && lists.some((l) => l.id === initialListId)) return initialListId;
+    return lists[0]?.id || "";
+  });
   const [newListName, setNewListName] = useState("");
   const [result, setResult] = useState<{ imported: number; skipped: number; invalid: number } | null>(null);
   const [inlineProgress, setInlineProgress] = useState<{
@@ -83,6 +91,13 @@ export function LeadImport({
     setInlineProgress(null);
     setStep(1);
     setNewListName("");
+    if (initialListId && lists.some((l) => l.id === initialListId)) {
+      setTargetMode("existing");
+      setSelectedListId(initialListId);
+    } else {
+      setTargetMode("new");
+      setSelectedListId(lists[0]?.id || "");
+    }
   };
 
   const handleFile = useCallback(async (file: File) => {
@@ -136,13 +151,17 @@ export function LeadImport({
   const doImport = () =>
     start(async () => {
       if (!csv || csv.rows.length === 0) return;
+      const targetListId = targetMode === "existing" && selectedListId ? selectedListId : "__new__";
       const resolvedListName =
-        newListName.trim() || fileName.replace(/\.csv$/i, "") || "New Lead List";
+        targetMode === "existing"
+          ? lists.find((l) => l.id === selectedListId)?.name || "Saved List"
+          : (newListName.trim() || fileName.replace(/\.csv$/i, "") || "New Lead List");
 
       // If background job provider is active and this is not a campaign wizard inline callback,
       // dispatch to persistent background runner!
       if (startImportJob && typeof window !== "undefined" && !onImported) {
         await startImportJob({
+          listId: targetListId,
           listName: resolvedListName,
           fileName,
           mapping: finalMapping,
@@ -155,7 +174,7 @@ export function LeadImport({
 
       // Inline runner (used for wizard callback or isolated unit tests)
       const total = csv.rows.length;
-      let currentListId = initialListId || "__new__";
+      let currentListId = targetListId;
       let totalImported = 0;
       let totalSkipped = 0;
       let totalInvalid = 0;
@@ -489,28 +508,74 @@ export function LeadImport({
       {step === 2 && (
         <>
           <div className="space-y-4">
-            {/* Automatic dedicated list creation - no dropdown to accidentally overwrite existing lists */}
-            <div className="rounded-xl border border-border/80 bg-card/60 p-4 shadow-xs">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label htmlFor="list-name" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Target Contact List Name
-                  </label>
-                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                    New dedicated list
-                  </span>
-                </div>
-                <Input
-                  id="list-name"
-                  value={newListName}
-                  onChange={(e) => setNewListName(e.target.value)}
-                  placeholder="e.g. Q4 Outreach Prospects"
-                  className="bg-background font-medium"
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Every uploaded file creates a separate, dedicated contact list so contacts are never accidentally mixed into existing lists.
-                </p>
+            {/* Target Contact List Selection */}
+            <div className="rounded-xl border border-border/80 bg-card/60 p-4 shadow-xs space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label htmlFor="list-name" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Target Contact List
+                </label>
+                {lists.length > 0 && (
+                  <div className="flex items-center rounded-lg bg-muted/60 p-0.5 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setTargetMode("new")}
+                      className={cn(
+                        "rounded-md px-2.5 py-1 font-medium transition-colors",
+                        targetMode === "new"
+                          ? "bg-background text-foreground shadow-xs"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      New list
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTargetMode("existing")}
+                      className={cn(
+                        "rounded-md px-2.5 py-1 font-medium transition-colors",
+                        targetMode === "existing"
+                          ? "bg-background text-foreground shadow-xs"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      Add to existing list ({lists.length})
+                    </button>
+                  </div>
+                )}
               </div>
+
+              {targetMode === "new" ? (
+                <div className="space-y-1.5">
+                  <Input
+                    id="list-name"
+                    value={newListName}
+                    onChange={(e) => setNewListName(e.target.value)}
+                    placeholder="e.g. Q4 Outreach Prospects"
+                    className="bg-background font-medium"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Creates a separate, dedicated contact list in your workspace so contacts are organized and ready for outreach campaigns.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Select value={selectedListId} onValueChange={setSelectedListId}>
+                    <SelectTrigger className="w-full bg-background font-medium" aria-label="Select target saved list">
+                      <SelectValue placeholder="Select a saved list" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {lists.map((l) => (
+                        <SelectItem key={l.id} value={l.id}>
+                          {l.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Contacts from this CSV will be imported directly into this saved list. Existing duplicate emails will be skipped.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Scroll wide column rows inside the panel; actions stay outside it. */}
@@ -625,18 +690,22 @@ export function LeadImport({
               </Button>
               <div className="flex gap-3">
                 {result && !onImported ? (
-                  <Button type="button" onClick={() => router.push("/leads")}>
-                    View leads <ArrowRight className="h-4 w-4" />
+                  <Button type="button" onClick={() => router.push("/leads?tab=saved-lists")}>
+                    View Saved Lists <ArrowRight className="h-4 w-4" />
                   </Button>
                 ) : (
                   <Button
                     type="button"
                     onClick={doImport}
-                    disabled={pending || !emailMapped || !newListName.trim()}
+                    disabled={
+                      pending ||
+                      !emailMapped ||
+                      (targetMode === "new" ? !newListName.trim() : !selectedListId)
+                    }
                     aria-describedby={!emailMapped ? "email-mapping-error" : undefined}
                   >
-                    {pending && <Loader2 className="h-4 w-4 animate-spin" />}
-                    Confirm
+                    {pending && <Loader2 className="h-4 w-4 animate-spin mr-1.5" />}
+                    Confirm & Import
                   </Button>
                 )}
               </div>

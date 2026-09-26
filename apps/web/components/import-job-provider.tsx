@@ -16,6 +16,7 @@ import { importLeads } from "@/lib/actions";
 interface ImportJobContextType {
   activeJob: StoredImportJob | null;
   startImportJob: (params: {
+    listId?: string;
     listName: string;
     fileName: string;
     mapping: Record<string, string | null>;
@@ -149,11 +150,13 @@ export function ImportJobProvider({ children }: { children: React.ReactNode }) {
 
   const startImportJob = useCallback(
     async ({
+      listId,
       listName,
       fileName,
       mapping,
       rows,
     }: {
+      listId?: string;
       listName: string;
       fileName: string;
       mapping: Record<string, string | null>;
@@ -162,7 +165,7 @@ export function ImportJobProvider({ children }: { children: React.ReactNode }) {
       const newJob: StoredImportJob = {
         id: `import_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         listName: listName.trim() || fileName.replace(/\.csv$/i, "") || "New Lead List",
-        listId: "__new__",
+        listId: listId || "__new__",
         fileName,
         totalRows: rows.length,
         processedRows: 0,

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Download, Plus, Search, Tag, Trash2, UserPlus, X } from "lucide-react";
+import { ChevronDown, Download, Plus, Search, Tag, Trash2, Upload, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { LEAD_STATUSES } from "@smartreach/shared";
 import {
@@ -267,6 +268,11 @@ export function LeadTable({
         }
         actions={
           <>
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/leads/import?listId=${listId}`}>
+                <Upload className="h-4 w-4 mr-1.5 text-primary" /> Import CSV
+              </Link>
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setRenameOpen(true)}>
               Rename
             </Button>
@@ -354,11 +360,18 @@ export function LeadTable({
         <EmptyState
           icon={UserPlus}
           title="No leads in this list"
-          description="Add a lead by email, or upload a CSV from the Leads page."
+          description="Add a lead manually, or upload a CSV file to import contacts directly into this list."
           action={
-            <Button size="sm" onClick={openCreate}>
-              <Plus className="h-4 w-4" /> Add Lead
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" asChild className="gap-1.5">
+                <Link href={`/leads/import?listId=${listId}`}>
+                  <Upload className="h-4 w-4" /> Import CSV
+                </Link>
+              </Button>
+              <Button size="sm" variant="outline" onClick={openCreate} className="gap-1.5">
+                <Plus className="h-4 w-4" /> Add Lead
+              </Button>
+            </div>
           }
         />
       ) : rows.length > 0 || filtered ? (

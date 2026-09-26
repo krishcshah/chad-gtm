@@ -22,6 +22,7 @@ import {
   Plus,
   Search,
   Sparkles,
+  Upload,
   Users,
 } from "lucide-react";
 import type {
@@ -54,6 +55,7 @@ interface ApolloLeadsViewProps {
   initialFacets: DirectoryFacets;
   existingLists: ExistingListOption[];
   workspaceName: string;
+  defaultTab?: "directory" | "saved-lists";
 }
 
 export function ApolloLeadsView({
@@ -61,8 +63,9 @@ export function ApolloLeadsView({
   initialFacets,
   existingLists,
   workspaceName,
+  defaultTab = "directory",
 }: ApolloLeadsViewProps) {
-  const [activeTab, setActiveTab] = useState<"directory" | "saved-lists">("directory");
+  const [activeTab, setActiveTab] = useState<"directory" | "saved-lists">(defaultTab);
 
   // Lead Directory state
   const [facets, setFacets] = useState<DirectoryFacets>(initialFacets);
@@ -329,6 +332,18 @@ export function ApolloLeadsView({
 
         {/* Global Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" asChild className="gap-1.5 shadow-sm text-xs font-semibold">
+            <Link href="/leads/import">
+              <Upload className="h-4 w-4 text-primary" />
+              Import CSV
+            </Link>
+          </Button>
+          <Button size="sm" variant="outline" asChild className="gap-1.5 shadow-sm text-xs font-semibold">
+            <Link href="/leads/new">
+              <Plus className="h-4 w-4" />
+              New List
+            </Link>
+          </Button>
           <Button size="sm" asChild className="gap-1.5 shadow-sm text-xs font-semibold">
             <Link href="/campaigns/new">
               <Sparkles className="h-4 w-4" />
@@ -410,6 +425,33 @@ export function ApolloLeadsView({
 
         {/* TAB 2: MY SAVED CAMPAIGN LISTS */}
         <TabsContent value="saved-lists" className="mt-0 space-y-6 outline-none w-full max-w-full min-w-0">
+          {/* Action & Info banner for Saved Lists */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border/70 bg-card/60 p-4 shadow-xs backdrop-blur">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="size-4 text-violet-400" />
+                <h2 className="text-sm font-semibold text-foreground">Workspace Saved Lists</h2>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Custom leads imported via CSV or saved from the 183k+ B2B Directory into your workspace to launch outreach campaigns.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" asChild className="gap-1.5 shadow-sm text-xs font-semibold">
+                <Link href="/leads/import">
+                  <Upload className="size-3.5" />
+                  Import CSV to List
+                </Link>
+              </Button>
+              <Button size="sm" variant="outline" asChild className="gap-1.5 text-xs font-semibold">
+                <Link href="/leads/new">
+                  <Plus className="size-3.5" />
+                  New Empty List
+                </Link>
+              </Button>
+            </div>
+          </div>
+
           {/* Summary Strip */}
           <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
             <div className="rounded-xl border border-border/60 bg-card/40 p-4 backdrop-blur">
@@ -446,11 +488,23 @@ export function ApolloLeadsView({
             <EmptyState
               icon={Users}
               title="No campaign lists created yet"
-              description="Switch to the B2B Lead Directory tab to select and segment leads from 183k+ verified contacts into campaign lists."
+              description="Import your own CSV contacts into your workspace, or segment leads from the 183k+ B2B directory into campaign lists."
               action={
-                <Button size="sm" onClick={() => setActiveTab("directory")} className="gap-1.5">
-                  <Database className="h-4 w-4" /> Explore Directory
-                </Button>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Button size="sm" asChild className="gap-1.5">
+                    <Link href="/leads/import">
+                      <Upload className="h-4 w-4" /> Import CSV
+                    </Link>
+                  </Button>
+                  <Button size="sm" variant="outline" asChild className="gap-1.5">
+                    <Link href="/leads/new">
+                      <Plus className="h-4 w-4" /> New List
+                    </Link>
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setActiveTab("directory")} className="gap-1.5">
+                    <Database className="h-4 w-4" /> Explore Directory
+                  </Button>
+                </div>
               }
             />
           ) : (
