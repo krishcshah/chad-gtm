@@ -45,7 +45,6 @@ import {
   Phone,
   Plus,
   ShieldCheck,
-  Upload,
   UserPlus,
   Users,
 } from "lucide-react";
@@ -71,7 +70,6 @@ interface LeadsDataTableProps {
   onPageSizeChange: (newSize: number) => void;
   onViewLeadDetails: (lead: DirectoryLead) => void;
   onOpenAddToList: () => void;
-  onOpenUploadDialog: () => void;
   onExportCsv: () => void;
 }
 
@@ -94,7 +92,6 @@ export function LeadsDataTable({
   onPageSizeChange,
   onViewLeadDetails,
   onOpenAddToList,
-  onOpenUploadDialog,
   onExportCsv,
 }: LeadsDataTableProps) {
   const [copiedKey, setCopiedKey] = React.useState<string | null>(null);
@@ -266,16 +263,6 @@ export function LeadsDataTable({
                 Export CSV
               </>
             )}
-          </Button>
-
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onOpenUploadDialog}
-            className="gap-1.5 h-8 text-xs font-medium border-primary/30 text-primary hover:bg-primary/10"
-          >
-            <Upload className="size-3.5" />
-            Upload CSV
           </Button>
 
           {/* Page size selector */}

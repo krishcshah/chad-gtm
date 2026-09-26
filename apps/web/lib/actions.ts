@@ -2027,7 +2027,6 @@ export async function saveWorkspaceAiSettings(input: {
 import {
   searchLeadsDirectory,
   getDirectoryFacets,
-  ingestCsvContent,
   getDirectoryDb,
   buildDirectoryWhereClause,
   getMatchingDirectoryLeadsForExport,
@@ -2059,30 +2058,6 @@ export async function getDirectoryFacetsAction(): Promise<ActionResult<Directory
     await requireUser();
     const facets = getDirectoryFacets();
     return { ok: true, data: facets };
-  } catch (e) {
-    return err(e);
-  }
-}
-
-/**
- * Ingest any uploaded CSV file into the master leads directory.
- */
-export async function ingestCsvDirectoryAction(
-  formData: FormData
-): Promise<ActionResult<{ inserted: number; totalInDb: number }>> {
-  try {
-    await requireUser();
-    const file = formData.get("file") as File | null;
-    if (!file) {
-      return { ok: false, error: "No CSV file provided" };
-    }
-    const text = await file.text();
-    const result = await ingestCsvContent(text, file.name);
-    return {
-      ok: true,
-      data: result,
-      message: `Successfully ingested ${result.inserted.toLocaleString()} leads from ${file.name}!`,
-    };
   } catch (e) {
     return err(e);
   }

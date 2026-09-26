@@ -22,7 +22,6 @@ import {
   Plus,
   Search,
   Sparkles,
-  Upload,
   Users,
 } from "lucide-react";
 import type {
@@ -39,7 +38,6 @@ import {
 import { LeadFiltersPanel } from "./lead-filters-panel";
 import { LeadsDataTable } from "./leads-data-table";
 import { LeadDetailsSheet } from "./lead-details-sheet";
-import { CsvUploadDialog } from "./csv-upload-dialog";
 import { AddToCampaignDialog } from "./add-to-campaign-dialog";
 import { LeadListCard } from "@/app/(app)/leads/lead-list-card";
 import { toast } from "sonner";
@@ -95,7 +93,6 @@ export function ApolloLeadsView({
 
   // Modal states
   const [inspectingLead, setInspectingLead] = useState<DirectoryLead | null>(null);
-  const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isAddToListOpen, setIsAddToListOpen] = useState(false);
 
   // Trigger directory search query
@@ -283,18 +280,6 @@ export function ApolloLeadsView({
     toast.success(`Exported ${leadsToExport.length} leads to CSV`);
   };
 
-  const handleRefreshAfterUpload = async () => {
-    try {
-      const facetRes = await getDirectoryFacetsAction();
-      if (facetRes.ok && facetRes.data) {
-        setFacets(facetRes.data);
-      }
-      executeSearch({ page: 1 });
-    } catch {
-      // Ignore
-    }
-  };
-
   const totalSavedLeads = existingLists.reduce((acc, l) => acc + Number(l.leadCount || 0), 0);
 
   return (
@@ -320,16 +305,6 @@ export function ApolloLeadsView({
 
         {/* Global Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setIsUploadOpen(true)}
-            className="gap-1.5 shadow-sm text-xs font-medium"
-          >
-            <Upload className="h-4 w-4 text-primary" />
-            Upload New CSV
-          </Button>
-
           <Button size="sm" asChild className="gap-1.5 shadow-sm text-xs font-semibold">
             <Link href="/campaigns/new">
               <Sparkles className="h-4 w-4" />
@@ -402,7 +377,6 @@ export function ApolloLeadsView({
               onPageSizeChange={handlePageSizeChange}
               onViewLeadDetails={(lead) => setInspectingLead(lead)}
               onOpenAddToList={() => setIsAddToListOpen(true)}
-              onOpenUploadDialog={() => setIsUploadOpen(true)}
               onExportCsv={handleExportCsv}
             />
           </div>
@@ -446,7 +420,7 @@ export function ApolloLeadsView({
             <EmptyState
               icon={Users}
               title="No campaign lists created yet"
-              description="Switch to the B2B Lead Directory tab to select leads from 183k+ contacts, or upload a custom CSV file."
+              description="Switch to the B2B Lead Directory tab to select and segment leads from 183k+ verified contacts into campaign lists."
               action={
                 <Button size="sm" onClick={() => setActiveTab("directory")} className="gap-1.5">
                   <Database className="h-4 w-4" /> Explore Directory
@@ -480,13 +454,6 @@ export function ApolloLeadsView({
           setSelectedLeadIds(new Set([id]));
           setIsAddToListOpen(true);
         }}
-      />
-
-      {/* Ingest CSV Dialog */}
-      <CsvUploadDialog
-        open={isUploadOpen}
-        onOpenChange={setIsUploadOpen}
-        onSuccess={handleRefreshAfterUpload}
       />
 
       {/* Add To Campaign List Dialog */}
