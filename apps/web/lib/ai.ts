@@ -2,7 +2,7 @@
  * Web application AI integration helpers.
  * Re-exports core AI engine methods and resolves user/workspace AI preferences.
  */
-import { getDb } from "./db";
+import { getDb, ensureAiColumns } from "./db";
 import { decryptSecret, schema } from "@smartreach/database";
 import { eq } from "drizzle-orm";
 import { SUPPORTED_AI_MODELS, type AiModelDefinition } from "@smartreach/shared";
@@ -159,6 +159,7 @@ export const DIVERSE_SAMPLE_LEADS: LeadProfile[] = [
 export async function getWorkspaceAiOptions(userId: string): Promise<AiEngineOptions> {
   try {
     const db = getDb();
+    await ensureAiColumns(db);
     const rows: any[] = await db
       .select({
         aiApiKeyEnc: schema.workspaceSettings.aiApiKeyEnc,

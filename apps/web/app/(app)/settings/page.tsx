@@ -1,5 +1,5 @@
 import { requireWorkspace } from "@/lib/session";
-import { getDb } from "@/lib/db";
+import { getDb, ensureAiColumns } from "@/lib/db";
 import { listUserWorkspaces } from "@/lib/workspaces";
 import { schema } from "@smartreach/database";
 import { APP_NAME } from "@smartreach/shared";
@@ -18,6 +18,7 @@ export default async function SettingsPage() {
   const workspaces = await listUserWorkspaces(user.id);
   const initial = (user.name ?? user.email ?? "U").slice(0, 1).toUpperCase();
   const db = getDb();
+  await ensureAiColumns(db);
   const [settings] = await db
     .select()
     .from(schema.workspaceSettings)
