@@ -19,11 +19,17 @@ export default async function SettingsPage() {
   const initial = (user.name ?? user.email ?? "U").slice(0, 1).toUpperCase();
   const db = getDb();
   await ensureAiColumns(db);
-  const [settings] = await db
-    .select()
-    .from(schema.workspaceSettings)
-    .where(eq(schema.workspaceSettings.userId, user.id))
-    .limit(1);
+  let settings: any = null;
+  try {
+    const rows = await db
+      .select()
+      .from(schema.workspaceSettings)
+      .where(eq(schema.workspaceSettings.userId, user.id))
+      .limit(1);
+    settings = rows[0] ?? null;
+  } catch (err) {
+    console.error("[settings] query error:", err);
+  }
   const suppressions = await db
     .select()
     .from(schema.suppressions)
