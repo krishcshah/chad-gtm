@@ -501,7 +501,12 @@ export function synthesizeImprovedCopy(options: {
     }
 
     let resSubject = subject.trim();
-    if (!resSubject || resSubject.toLowerCase().includes("subject") || resSubject === "(None provided)") {
+    if (
+      !resSubject ||
+      resSubject.toLowerCase().includes("subject") ||
+      resSubject.toLowerCase().includes("quick question regarding") ||
+      resSubject === "(None provided)"
+    ) {
       if (prodName) {
         resSubject = `${prodName} for {{company}}: automated interviews at scale`;
       } else if (combined.toLowerCase().includes("interview")) {
