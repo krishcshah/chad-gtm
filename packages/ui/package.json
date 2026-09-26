@@ -27,6 +27,7 @@
     "./popover": "./src/popover.tsx",
     "./alert": "./src/alert.tsx",
     "./empty-state": "./src/empty-state.tsx",
+    "./sheet": "./src/sheet.tsx",
     "./utils": "./src/utils.ts"
   },
   "peerDependencies": {

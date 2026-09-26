@@ -1992,3 +1992,151 @@ export async function saveWorkspaceAiSettings(input: {
   }
 }
 
+/* ─── Apollo Lead Directory Actions ────────────────────────────────────────── */
+
+import {
+  searchLeadsDirectory,
+  getDirectoryFacets,
+  ingestCsvContent,
+  getDirectoryDb,
+  type DirectorySearchParams,
+  type DirectorySearchResult,
+  type DirectoryFacets,
+} from "./leads-directory";
+
+/**
+ * Search the master Lead Directory (Apollo-style lead database).
+ */
+export async function searchDirectoryLeadsAction(
+  params: DirectorySearchParams
+): Promise<ActionResult<DirectorySearchResult>> {
+  try {
+    await requireUser();
+    const result = searchLeadsDirectory(params);
+    return { ok: true, data: result };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+/**
+ * Fetch aggregated filter facets (industries, countries, revenue, sizes).
+ */
+export async function getDirectoryFacetsAction(): Promise<ActionResult<DirectoryFacets>> {
+  try {
+    await requireUser();
+    const facets = getDirectoryFacets();
+    return { ok: true, data: facets };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+/**
+ * Ingest any uploaded CSV file into the master leads directory.
+ */
+export async function ingestCsvDirectoryAction(
+  formData: FormData
+): Promise<ActionResult<{ inserted: number; totalInDb: number }>> {
+  try {
+    await requireUser();
+    const file = formData.get("file") as File | null;
+    if (!file) {
+      return { ok: false, error: "No CSV file provided" };
+    }
+    const text = await file.text();
+    const result = await ingestCsvContent(text, file.name);
+    return {
+      ok: true,
+      data: result,
+      message: `Successfully ingested ${result.inserted.toLocaleString()} leads from ${file.name}!`,
+    };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+/**
+ * Import selected directory leads into a campaign lead list.
+ */
+export async function saveDirectoryLeadsToCampaignListAction(input: {
+  leadIds: number[];
+  listName?: string;
+  listId?: string;
+}): Promise<ActionResult<{ leadListId: string; count: number }>> {
+  try {
+    const user = await requireUser();
+    const db = getDb();
+    const dirDb = getDirectoryDb();
+
+    let targetListId = input.listId;
+    if (!targetListId) {
+      const listName = input.listName || `Apollo Leads - ${new Date().toLocaleDateString()}`;
+      const [newList] = await db
+        .insert(schema.leadLists)
+        .values({
+          userId: user.id,
+          name: listName,
+        })
+        .returning();
+      targetListId = newList.id;
+    }
+
+    if (!targetListId) {
+      return { ok: false, error: "Failed to determine target lead list" };
+    }
+
+    if (!input.leadIds.length) {
+      return { ok: false, error: "No leads selected" };
+    }
+
+    // Fetch leads from directory
+    const placeholders = input.leadIds.map(() => "?").join(",");
+    const rows = dirDb
+      .prepare(`SELECT * FROM leads WHERE id IN (${placeholders})`)
+      .all(...input.leadIds) as any[];
+
+    let insertedCount = 0;
+    for (const r of rows) {
+      if (!r.email) continue;
+      const leadId = crypto.randomUUID();
+      try {
+        await db.insert(schema.leads).values({
+          id: leadId,
+          userId: user.id,
+          listId: targetListId,
+          email: r.email,
+          firstName: r.first_name || "",
+          lastName: r.last_name || "",
+          company: r.company_name || "",
+          jobTitle: r.job_title || "",
+          website: r.company_website || "",
+          linkedin: r.linkedin_url || "",
+          location: r.location || "",
+          industry: r.industry || "",
+          customFields: r.raw_data ? JSON.parse(r.raw_data) : {},
+        });
+        insertedCount++;
+      } catch {
+        // Skip duplicate emails within the same list
+      }
+    }
+
+    await db
+      .update(schema.leadLists)
+      .set({
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(schema.leadLists.id, targetListId));
+
+    revalidatePath("/leads");
+    return {
+      ok: true,
+      data: { leadListId: targetListId, count: insertedCount },
+      message: `Successfully added ${insertedCount} leads to your campaign list!`,
+    };
+  } catch (e) {
+    return err(e);
+  }
+}
+

@@ -21,7 +21,8 @@ function isLocalPostgres(url: string): boolean {
   }
 }
 
-export function createDb(url: string): { db: SmartReachDb; close?: () => Promise<void> } {
+export function createDb(rawUrl: string): { db: SmartReachDb; close?: () => Promise<void> } {
+  const url = (rawUrl || "").trim().replace(/^["']|["']$/g, "");
   if (isLocalPostgres(url)) {
     const pool = new pg.Pool({ connectionString: url });
     // Cast: nested @types/pg copies disagree on PoolClient signatures.

@@ -4,11 +4,26 @@ import { z } from "zod";
  * Central, validated environment. Every secret access goes through here so a
  * misconfigured deployment fails loudly at startup instead of at send time.
  */
+function sanitizeUrl(val: string | undefined, fallback: string): string {
+  if (!val) return fallback;
+  const cleaned = val.trim().replace(/^["']|["']$/g, "");
+  try {
+    new URL(cleaned);
+    return cleaned;
+  } catch {
+    return fallback;
+  }
+}
+
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   BETTER_AUTH_SECRET: z.string().min(16, "BETTER_AUTH_SECRET must be at least 16 chars"),
-  BETTER_AUTH_URL: z.string().default("http://localhost:3000"),
-  APP_URL: z.string().default("http://localhost:3000"),
+  BETTER_AUTH_URL: z
+    .string()
+    .transform((val) => sanitizeUrl(val, "http://localhost:3000")),
+  APP_URL: z
+    .string()
+    .transform((val) => sanitizeUrl(val, "http://localhost:3000")),
   /** 64 hex chars (32 bytes) — encrypts SMTP/IMAP credentials at rest. */
   ENCRYPTION_KEY: z
     .string()

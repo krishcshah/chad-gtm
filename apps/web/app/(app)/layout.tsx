@@ -7,6 +7,9 @@ import { GermanFlag } from "@/components/german-flag";
 import { getSession } from "@/lib/session";
 import { getActiveWorkspace, getFallbackWorkspace, listUserWorkspaces, type WorkspaceItem } from "@/lib/workspaces";
 
+import { SidebarProvider } from "@/components/layout/sidebar-context";
+import { AppShell, AppMainContent } from "@/components/layout/app-shell";
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
   if (!session?.user) {
@@ -31,27 +34,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <ImportJobProvider>
-      <div className="app-shell flex min-h-dvh">
-        <NavigationProgress />
-        <AppSidebar
-          user={user}
-          workspaces={workspaces}
-          activeWorkspace={workspace}
-        />
-        <main className="flex-1 min-w-0 pt-14 lg:pt-0 lg:pl-64 flex flex-col group">
-          <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 [&:has(.unibox-root)]:max-w-none [&:has(.unibox-root)]:px-4 [&:has(.unibox-root)]:py-4 sm:[&:has(.unibox-root)]:px-6 lg:[&:has(.unibox-root)]:px-8 flex-1 flex flex-col">
-            <div className="flex-1 w-full group-has-[.unibox-root]:flex group-has-[.unibox-root]:flex-col group-has-[.unibox-root]:min-h-0">
-              {children}
-            </div>
-            <footer className="mt-auto pt-8 pb-2 text-center text-[10px] text-muted-foreground/40 flex items-center justify-center gap-1.5 select-none group-has-[.unibox-root]:hidden">
-              <GermanFlag className="h-2.5 w-3.5" />
-              <span>Made in Germany</span>
-            </footer>
-          </div>
-        </main>
-        <CommandPalette />
-      </div>
-    </ImportJobProvider>
+    <SidebarProvider>
+      <ImportJobProvider>
+        <AppShell>
+          <NavigationProgress />
+          <AppSidebar
+            user={user}
+            workspaces={workspaces}
+            activeWorkspace={workspace}
+          />
+          <AppMainContent>{children}</AppMainContent>
+          <CommandPalette />
+        </AppShell>
+      </ImportJobProvider>
+    </SidebarProvider>
   );
 }

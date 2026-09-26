@@ -17,9 +17,13 @@ build/
 .env.*.local
 
 # data (local dev database)
-data/
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
 *.db
 *.db-journal
+!data/leads.db.gz
 
 # logs
 *.log

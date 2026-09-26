@@ -63,12 +63,12 @@ export function WorkspaceSwitcher({
             type="button"
             className={cn(
               "group flex items-center justify-between rounded-xl border border-border/50 bg-card/50 hover:bg-accent/40 px-3 py-2 text-left transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring select-none",
-              compact ? "w-auto gap-1.5 px-2.5 py-1.5" : "w-full",
+              compact ? "w-10 h-10 justify-center p-0" : "w-full",
               className
             )}
             title={`Active Workspace: ${activeWorkspace.name}`}
           >
-            <div className="flex items-center gap-2.5 min-w-0">
+            <div className={cn("flex items-center min-w-0", compact ? "justify-center" : "gap-2.5")}>
               <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:bg-primary/20 transition-colors">
                 <Briefcase className="size-3.5" />
               </div>
@@ -92,7 +92,9 @@ export function WorkspaceSwitcher({
                 </div>
               )}
             </div>
-            <ChevronDown className="size-3.5 text-muted-foreground/70 shrink-0 group-hover:text-foreground transition-colors ml-1.5" />
+            {!compact && (
+              <ChevronDown className="size-3.5 text-muted-foreground/70 shrink-0 group-hover:text-foreground transition-colors ml-1.5" />
+            )}
           </button>
         </DropdownMenuTrigger>
 

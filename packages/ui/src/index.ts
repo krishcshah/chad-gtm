@@ -23,3 +23,4 @@ export * from "./alert";
 export * from "./empty-state";
 export * from "./page-header";
 export * from "./state-panel";
+export * from "./sheet";
