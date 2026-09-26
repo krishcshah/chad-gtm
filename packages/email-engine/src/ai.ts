@@ -506,12 +506,13 @@ export function synthesizeImprovedCopy(options: {
     let cta = "";
 
     if (ctx.isHiringDomain) {
+      const persona = /dolly/i.test(ctx.productName + " " + combined) ? "Dolly" : (ctx.productName || "our AI interviewer");
       resSubject = `${ctx.productName || 'Hello Dolly'} for {{company}}: AI video interviews at scale`;
       hook = `Between screening applicant flow and coordinating initial phone screens across open requisitions, conducting first-round interviews is usually the heaviest time drain for hiring teams at {{company}}.`;
       bridge = `We built ${ctx.productName || 'Hello Dolly'}—${ctx.featureSummary || 'an AI automated interviewer with live, reactionary video and voice streaming that feels like an authentic video call'}.`;
-      value = `Candidates interview with ${ctx.productName ? ctx.productName.split(' ')[0] : 'Dolly'} 24/7. She converses and reacts in real time just like a human interviewer, testing communication and domain skills to filter out the highest-signal talent before your recruiters step in.`;
+      value = `Candidates interview with ${persona} 24/7. She converses and reacts in real time just like a human interviewer, testing communication and domain skills to filter out the highest-signal talent before your recruiters step in.`;
       commercial = `We offer this on a flexible monthly subscription so hiring management companies like {{company}} can run candidate interviews at scale without adding recruiter headcount.`;
-      cta = `Would you be open to a 3-minute interactive test call with ${ctx.productName ? ctx.productName.split(' ')[0] : 'Dolly'} this week to see how reactionary it feels in real time?`;
+      cta = `Would you be open to a 3-minute interactive test call with ${persona} this week to see how reactionary it feels in real time?`;
     } else if (ctx.isSalesDomain) {
       resSubject = `${ctx.productName ? ctx.productName + ' for ' : ''}Pipeline growth at {{company}}`;
       hook = `Scaling outbound pipeline without burning out SDRs or compromising message relevance is usually the hardest lever to pull in modern sales.`;
