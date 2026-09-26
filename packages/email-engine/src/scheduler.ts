@@ -76,6 +76,7 @@ export function isInSendingWindow(c: CampaignRow, now: Date): boolean {
   const start = parseTimeToMinutes(c.sendingWindowStart);
   const end = parseTimeToMinutes(c.sendingWindowEnd);
   if (start === end) return true; // treat identical start/end as "all day"
+  if (start === 0 && end >= 1439) return true; // 00:00 to 23:59 is all day
   if (start < end) return mins >= start && mins < end;
   return mins >= start || mins < end; // overnight window
 }

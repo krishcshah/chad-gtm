@@ -91,7 +91,7 @@ export function makeImapClient(sender: SenderRow): ImapFlow {
       pass: decryptSecret(sender.imapPasswordEnc),
     },
     logger: false,
-    socketTimeout: 20_000,
+    socketTimeout: 10_000,
   } as any);
 }
 

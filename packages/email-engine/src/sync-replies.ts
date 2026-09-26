@@ -617,12 +617,32 @@ export async function syncTick(db: EngineDb): Promise<SyncResult> {
   const senders: SenderRow[] = await db
     .select()
     .from(schema.senderAccounts)
-    .where(sql`${schema.senderAccounts.deletedAt} is null and ${schema.senderAccounts.imapHost} != ''`);
-  for (const s of senders) {
-    result.checked++;
-    const r = await syncSenderReplies(db, s);
-    result.repliesFound += r.found;
-    if (r.error) result.errors.push(`${s.email}: ${r.error}`);
+    .where(
+      sql`${schema.senderAccounts.deletedAt} is null and ${schema.senderAccounts.imapHost} != '' and ${schema.senderAccounts.status} != 'paused' and (${schema.senderAccounts.imapStatus} is null or ${schema.senderAccounts.imapStatus} != 'failed')`
+    );
+
+  const syncWithTimeout = async (s: SenderRow) => {
+    return Promise.race([
+      syncSenderReplies(db, s),
+      new Promise<{ found: number; error?: string }>((_, reject) =>
+        setTimeout(() => reject(new Error("IMAP sync timeout (10s)")), 10000)
+      ),
+    ]).catch((err) => {
+      return { found: 0, error: String(err?.message || err) };
+    });
+  };
+
+  const outcomes = await Promise.allSettled(senders.map((s) => syncWithTimeout(s)));
+  result.checked = senders.length;
+  for (let i = 0; i < outcomes.length; i++) {
+    const outcome = outcomes[i];
+    const s = senders[i];
+    if (outcome.status === "fulfilled") {
+      result.repliesFound += outcome.value.found;
+      if (outcome.value.error) result.errors.push(`${s.email}: ${outcome.value.error}`);
+    } else {
+      result.errors.push(`${s.email}: ${String((outcome as PromiseRejectedResult).reason?.message || (outcome as PromiseRejectedResult).reason)}`);
+    }
   }
   return result;
 }
