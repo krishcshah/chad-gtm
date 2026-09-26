@@ -259,6 +259,19 @@ export async function importLeads(input: unknown): Promise<
       else if (!standardCol && val) customFields[field] = val;
     }
 
+    // Automatically store all remaining unmapped CSV columns in customFields
+    // so the AI engine and templates have full access to the entire row of that lead
+    for (const [col, rawVal] of Object.entries(row)) {
+      const val = (rawVal ?? "").trim();
+      if (!val) continue;
+      const normKey = col.trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
+      if (!normKey) continue;
+      const isStandard = Object.values(STANDARD_KEY_TO_COLUMN).includes(normKey);
+      if (!isStandard && !customFields[normKey] && !customFields[col]) {
+        customFields[normKey] = val;
+      }
+    }
+
     toInsert.push({
       userId: user.id,
       workspaceId: workspace.id,
@@ -1954,19 +1967,31 @@ export async function previewAiSequenceGeneration(input: unknown): Promise<Actio
       );
     }
 
-    // Map real saved leads (never inject fake mock leads)
-    const leadsToPreview: LeadProfile[] = realLeads.map((l) => ({
-      id: l.id,
-      email: l.email,
-      firstName: l.firstName,
-      lastName: l.lastName,
-      company: l.company,
-      jobTitle: l.jobTitle,
-      industry: l.industry,
-      website: l.website,
-      location: l.location,
-      customFields: l.customFields,
-    }));
+    // Map real saved leads with full CSV row attributes (never inject fake mock leads)
+    const leadsToPreview: LeadProfile[] = realLeads.map((l) => {
+      let customFields: Record<string, any> = {};
+      if (typeof l.customFields === "string") {
+        try {
+          customFields = JSON.parse(l.customFields);
+        } catch {}
+      } else if (l.customFields && typeof l.customFields === "object") {
+        customFields = l.customFields;
+      }
+      return {
+        id: l.id,
+        email: l.email,
+        firstName: l.firstName,
+        lastName: l.lastName,
+        company: l.company,
+        jobTitle: l.jobTitle,
+        industry: l.industry,
+        website: l.website,
+        location: l.location,
+        phone: l.phone,
+        linkedin: l.linkedin,
+        customFields,
+      };
+    });
 
     const aiOptions = await getWorkspaceAiOptions(user.id);
 
@@ -1995,6 +2020,9 @@ export async function previewAiSequenceGeneration(input: unknown): Promise<Actio
             industry: g.lead.industry,
             website: g.lead.website,
             location: g.lead.location,
+            phone: g.lead.phone,
+            linkedin: g.lead.linkedin,
+            customFields: g.lead.customFields,
           },
           email: g.email,
         })),
