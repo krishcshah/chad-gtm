@@ -25,6 +25,13 @@ export interface SenderCardData {
   fromName?: string;
   replyTo?: string;
   timezone?: string;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUsername?: string;
+  smtpSecurity?: "tls" | "ssl" | "none";
+  imapHost?: string;
+  imapPort?: number;
+  imapUsername?: string;
 }
 
 const healthColor = (h: number) =>

@@ -1,22 +1,30 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Activity,
   AlertTriangle,
   ArrowUpRight,
+  Check,
   CheckCircle2,
   Clock,
+  Eye,
+  EyeOff,
   Flame,
   Globe,
+  KeyRound,
   Loader2,
+  Lock,
   Mail,
   Play,
+  RefreshCw,
   Save,
+  Server,
   ShieldCheck,
   Sliders,
   Trash2,
+  XCircle,
   Zap,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -34,12 +42,18 @@ import {
   Input,
   Label,
   Progress,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Switch,
   Textarea,
   cn,
 } from "@smartreach/ui";
 import {
   deleteSender,
+  retestSenderConnection,
   runWarmupCycle,
   testSenderConnection,
   updateSenderDetails,
@@ -63,6 +77,13 @@ export interface SenderFullData {
   fromName?: string;
   replyTo?: string;
   timezone?: string;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUsername?: string;
+  smtpSecurity?: "tls" | "ssl" | "none";
+  imapHost?: string;
+  imapPort?: number;
+  imapUsername?: string;
 }
 
 interface SenderDetailDrawerProps {
@@ -76,6 +97,17 @@ export function SenderDetailDrawer({ sender, open, onOpenChange }: SenderDetailD
   const [tab, setTab] = useState<"performance" | "limits" | "warmup" | "settings">("performance");
   const [pending, start] = useTransition();
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  // Live Protocol Test States
+  const [liveSmtpStatus, setLiveSmtpStatus] = useState(sender.smtpStatus);
+  const [liveImapStatus, setLiveImapStatus] = useState(sender.imapStatus);
+  const [liveStatus, setLiveStatus] = useState(sender.status);
+  const [liveHealth, setLiveHealth] = useState(sender.health);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionCheckResult, setConnectionCheckResult] = useState<{
+    smtp: { ok: boolean; message: string; latencyMs?: number };
+    imap: { ok: boolean; message: string; latencyMs?: number };
+  } | null>(null);
 
   // Parsed Warmup & Signature
   const { warmup: initialWarmup, cleanSig: initialSig } = useMemo(
@@ -98,9 +130,127 @@ export function SenderDetailDrawer({ sender, open, onOpenChange }: SenderDetailD
   const [replyTo, setReplyTo] = useState(sender.replyTo || "");
   const [signatureText, setSignatureText] = useState(initialSig);
 
-  // Connection Test State
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  // Editable SMTP & IMAP Credentials Form
+  const [smtpHost, setSmtpHost] = useState(sender.smtpHost || "");
+  const [smtpPort, setSmtpPort] = useState(sender.smtpPort || 587);
+  const [smtpSecurity, setSmtpSecurity] = useState<"tls" | "ssl" | "none">(
+    (sender.smtpSecurity as "tls" | "ssl" | "none") || "tls"
+  );
+  const [smtpUsername, setSmtpUsername] = useState(sender.smtpUsername || sender.email || "");
+  const [smtpPassword, setSmtpPassword] = useState("");
+  const [showSmtpPassword, setShowSmtpPassword] = useState(false);
+
+  const [imapHost, setImapHost] = useState(sender.imapHost || "");
+  const [imapPort, setImapPort] = useState(sender.imapPort || 993);
+  const [imapUsername, setImapUsername] = useState(sender.imapUsername || sender.email || "");
+  const [imapPassword, setImapPassword] = useState("");
+  const [showImapPassword, setShowImapPassword] = useState(false);
+
+  const [testingCreds, setTestingCreds] = useState(false);
+  const [credsTestResult, setCredsTestResult] = useState<{
+    smtp: { ok: boolean; message: string; latencyMs?: number };
+    imap: { ok: boolean; message: string; latencyMs?: number };
+  } | null>(null);
+
+  // Sync state whenever sender prop updates
+  useEffect(() => {
+    setLiveSmtpStatus(sender.smtpStatus);
+    setLiveImapStatus(sender.imapStatus);
+    setLiveStatus(sender.status);
+    setLiveHealth(sender.health);
+    setDailyLimit(sender.dailyLimit || 50);
+    setHourlyLimit(sender.hourlyLimit || 15);
+    setSenderName(sender.senderName || "");
+    setFromName(sender.fromName || sender.senderName || "");
+    setReplyTo(sender.replyTo || "");
+    setSmtpHost(sender.smtpHost || "");
+    setSmtpPort(sender.smtpPort || 587);
+    setSmtpSecurity((sender.smtpSecurity as "tls" | "ssl" | "none") || "tls");
+    setSmtpUsername(sender.smtpUsername || sender.email || "");
+    setImapHost(sender.imapHost || "");
+    setImapPort(sender.imapPort || 993);
+    setImapUsername(sender.imapUsername || sender.email || "");
+    setSmtpPassword("");
+    setImapPassword("");
+    setConnectionCheckResult(null);
+    setCredsTestResult(null);
+  }, [sender]);
+
+  // Retest live connection using saved database credentials
+  const handleRetestConnection = async () => {
+    try {
+      setTestingConnection(true);
+      toast.info(`Retesting live SMTP & IMAP connection for ${sender.email}...`);
+      const res = await retestSenderConnection(sender.id);
+      if (!res.ok) {
+        toast.error(res.error || "Connection test failed");
+        return;
+      }
+      if (res.data) {
+        setLiveSmtpStatus(res.data.smtpStatus);
+        setLiveImapStatus(res.data.imapStatus);
+        setLiveStatus(res.data.status);
+        setLiveHealth(res.data.health);
+        setConnectionCheckResult({
+          smtp: res.data.smtp,
+          imap: res.data.imap,
+        });
+        if (res.data.smtp.ok && res.data.imap.ok) {
+          toast.success("Both SMTP & IMAP verified successfully!");
+        } else if (res.data.smtp.ok) {
+          toast.warning(`SMTP connected, but IMAP issue: ${res.data.imap.message}`);
+        } else {
+          toast.error(`SMTP connection failed: ${res.data.smtp.message}`);
+        }
+        router.refresh();
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to trigger connection test");
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  // Test credentials currently in the Settings form
+  const handleTestFormCredentials = async () => {
+    if (!smtpHost || !smtpUsername) {
+      toast.error("Please enter SMTP Host and Username");
+      return;
+    }
+    try {
+      setTestingCreds(true);
+      toast.info("Validating SMTP and IMAP connection...");
+      const res = await testSenderConnection({
+        smtpHost: smtpHost.trim(),
+        smtpPort: Number(smtpPort),
+        smtpUsername: smtpUsername.trim(),
+        smtpPassword: smtpPassword.trim(),
+        smtpSecurity,
+        imapHost: imapHost.trim(),
+        imapPort: Number(imapPort),
+        imapUsername: imapUsername.trim(),
+        imapPassword: imapPassword.trim(),
+      });
+      if (!res.ok) {
+        toast.error(res.error || "Connection test failed");
+        return;
+      }
+      if (res.data) {
+        setCredsTestResult(res.data);
+        if (res.data.smtp.ok && res.data.imap.ok) {
+          toast.success("Credentials verified! Both SMTP & IMAP connected.");
+        } else if (res.data.smtp.ok) {
+          toast.warning(`SMTP Connected, but IMAP issue: ${res.data.imap.message}`);
+        } else {
+          toast.error(`SMTP Failed: ${res.data.smtp.message}`);
+        }
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to test credentials");
+    } finally {
+      setTestingCreds(false);
+    }
+  };
 
   const handleSaveLimits = () => {
     start(async () => {
@@ -138,12 +288,21 @@ export function SenderDetailDrawer({ sender, open, onOpenChange }: SenderDetailD
   const handleSaveSettings = () => {
     start(async () => {
       const res = await updateSenderDetails(sender.id, {
-        senderName,
-        fromName,
-        replyTo,
+        senderName: senderName.trim(),
+        fromName: fromName.trim(),
+        replyTo: replyTo.trim(),
         cleanSignature: signatureText,
         dailyLimit,
         hourlyLimit,
+        smtpHost: smtpHost.trim(),
+        smtpPort: Number(smtpPort),
+        smtpUsername: smtpUsername.trim(),
+        smtpPassword: smtpPassword.trim() || undefined,
+        smtpSecurity,
+        imapHost: imapHost.trim(),
+        imapPort: Number(imapPort),
+        imapUsername: imapUsername.trim(),
+        imapPassword: imapPassword.trim() || undefined,
         warmup: {
           enabled: warmupEnabled,
           dailyLimit: warmupDaily,
@@ -153,7 +312,9 @@ export function SenderDetailDrawer({ sender, open, onOpenChange }: SenderDetailD
         },
       });
       if (res.ok) {
-        toast.success("Sender details saved");
+        toast.success("Sender details and credentials saved successfully!");
+        setSmtpPassword("");
+        setImapPassword("");
         router.refresh();
       } else {
         toast.error(res.error || "Failed to save details");
@@ -209,11 +370,23 @@ export function SenderDetailDrawer({ sender, open, onOpenChange }: SenderDetailD
               </div>
 
               <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleRetestConnection}
+                  disabled={testingConnection}
+                  className="gap-1.5 h-7 text-xs font-medium border-border/80 hover:border-primary/50 hover:bg-primary/5"
+                  title="Retest SMTP and IMAP connection"
+                >
+                  <RefreshCw className={cn("size-3", testingConnection && "animate-spin text-primary")} />
+                  {testingConnection ? "Checking..." : "Retest Connection"}
+                </Button>
                 <Badge
-                  variant={sender.status === "active" ? "success" : "secondary"}
+                  variant={liveStatus === "active" ? "success" : "secondary"}
                   className="capitalize font-semibold text-[11px]"
                 >
-                  {sender.status}
+                  {liveStatus}
                 </Badge>
                 {warmupEnabled && (
                   <Badge variant="outline" className="border-amber-500/30 text-amber-400 bg-amber-500/10 text-[10px]">
@@ -331,21 +504,54 @@ export function SenderDetailDrawer({ sender, open, onOpenChange }: SenderDetailD
 
                 {/* DNS & Protocols Status */}
                 <div className="rounded-xl border border-border/60 bg-card/40 p-4 space-y-3">
-                  <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                    Protocol & Auth Diagnostics
-                  </h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">
+                      Protocol & Auth Diagnostics
+                    </h3>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleRetestConnection}
+                      disabled={testingConnection}
+                      className="gap-1.5 h-6 text-xs text-primary hover:text-primary hover:bg-primary/10 px-2"
+                    >
+                      <RefreshCw className={cn("size-3", testingConnection && "animate-spin")} />
+                      {testingConnection ? "Checking..." : "Retest Now"}
+                    </Button>
+                  </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                     <div className="p-2.5 rounded-lg border border-border/40 bg-accent/20 flex flex-col gap-1">
                       <span className="text-muted-foreground text-[10px]">SMTP Status</span>
-                      <span className="font-semibold text-emerald-400 flex items-center gap-1">
-                        <CheckCircle2 className="size-3" /> {sender.smtpStatus === "failed" ? "Failed" : "Connected"}
+                      <span className={cn(
+                        "font-semibold flex items-center gap-1",
+                        liveSmtpStatus === "ok" ? "text-emerald-400" : liveSmtpStatus === "failed" ? "text-destructive" : "text-muted-foreground"
+                      )}>
+                        {liveSmtpStatus === "ok" ? (
+                          <CheckCircle2 className="size-3" />
+                        ) : liveSmtpStatus === "failed" ? (
+                          <XCircle className="size-3" />
+                        ) : (
+                          <Clock className="size-3" />
+                        )}
+                        {liveSmtpStatus === "ok" ? "Connected" : liveSmtpStatus === "failed" ? "Failed" : "Untested"}
                       </span>
                     </div>
 
                     <div className="p-2.5 rounded-lg border border-border/40 bg-accent/20 flex flex-col gap-1">
                       <span className="text-muted-foreground text-[10px]">IMAP Sync</span>
-                      <span className="font-semibold text-emerald-400 flex items-center gap-1">
-                        <CheckCircle2 className="size-3" /> {sender.imapStatus === "failed" ? "Failed" : "Synchronized"}
+                      <span className={cn(
+                        "font-semibold flex items-center gap-1",
+                        liveImapStatus === "ok" ? "text-emerald-400" : liveImapStatus === "failed" ? "text-destructive" : "text-muted-foreground"
+                      )}>
+                        {liveImapStatus === "ok" ? (
+                          <CheckCircle2 className="size-3" />
+                        ) : liveImapStatus === "failed" ? (
+                          <XCircle className="size-3" />
+                        ) : (
+                          <Clock className="size-3" />
+                        )}
+                        {liveImapStatus === "ok" ? "Synchronized" : liveImapStatus === "failed" ? "Failed" : "Untested"}
                       </span>
                     </div>
 
@@ -363,6 +569,30 @@ export function SenderDetailDrawer({ sender, open, onOpenChange }: SenderDetailD
                       </span>
                     </div>
                   </div>
+
+                  {connectionCheckResult && (
+                    <div className={cn(
+                      "rounded-lg border p-3 text-xs space-y-1 mt-2",
+                      connectionCheckResult.smtp.ok && connectionCheckResult.imap.ok
+                        ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-300"
+                        : "border-destructive/20 bg-destructive/5 text-foreground"
+                    )}>
+                      <div className="font-semibold flex items-center gap-1.5">
+                        {connectionCheckResult.smtp.ok && connectionCheckResult.imap.ok ? (
+                          <CheckCircle2 className="size-3.5 text-emerald-400" />
+                        ) : (
+                          <AlertTriangle className="size-3.5 text-amber-400" />
+                        )}
+                        Live Connection Diagnostics Result
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        SMTP: {connectionCheckResult.smtp.message} {connectionCheckResult.smtp.latencyMs ? `(${connectionCheckResult.smtp.latencyMs}ms)` : ""}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        IMAP: {connectionCheckResult.imap.message} {connectionCheckResult.imap.latencyMs ? `(${connectionCheckResult.imap.latencyMs}ms)` : ""}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -531,6 +761,239 @@ export function SenderDetailDrawer({ sender, open, onOpenChange }: SenderDetailD
             {/* TAB 4: SETTINGS & DETAILS */}
             {tab === "settings" && (
               <div className="space-y-4">
+                {/* SMTP & IMAP Server Credentials */}
+                <div className="rounded-xl border border-border/60 bg-card/40 p-5 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/40 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="size-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                        <KeyRound className="size-3.5" />
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
+                          SMTP & IMAP Server Credentials
+                        </h3>
+                        <p className="text-[11px] text-muted-foreground">
+                          Configure your outbound sending host and inbound reply synchronization server.
+                        </p>
+                      </div>
+                    </div>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={handleTestFormCredentials}
+                      disabled={testingCreds}
+                      className="gap-1.5 h-7 text-xs font-medium border-primary/30 text-primary hover:bg-primary/10 self-start sm:self-auto"
+                    >
+                      {testingCreds ? (
+                        <>
+                          <Loader2 className="size-3 animate-spin" />
+                          Testing...
+                        </>
+                      ) : (
+                        <>
+                          <Server className="size-3" />
+                          Test Credentials
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* Outbound SMTP Server */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-1.5">
+                      <Mail className="size-3.5 text-primary" />
+                      <span className="text-xs font-semibold text-foreground">Outbound SMTP Server</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="sm:col-span-2">
+                        <Label htmlFor="smtp-host" className="text-xs font-medium">
+                          SMTP Host / Server URL <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          id="smtp-host"
+                          value={smtpHost}
+                          onChange={(e) => setSmtpHost(e.target.value)}
+                          placeholder="e.g. smtp.mailgun.org or hey@chrissha.cloud"
+                          className="mt-1 font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="smtp-port" className="text-xs font-medium">
+                          Port
+                        </Label>
+                        <Input
+                          id="smtp-port"
+                          type="number"
+                          value={smtpPort}
+                          onChange={(e) => setSmtpPort(Number(e.target.value))}
+                          className="mt-1 font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <Label htmlFor="smtp-security" className="text-xs font-medium">
+                          Security
+                        </Label>
+                        <Select
+                          value={smtpSecurity}
+                          onValueChange={(val) => setSmtpSecurity(val as any)}
+                        >
+                          <SelectTrigger className="mt-1 h-9 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="tls">STARTTLS (587)</SelectItem>
+                            <SelectItem value="ssl">SSL / TLS (465)</SelectItem>
+                            <SelectItem value="none">None (25)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="smtp-username" className="text-xs font-medium">
+                          SMTP Username <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          id="smtp-username"
+                          value={smtpUsername}
+                          onChange={(e) => setSmtpUsername(e.target.value)}
+                          placeholder="username or email"
+                          className="mt-1 font-mono text-xs"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="smtp-password" className="text-xs font-medium">
+                            SMTP Password
+                          </Label>
+                          <button
+                            type="button"
+                            onClick={() => setShowSmtpPassword(!showSmtpPassword)}
+                            className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-0.5"
+                          >
+                            {showSmtpPassword ? <EyeOff className="size-2.5" /> : <Eye className="size-2.5" />}
+                            {showSmtpPassword ? "Hide" : "Show"}
+                          </button>
+                        </div>
+                        <Input
+                          id="smtp-password"
+                          type={showSmtpPassword ? "text" : "password"}
+                          value={smtpPassword}
+                          onChange={(e) => setSmtpPassword(e.target.value)}
+                          placeholder="•••••••• (leave blank to keep current)"
+                          className="mt-1 font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Inbound IMAP Server */}
+                  <div className="space-y-3 pt-3 border-t border-border/40">
+                    <div className="flex items-center gap-1.5">
+                      <Server className="size-3.5 text-primary" />
+                      <span className="text-xs font-semibold text-foreground">Inbound IMAP Server (For Replies)</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="sm:col-span-2">
+                        <Label htmlFor="imap-host" className="text-xs font-medium">
+                          IMAP Host / Server URL
+                        </Label>
+                        <Input
+                          id="imap-host"
+                          value={imapHost}
+                          onChange={(e) => setImapHost(e.target.value)}
+                          placeholder="e.g. imap.mailgun.org"
+                          className="mt-1 font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="imap-port" className="text-xs font-medium">
+                          Port
+                        </Label>
+                        <Input
+                          id="imap-port"
+                          type="number"
+                          value={imapPort}
+                          onChange={(e) => setImapPort(Number(e.target.value))}
+                          className="mt-1 font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <Label htmlFor="imap-username" className="text-xs font-medium">
+                          IMAP Username
+                        </Label>
+                        <Input
+                          id="imap-username"
+                          value={imapUsername}
+                          onChange={(e) => setImapUsername(e.target.value)}
+                          placeholder="username or email"
+                          className="mt-1 font-mono text-xs"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="imap-password" className="text-xs font-medium">
+                            IMAP Password
+                          </Label>
+                          <button
+                            type="button"
+                            onClick={() => setShowImapPassword(!showImapPassword)}
+                            className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-0.5"
+                          >
+                            {showImapPassword ? <EyeOff className="size-2.5" /> : <Eye className="size-2.5" />}
+                            {showImapPassword ? "Hide" : "Show"}
+                          </button>
+                        </div>
+                        <Input
+                          id="imap-password"
+                          type={showImapPassword ? "text" : "password"}
+                          value={imapPassword}
+                          onChange={(e) => setImapPassword(e.target.value)}
+                          placeholder="•••••••• (leave blank to keep current)"
+                          className="mt-1 font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Credentials Test Banner */}
+                  {credsTestResult && (
+                    <div className={cn(
+                      "rounded-lg border p-3 text-xs space-y-1 mt-2",
+                      credsTestResult.smtp.ok && credsTestResult.imap.ok
+                        ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-300"
+                        : "border-destructive/20 bg-destructive/5 text-foreground"
+                    )}>
+                      <div className="font-semibold flex items-center gap-1.5">
+                        {credsTestResult.smtp.ok && credsTestResult.imap.ok ? (
+                          <CheckCircle2 className="size-3.5 text-emerald-400" />
+                        ) : (
+                          <AlertTriangle className="size-3.5 text-amber-400" />
+                        )}
+                        Credential Test Results
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        SMTP: {credsTestResult.smtp.message} {credsTestResult.smtp.latencyMs ? `(${credsTestResult.smtp.latencyMs}ms)` : ""}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        IMAP: {credsTestResult.imap.message} {credsTestResult.imap.latencyMs ? `(${credsTestResult.imap.latencyMs}ms)` : ""}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* General Settings */}
                 <div className="rounded-xl border border-border/60 bg-card/40 p-5 space-y-4">
                   <div>
                     <Label htmlFor="sender-name" className="text-xs font-semibold">
@@ -589,9 +1052,9 @@ export function SenderDetailDrawer({ sender, open, onOpenChange }: SenderDetailD
                     />
                   </div>
 
-                  <Button onClick={handleSaveSettings} disabled={pending} size="sm" className="gap-1.5 mt-2">
+                  <Button onClick={handleSaveSettings} disabled={pending} size="sm" className="gap-1.5 mt-2 font-semibold">
                     {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-                    Save Account Settings
+                    Save Account Settings & Credentials
                   </Button>
                 </div>
               </div>

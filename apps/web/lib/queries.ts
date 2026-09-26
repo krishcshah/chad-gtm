@@ -327,6 +327,13 @@ export async function listSenders(userId: string, workspaceId?: string, isDefaul
       fromName: senderAccounts.fromName,
       replyTo: senderAccounts.replyTo,
       timezone: senderAccounts.timezone,
+      smtpHost: senderAccounts.smtpHost,
+      smtpPort: senderAccounts.smtpPort,
+      smtpUsername: senderAccounts.smtpUsername,
+      smtpSecurity: senderAccounts.smtpSecurity,
+      imapHost: senderAccounts.imapHost,
+      imapPort: senderAccounts.imapPort,
+      imapUsername: senderAccounts.imapUsername,
       usedToday: sql<number>`coalesce(${usage.count}, 0)`,
     })
     .from(senderAccounts)

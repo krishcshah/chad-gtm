@@ -79,7 +79,7 @@ export function ApolloLeadsView({
     hasPhone: false,
     hasLinkedin: false,
     page: 1,
-    pageSize: 20,
+    pageSize: 10,
     sortBy: "default",
     sortOrder: "desc",
   });

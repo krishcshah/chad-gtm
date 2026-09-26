@@ -177,19 +177,18 @@ export function LeadsDataTable({
                 <ChevronDown className="size-3 opacity-60" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-64">
+            <DropdownMenuContent align="start" className="w-64 p-1">
               <DropdownMenuItem
                 onClick={() => (onSelectCurrentPage ? onSelectCurrentPage() : onSelectAll())}
-                className="gap-2 cursor-pointer"
+                className="gap-2.5 px-3 py-2 cursor-pointer flex items-center"
               >
-                <Check
-                  className={cn(
-                    "size-3.5 text-primary shrink-0",
-                    !isSelectAllMatching && isAllSelected ? "opacity-100" : "opacity-0"
-                  )}
-                />
-                <div>
-                  <div className="font-medium">Select this page</div>
+                <div className="size-4 shrink-0 flex items-center justify-center">
+                  {!isSelectAllMatching && isAllSelected ? (
+                    <Check className="size-3.5 text-primary" />
+                  ) : null}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-xs text-foreground">Select this page</div>
                   <div className="text-[11px] text-muted-foreground">
                     {leads.length} leads in current view
                   </div>
@@ -197,16 +196,15 @@ export function LeadsDataTable({
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => (onSelectAllMatching ? onSelectAllMatching() : onSelectAll())}
-                className="gap-2 cursor-pointer"
+                className="gap-2.5 px-3 py-2 cursor-pointer flex items-center"
               >
-                <Check
-                  className={cn(
-                    "size-3.5 text-primary shrink-0",
-                    isSelectAllMatching ? "opacity-100" : "opacity-0"
-                  )}
-                />
-                <div>
-                  <div className="font-semibold text-primary">Select all in list</div>
+                <div className="size-4 shrink-0 flex items-center justify-center">
+                  {isSelectAllMatching ? (
+                    <Check className="size-3.5 text-primary" />
+                  ) : null}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-xs text-primary">Select all in list</div>
                   <div className="text-[11px] text-muted-foreground">
                     All {total.toLocaleString()} leads matching current filters
                   </div>
@@ -217,7 +215,7 @@ export function LeadsDataTable({
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={() => (onClearSelection ? onClearSelection() : onSelectAll())}
-                    className="text-muted-foreground cursor-pointer"
+                    className="text-muted-foreground cursor-pointer px-3 py-1.5 text-xs"
                   >
                     Clear selection
                   </DropdownMenuItem>
@@ -354,67 +352,12 @@ export function LeadsDataTable({
         <Table className="min-w-[1050px]">
           <TableHeader className="bg-muted/40 sticky top-0 z-10 text-[11px] uppercase tracking-wider text-muted-foreground">
             <TableRow className="border-border/60 hover:bg-transparent">
-              <TableHead className="w-14 px-2 text-center">
-                <div className="flex items-center justify-center gap-0.5">
-                  <Checkbox
-                    checked={isMasterChecked ? true : someSelected ? "indeterminate" : false}
-                    onCheckedChange={handleMasterToggle}
-                    aria-label="Select all on current page"
-                  />
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-5 p-0 text-muted-foreground hover:text-foreground data-[state=open]:text-foreground"
-                        aria-label="Selection options"
-                      >
-                        <ChevronDown className="size-3" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-56">
-                      <DropdownMenuItem
-                        onClick={() => (onSelectCurrentPage ? onSelectCurrentPage() : onSelectAll())}
-                        className="gap-2 cursor-pointer"
-                      >
-                        <Check
-                          className={cn(
-                            "size-3.5 shrink-0",
-                            !isSelectAllMatching && isAllSelected
-                              ? "text-primary opacity-100"
-                              : "opacity-0"
-                          )}
-                        />
-                        <span>Select this page ({leads.length})</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => (onSelectAllMatching ? onSelectAllMatching() : onSelectAll())}
-                        className="gap-2 cursor-pointer"
-                      >
-                        <Check
-                          className={cn(
-                            "size-3.5 shrink-0",
-                            isSelectAllMatching ? "text-primary opacity-100" : "opacity-0"
-                          )}
-                        />
-                        <span className="font-semibold text-primary">
-                          Select all {total.toLocaleString()} leads
-                        </span>
-                      </DropdownMenuItem>
-                      {(selectedLeadIds.size > 0 || isSelectAllMatching) && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => (onClearSelection ? onClearSelection() : onSelectAll())}
-                            className="text-muted-foreground cursor-pointer"
-                          >
-                            Clear selection
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
+              <TableHead className="w-12 px-3 text-center">
+                <Checkbox
+                  checked={isMasterChecked ? true : someSelected ? "indeterminate" : false}
+                  onCheckedChange={handleMasterToggle}
+                  aria-label="Select all on current page"
+                />
               </TableHead>
               <TableHead className="min-w-[200px] font-semibold text-foreground">
                 Contact & Title

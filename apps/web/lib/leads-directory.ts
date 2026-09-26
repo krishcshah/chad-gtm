@@ -315,7 +315,7 @@ export function searchLeadsDirectory(params: DirectorySearchParams): DirectorySe
   try {
     const db = getDirectoryDb();
     const page = Math.max(1, params.page || 1);
-    const pageSize = Math.min(100, Math.max(5, params.pageSize || 20));
+    const pageSize = Math.min(100, Math.max(5, params.pageSize || 10));
     const offset = (page - 1) * pageSize;
 
     const { whereSql, bindings } = buildDirectoryWhereClause(params);
@@ -395,7 +395,7 @@ export function searchLeadsDirectory(params: DirectorySearchParams): DirectorySe
       leads: [],
       total: 0,
       page: 1,
-      pageSize: params.pageSize || 20,
+      pageSize: params.pageSize || 10,
       totalPages: 0,
     };
   }

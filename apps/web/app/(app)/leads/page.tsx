@@ -17,7 +17,7 @@ export default async function LeadsPage() {
     Promise.resolve().then(() =>
       searchLeadsDirectory({
         page: 1,
-        pageSize: 20,
+        pageSize: 10,
         sortBy: "default",
         sortOrder: "desc",
       })

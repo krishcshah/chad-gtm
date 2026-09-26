@@ -495,6 +495,73 @@ export async function updateSenderDetails(
   return result;
 }
 
+/**
+ * Retest live SMTP and IMAP connection for an existing sender account.
+ * Updates smtpStatus, imapStatus, status, and health in the database, and returns live status.
+ */
+export async function retestSenderConnection(senderId: string): Promise<
+  ActionResult<{
+    smtp: { ok: boolean; message: string; latencyMs?: number };
+    imap: { ok: boolean; message: string; latencyMs?: number };
+    status: string;
+    health: number;
+    smtpStatus: string;
+    imapStatus: string;
+  }>
+> {
+  const user = await requireUser();
+  const db = getDb();
+  try {
+    const [sender] = await db
+      .select()
+      .from(schema.senderAccounts)
+      .where(and(eq(schema.senderAccounts.id, senderId), eq(schema.senderAccounts.userId, user.id)))
+      .limit(1);
+
+    if (!sender) return { ok: false, error: "Sender not found" };
+
+    const { testConnection } = await import("@smartreach/email-engine/mailer");
+    const result = await testConnection(sender as any);
+
+    const smtpStatus = result.smtp.ok ? "ok" : "failed";
+    const imapStatus = result.imap.ok ? "ok" : "failed";
+    const bothOk = result.smtp.ok && result.imap.ok;
+    const nextStatus = result.smtp.ok ? "active" : "failed";
+    const nextHealth = bothOk ? 100 : result.smtp.ok ? 75 : 20;
+
+    await db
+      .update(schema.senderAccounts)
+      .set({
+        smtpStatus,
+        imapStatus,
+        status: nextStatus,
+        health: nextHealth,
+        updatedAt: nowIso(),
+      })
+      .where(and(eq(schema.senderAccounts.id, senderId), eq(schema.senderAccounts.userId, user.id)));
+
+    revalidatePath("/senders");
+    return {
+      ok: true,
+      data: {
+        smtp: result.smtp,
+        imap: result.imap,
+        status: nextStatus,
+        health: nextHealth,
+        smtpStatus,
+        imapStatus,
+      },
+      message: bothOk
+        ? "Both SMTP and IMAP verified successfully!"
+        : result.smtp.ok
+        ? `SMTP Connected, but IMAP issue: ${result.imap.message}`
+        : `SMTP connection failed: ${result.smtp.message}`,
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Connection test failed" };
+  }
+}
+
 export async function runWarmupCycle(): Promise<{ ok: boolean; message: string; exchanged: number }> {
   const user = await requireUser();
   const result = await runWarmupCycleForUser(getDb(), user.id);

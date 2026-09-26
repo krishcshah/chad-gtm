@@ -2,7 +2,7 @@
  * Sender operations: pause/resume, edit limits, update details, delete, and warmup.
  */
 import { and, eq, isNull } from "drizzle-orm";
-import { schema } from "@smartreach/database";
+import { schema, encryptSecret } from "@smartreach/database";
 import { nowIso } from "@smartreach/shared";
 import { parseSenderWarmup, formatSenderWarmup, type SenderWarmupConfig } from "./sender-warmup";
 
@@ -93,6 +93,15 @@ export async function updateSenderDetailsForUser(
     timezone?: string;
     cleanSignature?: string;
     warmup?: Partial<SenderWarmupConfig>;
+    smtpHost?: string;
+    smtpPort?: number;
+    smtpUsername?: string;
+    smtpPassword?: string;
+    smtpSecurity?: "tls" | "ssl" | "none";
+    imapHost?: string;
+    imapPort?: number;
+    imapUsername?: string;
+    imapPassword?: string;
   },
 ): Promise<SenderActionResult> {
   try {
@@ -119,6 +128,37 @@ export async function updateSenderDetailsForUser(
     if (data.dailyLimit !== undefined) patch.dailyLimit = Math.max(1, Number(data.dailyLimit));
     if (data.hourlyLimit !== undefined) patch.hourlyLimit = Math.max(1, Number(data.hourlyLimit));
     if (data.timezone) patch.timezone = data.timezone;
+
+    // SMTP Credential Updates
+    if (data.smtpHost !== undefined && data.smtpHost.trim() !== "") {
+      patch.smtpHost = data.smtpHost.trim();
+    }
+    if (data.smtpPort !== undefined && !isNaN(Number(data.smtpPort))) {
+      patch.smtpPort = Number(data.smtpPort);
+    }
+    if (data.smtpUsername !== undefined && data.smtpUsername.trim() !== "") {
+      patch.smtpUsername = data.smtpUsername.trim();
+    }
+    if (data.smtpPassword !== undefined && data.smtpPassword.trim() !== "") {
+      patch.smtpPasswordEnc = encryptSecret(data.smtpPassword.trim());
+    }
+    if (data.smtpSecurity !== undefined) {
+      patch.smtpSecurity = data.smtpSecurity;
+    }
+
+    // IMAP Credential Updates
+    if (data.imapHost !== undefined) {
+      patch.imapHost = data.imapHost.trim();
+    }
+    if (data.imapPort !== undefined && !isNaN(Number(data.imapPort))) {
+      patch.imapPort = Number(data.imapPort);
+    }
+    if (data.imapUsername !== undefined) {
+      patch.imapUsername = data.imapUsername.trim();
+    }
+    if (data.imapPassword !== undefined && data.imapPassword.trim() !== "") {
+      patch.imapPasswordEnc = encryptSecret(data.imapPassword.trim());
+    }
 
     await db
       .update(senderAccounts)
