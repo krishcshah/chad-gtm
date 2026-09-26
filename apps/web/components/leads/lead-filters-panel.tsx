@@ -8,6 +8,7 @@ import {
   Input,
   Separator,
   Switch,
+  cn,
 } from "@smartreach/ui";
 import {
   Briefcase,
@@ -35,6 +36,8 @@ interface LeadFiltersPanelProps {
   onApply: () => void;
   isLoading?: boolean;
   totalResults?: number;
+  tableHeight?: number | null;
+  className?: string;
 }
 
 export function LeadFiltersPanel({
@@ -44,6 +47,8 @@ export function LeadFiltersPanel({
   onApply,
   isLoading = false,
   totalResults,
+  tableHeight,
+  className,
 }: LeadFiltersPanelProps) {
   // Local collapsible sections
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -63,6 +68,15 @@ export function LeadFiltersPanel({
   // Country search filter inside facet list
   const [countrySearch, setCountrySearch] = useState("");
   const [showAllCountries, setShowAllCountries] = useState(false);
+
+  const [isLg, setIsLg] = useState(false);
+
+  React.useEffect(() => {
+    const checkLg = () => setIsLg(window.innerWidth >= 1024);
+    checkLg();
+    window.addEventListener("resize", checkLg);
+    return () => window.removeEventListener("resize", checkLg);
+  }, []);
 
   const toggleSection = (section: string) => {
     setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
@@ -208,9 +222,15 @@ export function LeadFiltersPanel({
     (filters.hasLinkedin ? 1 : 0);
 
   return (
-    <aside className="w-full lg:w-80 shrink-0 flex flex-col bg-card/60 border border-border/70 rounded-xl overflow-hidden shadow-sm backdrop-blur-sm max-w-full min-w-0">
+    <aside
+      style={isLg && tableHeight ? { height: `${tableHeight}px` } : undefined}
+      className={cn(
+        "w-full lg:w-80 shrink-0 flex flex-col bg-card/60 border border-border/70 rounded-xl overflow-hidden shadow-sm backdrop-blur-sm max-w-full min-w-0 transition-[height] duration-150",
+        className
+      )}
+    >
       {/* Panel Header */}
-      <div className="p-4 border-b border-border/70 bg-muted/20 flex items-center justify-between">
+      <div className="p-4 border-b border-border/70 bg-muted/20 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <SlidersHorizontal className="size-4 text-primary" />
           <span className="font-semibold text-sm text-foreground">Lead Filters</span>
@@ -236,7 +256,7 @@ export function LeadFiltersPanel({
       </div>
 
       {/* Scrollable Filters Body */}
-      <div className="flex-1 overflow-y-auto max-h-[calc(100vh-230px)] divide-y divide-border/50 text-sm">
+      <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-border/50 text-sm">
         {/* Quick Search Section */}
         <div className="p-3.5 space-y-2.5">
           <div
@@ -643,7 +663,7 @@ export function LeadFiltersPanel({
       </div>
 
       {/* Sticky Bottom Apply Button */}
-      <div className="p-3 border-t border-border/70 bg-card/80 backdrop-blur-sm">
+      <div className="p-3 border-t border-border/70 bg-card/80 backdrop-blur-sm shrink-0">
         <Button
           type="button"
           onClick={onApply}

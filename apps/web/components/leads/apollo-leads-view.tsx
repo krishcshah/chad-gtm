@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   Badge,
@@ -94,6 +94,30 @@ export function ApolloLeadsView({
   // Modal states
   const [inspectingLead, setInspectingLead] = useState<DirectoryLead | null>(null);
   const [isAddToListOpen, setIsAddToListOpen] = useState(false);
+
+  // Measure table container height to perfectly match the filter panel height on desktop
+  const tableRef = useRef<HTMLDivElement>(null);
+  const [tableHeight, setTableHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    const el = tableRef.current;
+    if (!el) return;
+
+    const updateHeight = () => {
+      if (el.offsetHeight > 0) {
+        setTableHeight(el.offsetHeight);
+      }
+    };
+
+    updateHeight();
+
+    const ro = new ResizeObserver(() => {
+      updateHeight();
+    });
+    ro.observe(el);
+
+    return () => ro.disconnect();
+  }, [searchResult.leads.length, isLoading]);
 
   // Trigger directory search query
   const executeSearch = (overrideParams?: Partial<DirectorySearchParams>) => {
@@ -355,10 +379,12 @@ export function ApolloLeadsView({
               onApply={handleApplyFilters}
               isLoading={isLoading}
               totalResults={searchResult.total}
+              tableHeight={tableHeight}
             />
 
             {/* Right Data Table */}
             <LeadsDataTable
+              containerRef={tableRef}
               leads={searchResult.leads}
               total={searchResult.total}
               page={searchResult.page}

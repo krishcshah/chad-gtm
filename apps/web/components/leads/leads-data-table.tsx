@@ -71,6 +71,7 @@ interface LeadsDataTableProps {
   onViewLeadDetails: (lead: DirectoryLead) => void;
   onOpenAddToList: () => void;
   onExportCsv: () => void;
+  containerRef?: React.Ref<HTMLDivElement>;
 }
 
 export function LeadsDataTable({
@@ -93,6 +94,7 @@ export function LeadsDataTable({
   onViewLeadDetails,
   onOpenAddToList,
   onExportCsv,
+  containerRef,
 }: LeadsDataTableProps) {
   const [copiedKey, setCopiedKey] = React.useState<string | null>(null);
 
@@ -124,7 +126,10 @@ export function LeadsDataTable({
   };
 
   return (
-    <div className="w-full max-w-full min-w-0 flex-1 flex flex-col bg-card/60 border border-border/70 rounded-xl overflow-hidden shadow-sm backdrop-blur-sm">
+    <div
+      ref={containerRef}
+      className="w-full max-w-full min-w-0 flex-1 flex flex-col bg-card/60 border border-border/70 rounded-xl overflow-hidden shadow-sm backdrop-blur-sm"
+    >
       {/* Table Header Bar */}
       <div className="p-3 sm:p-4 border-b border-border/70 bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full max-w-full min-w-0">
         <div className="flex items-center gap-3 min-w-0">
