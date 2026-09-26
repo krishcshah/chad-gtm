@@ -118,8 +118,8 @@ export default async function LandingPage() {
             {/* Main Headline */}
             <h1 className="mx-auto max-w-5xl text-balance text-4xl font-extrabold tracking-tight sm:text-6xl lg:text-7xl leading-[1.08]">
               Cold Email Software That’s Completely Free.{" "}
-              <span className="bg-gradient-to-r from-primary via-info to-cyan-400 bg-clip-text text-transparent">
-                Unlimited Mailboxes. Zero Limits.
+              <span className="sm:block bg-gradient-to-r from-primary via-info to-cyan-400 bg-clip-text text-transparent">
+                Unlimited Everything, Zero Limits.
               </span>
             </h1>
 
