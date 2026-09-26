@@ -159,7 +159,7 @@ export default async function LandingPage() {
               </div>
               <div className="flex items-center gap-1.5 font-medium text-foreground">
                 <EuFlag className="h-3 w-4.5" />
-                <span>100% EU-Hosted (Frankfurt)</span>
+                <span>EU-Hosted</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="size-4 text-emerald-400" />
@@ -281,17 +281,17 @@ export default async function LandingPage() {
                     </span>
                     <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-400 shadow-xs">
                       <EuFlag className="h-3 w-4.5" />
-                      <span>100% EU-HOSTED</span>
+                      <span>EU-HOSTED</span>
                     </span>
                   </div>
                   <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-foreground">
                     Engineered with German Precision.{" "}
                     <span className="bg-gradient-to-r from-amber-400 via-primary to-cyan-400 bg-clip-text text-transparent">
-                      100% EU-Hosted in Frankfurt.
+                      100% EU-Hosted.
                     </span>
                   </h2>
                   <p className="mt-3 text-sm sm:text-base leading-relaxed text-muted-foreground">
-                    SmartReach combines German software engineering excellence with dedicated European cloud infrastructure. Avoid closed-source US platforms with surveillance risks, surprise monthly price hikes, and vendor lock-in. Your campaigns, lead directories, and sender credentials run in Frankfurt, Germany under strict GDPR data sovereignty.
+                    SmartReach combines German software engineering excellence with dedicated European cloud infrastructure. Avoid closed-source US platforms with surveillance risks, surprise monthly price hikes, and vendor lock-in. Your campaigns, lead directories, and sender credentials remain strictly within the European Union under GDPR data sovereignty.
                   </p>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full lg:w-auto shrink-0">
@@ -311,9 +311,9 @@ export default async function LandingPage() {
                       <span>Cloud Infrastructure</span>
                     </div>
                     <div className="mt-1.5 text-sm font-bold text-foreground">
-                      100% EU-Hosted
+                      EU-Hosted
                     </div>
-                    <p className="mt-1 text-[11px] text-emerald-400">Frankfurt Datacenter (eu-frankfurt-1)</p>
+                    <p className="mt-1 text-[11px] text-emerald-400">Enterprise European cloud</p>
                   </div>
                   <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[210px]">
                     <div className="text-xs text-muted-foreground font-medium">Data Sovereignty</div>
@@ -376,7 +376,7 @@ export default async function LandingPage() {
                     <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5">
                       <div className="flex items-center gap-1.5">
                         <EuFlag className="h-3 w-4.5" />
-                        <span>100% EU-Hosted (Frankfurt, DE)</span>
+                        <span>EU-Hosted</span>
                       </div>
                     </td>
                     <td className="p-4 sm:p-5 text-muted-foreground">US Cloud (AWS/GCP)</td>
@@ -565,7 +565,7 @@ export default async function LandingPage() {
                 },
                 {
                   q: "Where is my data hosted and is SmartReach GDPR compliant?",
-                  a: "SmartReach is 100% hosted in the European Union on enterprise cloud infrastructure located in Frankfurt, Germany (eu-frankfurt-1). All campaign data, prospect contacts, database records, and authentication sessions remain strictly within the EU, giving you full data sovereignty and effortless GDPR compliance without US CLOUD Act exposure.",
+                  a: "SmartReach is 100% hosted in the European Union on enterprise cloud infrastructure. All campaign data, prospect contacts, database records, and authentication sessions remain strictly within the EU, giving you full data sovereignty and effortless GDPR compliance without US CLOUD Act exposure.",
                 },
                 {
                   q: "How does SmartReach protect email deliverability?",

@@ -45,11 +45,11 @@ export default function SignupPage() {
           <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 bg-emerald-500/10 text-[10px] py-0.5">
             100% Free Forever
           </Badge>
-          <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+          <div className="flex items-center gap-2.5 text-[11px] font-medium text-muted-foreground">
             <span className="inline-flex items-center gap-1" title="Made in Germany">
-              <GermanFlag className="h-2.5 w-3.5" /> DE
+              <GermanFlag className="h-2.5 w-3.5" /> Made in Germany
             </span>
-            <span className="inline-flex items-center gap-1" title="100% EU-Hosted">
+            <span className="inline-flex items-center gap-1" title="EU-Hosted">
               <EuFlag className="h-2.5 w-3.5" /> EU-Hosted
             </span>
           </div>
