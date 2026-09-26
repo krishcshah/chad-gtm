@@ -373,8 +373,11 @@ export default async function LandingPage() {
                   </tr>
                   <tr>
                     <td className="p-4 sm:p-5 font-medium">Hosting & Data Residency</td>
-                    <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5 flex items-center gap-1.5">
-                      <EuFlag className="h-3 w-4.5" /> 100% EU-Hosted (Frankfurt, DE)
+                    <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5">
+                      <div className="flex items-center gap-1.5">
+                        <EuFlag className="h-3 w-4.5" />
+                        <span>100% EU-Hosted (Frankfurt, DE)</span>
+                      </div>
                     </td>
                     <td className="p-4 sm:p-5 text-muted-foreground">US Cloud (AWS/GCP)</td>
                     <td className="p-4 sm:p-5 text-muted-foreground">US Cloud (AWS)</td>
@@ -389,8 +392,11 @@ export default async function LandingPage() {
                   </tr>
                   <tr>
                     <td className="p-4 sm:p-5 font-medium">Engineering & Standards</td>
-                    <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5 flex items-center gap-1.5">
-                      <GermanFlag className="h-3 w-4.5" /> Made in Germany
+                    <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5">
+                      <div className="flex items-center gap-1.5">
+                        <GermanFlag className="h-3 w-4.5" />
+                        <span>Made in Germany</span>
+                      </div>
                     </td>
                     <td className="p-4 sm:p-5 text-muted-foreground">US SaaS</td>
                     <td className="p-4 sm:p-5 text-muted-foreground">US SaaS</td>

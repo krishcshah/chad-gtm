@@ -9,7 +9,7 @@ interface EuFlagProps extends React.SVGProps<SVGSVGElement> {
  * Crisp, vector-accurate 12-star EU emblem on #003399 blue background.
  */
 export function EuFlag({
-  className = "h-3 w-4.5 rounded-[2px] shadow-xs inline-block shrink-0 align-middle",
+  className = "h-3 w-4.5",
   ...props
 }: EuFlagProps) {
   return (
@@ -17,7 +17,7 @@ export function EuFlag({
       viewBox="0 0 30 20"
       aria-label="European Union Flag"
       role="img"
-      className={`overflow-hidden border border-black/15 dark:border-white/15 ${className}`}
+      className={`inline-block shrink-0 align-middle rounded-[2px] shadow-xs overflow-hidden border border-black/15 dark:border-white/15 ${className}`}
       {...props}
     >
       <rect width="30" height="20" fill="#003399" />
