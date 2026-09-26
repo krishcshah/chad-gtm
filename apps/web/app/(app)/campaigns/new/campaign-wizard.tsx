@@ -572,49 +572,7 @@ export function CampaignWizard({
         setFieldErrors({});
         const { sendingWindowStart, sendingWindowEnd } = normalizedWindows();
 
-        let targetId = draftId;
-        if (!targetId) {
-          const draftRes = await saveCampaignDraft({
-            name: name.trim(),
-            leadListId,
-            templateId: templateId || null,
-            senderIds: [...senderIds],
-            startMode,
-            scheduledAt: scheduledIso(),
-            businessDaysOnly,
-            sendingTimezone,
-            sendingWindowStart,
-            sendingWindowEnd,
-            dailyLimit: Number(dailyLimit),
-            minDelaySec: Number(minDelay),
-            maxDelaySec: Number(maxDelay),
-            maxEmailsPerSenderPerDay: Number(perSender),
-            stopOnReply,
-            retryFailed,
-            retryCount: Number(retryCount),
-            wizardStep: 6,
-          });
-          if (!draftRes.ok || !draftRes.data?.id) {
-            applyFailure(
-              draftRes.ok ? "Could not prepare campaign" : draftRes.error,
-              draftRes.ok ? {} : (draftRes.fieldErrors ?? {}),
-            );
-            return;
-          }
-          targetId = draftRes.data.id;
-          rememberDraft(targetId);
-        }
-
-        if (steps.length > 0 && steps[0]?.variants[0]?.subject.trim()) {
-          const seqRes = await saveCampaignSequence(toSavePayload(targetId, steps));
-          if (!seqRes.ok) {
-            applyFailure(seqRes.error, seqRes.fieldErrors ?? {});
-            return;
-          }
-        }
-
-        const res = await publishCampaign({
-          id: targetId,
+        const payload: Record<string, unknown> = {
           name: name.trim(),
           leadListId,
           senderIds: [...senderIds],
@@ -632,12 +590,25 @@ export function CampaignWizard({
           stopOnReply,
           retryFailed,
           retryCount: Number(retryCount),
-        });
+        };
+
+        if (draftId) {
+          payload.id = draftId;
+        }
+
+        if (steps.length > 0 && steps[0]?.variants[0]?.subject.trim()) {
+          payload.steps = toSavePayload("", steps).steps;
+        }
+
+        const res = await publishCampaign(payload);
         if (res.ok && res.data?.id) {
           router.push(`/campaigns/${res.data.id}`);
           return;
         }
         applyFailure(res.ok ? "Could not publish campaign" : res.error, res.ok ? {} : (res.fieldErrors ?? {}));
+      } catch (err) {
+        console.error("[submit] Unexpected error:", err);
+        setError(err instanceof Error ? err.message : "Something went wrong while publishing");
       } finally {
         setPendingKind(null);
       }

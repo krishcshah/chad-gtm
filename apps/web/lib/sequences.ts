@@ -195,18 +195,13 @@ async function persistSequenceReplacement(
   campaignId: string,
   planned: PlannedStep[],
 ): Promise<void> {
-  const batch = readNeonHttpBatch(db);
-  if (batch) {
-    await batch(replacementQueries(db, campaignId, planned));
-    return;
+  await db.delete(sequenceSteps).where(eq(sequenceSteps.campaignId, campaignId));
+  for (const step of planned) {
+    await db.insert(sequenceSteps).values(step.row);
+    for (const variant of step.variants) {
+      await db.insert(sequenceStepVariants).values(variant.row);
+    }
   }
-  if (typeof db.transaction === "function") {
-    await db.transaction(async (tx) => {
-      for (const query of replacementQueries(tx, campaignId, planned)) await query;
-    });
-    return;
-  }
-  for (const query of replacementQueries(db, campaignId, planned)) await query;
 }
 
 /**

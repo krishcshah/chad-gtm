@@ -811,8 +811,15 @@ export async function publishCampaign(input: unknown): Promise<ActionResult<{ id
   const db = getDb();
   const workspace = await getActiveWorkspace(user.id);
   const result = await publishCampaignForUser(db, user.id, input, null, workspace.id);
-  if (result.ok) {
-    const id = result.data?.id;
+  if (result.ok && result.data?.id) {
+    const id = result.data.id;
+    const rawSteps = (input as { steps?: unknown })?.steps;
+    if (Array.isArray(rawSteps) && rawSteps.length > 0) {
+      await saveCampaignSequenceForUser(db, user.id, {
+        campaignId: id,
+        steps: rawSteps,
+      });
+    }
     await logActivity(
       user.id,
       "campaign.created",
@@ -821,6 +828,7 @@ export async function publishCampaign(input: unknown): Promise<ActionResult<{ id
     );
     revalidatePath("/campaigns");
     revalidatePath("/dashboard");
+    revalidatePath(`/campaigns/${id}`);
   }
   return result;
 }
