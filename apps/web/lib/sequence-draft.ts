@@ -16,6 +16,8 @@ export type VariantSource = {
   bodyText: string;
   weight: number;
   pausedAt: string | null;
+  aiGenerateOnTheFly?: boolean;
+  aiPrompt?: string;
 };
 
 export type StepSource = {
@@ -37,6 +39,8 @@ export type DraftVariant = {
   pausedAt: string | null;
   /** Visual edits leave bodyText alone once the plain version was edited on purpose. */
   plainEdited: boolean;
+  aiGenerateOnTheFly?: boolean;
+  aiPrompt?: string;
 };
 
 export type DraftStep = {
@@ -62,6 +66,8 @@ export type SequenceSavePayload = {
       bodyText: string;
       weight: number;
       pausedAt: string | null;
+      aiGenerateOnTheFly?: boolean;
+      aiPrompt?: string;
     }>;
   }>;
 };
@@ -115,6 +121,8 @@ export function blankVariant(label: "A" | "B"): DraftVariant {
     weight: 50,
     pausedAt: null,
     plainEdited: false,
+    aiGenerateOnTheFly: false,
+    aiPrompt: "",
   };
 }
 
@@ -149,6 +157,8 @@ export function stepsFromDto(steps: StepSource[]): DraftStep[] {
               weight: source.length === 2 ? 50 : variant.weight || 50,
               pausedAt: variant.pausedAt ?? null,
               plainEdited: plain.length > 0 && plain !== derived,
+              aiGenerateOnTheFly: Boolean(variant.aiGenerateOnTheFly),
+              aiPrompt: variant.aiPrompt ?? "",
             };
           });
     return {
@@ -199,6 +209,8 @@ export function addVariant(step: DraftStep): DraftStep {
         bodyText: first.bodyText,
         plainEdited: first.plainEdited,
         weight: 50,
+        aiGenerateOnTheFly: first.aiGenerateOnTheFly,
+        aiPrompt: first.aiPrompt,
       },
     ],
   };
@@ -252,6 +264,8 @@ export function toSavePayload(campaignId: string, steps: DraftStep[]): SequenceS
           bodyText: variant.bodyText,
           weight: two ? 50 : variant.weight || 50,
           pausedAt: variant.pausedAt,
+          aiGenerateOnTheFly: Boolean(variant.aiGenerateOnTheFly),
+          aiPrompt: variant.aiPrompt || "",
         };
       }),
     })),

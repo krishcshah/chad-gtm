@@ -3,6 +3,8 @@ export interface TemplateVariantItem {
   subject: string;
   bodyText: string;
   bodyHtml?: string;
+  aiGenerateOnTheFly?: boolean;
+  aiPrompt?: string;
 }
 
 export interface TemplateStepItem {

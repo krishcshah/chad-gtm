@@ -8,6 +8,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { eq, desc } from "drizzle-orm";
 import { ComplianceForms } from "./compliance-forms";
 import { WorkspaceSettingsCard } from "./workspace-settings-card";
+import { AiSettingsCard } from "@/components/ai/ai-settings-card";
 import { GermanFlag } from "@/components/german-flag";
 
 export const dynamic = "force-dynamic";
@@ -62,6 +63,12 @@ export default async function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <AiSettingsCard
+        initialProvider={settings?.aiProvider ?? "google"}
+        initialModel={settings?.aiModel ?? "gemini-3.8-flash"}
+        hasApiKey={Boolean(settings?.aiApiKeyEnc)}
+      />
 
       <ComplianceForms
         initialSettings={{

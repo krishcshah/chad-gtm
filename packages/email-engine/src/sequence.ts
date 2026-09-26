@@ -11,6 +11,7 @@ import {
 import { addCalendarDays } from "@smartreach/shared";
 import { and, asc, eq, isNull, lte, or, sql } from "drizzle-orm";
 import type { EngineDb } from "./db-port";
+import { generateEmailScriptOnTheFly, type LeadProfile } from "./ai";
 
 export type SequenceStepRow = {
   id: string;
@@ -29,6 +30,8 @@ export type SequenceVariantRow = {
   bodyText: string;
   weight: number;
   pausedAt: string | null;
+  aiGenerateOnTheFly?: boolean | null;
+  aiPrompt?: string | null;
 };
 
 export type StepContent = {
@@ -84,9 +87,16 @@ export async function resolveStepContent(
     templateId: string | null;
     vars: Record<string, string | null | undefined>;
     steps: SequenceStepRow[];
+    lead?: any;
+    senderName?: string;
+    aiOptions?: {
+      apiKey?: string | null;
+      provider?: string;
+      model?: string;
+    };
   },
 ): Promise<StepContent | { error: string }> {
-  const { steps, stepPosition, templateId, vars } = opts;
+  const { steps, stepPosition, templateId, vars, lead, senderName, aiOptions } = opts;
 
   if (steps.length > 0) {
     const step = steps.find((s) => s.position === stepPosition);
@@ -94,14 +104,61 @@ export async function resolveStepContent(
     const variants = await loadStepVariants(db, step.id);
     const picked = pickVariantEqualWeight(variants);
     if (!picked) return { error: "sequence-variant-missing" };
+
+    let finalSubject = renderWithVarsAndSpintax(picked.subject, vars);
+    let finalBodyText = renderWithVarsAndSpintax(picked.bodyText, vars);
+    let finalBodyHtml = renderWithVarsAndSpintax(picked.bodyHtml, vars);
+    let format: "text" | "html" = picked.bodyHtml.trim() ? "html" : "text";
+
+    if (picked.aiGenerateOnTheFly && picked.aiPrompt?.trim()) {
+      try {
+        const leadProfile: LeadProfile = {
+          email: vars.email || lead?.email || "",
+          firstName: vars.first_name || lead?.firstName || null,
+          lastName: vars.last_name || lead?.lastName || null,
+          company: vars.company || lead?.company || null,
+          jobTitle: vars.job_title || lead?.jobTitle || null,
+          website: vars.website || lead?.website || null,
+          industry: vars.industry || lead?.industry || null,
+          location: vars.location || lead?.location || null,
+          customFields: lead?.customFields || null,
+        };
+
+        const generated = await generateEmailScriptOnTheFly({
+          lead: leadProfile,
+          customInstruction: picked.aiPrompt,
+          senderName,
+          fallbackSubject: finalSubject,
+          fallbackBody: finalBodyText,
+          vars,
+          apiKey: aiOptions?.apiKey,
+          provider: aiOptions?.provider,
+          model: aiOptions?.model,
+        });
+
+        if (generated.subject) {
+          finalSubject = renderWithVarsAndSpintax(generated.subject, vars);
+        }
+        if (generated.bodyText) {
+          finalBodyText = renderWithVarsAndSpintax(generated.bodyText, vars);
+          finalBodyHtml = generated.bodyHtml
+            ? renderWithVarsAndSpintax(generated.bodyHtml, vars)
+            : `<p>${finalBodyText.replace(/\n/g, "<br>")}</p>`;
+          format = "html";
+        }
+      } catch (aiErr) {
+        console.warn("[scheduler] AI script generation error, falling back to baseline template:", aiErr);
+      }
+    }
+
     return {
-      subject: renderWithVarsAndSpintax(picked.subject, vars),
-      bodyText: renderWithVarsAndSpintax(picked.bodyText, vars),
-      bodyHtml: renderWithVarsAndSpintax(picked.bodyHtml, vars),
+      subject: finalSubject,
+      bodyText: finalBodyText,
+      bodyHtml: finalBodyHtml,
       stepPosition,
       sequenceStepId: step.id,
       variantId: picked.id,
-      format: picked.bodyHtml.trim() ? "html" : "text",
+      format,
     };
   }
 

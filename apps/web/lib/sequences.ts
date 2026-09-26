@@ -63,6 +63,8 @@ export type SequenceVariantDTO = {
   bodyText: string;
   weight: number;
   pausedAt: string | null;
+  aiGenerateOnTheFly?: boolean;
+  aiPrompt?: string;
 };
 
 export type SequenceStepDTO = {
@@ -117,6 +119,8 @@ export async function getCampaignSequenceForUser(
       bodyText: v.bodyText,
       weight: v.weight,
       pausedAt: v.pausedAt ?? null,
+      aiGenerateOnTheFly: Boolean(v.aiGenerateOnTheFly),
+      aiPrompt: v.aiPrompt ?? "",
     });
     byStep.set(v.stepId, list);
   }
@@ -195,13 +199,18 @@ async function persistSequenceReplacement(
   campaignId: string,
   planned: PlannedStep[],
 ): Promise<void> {
-  await db.delete(sequenceSteps).where(eq(sequenceSteps.campaignId, campaignId));
-  for (const step of planned) {
-    await db.insert(sequenceSteps).values(step.row);
-    for (const variant of step.variants) {
-      await db.insert(sequenceStepVariants).values(variant.row);
-    }
+  const batch = readNeonHttpBatch(db);
+  if (batch) {
+    await batch(replacementQueries(db, campaignId, planned));
+    return;
   }
+  if (typeof db.transaction === "function") {
+    await db.transaction(async (tx) => {
+      for (const query of replacementQueries(tx, campaignId, planned)) await query;
+    });
+    return;
+  }
+  for (const query of replacementQueries(db, campaignId, planned)) await query;
 }
 
 /**
@@ -278,6 +287,8 @@ export async function saveCampaignSequenceForUser(
         bodyText: vIn.bodyText ?? "",
         weight,
         pausedAt,
+        aiGenerateOnTheFly: Boolean(vIn.aiGenerateOnTheFly),
+        aiPrompt: vIn.aiPrompt ?? "",
       };
       variants.push({
         dto,

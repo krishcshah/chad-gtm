@@ -20,6 +20,8 @@ import {
 } from "@smartreach/ui";
 import { saveSequenceAsTemplate, updateSequenceTemplate } from "@/lib/actions";
 import type { ReusableSequence, TemplateStepItem, TemplateVariantItem } from "@/lib/sequence-templates";
+import { AiDynamicScriptCard } from "@/components/ai/ai-dynamic-script-card";
+import { AiAssistantPopover } from "@/components/ai/ai-assistant-popover";
 
 interface CreateSequenceDialogProps {
   open: boolean;
@@ -463,9 +465,19 @@ export function CreateSequenceDialog({
                     {/* Subject Line Field */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <Label className="text-xs font-medium text-foreground">
-                          Subject Line <span className="text-primary font-bold">({activeVar.label})</span>
-                        </Label>
+                        <div className="flex items-center gap-2">
+                          <Label className="text-xs font-medium text-foreground">
+                            Subject Line <span className="text-primary font-bold">({activeVar.label})</span>
+                          </Label>
+                          <AiAssistantPopover
+                            subject={activeVar.subject}
+                            bodyText={activeVar.bodyText}
+                            onApply={(improved) => {
+                              updateStepSubject(i, currentVarIdx, improved.subject);
+                              updateStepBody(i, currentVarIdx, improved.bodyText);
+                            }}
+                          />
+                        </div>
                         <span className="text-[10px] text-muted-foreground">
                           {activeVar.subject.length > 0 ? `${activeVar.subject.length} chars` : "Required"}
                         </span>
@@ -514,6 +526,40 @@ export function CreateSequenceDialog({
                         </span>
                       </div>
                     </div>
+
+                    {/* AI Dynamic Scripts on the Fly */}
+                    <AiDynamicScriptCard
+                      enabled={activeVar.aiGenerateOnTheFly ?? false}
+                      onEnabledChange={(enabled) => {
+                        setSteps((prev) =>
+                          prev.map((step, sIdx) => {
+                            if (sIdx !== i) return step;
+                            const nextVariants = [...step.variants];
+                            nextVariants[currentVarIdx] = {
+                              ...nextVariants[currentVarIdx],
+                              aiGenerateOnTheFly: enabled,
+                            };
+                            return { ...step, variants: nextVariants };
+                          })
+                        );
+                      }}
+                      instruction={activeVar.aiPrompt ?? ""}
+                      onInstructionChange={(val) => {
+                        setSteps((prev) =>
+                          prev.map((step, sIdx) => {
+                            if (sIdx !== i) return step;
+                            const nextVariants = [...step.variants];
+                            nextVariants[currentVarIdx] = {
+                              ...nextVariants[currentVarIdx],
+                              aiPrompt: val,
+                            };
+                            return { ...step, variants: nextVariants };
+                          })
+                        );
+                      }}
+                      fallbackSubject={activeVar.subject}
+                      fallbackBody={activeVar.bodyText}
+                    />
                   </div>
                 );
               })}

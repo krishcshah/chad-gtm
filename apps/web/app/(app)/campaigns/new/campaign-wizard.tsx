@@ -62,6 +62,8 @@ import {
   type ReusableSequence,
   type TemplateStepItem,
 } from "@/lib/sequence-templates";
+import { AiDynamicScriptCard } from "@/components/ai/ai-dynamic-script-card";
+import { AiAssistantPopover } from "@/components/ai/ai-assistant-popover";
 import {
   CAMPAIGN_FIELD_CONTROL_ID,
   CAMPAIGN_FIELD_STEP,
@@ -1145,7 +1147,18 @@ export function CampaignWizard({
                         </Badge>
                       )}
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
+                      <AiAssistantPopover
+                        subject={activeVariant.subject}
+                        bodyText={activeVariant.bodyText}
+                        onApply={(improved) => {
+                          patchVariant(selectedStep, actualVariantIndex, {
+                            subject: improved.subject,
+                            bodyText: improved.bodyText,
+                            bodyHtml: improved.bodyHtml || `<p>${improved.bodyText.replace(/\n/g, "<br>")}</p>`,
+                          });
+                        }}
+                      />
                       <Button
                         type="button"
                         variant="ghost"
@@ -1293,6 +1306,21 @@ export function CampaignWizard({
                       </div>
                     </div>
                   </div>
+
+                  {/* AI Dynamic Scripts on the Fly */}
+                  <AiDynamicScriptCard
+                    enabled={activeVariant.aiGenerateOnTheFly ?? false}
+                    onEnabledChange={(enabled) =>
+                      patchVariant(selectedStep, actualVariantIndex, { aiGenerateOnTheFly: enabled })
+                    }
+                    instruction={activeVariant.aiPrompt ?? ""}
+                    onInstructionChange={(val) =>
+                      patchVariant(selectedStep, actualVariantIndex, { aiPrompt: val })
+                    }
+                    fallbackSubject={activeVariant.subject}
+                    fallbackBody={activeVariant.bodyText}
+                    leadListId={leadListId ?? undefined}
+                  />
                 </div>
               )}
             </div>

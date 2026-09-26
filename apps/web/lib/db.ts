@@ -1,6 +1,7 @@
 import { createDb } from "@smartreach/database/connection";
 import { schema } from "@smartreach/database";
 import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
+import { sql } from "drizzle-orm";
 import { env, isDbConfigured } from "./env";
 
 /**
@@ -10,6 +11,24 @@ import { env, isDbConfigured } from "./env";
 export type Db = NeonHttpDatabase<typeof schema>;
 
 let cached: Db | null = null;
+let migrated = false;
+
+export async function ensureAiColumns(db: Db) {
+  if (migrated) return;
+  try {
+    await db.execute(sql`
+      ALTER TABLE "sequence_step_variants" ADD COLUMN IF NOT EXISTS "ai_generate_on_the_fly" boolean DEFAULT false NOT NULL;
+      ALTER TABLE "sequence_step_variants" ADD COLUMN IF NOT EXISTS "ai_prompt" text DEFAULT '' NOT NULL;
+      ALTER TABLE "workspace_settings" ADD COLUMN IF NOT EXISTS "ai_api_key_enc" text;
+      ALTER TABLE "workspace_settings" ADD COLUMN IF NOT EXISTS "ai_provider" text DEFAULT 'google' NOT NULL;
+      ALTER TABLE "workspace_settings" ADD COLUMN IF NOT EXISTS "ai_model" text DEFAULT 'gemini-3.8-flash' NOT NULL;
+      UPDATE "workspace_settings" SET "ai_model" = 'gemini-3.8-flash' WHERE "ai_model" IN ('gemini-2.5-flash', 'gemini-1.5-pro', 'gpt-4o', 'gpt-4o-mini');
+    `);
+    migrated = true;
+  } catch (err) {
+    console.error("[db] ensureAiColumns error:", err);
+  }
+}
 
 export function getDb(): Db {
   if (!cached) {

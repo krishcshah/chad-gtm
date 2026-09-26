@@ -427,6 +427,8 @@ export const sequenceStepVariants = pgTable(
     /** Equal-weight A/B default 50; unused when only one active variant. */
     weight: integer("weight").notNull().default(50),
     pausedAt: text("paused_at"),
+    aiGenerateOnTheFly: boolean("ai_generate_on_the_fly").notNull().default(false),
+    aiPrompt: text("ai_prompt").notNull().default(""),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -561,6 +563,9 @@ export const workspaceSettings = pgTable("workspace_settings", {
   /** Physical postal address required by CAN-SPAM on commercial mail. */
   postalAddress: text("postal_address").notNull().default(""),
   unsubscribeBaseUrl: text("unsubscribe_base_url").notNull().default(""),
+  aiApiKeyEnc: text("ai_api_key_enc"),
+  aiProvider: text("ai_provider").notNull().default("google"),
+  aiModel: text("ai_model").notNull().default("gemini-3.8-flash"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

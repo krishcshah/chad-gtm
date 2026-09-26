@@ -10,7 +10,8 @@
     "./scheduler": "./src/scheduler.ts",
     "./processor": "./src/processor.ts",
     "./sync-replies": "./src/sync-replies.ts",
-    "./worker": "./src/worker.ts"
+    "./worker": "./src/worker.ts",
+    "./ai": "./src/ai.ts"
   },
   "scripts": {
     "start": "tsx src/run.ts",

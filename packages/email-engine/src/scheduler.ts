@@ -287,6 +287,8 @@ export async function scheduleCampaign(
       templateId: campaign.templateId,
       vars,
       steps: sequenceSteps,
+      lead,
+      senderName: pick.sender.fromName ?? undefined,
     });
     if ("error" in content) {
       await db

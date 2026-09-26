@@ -54,6 +54,7 @@ import {
 } from "./sequences";
 import { getDb } from "./db";
 import { requireUser } from "./session";
+import type { LeadProfile } from "./ai";
 import { ACTIVE_WORKSPACE_COOKIE, getActiveWorkspace, type WorkspaceItem } from "./workspaces";
 import { formatZodActionError } from "./zod-action-error";
 import {
@@ -1790,3 +1791,204 @@ export async function deleteWorkspaceAction(
     return err(e);
   }
 }
+
+/* ─── AI Assistance & On-the-Fly Personalization Actions ───────────────── */
+
+export async function previewAiSequenceGeneration(input: unknown): Promise<ActionResult<{
+  samples: Array<{
+    lead: {
+      id?: string;
+      email: string;
+      firstName?: string | null;
+      lastName?: string | null;
+      company?: string | null;
+      jobTitle?: string | null;
+      industry?: string | null;
+      website?: string | null;
+      location?: string | null;
+    };
+    email: {
+      subject: string;
+      bodyText: string;
+      bodyHtml: string;
+      personalizationReason?: string;
+    };
+  }>;
+}>> {
+  try {
+    const user = await requireUser();
+    const { aiPreviewGenerationSchema } = await import("@smartreach/validation");
+    const { getWorkspaceAiOptions, previewBatchLeadEmails, DIVERSE_SAMPLE_LEADS } = await import("./ai");
+    const { ensureAiColumns } = await import("./db");
+
+    const parsed = aiPreviewGenerationSchema.safeParse(input);
+    if (!parsed.success) return err(parsed.error);
+    const data = parsed.data;
+
+    const db = getDb();
+    await ensureAiColumns(db);
+
+    let targetLeadListId = data.leadListId;
+    if (!targetLeadListId && data.campaignId) {
+      const camps: any[] = await db
+        .select({ leadListId: schema.campaigns.leadListId })
+        .from(schema.campaigns)
+        .where(and(eq(schema.campaigns.id, data.campaignId), eq(schema.campaigns.userId, user.id)))
+        .limit(1);
+      if (camps[0]?.leadListId) targetLeadListId = camps[0].leadListId;
+    }
+
+    let realLeads: any[] = [];
+    if (targetLeadListId) {
+      realLeads = await db
+        .select()
+        .from(schema.leads)
+        .where(
+          and(
+            eq(schema.leads.listId, targetLeadListId),
+            sql`${schema.leads.deletedAt} is null`,
+          ),
+        )
+        .limit(10);
+    }
+
+    // Map real leads or augment with diverse realistic sample leads up to 10
+    const leadsToPreview: LeadProfile[] = realLeads.map((l) => ({
+      id: l.id,
+      email: l.email,
+      firstName: l.firstName,
+      lastName: l.lastName,
+      company: l.company,
+      jobTitle: l.jobTitle,
+      industry: l.industry,
+      website: l.website,
+      location: l.location,
+      customFields: l.customFields,
+    }));
+
+    if (leadsToPreview.length < 10) {
+      const needed = 10 - leadsToPreview.length;
+      leadsToPreview.push(...DIVERSE_SAMPLE_LEADS.slice(0, needed));
+    }
+
+    const aiOptions = await getWorkspaceAiOptions(user.id);
+
+    const generated = await previewBatchLeadEmails(leadsToPreview, {
+      customInstruction: data.customInstruction,
+      fallbackSubject: data.fallbackSubject,
+      fallbackBody: data.fallbackBody,
+      senderName: user.name || "Elena",
+      apiKey: aiOptions.apiKey,
+      provider: aiOptions.provider,
+      model: aiOptions.model,
+      maxCount: 10,
+    });
+
+    return {
+      ok: true,
+      data: {
+        samples: generated.map((g) => ({
+          lead: {
+            id: g.lead.id,
+            email: g.lead.email,
+            firstName: g.lead.firstName,
+            lastName: g.lead.lastName,
+            company: g.lead.company,
+            jobTitle: g.lead.jobTitle,
+            industry: g.lead.industry,
+            website: g.lead.website,
+            location: g.lead.location,
+          },
+          email: g.email,
+        })),
+      },
+    };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+export async function improveSequenceCopy(input: unknown): Promise<ActionResult<{
+  subject: string;
+  bodyText: string;
+  bodyHtml: string;
+  changesSummary: string;
+}>> {
+  try {
+    const user = await requireUser();
+    const { aiImproveCopySchema } = await import("@smartreach/validation");
+    const { getWorkspaceAiOptions, improveEmailCopy } = await import("./ai");
+
+    const parsed = aiImproveCopySchema.safeParse(input);
+    if (!parsed.success) return err(parsed.error);
+    const data = parsed.data;
+
+    const aiOptions = await getWorkspaceAiOptions(user.id);
+
+    const result = await improveEmailCopy({
+      subject: data.subject,
+      bodyText: data.bodyText,
+      instruction: data.instruction,
+      tone: data.tone,
+      apiKey: aiOptions.apiKey,
+      provider: aiOptions.provider,
+      model: aiOptions.model,
+    });
+
+    return { ok: true, data: result };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+export async function saveWorkspaceAiSettings(input: {
+  provider: string;
+  model: string;
+  apiKey?: string;
+}): Promise<ActionResult<{ provider: string; model: string }>> {
+  try {
+    const user = await requireUser();
+    const { ensureAiColumns } = await import("./db");
+
+    const db = getDb();
+    await ensureAiColumns(db);
+
+    const updateValues: Record<string, any> = {
+      aiProvider: input.provider || "google",
+      aiModel: input.model || "gemini-3.8-flash",
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (input.apiKey && input.apiKey.trim()) {
+      updateValues.aiApiKeyEnc = encryptSecret(input.apiKey.trim());
+    }
+
+    const [existing] = await db
+      .select({ userId: schema.workspaceSettings.userId })
+      .from(schema.workspaceSettings)
+      .where(eq(schema.workspaceSettings.userId, user.id))
+      .limit(1);
+
+    if (existing) {
+      await db
+        .update(schema.workspaceSettings)
+        .set(updateValues)
+        .where(eq(schema.workspaceSettings.userId, user.id));
+    } else {
+      await db.insert(schema.workspaceSettings).values({
+        userId: user.id,
+        ...updateValues,
+      });
+    }
+
+    revalidatePath("/settings");
+    return {
+      ok: true,
+      data: { provider: updateValues.aiProvider, model: updateValues.aiModel },
+      message: "AI settings updated successfully",
+    };
+  } catch (e) {
+    return err(e);
+  }
+}
+

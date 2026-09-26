@@ -50,6 +50,8 @@ import {
 } from "lucide-react";
 import { previewSequenceStep, saveCampaignSequence } from "@/lib/actions";
 import { EmailBody } from "../../unibox/message-body";
+import { AiDynamicScriptCard } from "@/components/ai/ai-dynamic-script-card";
+import { AiAssistantPopover } from "@/components/ai/ai-assistant-popover";
 import {
   MAX_SEQUENCE_STEP_COUNT,
   addStep,
@@ -876,7 +878,21 @@ export function SequenceEditor({
 
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <Label htmlFor={subjectId}>Subject</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor={subjectId}>Subject</Label>
+                    <AiAssistantPopover
+                      subject={variant.subject}
+                      bodyText={variant.bodyText}
+                      onApply={(improved) => {
+                        patchVariant(activeVariantIndex, {
+                          subject: improved.subject,
+                          bodyText: improved.bodyText,
+                          bodyHtml: improved.bodyHtml || `<p>${improved.bodyText.replace(/\n/g, "<br>")}</p>`,
+                          plainEdited: true,
+                        });
+                      }}
+                    />
+                  </div>
                   <span className={cn("text-xs tabular-nums", variant.subject.length > 500 ? "text-destructive" : "text-muted-foreground")}>
                     {variant.subject.length}/500
                   </span>
@@ -1069,6 +1085,21 @@ export function SequenceEditor({
                   Type {"{Hi|Hello}"} in the body to rotate a phrase. Variables use {"{{company}}"}.
                 </p>
               </div>
+
+              {/* AI Dynamic Scripts on the Fly */}
+              <AiDynamicScriptCard
+                enabled={variant.aiGenerateOnTheFly ?? false}
+                onEnabledChange={(enabled) =>
+                  patchVariant(activeVariantIndex, { aiGenerateOnTheFly: enabled })
+                }
+                instruction={variant.aiPrompt ?? ""}
+                onInstructionChange={(val) =>
+                  patchVariant(activeVariantIndex, { aiPrompt: val })
+                }
+                fallbackSubject={variant.subject}
+                fallbackBody={variant.bodyText}
+                campaignId={campaignId}
+              />
 
               <details className="rounded-lg border border-border bg-background/40 px-3 py-2">
                 <summary className="cursor-pointer text-sm font-medium">Sample lead for preview</summary>

@@ -421,6 +421,8 @@ const sequenceVariantSchema = z.object({
   /** Equal-weight A/B; default 50. Ignored when only one active variant. */
   weight: z.coerce.number().int().min(1).max(100).default(50),
   pausedAt: z.string().datetime({ offset: true }).nullable().optional(),
+  aiGenerateOnTheFly: z.boolean().default(false).optional(),
+  aiPrompt: z.string().max(20_000).default("").optional(),
 });
 
 const sequenceStepSchema = z.object({
@@ -450,4 +452,25 @@ export const sequencePreviewSchema = z.object({
   sampleVars: z.record(z.string(), z.string()).optional(),
 });
 export type SequencePreviewInput = z.infer<typeof sequencePreviewSchema>;
+
+/* ─── AI Assistance & On-the-Fly Personalization ────────────────────────── */
+
+export const aiImproveCopySchema = z.object({
+  subject: z.string().max(500).default(""),
+  bodyText: z.string().max(100_000).default(""),
+  instruction: z.string().max(2000).default(""),
+  tone: z.enum(["concise", "executive", "persuasive", "casual", "punchy_cta", "auto"]).default("auto"),
+});
+export type AiImproveCopyInput = z.infer<typeof aiImproveCopySchema>;
+
+export const aiPreviewGenerationSchema = z.object({
+  campaignId: z.string().optional(),
+  leadListId: z.string().optional(),
+  customInstruction: z.string().max(20_000).default(""),
+  fallbackSubject: z.string().max(500).default(""),
+  fallbackBody: z.string().max(100_000).default(""),
+  sampleCount: z.coerce.number().int().min(1).max(20).default(10),
+});
+export type AiPreviewGenerationInput = z.infer<typeof aiPreviewGenerationSchema>;
+
 
