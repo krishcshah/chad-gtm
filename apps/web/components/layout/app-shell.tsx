@@ -3,7 +3,6 @@
 import React from "react";
 import { useSidebar } from "./sidebar-context";
 import { cn } from "@smartreach/ui";
-import { GermanFlag } from "@/components/german-flag";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { collapsed } = useSidebar();
@@ -34,10 +33,6 @@ export function AppMainContent({ children }: { children: React.ReactNode }) {
         <div className="flex-1 w-full max-w-full min-w-0 group-has-[.unibox-root]:flex group-has-[.unibox-root]:flex-col group-has-[.unibox-root]:min-h-0 group-has-[.apollo-leads-root]:flex group-has-[.apollo-leads-root]:flex-col">
           {children}
         </div>
-        <footer className="mt-auto pt-8 pb-2 text-center text-[10px] text-muted-foreground/40 flex items-center justify-center gap-1.5 select-none group-has-[.unibox-root]:hidden group-has-[.apollo-leads-root]:hidden">
-          <GermanFlag className="h-2.5 w-3.5" />
-          <span>Made in Germany</span>
-        </footer>
       </div>
     </main>
   );
