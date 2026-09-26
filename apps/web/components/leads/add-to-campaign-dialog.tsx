@@ -160,7 +160,11 @@ export function AddToCampaignDialog({
                 className="text-xs h-9"
               />
               <p className="text-[11px] text-muted-foreground">
-                A dedicated list will be created in your workspace containing these {selectedLeadIds.length} leads.
+                A dedicated list will be created in your workspace containing{" "}
+                {isSelectAllMatching
+                  ? `all ${effectiveCount.toLocaleString()} leads matching current filters`
+                  : `these ${effectiveCount.toLocaleString()} leads`}
+                .
               </p>
             </div>
           ) : (
@@ -198,7 +202,7 @@ export function AddToCampaignDialog({
             type="button"
             size="sm"
             onClick={handleAdd}
-            disabled={isSubmitting || selectedLeadIds.length === 0}
+            disabled={isSubmitting || effectiveCount === 0}
             className="gap-1.5 font-semibold bg-primary text-primary-foreground"
           >
             {isSubmitting ? (
@@ -209,7 +213,9 @@ export function AddToCampaignDialog({
             ) : (
               <>
                 <FolderPlus className="size-3.5" />
-                Add {selectedLeadIds.length} Leads
+                {isSelectAllMatching
+                  ? `Add All ${effectiveCount.toLocaleString()} Leads`
+                  : `Add ${effectiveCount.toLocaleString()} Leads`}
               </>
             )}
           </Button>
