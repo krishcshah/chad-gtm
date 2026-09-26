@@ -143,9 +143,9 @@ export function BulkEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-lg">
+          <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
             <Sliders className="size-5 text-primary" />
             Bulk Edit {selectedIds.length} Sender{selectedIds.length === 1 ? "" : "s"}
           </DialogTitle>
@@ -155,36 +155,36 @@ export function BulkEditDialog({
         </DialogHeader>
 
         <Tabs defaultValue="warmup" className="w-full mt-2">
-          <TabsList className="grid w-full grid-cols-3 rounded-xl border border-border/80 bg-muted/60 p-1.5 gap-1.5 shadow-2xs">
+          <TabsList className="grid w-full grid-cols-3 rounded-xl border border-border/80 bg-muted/60 p-1 sm:p-1.5 gap-1 sm:gap-1.5 shadow-2xs">
             <TabsTrigger
               value="warmup"
-              className="gap-2 rounded-lg py-2.5 text-xs font-medium text-muted-foreground transition-all hover:text-foreground hover:bg-background/40 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border"
+              className="gap-1.5 sm:gap-2 rounded-lg py-2 sm:py-2.5 text-[11px] sm:text-xs font-medium text-muted-foreground transition-all hover:text-foreground hover:bg-background/40 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border"
             >
               <Flame className="size-3.5 text-amber-500" />
-              <span>Warmup & Limits</span>
+              <span className="truncate">Warmup & Limits</span>
             </TabsTrigger>
             <TabsTrigger
               value="servers"
-              className="gap-2 rounded-lg py-2.5 text-xs font-medium text-muted-foreground transition-all hover:text-foreground hover:bg-background/40 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border"
+              className="gap-1.5 sm:gap-2 rounded-lg py-2 sm:py-2.5 text-[11px] sm:text-xs font-medium text-muted-foreground transition-all hover:text-foreground hover:bg-background/40 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border"
             >
               <Server className="size-3.5 text-blue-500" />
-              <span>SMTP & IMAP</span>
+              <span className="truncate">SMTP & IMAP</span>
             </TabsTrigger>
             <TabsTrigger
               value="profile"
-              className="gap-2 rounded-lg py-2.5 text-xs font-medium text-muted-foreground transition-all hover:text-foreground hover:bg-background/40 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border"
+              className="gap-1.5 sm:gap-2 rounded-lg py-2 sm:py-2.5 text-[11px] sm:text-xs font-medium text-muted-foreground transition-all hover:text-foreground hover:bg-background/40 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border"
             >
               <Mail className="size-3.5 text-violet-500" />
-              <span>Profile & Pacing</span>
+              <span className="truncate">Profile & Pacing</span>
             </TabsTrigger>
           </TabsList>
 
-          {/* Consistent Fixed-Height Container to prevent jarring layout jumps */}
-          <div className="min-h-[385px] pt-3 flex flex-col justify-start">
+          {/* Flexible container that adapts cleanly on mobile */}
+          <div className="min-h-0 sm:min-h-[340px] pt-3 flex flex-col justify-start">
             {/* TAB 1: Warmup & Limits */}
             <TabsContent value="warmup" className="space-y-4 m-0">
-            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
-              <div className="flex items-center justify-between">
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5 sm:p-4 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                 <div>
                   <Label className="text-xs font-semibold text-foreground">Peer Warmup Pool</Label>
                   <p className="text-[11px] text-muted-foreground">
@@ -192,7 +192,7 @@ export function BulkEditDialog({
                   </p>
                 </div>
                 <Select value={warmupAction} onValueChange={(v: any) => setWarmupAction(v)}>
-                  <SelectTrigger className="h-8 w-44 bg-background text-xs">
+                  <SelectTrigger className="h-8 w-full sm:w-44 bg-background text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -204,7 +204,7 @@ export function BulkEditDialog({
               </div>
 
               {warmupAction === "enable" && (
-                <div className="grid grid-cols-2 gap-3 pt-1 border-t border-amber-500/15">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-amber-500/15">
                   <div className="space-y-1">
                     <Label className="text-[11px] text-muted-foreground">Reply Rate (%)</Label>
                     <Input
@@ -233,7 +233,7 @@ export function BulkEditDialog({
               )}
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">Account Status</Label>
                 <Select value={statusAction} onValueChange={(v: any) => setStatusAction(v)}>
@@ -278,12 +278,12 @@ export function BulkEditDialog({
 
           {/* TAB 2: SMTP & IMAP */}
           <TabsContent value="servers" className="space-y-4 m-0">
-            <div className="space-y-3 rounded-xl border border-border/70 bg-card/60 p-4">
+            <div className="space-y-3 rounded-xl border border-border/70 bg-card/60 p-3.5 sm:p-4">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
                 <Server className="size-3.5 text-primary" /> SMTP Outbound Host & Security
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1 col-span-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1 col-span-1 sm:col-span-2">
                   <Label className="text-[11px] text-muted-foreground">SMTP Server Host</Label>
                   <Input
                     placeholder="e.g. smtp.gmail.com"
@@ -292,7 +292,7 @@ export function BulkEditDialog({
                     className="h-8 text-xs bg-background"
                   />
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1 col-span-1">
                   <Label className="text-[11px] text-muted-foreground">Port</Label>
                   <Input
                     type="number"
@@ -304,7 +304,7 @@ export function BulkEditDialog({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-[11px] text-muted-foreground">SMTP Password / App Password</Label>
                   <Input
@@ -332,12 +332,12 @@ export function BulkEditDialog({
               </div>
             </div>
 
-            <div className="space-y-3 rounded-xl border border-border/70 bg-card/60 p-4">
+            <div className="space-y-3 rounded-xl border border-border/70 bg-card/60 p-3.5 sm:p-4">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
                 <Shield className="size-3.5 text-primary" /> IMAP Inbound Sync (UniBox)
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1 col-span-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1 col-span-1 sm:col-span-2">
                   <Label className="text-[11px] text-muted-foreground">IMAP Server Host</Label>
                   <Input
                     placeholder="e.g. imap.gmail.com"
@@ -346,7 +346,7 @@ export function BulkEditDialog({
                     className="h-8 text-xs bg-background"
                   />
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1 col-span-1">
                   <Label className="text-[11px] text-muted-foreground">Port</Label>
                   <Input
                     type="number"
@@ -373,7 +373,7 @@ export function BulkEditDialog({
 
           {/* TAB 3: Profile & Pacing */}
           <TabsContent value="profile" className="space-y-4 m-0">
-            <div className="space-y-3 rounded-xl border border-border/70 bg-card/60 p-4">
+            <div className="space-y-3 rounded-xl border border-border/70 bg-card/60 p-3.5 sm:p-4">
               <div className="space-y-1">
                 <Label className="text-xs">Display Sender Name</Label>
                 <Input
@@ -415,11 +415,11 @@ export function BulkEditDialog({
           </div>
         </Tabs>
 
-        <DialogFooter className="mt-3 gap-2">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="mt-4 flex-col-reverse sm:flex-row gap-2">
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
             Cancel
           </Button>
-          <Button size="sm" onClick={handleApply} disabled={pending}>
+          <Button size="sm" onClick={handleApply} disabled={pending} className="w-full sm:w-auto">
             {pending ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : <Check className="size-3.5 mr-1.5" />}
             {pending ? "Applying changes…" : `Apply to ${selectedIds.length} Senders`}
           </Button>

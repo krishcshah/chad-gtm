@@ -64,6 +64,7 @@ import {
 } from "@/lib/sequence-templates";
 import { AiDynamicScriptCard } from "@/components/ai/ai-dynamic-script-card";
 import { AiAssistantPopover } from "@/components/ai/ai-assistant-popover";
+import { ManualEmailPreviewDialog } from "@/components/email/manual-email-preview-dialog";
 import {
   CAMPAIGN_FIELD_CONTROL_ID,
   CAMPAIGN_FIELD_STEP,
@@ -283,6 +284,7 @@ export function CampaignWizard({
   const [saveSeqDesc, setSaveSeqDesc] = useState("");
   const [saveSeqPending, setSaveSeqPending] = useState(false);
   const [importSeqOpen, setImportSeqOpen] = useState(false);
+  const [manualPreviewOpen, setManualPreviewOpen] = useState(false);
 
   const applySavedSequence = (seq: ReusableSequence) => {
     if (!seq.steps || seq.steps.length === 0) return;
@@ -1205,107 +1207,160 @@ export function CampaignWizard({
                     </div>
                   </div>
 
-                  {/* Subject input + Variable chips */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <Label htmlFor="step-subject">Subject</Label>
-                      <span className="text-[11px] text-muted-foreground tabular-nums">
-                        {activeVariant.subject.length}/500
-                      </span>
-                    </div>
-                    <Input
-                      ref={subjectRef}
-                      id="step-subject"
-                      value={activeVariant.subject}
-                      onChange={(e) =>
-                        patchVariant(selectedStep, actualVariantIndex, { subject: e.target.value })
-                      }
-                      placeholder="Quick question, {{first_name}}"
-                    />
-                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                      {PRIMARY_VARS.map((v) => (
-                        <button
-                          key={v}
-                          type="button"
-                          onClick={() => insertVariable(`{{${v}}}`)}
-                          className="rounded-md border border-border bg-muted/40 px-2 py-0.5 font-mono text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                        >
-                          {`{{${v}}}`}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Single Compose Area with Formatted/Plain Toggle in Bottom Right */}
-                  <div className="space-y-2">
-                    <Label htmlFor="step-body">Email body</Label>
-                    <div className="relative rounded-lg border border-border bg-background focus-within:ring-2 focus-within:ring-primary/40">
-                      {bodyMode === "formatted" ? (
-                        <Textarea
-                          ref={textRef}
-                          id="step-body"
-                          rows={14}
-                          value={activeVariant.bodyText}
-                          onChange={(e) =>
-                            patchVariant(selectedStep, actualVariantIndex, {
-                              bodyText: e.target.value,
-                              bodyHtml: `<p>${e.target.value.replace(/\n/g, "<br>")}</p>`,
-                            })
-                          }
-                          placeholder={`Hi {{first_name}},\n\nI noticed {{company}} and wanted to reach out…`}
-                          className="min-h-[380px] resize-y border-0 bg-transparent p-4 text-sm leading-relaxed focus-visible:ring-0 focus-visible:ring-offset-0"
-                        />
-                      ) : (
-                        <Textarea
-                          ref={textRef}
-                          id="step-body"
-                          rows={14}
-                          value={activeVariant.bodyText}
-                          onChange={(e) =>
-                            patchVariant(selectedStep, actualVariantIndex, {
-                              bodyText: e.target.value,
-                              bodyHtml: `<p>${e.target.value.replace(/\n/g, "<br>")}</p>`,
-                            })
-                          }
-                          placeholder="Plain text email body…"
-                          className="min-h-[380px] resize-y border-0 bg-transparent p-4 font-mono text-xs leading-relaxed focus-visible:ring-0 focus-visible:ring-offset-0"
-                        />
-                      )}
-
-                      {/* Bottom-right Formatted vs Plain text Toggle */}
-                      <div className="flex items-center justify-between border-t border-border/50 bg-muted/20 px-3 py-1.5">
-                        <span className="text-[11px] text-muted-foreground">
-                          {bodyMode === "formatted" ? "Rich text formatting" : "Standard plain text"}
-                        </span>
-                        <div className="flex items-center gap-1 rounded-md border border-border/80 bg-background p-0.5 text-xs shadow-2xs">
-                          <button
-                            type="button"
-                            onClick={() => setBodyMode("formatted")}
-                            className={cn(
-                              "rounded px-2.5 py-0.5 font-medium transition-colors text-[11px]",
-                              bodyMode === "formatted"
-                                ? "bg-primary text-primary-foreground font-semibold"
-                                : "text-muted-foreground hover:text-foreground",
-                            )}
-                          >
-                            Formatted
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setBodyMode("plain")}
-                            className={cn(
-                              "rounded px-2.5 py-0.5 font-medium transition-colors text-[11px]",
-                              bodyMode === "plain"
-                                ? "bg-primary text-primary-foreground font-semibold"
-                                : "text-muted-foreground hover:text-foreground",
-                            )}
-                          >
-                            Plain text
-                          </button>
+                  {activeVariant.aiGenerateOnTheFly ? (
+                    <div className="rounded-xl border border-primary/25 bg-primary/[0.04] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-start sm:items-center gap-3">
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <Sparkles className="size-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-foreground">
+                            Manual email composition is collapsed & hidden
+                          </p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            "Write scripts on the fly" is active. Each recipient will receive an AI-synthesized subject and email generated at dispatch-time using their live company & lead attributes.
+                          </p>
                         </div>
                       </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="text-xs shrink-0 w-full sm:w-auto"
+                        onClick={() =>
+                          patchVariant(selectedStep, actualVariantIndex, { aiGenerateOnTheFly: false })
+                        }
+                      >
+                        Turn off to edit manually
+                      </Button>
                     </div>
-                  </div>
+                  ) : (
+                    <>
+                      {/* Subject input + Variable chips */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <Label htmlFor="step-subject">Subject</Label>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setManualPreviewOpen(true)}
+                              className="h-6 px-2 text-[11px] gap-1 text-primary border-primary/30 hover:bg-primary/5"
+                            >
+                              <Eye className="size-3" /> Preview Email
+                            </Button>
+                          </div>
+                          <span className="text-[11px] text-muted-foreground tabular-nums">
+                            {activeVariant.subject.length}/500
+                          </span>
+                        </div>
+                        <Input
+                          ref={subjectRef}
+                          id="step-subject"
+                          value={activeVariant.subject}
+                          onChange={(e) =>
+                            patchVariant(selectedStep, actualVariantIndex, { subject: e.target.value })
+                          }
+                          placeholder="Quick question, {{first_name}}"
+                        />
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                          {PRIMARY_VARS.map((v) => (
+                            <button
+                              key={v}
+                              type="button"
+                              onClick={() => insertVariable(`{{${v}}}`)}
+                              className="rounded-md border border-border bg-muted/40 px-2 py-0.5 font-mono text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                            >
+                              {`{{${v}}}`}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Single Compose Area with Formatted/Plain Toggle in Bottom Right */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="step-body">Email body</Label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setManualPreviewOpen(true)}
+                            className="h-6 px-2 text-[11px] gap-1 text-primary hover:bg-primary/5"
+                          >
+                            <Eye className="size-3" /> Preview Email with Lead Data
+                          </Button>
+                        </div>
+                        <div className="relative rounded-lg border border-border bg-background focus-within:ring-2 focus-within:ring-primary/40">
+                          {bodyMode === "formatted" ? (
+                            <Textarea
+                              ref={textRef}
+                              id="step-body"
+                              rows={14}
+                              value={activeVariant.bodyText}
+                              onChange={(e) =>
+                                patchVariant(selectedStep, actualVariantIndex, {
+                                  bodyText: e.target.value,
+                                  bodyHtml: `<p>${e.target.value.replace(/\n/g, "<br>")}</p>`,
+                                })
+                              }
+                              placeholder={`Hi {{first_name}},\n\nI noticed {{company}} and wanted to reach out…`}
+                              className="min-h-[380px] resize-y border-0 bg-transparent p-4 text-sm leading-relaxed focus-visible:ring-0 focus-visible:ring-offset-0"
+                            />
+                          ) : (
+                            <Textarea
+                              ref={textRef}
+                              id="step-body"
+                              rows={14}
+                              value={activeVariant.bodyText}
+                              onChange={(e) =>
+                                patchVariant(selectedStep, actualVariantIndex, {
+                                  bodyText: e.target.value,
+                                  bodyHtml: `<p>${e.target.value.replace(/\n/g, "<br>")}</p>`,
+                                })
+                              }
+                              placeholder="Plain text email body…"
+                              className="min-h-[380px] resize-y border-0 bg-transparent p-4 font-mono text-xs leading-relaxed focus-visible:ring-0 focus-visible:ring-offset-0"
+                            />
+                          )}
+
+                          {/* Bottom-right Formatted vs Plain text Toggle */}
+                          <div className="flex items-center justify-between border-t border-border/50 bg-muted/20 px-3 py-1.5">
+                            <span className="text-[11px] text-muted-foreground">
+                              {bodyMode === "formatted" ? "Rich text formatting" : "Standard plain text"}
+                            </span>
+                            <div className="flex items-center gap-1 rounded-md border border-border/80 bg-background p-0.5 text-xs shadow-2xs">
+                              <button
+                                type="button"
+                                onClick={() => setBodyMode("formatted")}
+                                className={cn(
+                                  "rounded px-2.5 py-0.5 font-medium transition-colors text-[11px]",
+                                  bodyMode === "formatted"
+                                    ? "bg-primary text-primary-foreground font-semibold"
+                                    : "text-muted-foreground hover:text-foreground",
+                                )}
+                              >
+                                Formatted
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setBodyMode("plain")}
+                                className={cn(
+                                  "rounded px-2.5 py-0.5 font-medium transition-colors text-[11px]",
+                                  bodyMode === "plain"
+                                    ? "bg-primary text-primary-foreground font-semibold"
+                                    : "text-muted-foreground hover:text-foreground",
+                                )}
+                              >
+                                Plain text
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
 
                   {/* AI Dynamic Scripts on the Fly */}
                   <AiDynamicScriptCard
@@ -1319,6 +1374,16 @@ export function CampaignWizard({
                     }
                     fallbackSubject={activeVariant.subject}
                     fallbackBody={activeVariant.bodyText}
+                    leadListId={leadListId ?? undefined}
+                  />
+
+                  {/* Manual Email Preview Dialog with Live Lead Interpolation and Test Mail */}
+                  <ManualEmailPreviewDialog
+                    open={manualPreviewOpen}
+                    onOpenChange={setManualPreviewOpen}
+                    subject={activeVariant.subject}
+                    bodyText={activeVariant.bodyText}
+                    bodyHtml={activeVariant.bodyHtml}
                     leadListId={leadListId ?? undefined}
                   />
                 </div>

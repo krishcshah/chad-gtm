@@ -120,31 +120,31 @@ export function AiDynamicScriptCard({
       >
         {/* Card Header & Toggle */}
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-start sm:items-center gap-2.5 min-w-0 flex-1">
             <span
               className={cn(
-                "flex size-7 items-center justify-center rounded-lg transition-colors",
+                "flex size-7 items-center justify-center rounded-lg transition-colors shrink-0 mt-0.5 sm:mt-0",
                 enabled ? "bg-primary text-primary-foreground shadow-xs" : "bg-muted text-muted-foreground"
               )}
             >
               <Sparkles className="size-3.5" />
             </span>
-            <div>
-              <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <span className="font-semibold text-xs sm:text-sm text-foreground">
                   Write scripts on the fly
                 </span>
                 <Badge
                   variant={enabled ? "default" : "outline"}
                   className={cn(
-                    "text-[10px] uppercase font-bold tracking-wider py-0 px-1.5",
+                    "text-[10px] uppercase font-bold tracking-wider py-0 px-1.5 shrink-0",
                     enabled ? "bg-primary text-primary-foreground" : "text-muted-foreground border-border"
                   )}
                 >
                   AI Personalization
                 </Badge>
               </div>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
+              <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2 sm:line-clamp-none">
                 Generate unique, lead-specific cold outreach scripts at dispatch-time based on their live role and company data.
               </p>
             </div>
@@ -154,7 +154,7 @@ export function AiDynamicScriptCard({
             checked={enabled}
             onCheckedChange={onEnabledChange}
             aria-label="Toggle write scripts on the fly"
-            className="shrink-0"
+            className="shrink-0 self-center"
           />
         </div>
 
@@ -163,14 +163,14 @@ export function AiDynamicScriptCard({
           <div className="pt-2 border-t border-primary/20 space-y-3 animate-in fade-in-50 duration-200">
             {/* Custom Instructions Input */}
             <div className="space-y-1.5">
-              <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
-                <Label htmlFor="ai-instructions" className="font-semibold text-foreground flex items-center gap-1.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-[11px]">
+                <Label htmlFor="ai-instructions" className="font-semibold text-foreground flex items-center gap-1.5 shrink-0">
                   <Sliders className="size-3 text-primary" />
                   Custom Instructions & Script Prompt
                 </Label>
-                <div className="flex items-center gap-1 text-muted-foreground">
-                  <span>Insert variables:</span>
-                  <div className="flex items-center gap-1">
+                <div className="flex flex-wrap items-center gap-1 text-muted-foreground">
+                  <span className="shrink-0">Insert variables:</span>
+                  <div className="flex flex-wrap items-center gap-1">
                     {VARIABLE_CHIPS.map((chip) => (
                       <button
                         key={chip}
@@ -197,9 +197,9 @@ export function AiDynamicScriptCard({
             </div>
 
             {/* Prompt Quick Recipes & Preview Action */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
               <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                <span className="font-medium text-foreground/80">Recipes:</span>
+                <span className="font-medium text-foreground/80 shrink-0">Recipes:</span>
                 {PROMPT_RECIPES.map((r) => (
                   <button
                     key={r.label}
@@ -219,7 +219,7 @@ export function AiDynamicScriptCard({
                 size="sm"
                 onClick={handleOpenPreview}
                 disabled={loading}
-                className="h-7 px-3 text-xs font-semibold gap-1.5 shadow-xs"
+                className="h-7 px-3 text-xs font-semibold gap-1.5 shadow-xs w-full sm:w-auto shrink-0 justify-center"
               >
                 {loading ? (
                   <RefreshCw className="size-3.5 animate-spin" />

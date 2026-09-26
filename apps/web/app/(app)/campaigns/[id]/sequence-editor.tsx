@@ -46,12 +46,14 @@ import {
   List,
   Mail,
   Plus,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { previewSequenceStep, saveCampaignSequence } from "@/lib/actions";
 import { EmailBody } from "../../unibox/message-body";
 import { AiDynamicScriptCard } from "@/components/ai/ai-dynamic-script-card";
 import { AiAssistantPopover } from "@/components/ai/ai-assistant-popover";
+import { ManualEmailPreviewDialog } from "@/components/email/manual-email-preview-dialog";
 import {
   MAX_SEQUENCE_STEP_COUNT,
   addStep,
@@ -426,6 +428,7 @@ export function SequenceEditor({
   const [removeArmed, setRemoveArmed] = useState(false);
   const [samples, setSamples] = useState(SAMPLE_LEAD);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [manualPreviewOpen, setManualPreviewOpen] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewDenied, setPreviewDenied] = useState(false);
   const [previewData, setPreviewData] = useState<{
@@ -876,215 +879,266 @@ export function SequenceEditor({
                 )}
               </div>
 
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor={subjectId}>Subject</Label>
-                    <AiAssistantPopover
-                      subject={variant.subject}
-                      bodyText={variant.bodyText}
-                      onApply={(improved) => {
-                        patchVariant(activeVariantIndex, {
-                          subject: improved.subject,
-                          bodyText: improved.bodyText,
-                          bodyHtml: improved.bodyHtml || `<p>${improved.bodyText.replace(/\n/g, "<br>")}</p>`,
-                          plainEdited: true,
-                        });
+              {variant.aiGenerateOnTheFly ? (
+                <div className="rounded-xl border border-primary/25 bg-primary/[0.04] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start sm:items-center gap-3">
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <Sparkles className="size-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">
+                        Manual email composition is collapsed & hidden
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        "Write scripts on the fly" is active for Variant {variant.label}. Each recipient will receive an AI-synthesized subject and email generated at dispatch-time using their live company & lead attributes.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs shrink-0 w-full sm:w-auto"
+                    onClick={() =>
+                      patchVariant(activeVariantIndex, { aiGenerateOnTheFly: false })
+                    }
+                  >
+                    Turn off to edit manually
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor={subjectId}>Subject</Label>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setManualPreviewOpen(true)}
+                          className="h-6 px-2 text-[11px] gap-1 text-primary border-primary/30 hover:bg-primary/5"
+                        >
+                          <Eye className="size-3" /> Preview Email
+                        </Button>
+                        <AiAssistantPopover
+                          subject={variant.subject}
+                          bodyText={variant.bodyText}
+                          onApply={(improved) => {
+                            patchVariant(activeVariantIndex, {
+                              subject: improved.subject,
+                              bodyText: improved.bodyText,
+                              bodyHtml: improved.bodyHtml || `<p>${improved.bodyText.replace(/\n/g, "<br>")}</p>`,
+                              plainEdited: true,
+                            });
+                          }}
+                        />
+                      </div>
+                      <span className={cn("text-xs tabular-nums", variant.subject.length > 500 ? "text-destructive" : "text-muted-foreground")}>
+                        {variant.subject.length}/500
+                      </span>
+                    </div>
+                    <Input
+                      ref={subjectRef}
+                      id={subjectId}
+                      value={variant.subject}
+                      placeholder="Quick question, {{first_name}}"
+                      onChange={(e) => patchVariant(activeVariantIndex, { subject: e.target.value })}
+                      onSelect={(e) => {
+                        const el = e.currentTarget;
+                        subjectCaret.current = { start: el.selectionStart ?? 0, end: el.selectionEnd ?? 0 };
                       }}
                     />
+                    <VarChips idPrefix={`${subjectId}-vars`} onInsert={insertSubject} />
                   </div>
-                  <span className={cn("text-xs tabular-nums", variant.subject.length > 500 ? "text-destructive" : "text-muted-foreground")}>
-                    {variant.subject.length}/500
-                  </span>
-                </div>
-                <Input
-                  ref={subjectRef}
-                  id={subjectId}
-                  value={variant.subject}
-                  placeholder="Quick question, {{first_name}}"
-                  onChange={(e) => patchVariant(activeVariantIndex, { subject: e.target.value })}
-                  onSelect={(e) => {
-                    const el = e.currentTarget;
-                    subjectCaret.current = { start: el.selectionStart ?? 0, end: el.selectionEnd ?? 0 };
-                  }}
-                />
-                <VarChips idPrefix={`${subjectId}-vars`} onInsert={insertSubject} />
-              </div>
 
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p id={bodyLabelId} className="text-sm font-medium">
-                    {bodyMode === "formatted" ? "Formatted body" : "Plain-text version"}
-                  </p>
-                  {bodyMode === "formatted" ? (
-                    <div role="toolbar" aria-label="Body formatting" className="flex flex-wrap gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Bold"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => visualRef.current?.command("bold")}
-                      >
-                        <Bold />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Italic"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => visualRef.current?.command("italic")}
-                      >
-                        <Italic />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Bulleted list"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => visualRef.current?.command("insertUnorderedList")}
-                      >
-                        <List />
-                      </Button>
-                      <Popover>
-                        <PopoverTrigger asChild>
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <p id={bodyLabelId} className="text-sm font-medium">
+                          {bodyMode === "formatted" ? "Formatted body" : "Plain-text version"}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setManualPreviewOpen(true)}
+                          className="h-6 px-2 text-[11px] gap-1 text-primary hover:bg-primary/5"
+                        >
+                          <Eye className="size-3" /> Preview Email
+                        </Button>
+                      </div>
+                      {bodyMode === "formatted" ? (
+                        <div role="toolbar" aria-label="Body formatting" className="flex flex-wrap gap-1">
                           <Button
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            aria-label="Insert link"
+                            aria-label="Bold"
                             onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => visualRef.current?.command("bold")}
                           >
-                            <Link2 />
+                            <Bold />
                           </Button>
-                        </PopoverTrigger>
-                        <PopoverContent align="end" className="w-72">
-                          <Label htmlFor={`${bodyLabelId}-link`}>Link URL</Label>
-                          <Input
-                            id={`${bodyLabelId}-link`}
-                            className="mt-2"
-                            value={linkUrl}
-                            onChange={(e) => setLinkUrl(e.target.value)}
-                            placeholder="https://"
-                          />
-                          {linkError ? (
-                            <p role="alert" className="mt-2 text-xs text-destructive">
-                              {linkError}
-                            </p>
-                          ) : null}
                           <Button
                             type="button"
-                            size="sm"
-                            className="mt-3"
-                            onClick={() => {
-                              const url = safeUrl(linkUrl);
-                              if (!url) {
-                                setLinkError("Enter an http, https, or mailto link.");
-                                return;
-                              }
-                              setLinkError(null);
-                              visualRef.current?.link(url);
-                            }}
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="Italic"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => visualRef.current?.command("italic")}
                           >
-                            Add link
+                            <Italic />
                           </Button>
-                        </PopoverContent>
-                      </Popover>
-                      <SpinButton onInsert={(token) => visualRef.current?.insertText(token)} />
-                    </div>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs"
-                      onClick={() =>
-                        patchVariant(activeVariantIndex, {
-                          bodyText: plainFromHtml(variant.bodyHtml),
-                          plainEdited: false,
-                        })
-                      }
-                    >
-                      Match formatted body
-                    </Button>
-                  )}
-                </div>
-
-                <div className="rounded-xl border border-border bg-background shadow-xs focus-within:ring-2 focus-within:ring-ring">
-                  {bodyMode === "formatted" ? (
-                    <div className="p-1">
-                      <VisualBody
-                        key={`${step.key}:${variant.key}`}
-                        mountKey={`${step.key}:${variant.key}`}
-                        initialHtml={variant.bodyHtml}
-                        labelledBy={bodyLabelId}
-                        handleRef={visualRef}
-                        onChangeRef={visualChangeRef}
-                      />
-                    </div>
-                  ) : (
-                    <Textarea
-                      ref={textRef}
-                      id={plainId}
-                      rows={8}
-                      value={variant.bodyText}
-                      className="w-full border-0 bg-transparent p-4 font-mono text-sm shadow-none focus-visible:ring-0"
-                      placeholder={"Hi {{first_name}},\n\nI noticed {{company}}."}
-                      onChange={(e) =>
-                        patchVariant(activeVariantIndex, { bodyText: e.target.value, plainEdited: true })
-                      }
-                      onSelect={(e) => {
-                        const el = e.currentTarget;
-                        textCaret.current = { start: el.selectionStart ?? 0, end: el.selectionEnd ?? 0 };
-                      }}
-                    />
-                  )}
-
-                  {/* Single compose footer with VarChips and bottom-right Formatted / Plain text toggle */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 bg-muted/20 px-3 py-2">
-                    <VarChips idPrefix={`${bodyLabelId}-vars`} onInsert={insertBody} />
-                    <div className="flex items-center rounded-md border border-border bg-background p-0.5 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setBodyMode("formatted")}
-                        className={cn(
-                          "rounded px-2.5 py-1 text-xs font-medium transition-colors",
-                          bodyMode === "formatted"
-                            ? "bg-primary text-primary-foreground shadow-xs"
-                            : "text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        Formatted
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!variant.plainEdited && variant.bodyHtml.trim()) {
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="Bulleted list"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => visualRef.current?.command("insertUnorderedList")}
+                          >
+                            <List />
+                          </Button>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label="Insert link"
+                                onMouseDown={(e) => e.preventDefault()}
+                              >
+                                <Link2 />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent align="end" className="w-72">
+                              <Label htmlFor={`${bodyLabelId}-link`}>Link URL</Label>
+                              <Input
+                                id={`${bodyLabelId}-link`}
+                                className="mt-2"
+                                value={linkUrl}
+                                onChange={(e) => setLinkUrl(e.target.value)}
+                                placeholder="https://"
+                              />
+                              {linkError ? (
+                                <p role="alert" className="mt-2 text-xs text-destructive">
+                                  {linkError}
+                                </p>
+                              ) : null}
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="mt-3"
+                                onClick={() => {
+                                  const url = safeUrl(linkUrl);
+                                  if (!url) {
+                                    setLinkError("Enter an http, https, or mailto link.");
+                                    return;
+                                  }
+                                  setLinkError(null);
+                                  visualRef.current?.link(url);
+                                }}
+                              >
+                                Add link
+                              </Button>
+                            </PopoverContent>
+                          </Popover>
+                          <SpinButton onInsert={(token) => visualRef.current?.insertText(token)} />
+                        </div>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs"
+                          onClick={() =>
                             patchVariant(activeVariantIndex, {
                               bodyText: plainFromHtml(variant.bodyHtml),
-                            });
+                              plainEdited: false,
+                            })
                           }
-                          setBodyMode("plain");
-                        }}
-                        className={cn(
-                          "rounded px-2.5 py-1 text-xs font-medium transition-colors",
-                          bodyMode === "plain"
-                            ? "bg-primary text-primary-foreground shadow-xs"
-                            : "text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        Plain text
-                      </button>
+                        >
+                          Match formatted body
+                        </Button>
+                      )}
                     </div>
-                  </div>
-                </div>
 
-                <p className="text-xs text-muted-foreground">
-                  Type {"{Hi|Hello}"} in the body to rotate a phrase. Variables use {"{{company}}"}.
-                </p>
-              </div>
+                    <div className="rounded-xl border border-border bg-background shadow-xs focus-within:ring-2 focus-within:ring-ring">
+                      {bodyMode === "formatted" ? (
+                        <div className="p-1">
+                          <VisualBody
+                            key={`${step.key}:${variant.key}`}
+                            mountKey={`${step.key}:${variant.key}`}
+                            initialHtml={variant.bodyHtml}
+                            labelledBy={bodyLabelId}
+                            handleRef={visualRef}
+                            onChangeRef={visualChangeRef}
+                          />
+                        </div>
+                      ) : (
+                        <Textarea
+                          ref={textRef}
+                          id={plainId}
+                          rows={8}
+                          value={variant.bodyText}
+                          className="w-full border-0 bg-transparent p-4 font-mono text-sm shadow-none focus-visible:ring-0"
+                          placeholder={"Hi {{first_name}},\n\nI noticed {{company}}."}
+                          onChange={(e) =>
+                            patchVariant(activeVariantIndex, { bodyText: e.target.value, plainEdited: true })
+                          }
+                          onSelect={(e) => {
+                            const el = e.currentTarget;
+                            textCaret.current = { start: el.selectionStart ?? 0, end: el.selectionEnd ?? 0 };
+                          }}
+                        />
+                      )}
+
+                      {/* Single compose footer with VarChips and bottom-right Formatted / Plain text toggle */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 bg-muted/20 px-3 py-2">
+                        <VarChips idPrefix={`${bodyLabelId}-vars`} onInsert={insertBody} />
+                        <div className="flex items-center rounded-md border border-border bg-background p-0.5 text-xs">
+                          <button
+                            type="button"
+                            onClick={() => setBodyMode("formatted")}
+                            className={cn(
+                              "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                              bodyMode === "formatted"
+                                ? "bg-primary text-primary-foreground shadow-xs"
+                                : "text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            Formatted
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!variant.plainEdited && variant.bodyHtml.trim()) {
+                                patchVariant(activeVariantIndex, {
+                                  bodyText: plainFromHtml(variant.bodyHtml),
+                                });
+                              }
+                              setBodyMode("plain");
+                            }}
+                            className={cn(
+                              "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                              bodyMode === "plain"
+                                ? "bg-primary text-primary-foreground shadow-xs"
+                                : "text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            Plain text
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      Type {"{Hi|Hello}"} in the body to rotate a phrase. Variables use {"{{company}}"}.
+                    </p>
+                  </div>
+                </>
+              )}
 
               {/* AI Dynamic Scripts on the Fly */}
               <AiDynamicScriptCard
@@ -1098,6 +1152,16 @@ export function SequenceEditor({
                 }
                 fallbackSubject={variant.subject}
                 fallbackBody={variant.bodyText}
+                campaignId={campaignId}
+              />
+
+              {/* Manual Email Preview Dialog with Live Lead Interpolation and Test Mail */}
+              <ManualEmailPreviewDialog
+                open={manualPreviewOpen}
+                onOpenChange={setManualPreviewOpen}
+                subject={variant.subject}
+                bodyText={variant.bodyText}
+                bodyHtml={variant.bodyHtml}
                 campaignId={campaignId}
               />
 

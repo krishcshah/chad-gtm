@@ -24,6 +24,7 @@ import {
   Globe,
   CheckCircle2,
   ExternalLink,
+  ChevronLeft,
   ChevronRight,
   Clock,
   FileText,
@@ -74,18 +75,18 @@ export function AiGenerationPreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl p-0 overflow-hidden border border-border/80 bg-background shadow-2xl flex flex-col max-h-[88vh]">
+      <DialogContent className="w-[96vw] max-w-4xl p-0 overflow-hidden border border-border/80 bg-background shadow-2xl flex flex-col max-h-[92vh]">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border/70 bg-primary/5 px-6 py-4 shrink-0">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/70 bg-primary/5 px-4 sm:px-6 py-3.5 sm:py-4 shrink-0">
+          <div className="space-y-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
                 <Sparkles className="size-4" />
               </span>
-              <DialogTitle className="text-base font-semibold">
+              <DialogTitle className="text-sm sm:text-base font-semibold truncate">
                 AI On-The-Fly Generation Preview
               </DialogTitle>
-              <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary text-[11px]">
+              <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary text-[10px] sm:text-[11px] shrink-0">
                 {samples.length} Live Lead Samples
               </Badge>
             </div>
@@ -101,7 +102,7 @@ export function AiGenerationPreviewDialog({
               size="sm"
               onClick={onRegenerate}
               disabled={loading}
-              className="h-8 gap-1.5 text-xs font-medium shrink-0"
+              className="h-8 gap-1.5 text-xs font-medium w-full sm:w-auto shrink-0 justify-center"
             >
               <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
               {loading ? "Synthesizing…" : "Regenerate All 10"}
@@ -111,16 +112,68 @@ export function AiGenerationPreviewDialog({
 
         {/* Instructions pill bar */}
         {customInstruction?.trim() ? (
-          <div className="flex items-center gap-2 border-b border-border/50 bg-muted/20 px-6 py-2 text-xs text-muted-foreground shrink-0 truncate">
+          <div className="flex items-center gap-2 border-b border-border/50 bg-muted/20 px-4 sm:px-6 py-2 text-xs text-muted-foreground shrink-0 truncate">
             <span className="font-semibold text-foreground shrink-0">Active Instruction:</span>
             <span className="truncate italic font-mono text-[11px]">"{customInstruction.trim()}"</span>
           </div>
         ) : null}
 
-        {/* Content Body: 2 Columns */}
+        {/* Mobile Lead Switcher Bar */}
+        {samples.length > 0 ? (
+          <div className="flex md:hidden flex-col border-b border-border/60 bg-muted/20 px-3 py-2 shrink-0 gap-1.5">
+            <div className="flex items-center justify-between">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setSelectedIndex((prev) => Math.max(0, prev - 1))}
+                disabled={selectedIndex === 0}
+              >
+                <ChevronLeft className="size-3.5 mr-1" /> Prev
+              </Button>
+              <span className="text-xs font-semibold text-foreground">
+                Lead {selectedIndex + 1} of {samples.length}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setSelectedIndex((prev) => Math.min(samples.length - 1, prev + 1))}
+                disabled={selectedIndex >= samples.length - 1}
+              >
+                Next <ChevronRight className="size-3.5 ml-1" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 text-xs">
+              {samples.map((s, idx) => {
+                const isSelected = idx === selectedIndex;
+                const firstName = s.lead.firstName || s.lead.email.split("@")[0];
+                return (
+                  <button
+                    key={s.lead.id || idx}
+                    type="button"
+                    onClick={() => setSelectedIndex(idx)}
+                    className={cn(
+                      "rounded-full px-2.5 py-0.5 text-[11px] font-medium shrink-0 transition-colors border",
+                      isSelected
+                        ? "bg-primary text-primary-foreground border-primary font-semibold"
+                        : "bg-background border-border/80 text-muted-foreground hover:bg-muted"
+                    )}
+                  >
+                    {idx + 1}. {firstName}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        {/* Content Body: 2 Columns on Desktop, 1 Column on Mobile */}
         <div className="flex flex-1 min-h-0 overflow-hidden">
-          {/* Left Column: List of 10 Leads */}
-          <div className="w-72 shrink-0 border-r border-border/60 bg-muted/15 flex flex-col overflow-y-auto">
+          {/* Left Column: List of 10 Leads (Desktop Only) */}
+          <div className="hidden md:flex md:w-72 shrink-0 border-r border-border/60 bg-muted/15 flex-col overflow-y-auto">
             <div className="px-4 py-2.5 border-b border-border/50 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Sample Prospects ({samples.length})
             </div>
@@ -157,7 +210,7 @@ export function AiGenerationPreviewDialog({
           </div>
 
           {/* Right Column: Full Email Preview */}
-          <div className="flex-1 flex flex-col min-w-0 overflow-y-auto p-6 space-y-4">
+          <div className="flex-1 flex flex-col min-w-0 overflow-y-auto p-3.5 sm:p-6 space-y-3 sm:space-y-4">
             {loading ? (
               <div className="flex flex-1 flex-col items-center justify-center py-16 text-center space-y-3">
                 <RefreshCw className="size-7 animate-spin text-primary" />
@@ -167,17 +220,17 @@ export function AiGenerationPreviewDialog({
             ) : activeSample ? (
               <>
                 {/* Lead Profile Header */}
-                <div className="rounded-lg border border-border/70 bg-card p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs shadow-2xs">
+                <div className="rounded-lg border border-border/70 bg-card p-3 sm:p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-2xs">
                   <div className="flex items-center gap-3">
-                    <span className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-sm">
+                    <span className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-sm shrink-0">
                       {(activeSample.lead.firstName || activeSample.lead.email)[0]?.toUpperCase()}
                     </span>
-                    <div>
-                      <div className="flex items-center gap-2">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                         <span className="font-semibold text-sm text-foreground">
                           {[activeSample.lead.firstName, activeSample.lead.lastName].filter(Boolean).join(" ") || "Recipient"}
                         </span>
-                        <span className="text-muted-foreground">&lt;{activeSample.lead.email}&gt;</span>
+                        <span className="text-muted-foreground text-xs truncate max-w-[200px] sm:max-w-none">&lt;{activeSample.lead.email}&gt;</span>
                       </div>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-[11px] mt-0.5">
                         {activeSample.lead.jobTitle ? (
@@ -208,7 +261,7 @@ export function AiGenerationPreviewDialog({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 shrink-0 text-[11px] text-muted-foreground">
+                  <div className="flex items-center gap-3 shrink-0 text-[11px] text-muted-foreground w-full sm:w-auto justify-end border-t sm:border-t-0 pt-2 sm:pt-0">
                     <span className="flex items-center gap-1">
                       <FileText className="size-3 text-muted-foreground" />
                       {wordCount} words
@@ -251,8 +304,8 @@ export function AiGenerationPreviewDialog({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-border/70 bg-muted/20 px-6 py-3.5 shrink-0">
-          <p className="text-xs text-muted-foreground">
+        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between border-t border-border/70 bg-muted/20 px-4 sm:px-6 py-3 gap-2.5 shrink-0">
+          <p className="text-xs text-muted-foreground text-center sm:text-left">
             {samples.length > 0 ? (
               <span>Inspecting lead <strong>{selectedIndex + 1} of {samples.length}</strong>. Each outreach will be synthesized uniquely at send time.</span>
             ) : null}
@@ -261,7 +314,7 @@ export function AiGenerationPreviewDialog({
           <Button
             type="button"
             onClick={() => onOpenChange(false)}
-            className="h-8 text-xs font-semibold gap-1.5"
+            className="h-8 text-xs font-semibold gap-1.5 w-full sm:w-auto"
           >
             <CheckCircle2 className="size-3.5" />
             Looks Reliable — Keep Enabled

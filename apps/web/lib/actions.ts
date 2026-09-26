@@ -2235,3 +2235,207 @@ export async function exportMatchingDirectoryLeadsCsvAction(
   }
 }
 
+/* ═══ MANUAL EMAIL PREVIEW & TEST EMAIL ACTIONS ═══ */
+
+export interface ManualPreviewLead {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  company: string;
+  jobTitle: string;
+  industry: string;
+  website: string;
+  location: string;
+}
+
+export interface ManualPreviewSender {
+  id: string;
+  email: string;
+  fromName: string;
+  isRecommended?: boolean;
+}
+
+export async function getManualPreviewDataAction(input?: {
+  campaignId?: string;
+  leadListId?: string;
+}): Promise<
+  ActionResult<{
+    leads: ManualPreviewLead[];
+    senders: ManualPreviewSender[];
+    defaultSenderId?: string;
+  }>
+> {
+  try {
+    const user = await requireUser();
+    const db = getDb();
+    const { DIVERSE_SAMPLE_LEADS } = await import("./ai");
+
+    let targetLeadListId = input?.leadListId;
+    if (!targetLeadListId && input?.campaignId) {
+      const camps: any[] = await db
+        .select({ leadListId: schema.campaigns.leadListId })
+        .from(schema.campaigns)
+        .where(and(eq(schema.campaigns.id, input.campaignId), eq(schema.campaigns.userId, user.id)))
+        .limit(1);
+      if (camps[0]?.leadListId) targetLeadListId = camps[0].leadListId;
+    }
+
+    let realLeads: any[] = [];
+    if (targetLeadListId) {
+      realLeads = await db
+        .select()
+        .from(schema.leads)
+        .where(
+          and(
+            eq(schema.leads.listId, targetLeadListId),
+            sql`${schema.leads.deletedAt} is null`,
+          ),
+        )
+        .limit(10);
+    }
+
+    const leads: ManualPreviewLead[] =
+      realLeads.length > 0
+        ? realLeads.map((l) => ({
+            id: l.id,
+            email: l.email || "prospect@example.com",
+            firstName: l.firstName || "Prospect",
+            lastName: l.lastName || "",
+            company: l.company || "Acme Corp",
+            jobTitle: l.jobTitle || "Executive",
+            industry: l.industry || "Technology",
+            website: l.website || "example.com",
+            location: [l.city, l.country].filter(Boolean).join(", ") || "San Francisco, CA",
+          }))
+        : DIVERSE_SAMPLE_LEADS.map((l) => ({
+            id: l.id || crypto.randomUUID(),
+            email: l.email,
+            firstName: l.firstName || "Prospect",
+            lastName: l.lastName || "",
+            company: l.company || "Enterprise Corp",
+            jobTitle: l.jobTitle || "Operations Director",
+            industry: l.industry || "Software & Cloud Services",
+            website: l.website || "example.com",
+            location: l.location || "San Francisco, CA",
+          }));
+
+    const senderRows = await db
+      .select({
+        id: schema.senderAccounts.id,
+        email: schema.senderAccounts.email,
+        fromName: schema.senderAccounts.fromName,
+        senderName: schema.senderAccounts.senderName,
+        status: schema.senderAccounts.status,
+      })
+      .from(schema.senderAccounts)
+      .where(and(eq(schema.senderAccounts.userId, user.id), isNull(schema.senderAccounts.deletedAt)));
+
+    const senders: ManualPreviewSender[] = senderRows.map((s) => {
+      const emailLower = (s.email || "").toLowerCase();
+      const isRecommended =
+        emailLower.includes("krishshah.cloud") ||
+        emailLower.startsWith("hey@") ||
+        emailLower.startsWith("hello@") ||
+        emailLower.startsWith("contact@") ||
+        emailLower.startsWith("notifications@");
+      return {
+        id: s.id,
+        email: s.email,
+        fromName: s.fromName || s.senderName || s.email.split("@")[0],
+        isRecommended,
+      };
+    });
+
+    senders.sort((a, b) => (b.isRecommended ? 1 : 0) - (a.isRecommended ? 1 : 0));
+
+    const defaultSenderId = senders[0]?.id;
+
+    return {
+      ok: true,
+      data: {
+        leads,
+        senders,
+        defaultSenderId,
+      },
+    };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+export async function sendManualTestEmailAction(input: {
+  senderId?: string;
+  toEmail: string;
+  subject: string;
+  bodyHtml?: string;
+  bodyText?: string;
+}): Promise<ActionResult<{ messageId: string; senderEmail: string }>> {
+  try {
+    const user = await requireUser();
+    if (!input.toEmail || !input.toEmail.includes("@")) {
+      return { ok: false, error: "Please enter a valid recipient email address." };
+    }
+    if (!input.subject?.trim()) {
+      return { ok: false, error: "Subject line cannot be empty." };
+    }
+
+    const db = getDb();
+    let senderRow: any = null;
+
+    if (input.senderId) {
+      const [s] = await db
+        .select()
+        .from(schema.senderAccounts)
+        .where(
+          and(
+            eq(schema.senderAccounts.id, input.senderId),
+            eq(schema.senderAccounts.userId, user.id),
+            isNull(schema.senderAccounts.deletedAt),
+          ),
+        )
+        .limit(1);
+      senderRow = s;
+    }
+
+    if (!senderRow) {
+      const allSenders = await db
+        .select()
+        .from(schema.senderAccounts)
+        .where(and(eq(schema.senderAccounts.userId, user.id), isNull(schema.senderAccounts.deletedAt)));
+
+      if (allSenders.length === 0) {
+        return { ok: false, error: "No connected sender mailbox found. Please configure a sender in the Senders tab first." };
+      }
+
+      senderRow =
+        allSenders.find((s) => s.email.toLowerCase().includes("krishshah.cloud")) ||
+        allSenders.find((s) => s.email.toLowerCase().startsWith("hey@")) ||
+        allSenders.find((s) => s.email.toLowerCase().startsWith("hello@")) ||
+        allSenders.find((s) => s.email.toLowerCase().startsWith("contact@")) ||
+        allSenders[0];
+    }
+
+    const { sendMail } = await import("@smartreach/email-engine/mailer");
+    const result = await sendMail(senderRow as never, {
+      to: input.toEmail.trim(),
+      subject: input.subject.trim(),
+      html: input.bodyHtml || undefined,
+      text: input.bodyText || undefined,
+    });
+
+    return {
+      ok: true,
+      data: {
+        messageId: result.messageId,
+        senderEmail: senderRow.email,
+      },
+    };
+  } catch (e: any) {
+    return {
+      ok: false,
+      error: e?.message || "Failed to send test email. Check your SMTP server connection and credentials.",
+    };
+  }
+}
+
