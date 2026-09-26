@@ -10,15 +10,15 @@ if (!fs.existsSync(SCREENSHOTS_DIR)) {
 }
 
 async function run() {
-  console.log("Launching Chrome...");
+  console.log("1. Launching Chrome...");
   const browser = await puppeteer.launch({
     executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--window-size=1440,1000'],
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--window-size=1440,1050'],
   });
 
   const page = await browser.newPage();
-  await page.setViewport({ width: 1440, height: 1000 });
+  await page.setViewport({ width: 1440, height: 1050 });
 
   page.on('console', msg => console.log('PAGE LOG:', msg.type(), msg.text()));
   page.on('pageerror', err => console.log('PAGE ERROR:', err.message));
@@ -29,7 +29,7 @@ async function run() {
     password: 'Password123!Secure',
   };
 
-  console.log(`1. Navigating to ${BASE_URL}/signup...`);
+  console.log(`2. Navigating to ${BASE_URL}/signup...`);
   await page.goto(`${BASE_URL}/signup`, { waitUntil: 'networkidle2' });
   await page.type('#name', testUser.name);
   await page.type('#email', testUser.email);
@@ -37,13 +37,13 @@ async function run() {
   await page.click('form button');
 
   console.log("Waiting for dashboard redirect...");
-  await page.waitForFunction(() => !window.location.pathname.includes('/signup'), { timeout: 15000 });
+  await page.waitForFunction(() => !window.location.pathname.includes('/signup'), { timeout: 20000 });
   console.log("Current URL:", page.url());
 
-  // 2. Visit Settings to inspect AI Settings Card & Model Selector
-  console.log("2. Navigating to /settings...");
+  // 3. Visit Settings to inspect AI Settings Card & Model Selector
+  console.log("3. Navigating to /settings...");
   await page.goto(`${BASE_URL}/settings`, { waitUntil: 'networkidle2' });
-  await new Promise(r => setTimeout(r, 1000));
+  await new Promise(r => setTimeout(r, 1500));
 
   await page.screenshot({ path: path.join(SCREENSHOTS_DIR, '27_ai_settings_card.png'), fullPage: true });
   console.log("Saved 27_ai_settings_card.png");
@@ -58,65 +58,74 @@ async function run() {
       break;
     }
   }
-  await new Promise(r => setTimeout(r, 600));
+  await new Promise(r => setTimeout(r, 800));
   await page.screenshot({ path: path.join(SCREENSHOTS_DIR, '28_ai_settings_openai_models.png'), fullPage: true });
   console.log("Saved 28_ai_settings_openai_models.png");
 
-  // 3. Visit Campaign Wizard to inspect Step 4 Sequence & AI On-the-Fly card
-  console.log("3. Navigating to /campaigns/new...");
-  await page.goto(`${BASE_URL}/campaigns/new`, { waitUntil: 'networkidle2' });
-  await new Promise(r => setTimeout(r, 1000));
+  // 4. Visit Templates to open Sequence Builder with AI Features
+  console.log("4. Navigating to /templates...");
+  await page.goto(`${BASE_URL}/templates`, { waitUntil: 'networkidle2' });
+  await new Promise(r => setTimeout(r, 1500));
 
-  // Step 1: Campaign name
-  const nameInput = await page.$('input[placeholder*="Campaign"], input#campaign-name, input[type="text"]');
-  if (nameInput) {
-    await nameInput.type("Frontier AI Enterprise Sequence");
-  }
+  console.log("Clicking 'Create sequence' button...");
+  const createSeqBtn = await page.evaluateHandle(() => {
+    const btns = Array.from(document.querySelectorAll('button'));
+    return btns.find(b => b.textContent && (b.textContent.includes('Create sequence') || b.textContent.includes('Create First Sequence')));
+  });
 
-  // Click Next until Step 4
-  console.log("Advancing wizard to Step 4 (Sequence)...");
-  for (let s = 1; s <= 3; s++) {
-    const nextBtn = await page.evaluateHandle(() => {
+  if (createSeqBtn && createSeqBtn.asElement()) {
+    await createSeqBtn.asElement().click();
+    console.log("Sequence dialog opened, waiting for render...");
+    await new Promise(r => setTimeout(r, 1200));
+
+    await page.screenshot({ path: path.join(SCREENSHOTS_DIR, '29_sequence_editor_ai_composer.png'), fullPage: true });
+    console.log("Saved 29_sequence_editor_ai_composer.png");
+
+    // Click "✨ AI Assistant" popover beside Subject
+    console.log("Opening '✨ AI Assistant' popover...");
+    const aiAssistBtn = await page.evaluateHandle(() => {
       const btns = Array.from(document.querySelectorAll('button'));
-      return btns.find(b => b.textContent.includes('Next') || b.textContent.includes('Continue'));
+      return btns.find(b => b.textContent && b.textContent.includes('AI Assistant'));
     });
-    if (nextBtn) {
-      await nextBtn.asElement().click();
-      await new Promise(r => setTimeout(r, 1000));
+    if (aiAssistBtn && aiAssistBtn.asElement()) {
+      await aiAssistBtn.asElement().click();
+      await new Promise(r => setTimeout(r, 800));
+      await page.screenshot({ path: path.join(SCREENSHOTS_DIR, '32_ai_assistant_popover.png'), fullPage: true });
+      console.log("Saved 32_ai_assistant_popover.png");
+      // Close popover by clicking dialog background or escape
+      await page.keyboard.press('Escape');
+      await new Promise(r => setTimeout(r, 400));
     }
-  }
 
-  await page.screenshot({ path: path.join(SCREENSHOTS_DIR, '29_campaign_step4_ai_composer.png'), fullPage: true });
-  console.log("Saved 29_campaign_step4_ai_composer.png");
+    // Toggle "Write scripts on the fly"
+    console.log("Toggling 'Write scripts on the fly' switch...");
+    const switchEl = await page.$('button[role="switch"], [aria-label*="Toggle write scripts on the fly"]');
+    if (switchEl) {
+      await switchEl.click();
+      await new Promise(r => setTimeout(r, 1000));
+      await page.screenshot({ path: path.join(SCREENSHOTS_DIR, '30_ai_on_the_fly_card_enabled.png'), fullPage: true });
+      console.log("Saved 30_ai_on_the_fly_card_enabled.png");
 
-  // Enable "Write scripts on the fly"
-  console.log("Toggling 'Write scripts on the fly' switch...");
-  const switchEl = await page.$('button[role="switch"], [aria-label*="Toggle write scripts on the fly"]');
-  if (switchEl) {
-    await switchEl.click();
-    await new Promise(r => setTimeout(r, 800));
-    await page.screenshot({ path: path.join(SCREENSHOTS_DIR, '30_ai_on_the_fly_card_enabled.png'), fullPage: true });
-    console.log("Saved 30_ai_on_the_fly_card_enabled.png");
+      // Click "Preview 10 Sample Emails" button
+      console.log("Clicking 'Preview 10 Sample Emails'...");
+      const previewBtn = await page.evaluateHandle(() => {
+        const btns = Array.from(document.querySelectorAll('button'));
+        return btns.find(b => b.textContent && b.textContent.includes('Preview 10 Sample Emails'));
+      });
 
-    // Click "Preview 10 Sample Emails" button
-    console.log("Clicking 'Preview 10 Sample Emails'...");
-    const previewBtn = await page.evaluateHandle(() => {
-      const btns = Array.from(document.querySelectorAll('button'));
-      return btns.find(b => b.textContent.includes('Preview 10 Sample Emails'));
-    });
+      if (previewBtn && previewBtn.asElement()) {
+        await previewBtn.asElement().click();
+        console.log("Waiting for 10-sample preview modal to generate...");
+        await new Promise(r => setTimeout(r, 3500));
 
-    if (previewBtn && previewBtn.asElement()) {
-      await previewBtn.asElement().click();
-      console.log("Waiting for 10-sample preview modal to generate...");
-      await new Promise(r => setTimeout(r, 3000));
-
-      await page.screenshot({ path: path.join(SCREENSHOTS_DIR, '31_ai_10_samples_preview_modal.png'), fullPage: false });
-      console.log("Saved 31_ai_10_samples_preview_modal.png");
+        await page.screenshot({ path: path.join(SCREENSHOTS_DIR, '31_ai_10_samples_preview_modal.png'), fullPage: false });
+        console.log("Saved 31_ai_10_samples_preview_modal.png");
+      }
     }
   }
 
   await browser.close();
-  console.log("Browser test completed successfully!");
+  console.log("AI browser validation completed successfully!");
 }
 
 run().catch(err => {
