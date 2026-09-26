@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   schema,
   encryptSecret,
@@ -1818,7 +1818,7 @@ export async function previewAiSequenceGeneration(input: unknown): Promise<Actio
   try {
     const user = await requireUser();
     const { aiPreviewGenerationSchema } = await import("@smartreach/validation");
-    const { getWorkspaceAiOptions, previewBatchLeadEmails, DIVERSE_SAMPLE_LEADS } = await import("./ai");
+    const { getWorkspaceAiOptions, previewBatchLeadEmails } = await import("./ai");
     const { ensureAiColumns } = await import("./db");
 
     const parsed = aiPreviewGenerationSchema.safeParse(input);
@@ -1838,6 +1838,19 @@ export async function previewAiSequenceGeneration(input: unknown): Promise<Actio
       if (camps[0]?.leadListId) targetLeadListId = camps[0].leadListId;
     }
 
+    // If still no leadListId provided, lookup the user's most recent active lead list
+    if (!targetLeadListId) {
+      const recentLists = await db
+        .select({ id: schema.leadLists.id })
+        .from(schema.leadLists)
+        .where(and(eq(schema.leadLists.userId, user.id), sql`${schema.leadLists.deletedAt} is null`))
+        .orderBy(desc(schema.leadLists.updatedAt), desc(schema.leadLists.createdAt))
+        .limit(1);
+      if (recentLists[0]?.id) {
+        targetLeadListId = recentLists[0].id;
+      }
+    }
+
     let realLeads: any[] = [];
     if (targetLeadListId) {
       realLeads = await db
@@ -1849,10 +1862,32 @@ export async function previewAiSequenceGeneration(input: unknown): Promise<Actio
             sql`${schema.leads.deletedAt} is null`,
           ),
         )
-        .limit(10);
+        .orderBy(asc(schema.leads.createdAt), asc(schema.leads.id))
+        .limit(5);
     }
 
-    // Map real leads or augment with diverse realistic sample leads up to 10
+    // Fallback: If target list had no leads, look for any saved leads belonging to this user
+    if (realLeads.length === 0) {
+      realLeads = await db
+        .select()
+        .from(schema.leads)
+        .where(
+          and(
+            eq(schema.leads.userId, user.id),
+            sql`${schema.leads.deletedAt} is null`,
+          ),
+        )
+        .orderBy(desc(schema.leads.createdAt))
+        .limit(5);
+    }
+
+    if (realLeads.length === 0) {
+      return err(
+        "No saved leads found. Please select a lead list with saved leads in Step 2 before previewing."
+      );
+    }
+
+    // Map real saved leads (never inject fake mock leads)
     const leadsToPreview: LeadProfile[] = realLeads.map((l) => ({
       id: l.id,
       email: l.email,
@@ -1866,11 +1901,6 @@ export async function previewAiSequenceGeneration(input: unknown): Promise<Actio
       customFields: l.customFields,
     }));
 
-    if (leadsToPreview.length < 10) {
-      const needed = 10 - leadsToPreview.length;
-      leadsToPreview.push(...DIVERSE_SAMPLE_LEADS.slice(0, needed));
-    }
-
     const aiOptions = await getWorkspaceAiOptions(user.id);
 
     const generated = await previewBatchLeadEmails(leadsToPreview, {
@@ -1881,7 +1911,7 @@ export async function previewAiSequenceGeneration(input: unknown): Promise<Actio
       apiKey: aiOptions.apiKey,
       provider: aiOptions.provider,
       model: aiOptions.model,
-      maxCount: 10,
+      maxCount: 5,
     });
 
     return {
@@ -2281,6 +2311,18 @@ export async function getManualPreviewDataAction(input?: {
       if (camps[0]?.leadListId) targetLeadListId = camps[0].leadListId;
     }
 
+    if (!targetLeadListId) {
+      const recentLists = await db
+        .select({ id: schema.leadLists.id })
+        .from(schema.leadLists)
+        .where(and(eq(schema.leadLists.userId, user.id), sql`${schema.leadLists.deletedAt} is null`))
+        .orderBy(desc(schema.leadLists.updatedAt), desc(schema.leadLists.createdAt))
+        .limit(1);
+      if (recentLists[0]?.id) {
+        targetLeadListId = recentLists[0].id;
+      }
+    }
+
     let realLeads: any[] = [];
     if (targetLeadListId) {
       realLeads = await db
@@ -2292,7 +2334,22 @@ export async function getManualPreviewDataAction(input?: {
             sql`${schema.leads.deletedAt} is null`,
           ),
         )
-        .limit(10);
+        .orderBy(asc(schema.leads.createdAt), asc(schema.leads.id))
+        .limit(5);
+    }
+
+    if (realLeads.length === 0) {
+      realLeads = await db
+        .select()
+        .from(schema.leads)
+        .where(
+          and(
+            eq(schema.leads.userId, user.id),
+            sql`${schema.leads.deletedAt} is null`,
+          ),
+        )
+        .orderBy(desc(schema.leads.createdAt))
+        .limit(5);
     }
 
     const leads: ManualPreviewLead[] =

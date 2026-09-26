@@ -87,11 +87,11 @@ export function AiGenerationPreviewDialog({
                 AI On-The-Fly Generation Preview
               </DialogTitle>
               <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary text-[10px] sm:text-[11px] shrink-0">
-                {samples.length} Live Lead Samples
+                {samples.length} Saved Lead Previews
               </Badge>
             </div>
             <DialogDescription className="text-xs text-muted-foreground">
-              These emails are synthesized in real-time using the <strong>exact same prompt algorithm</strong> and lead attributes that will be executed during live campaign sending.
+              These emails are synthesized in real-time for your saved leads using their actual company and contact attributes.
             </DialogDescription>
           </div>
 
@@ -105,7 +105,7 @@ export function AiGenerationPreviewDialog({
               className="h-8 gap-1.5 text-xs font-medium w-full sm:w-auto shrink-0 justify-center"
             >
               <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
-              {loading ? "Synthesizing…" : "Regenerate All 10"}
+              {loading ? "Synthesizing…" : "Regenerate Top 5"}
             </Button>
           ) : null}
         </div>
@@ -172,10 +172,10 @@ export function AiGenerationPreviewDialog({
 
         {/* Content Body: 2 Columns on Desktop, 1 Column on Mobile */}
         <div className="flex flex-1 min-h-0 overflow-hidden">
-          {/* Left Column: List of 10 Leads (Desktop Only) */}
+          {/* Left Column: List of Leads (Desktop Only) */}
           <div className="hidden md:flex md:w-72 shrink-0 border-r border-border/60 bg-muted/15 flex-col overflow-y-auto">
             <div className="px-4 py-2.5 border-b border-border/50 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Sample Prospects ({samples.length})
+              Saved Leads ({samples.length})
             </div>
             <div className="divide-y divide-border/40">
               {samples.map((s, idx) => {
@@ -214,7 +214,7 @@ export function AiGenerationPreviewDialog({
             {loading ? (
               <div className="flex flex-1 flex-col items-center justify-center py-16 text-center space-y-3">
                 <RefreshCw className="size-7 animate-spin text-primary" />
-                <p className="text-sm font-medium text-foreground">Synthesizing personalized emails for 10 leads…</p>
+                <p className="text-sm font-medium text-foreground">Synthesizing personalized emails for top 5 saved leads…</p>
                 <p className="text-xs text-muted-foreground max-w-sm">Applying custom instructions and researching lead company attributes.</p>
               </div>
             ) : activeSample ? (

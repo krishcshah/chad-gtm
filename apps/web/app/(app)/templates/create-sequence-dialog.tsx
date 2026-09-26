@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Clock, Layers, Loader2, Pencil, Plus, Sparkles, Split, Trash2, X } from "lucide-react";
+import { Clock, Layers, Loader2, Pencil, Plus, Split, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   Badge,
@@ -20,8 +20,6 @@ import {
 } from "@smartreach/ui";
 import { saveSequenceAsTemplate, updateSequenceTemplate } from "@/lib/actions";
 import type { ReusableSequence, TemplateStepItem, TemplateVariantItem } from "@/lib/sequence-templates";
-import { AiDynamicScriptCard } from "@/components/ai/ai-dynamic-script-card";
-import { AiAssistantPopover } from "@/components/ai/ai-assistant-popover";
 
 interface CreateSequenceDialogProps {
   open: boolean;
@@ -457,150 +455,65 @@ export function CreateSequenceDialog({
                         </Button>
                       ) : (
                         <span className="text-[11px] text-muted-foreground pr-1 flex items-center gap-1">
-                          <Sparkles className="size-3 text-primary" /> 50/50 split active
+                          <Split className="size-3 text-primary" /> 50/50 split active
                         </span>
                       )}
                     </div>
 
-                    {activeVar.aiGenerateOnTheFly ? (
-                      <div className="rounded-xl border border-primary/25 bg-primary/[0.04] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-start sm:items-center gap-3">
-                          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                            <Sparkles className="size-4" />
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold text-foreground">
-                              Manual email composition is collapsed & hidden
-                            </p>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">
-                              "Write scripts on the fly" is active for Variant {activeVar.label}. Each recipient will receive an AI-synthesized subject and email generated at dispatch-time using their live company & lead attributes.
-                            </p>
-                          </div>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="text-xs shrink-0 w-full sm:w-auto"
-                          onClick={() => {
-                            setSteps((prev) =>
-                              prev.map((step, sIdx) => {
-                                if (sIdx !== i) return step;
-                                const nextVariants = [...step.variants];
-                                nextVariants[currentVarIdx] = {
-                                  ...nextVariants[currentVarIdx],
-                                  aiGenerateOnTheFly: false,
-                                };
-                                return { ...step, variants: nextVariants };
-                              })
-                            );
-                          }}
-                        >
-                          Turn off to edit manually
-                        </Button>
+                    {/* Subject Line Field */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-medium text-foreground">
+                          Subject Line <span className="text-primary font-bold">({activeVar.label})</span>
+                        </Label>
+                        <span className="text-[10px] text-muted-foreground">
+                          {activeVar.subject.length > 0 ? `${activeVar.subject.length} chars` : "Required"}
+                        </span>
                       </div>
-                    ) : (
-                      <>
-                        {/* Subject Line Field */}
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <Label className="text-xs font-medium text-foreground">
-                                Subject Line <span className="text-primary font-bold">({activeVar.label})</span>
-                              </Label>
-                              <AiAssistantPopover
-                                subject={activeVar.subject}
-                                bodyText={activeVar.bodyText}
-                                onApply={(improved) => {
-                                  updateStepSubject(i, currentVarIdx, improved.subject);
-                                  updateStepBody(i, currentVarIdx, improved.bodyText);
-                                }}
-                              />
-                            </div>
-                            <span className="text-[10px] text-muted-foreground">
-                              {activeVar.subject.length > 0 ? `${activeVar.subject.length} chars` : "Required"}
-                            </span>
-                          </div>
-                          <Input
-                            value={activeVar.subject}
-                            onChange={(e) => updateStepSubject(i, currentVarIdx, e.target.value)}
-                            placeholder={i === 0 ? "Subject line (e.g. Quick question for {{company}})" : "Re: Subject line..."}
-                            className="bg-background text-xs font-medium"
-                          />
-                        </div>
+                      <Input
+                        value={activeVar.subject}
+                        onChange={(e) => updateStepSubject(i, currentVarIdx, e.target.value)}
+                        placeholder={i === 0 ? "Subject line (e.g. Quick question for {{company}})" : "Re: Subject line..."}
+                        className="bg-background text-xs font-medium"
+                      />
+                    </div>
 
-                        {/* Email Body Field with increased height & insert tags */}
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-xs font-medium text-foreground">
-                              Email Body <span className="text-primary font-bold">({activeVar.label})</span>
-                            </Label>
-                            <div className="flex items-center gap-1">
-                              <span className="text-[10px] text-muted-foreground mr-1">Insert:</span>
-                              {["{{first_name}}", "{{company}}", "{{sender_name}}"].map((tag) => (
-                                <button
-                                  key={tag}
-                                  type="button"
-                                  onClick={() => insertToken(i, currentVarIdx, tag)}
-                                  className="rounded border border-border/60 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground hover:border-primary/40 hover:bg-primary/10 hover:text-primary transition-colors"
-                                >
-                                  {tag}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <Textarea
-                            rows={9}
-                            value={activeVar.bodyText}
-                            onChange={(e) => updateStepBody(i, currentVarIdx, e.target.value)}
-                            placeholder={`Write your outreach message for Variant ${activeVar.label}…`}
-                            className="bg-background text-xs font-mono min-h-[220px] leading-relaxed resize-y"
-                          />
-                          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                            <span>Tip: Personalize with variables like {"{{first_name}}"} and {"{{company}}"}</span>
-                            <span>
-                              {activeVar.bodyText.trim()
-                                ? `${activeVar.bodyText.trim().split(/\s+/).length} words`
-                                : "0 words"}
-                            </span>
-                          </div>
+                    {/* Email Body Field with increased height & insert tags */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-medium text-foreground">
+                          Email Body <span className="text-primary font-bold">({activeVar.label})</span>
+                        </Label>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-muted-foreground mr-1">Insert:</span>
+                          {["{{first_name}}", "{{company}}", "{{sender_name}}"].map((tag) => (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => insertToken(i, currentVarIdx, tag)}
+                              className="rounded border border-border/60 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground hover:border-primary/40 hover:bg-primary/10 hover:text-primary transition-colors"
+                            >
+                              {tag}
+                            </button>
+                          ))}
                         </div>
-                      </>
-                    )}
-
-                    {/* AI Dynamic Scripts on the Fly */}
-                    <AiDynamicScriptCard
-                      enabled={activeVar.aiGenerateOnTheFly ?? false}
-                      onEnabledChange={(enabled) => {
-                        setSteps((prev) =>
-                          prev.map((step, sIdx) => {
-                            if (sIdx !== i) return step;
-                            const nextVariants = [...step.variants];
-                            nextVariants[currentVarIdx] = {
-                              ...nextVariants[currentVarIdx],
-                              aiGenerateOnTheFly: enabled,
-                            };
-                            return { ...step, variants: nextVariants };
-                          })
-                        );
-                      }}
-                      instruction={activeVar.aiPrompt ?? ""}
-                      onInstructionChange={(val) => {
-                        setSteps((prev) =>
-                          prev.map((step, sIdx) => {
-                            if (sIdx !== i) return step;
-                            const nextVariants = [...step.variants];
-                            nextVariants[currentVarIdx] = {
-                              ...nextVariants[currentVarIdx],
-                              aiPrompt: val,
-                            };
-                            return { ...step, variants: nextVariants };
-                          })
-                        );
-                      }}
-                      fallbackSubject={activeVar.subject}
-                      fallbackBody={activeVar.bodyText}
-                    />
+                      </div>
+                      <Textarea
+                        rows={9}
+                        value={activeVar.bodyText}
+                        onChange={(e) => updateStepBody(i, currentVarIdx, e.target.value)}
+                        placeholder={`Write your outreach message for Variant ${activeVar.label}…`}
+                        className="bg-background text-xs font-mono min-h-[220px] leading-relaxed resize-y"
+                      />
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>Tip: Personalize with variables like {"{{first_name}}"} and {"{{company}}"}</span>
+                        <span>
+                          {activeVar.bodyText.trim()
+                            ? `${activeVar.bodyText.trim().split(/\s+/).length} words`
+                            : "0 words"}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 );
               })}
@@ -628,7 +541,7 @@ export function CreateSequenceDialog({
             ) : isEditingExistingCustom ? (
               <Pencil className="size-3.5 mr-1.5" />
             ) : (
-              <Sparkles className="size-3.5 mr-1.5" />
+              <Layers className="size-3.5 mr-1.5" />
             )}
             {pending
               ? "Saving sequence…"

@@ -469,7 +469,7 @@ export const aiPreviewGenerationSchema = z.object({
   customInstruction: z.string().max(20_000).default(""),
   fallbackSubject: z.string().max(500).default(""),
   fallbackBody: z.string().max(100_000).default(""),
-  sampleCount: z.coerce.number().int().min(1).max(20).default(10),
+  sampleCount: z.coerce.number().int().min(1).max(20).default(5),
 });
 export type AiPreviewGenerationInput = z.infer<typeof aiPreviewGenerationSchema>;
 

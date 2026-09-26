@@ -6,11 +6,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   Clock,
   Eye,
+  FileText,
   Layers,
   Pencil,
   Plus,
   Rocket,
-  Sparkles,
   Split,
   Trash2,
 } from "lucide-react";
@@ -141,7 +141,7 @@ export function TemplatesHub({ templates }: { templates: TemplateRow[] }) {
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Custom Sequences
             </span>
-            <Sparkles className="size-4 text-emerald-500" />
+            <FileText className="size-4 text-emerald-500" />
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-bold tracking-tight text-foreground">

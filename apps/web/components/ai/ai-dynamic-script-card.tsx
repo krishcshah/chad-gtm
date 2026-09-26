@@ -82,7 +82,7 @@ export function AiDynamicScriptCard({
           customInstruction: instruction,
           fallbackSubject,
           fallbackBody,
-          sampleCount: 10,
+          sampleCount: 5,
         });
 
         if (!res.ok) {
@@ -212,7 +212,7 @@ export function AiDynamicScriptCard({
                 ))}
               </div>
 
-              {/* THE 10-EMAIL SAMPLE PREVIEW BUTTON */}
+              {/* Top 5 Saved Leads Preview Button */}
               <Button
                 type="button"
                 variant="default"
@@ -226,7 +226,7 @@ export function AiDynamicScriptCard({
                 ) : (
                   <Eye className="size-3.5" />
                 )}
-                <span>{loading ? "Generating 10 Samples…" : "Preview 10 Sample Emails"}</span>
+                <span>{loading ? "Generating Previews…" : "Preview Top 5 Leads"}</span>
               </Button>
             </div>
           </div>
