@@ -78,42 +78,176 @@ function parseJsonFromText(raw: string): any {
   }
 }
 
+function capitalizeFirst(str: string): string {
+  if (!str) return "";
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function cleanPunctuation(str: string): string {
+  return str
+    .replace(/\s+([.,!?:;])/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /**
- * High-quality fallback generator when no external AI key is configured or during offline testing.
- * Synthesizes unique lead-specific copy based on actual lead attributes and custom instructions.
+ * Intelligent contextual script synthesizer when no external AI key is configured or during offline previews.
+ * Carefully parses the user's custom instructions (extracting product/brand names,
+ * core capabilities, value propositions, and audience targets) and maps them into
+ * a highly tailored, natural, peer-to-peer cold email for the specific lead.
  */
 function simulatePersonalizedScript(options: GenerateOnTheFlyOptions): GeneratedScript {
   const { lead, customInstruction, fallbackSubject, fallbackBody, senderName } = options;
-  const firstName = lead.firstName || "there";
+  const firstName = lead.firstName || (lead.email ? lead.email.split("@")[0] : "there");
   const company = lead.company || "your team";
   const role = lead.jobTitle || "leadership";
-  const industry = lead.industry || "your industry";
-  const sender = senderName || "Elena";
+  const industry = lead.industry || "your space";
+  const sender = senderName || "Krish Shah";
 
-  const lowerInst = (customInstruction || "").toLowerCase();
+  const rawInst = (customInstruction || "").trim();
 
-  let subject = `Quick question regarding ${company}, ${firstName}`;
-  let reason = `Referenced ${company} and role as ${role}`;
-  let body = "";
-
-  if (lowerInst.includes("benchmark") || lowerInst.includes("data") || lowerInst.includes("scale")) {
-    subject = `Benchmarking ${company}'s outbound infrastructure`;
-    body = `Hi ${firstName},\n\nSaw what you're leading at ${company}—impressive momentum in ${industry}.\n\nWe recently benchmarked how high-growth teams in your space are optimizing sender rotation and cold deliverability without domain burn.\n\nWould you be open to a quick 5-minute review of the benchmark data this week?\n\nBest,\n${sender}`;
-    reason = `Tailored hook for ${company} in ${industry} using outbound benchmark data`;
-  } else if (lowerInst.includes("pain") || lowerInst.includes("challenge") || lowerInst.includes("deliverability")) {
-    subject = `${firstName} - solving deliverability at ${company}`;
-    body = `Hey ${firstName},\n\nGiven your focus on ${role} at ${company}, I imagine protecting inbox reputation while scaling outreach is top of mind.\n\nWe built an automated infrastructure that eliminates domain burning and handles humanized multi-inbox rotation automatically.\n\nWorth a brief conversation Tuesday?\n\nBest,\n${sender}`;
-    reason = `Addressed deliverability challenges tailored for ${role} at ${company}`;
-  } else if (lowerInst.includes("concise") || lowerInst.includes("short") || lowerInst.includes("3-sentence")) {
-    subject = `Quick note for ${company}`;
-    body = `Hi ${firstName},\n\nLoved your recent trajectory at ${company}. We help ${industry} leaders scale cold outreach seamlessly with zero manual rotation.\n\nOpen to a 3-minute chat on Thursday?\n\nBest,\n${sender}`;
-    reason = `Generated crisp 3-sentence outreach referencing ${company}`;
-  } else {
-    // General tailored script
-    subject = fallbackSubject
+  // If no instruction is provided, fallback to standard tailored baseline
+  if (!rawInst) {
+    const subject = fallbackSubject
       ? fallbackSubject.replace(/\{\{\s*first_name\s*\}\}/g, firstName).replace(/\{\{\s*company\s*\}\}/g, company)
-      : `Scaling outreach for ${company}`;
-    body = `Hi ${firstName},\n\nNoticed what your team is building at ${company}. Considering your role as ${role}, I wanted to reach out regarding our automated cold email infrastructure.\n\nWe help companies in ${industry} scale multi-sender campaigns with 98%+ primary inbox placement.\n\nWould you be opposed to checking out how this works for ${company}?\n\nBest,\n${sender}`;
+      : `Question regarding ${company}`;
+    const body = fallbackBody
+      ? fallbackBody.replace(/\{\{\s*first_name\s*\}\}/g, firstName).replace(/\{\{\s*company\s*\}\}/g, company)
+      : `Hi ${firstName},\n\nSaw what your team is building at ${company}—impressive momentum in ${industry}.\n\nWould love to connect briefly regarding your current initiatives in this space.\n\nBest,\n${sender}`;
+    return {
+      subject,
+      bodyText: body,
+      bodyHtml: textToHtmlBlocks(body),
+      personalizationReason: `Referenced ${company} and role as ${role}`,
+    };
+  }
+
+  // 1. EXTRACT PRODUCT / SERVICE / BRAND NAME
+  let productName = "";
+  const productPatterns = [
+    /(?:product|service|tool|platform|solution|system|software|app|agent)\s+(?:called|named)\s+["']?([A-Za-z0-9\s\-]+?)["']?(?=[.,\n]|is|that|who|which|\bwith\b|\band\b|$)/i,
+    /(?:called|named)\s+["']?([A-Z][A-Za-z0-9\s\-]+?)["']?(?=[.,\n]|is|that|who|which|\bwith\b|\band\b|$)/i,
+    /(?:marketing|selling|promoting|pitching|introducing|launching)\s+(?:a\s+)?(?:new\s+)?(?:product|service|tool|platform)?\s*(?:called|named)?\s*["']?([A-Z][A-Za-z0-9\s\-]+?)["']?(?=[.,\n]|is|that|who|which|\bwith\b|\band\b|$)/i,
+    /(?:welcome to|meet)\s+["']?([A-Z][A-Za-z0-9\s\-]+?)["']?(?=[.,\n]|is|that|who|which|$)/i,
+    /["']([A-Z][A-Za-z0-9\s\-]{2,25})["']/
+  ];
+
+  for (const pat of productPatterns) {
+    const match = rawInst.match(pat);
+    if (match && match[1]) {
+      const candidate = match[1].trim();
+      if (!/^(the|a|an|this|our|new|cold|email|service|product|platform|tool)$/i.test(candidate)) {
+        productName = candidate;
+        break;
+      }
+    }
+  }
+
+  // 2. PARSE SUBSTANTIVE PROMPT SENTENCES
+  const rawSentences = rawInst
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  const substantiveSentences: string[] = [];
+  for (const s of rawSentences) {
+    const isMetaOnly = /^(?:you are marketing|act as|write a|generate a|craft a|send an|sell this|pitch this|make sure to|keep it|output strictly|please write)/i.test(s) &&
+      !/(?:video|interview|voice|streaming|platform|feature|candidate|hiring|recruit|talent|customer|scale|revenue|meeting)/i.test(s);
+    
+    if (isMetaOnly) continue;
+
+    let cleaned = s;
+    cleaned = cleaned.replace(/^(?:you are marketing|we are marketing|marketing)\s+(?:a product called|a service called|a tool called)?\s*[^.]*?[.,]\s*/i, "");
+    cleaned = cleaned.replace(/^(?:sell this service|sell this product|pitch this service|pitch this product)\.?\s*/i, "");
+    cleaned = cleaned.replace(/^(?:we have this product ready,?\s*and\s*)/i, "");
+    cleaned = cleaned.replace(/and\s+so\s+on\s+and\s+so\s+forth[.,]?/gi, "");
+
+    cleaned = cleanPunctuation(cleaned);
+    if (cleaned.length > 10) {
+      substantiveSentences.push(cleaned);
+    }
+  }
+
+  // 3. IDENTIFY KEY CAPABILITIES & VALUE PROPOSITIONS
+  let featureDescription = "";
+  let valueProposition = "";
+
+  for (const s of substantiveSentences) {
+    const lower = s.toLowerCase();
+    if (!featureDescription && (lower.includes("is an") || lower.includes("is a") || lower.includes("features") || lower.includes("streaming") || lower.includes("interviewer") || lower.includes("voice") || lower.includes("automated") || lower.includes("video") || lower.includes("feel like"))) {
+      featureDescription = s;
+    } else if (lower.includes("help") || lower.includes("scale") || lower.includes("select") || lower.includes("candidate") || lower.includes("interview") || lower.includes("save") || lower.includes("enable") || lower.includes("best candidate")) {
+      if (!valueProposition || lower.includes("scale") || lower.includes("best candidate")) {
+        valueProposition = s;
+      }
+    }
+  }
+
+  if (!featureDescription && substantiveSentences.length > 0) {
+    featureDescription = substantiveSentences[0];
+  }
+  if (!valueProposition && substantiveSentences.length > 1) {
+    valueProposition = substantiveSentences[substantiveSentences.length - 1];
+  }
+
+  // 4. CLEAN UP GRAMMAR & PERSPECTIVE FOR COLD OUTREACH
+  let pitchClause = featureDescription;
+  if (pitchClause) {
+    pitchClause = pitchClause.replace(/[,;]\s*and\s*so\s*on.*$/i, ".");
+    pitchClause = cleanPunctuation(pitchClause);
+    if (!/[.!?]$/.test(pitchClause)) pitchClause += ".";
+    pitchClause = capitalizeFirst(pitchClause);
+  } else {
+    pitchClause = productName
+      ? `We built ${productName} to deliver seamless automation tailored to high-growth teams.`
+      : `We built a new platform designed specifically to streamline key operations for teams in ${industry}.`;
+  }
+
+  let benefitClause = valueProposition;
+  if (benefitClause) {
+    benefitClause = benefitClause.replace(/^it\s+would\s+help\s+them\s+/i, `It helps teams like yours `);
+    benefitClause = benefitClause.replace(/^it\s+helps\s+them\s+/i, `It helps teams like yours `);
+    benefitClause = cleanPunctuation(benefitClause);
+    if (!/[.!?]$/.test(benefitClause)) benefitClause += ".";
+    benefitClause = capitalizeFirst(benefitClause);
+  } else {
+    benefitClause = `It is designed to help teams in ${industry} scale effectively without sacrificing quality.`;
+  }
+
+  // 5. COMPOSE SUBJECT LINE
+  let subject = "";
+  if (productName) {
+    if (rawInst.toLowerCase().includes("interview")) {
+      subject = `${productName} for ${company}: AI automated interviews at scale`;
+    } else {
+      subject = `${productName} + ${company}`;
+    }
+  } else if (rawInst.toLowerCase().includes("interview")) {
+    subject = `AI video interviewing for ${company}`;
+  } else {
+    subject = `Quick question regarding ${company}, ${firstName}`;
+  }
+
+  // 6. COMPOSE EMAIL BODY
+  const body = `Hi ${firstName},
+
+Saw what you're leading at ${company}—impressive momentum across ${industry}.
+
+${pitchClause}
+
+${benefitClause}
+
+Would you be open to a quick 5-minute interactive test call or preview this week?
+
+Best,
+${sender}`;
+
+  // 7. COMPOSE PERSONALIZATION REASON
+  let reason = "";
+  if (productName) {
+    reason = `Tailored ${productName} pitch specifically for ${firstName} at ${company} based on your campaign instructions`;
+  } else {
+    reason = `Synthesized outreach highlighting ${company} and role as ${role} based on your campaign instructions`;
   }
 
   return {
@@ -130,7 +264,7 @@ function simulatePersonalizedScript(options: GenerateOnTheFlyOptions): Generated
 async function callGemini(
   prompt: string,
   apiKey: string,
-  model = "gemini-3.8-flash",
+  model = "gemini-1.5-flash",
   timeoutMs = 12000,
 ): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
@@ -153,6 +287,9 @@ async function callGemini(
     });
 
     if (!res.ok) {
+      if (res.status === 404 && model !== "gemini-1.5-flash") {
+        return callGemini(prompt, apiKey, "gemini-1.5-flash", timeoutMs);
+      }
       const errText = await res.text().catch(() => "");
       throw new Error(`Gemini API error (${res.status}): ${errText.slice(0, 300)}`);
     }
@@ -204,6 +341,9 @@ async function callOpenAi(
     });
 
     if (!res.ok) {
+      if (res.status === 404 && model !== "gpt-4o-mini") {
+        return callOpenAi(prompt, apiKey, "gpt-4o-mini", timeoutMs);
+      }
       const errText = await res.text().catch(() => "");
       throw new Error(`OpenAI API error (${res.status}): ${errText.slice(0, 300)}`);
     }
