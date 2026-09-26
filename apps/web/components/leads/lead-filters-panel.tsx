@@ -26,6 +26,7 @@ import {
   Sparkles,
   Users2,
   SlidersHorizontal,
+  User,
 } from "lucide-react";
 import type { DirectoryFacets, DirectorySearchParams } from "@/lib/leads-directory";
 
@@ -170,6 +171,8 @@ export function LeadFiltersPanel({
       teamSizes: [],
       revenueRanges: [],
       hasEmail: false,
+      hasWorkEmail: false,
+      hasPersonalEmail: false,
       hasPhone: false,
       hasLinkedin: false,
       page: 1,
@@ -218,6 +221,8 @@ export function LeadFiltersPanel({
     (filters.teamSizes?.length || 0) +
     (filters.revenueRanges?.length || 0) +
     (filters.hasEmail ? 1 : 0) +
+    (filters.hasWorkEmail ? 1 : 0) +
+    (filters.hasPersonalEmail ? 1 : 0) +
     (filters.hasPhone ? 1 : 0) +
     (filters.hasLinkedin ? 1 : 0);
 
@@ -626,9 +631,31 @@ export function LeadFiltersPanel({
           {openSections.contactData && (
             <div className="space-y-2 pt-1">
               <label className="flex items-center justify-between py-1 cursor-pointer">
+                <span className="text-xs text-foreground flex items-center gap-1.5 font-medium">
+                  <Briefcase className="size-3.5 text-primary" />
+                  Has Work Email
+                </span>
+                <Switch
+                  checked={!!filters.hasWorkEmail}
+                  onCheckedChange={(c) => onChange({ ...filters, hasWorkEmail: c, page: 1 })}
+                />
+              </label>
+
+              <label className="flex items-center justify-between py-1 cursor-pointer">
                 <span className="text-xs text-foreground flex items-center gap-1.5">
+                  <User className="size-3.5 text-sky-400" />
+                  Has Personal Email
+                </span>
+                <Switch
+                  checked={!!filters.hasPersonalEmail}
+                  onCheckedChange={(c) => onChange({ ...filters, hasPersonalEmail: c, page: 1 })}
+                />
+              </label>
+
+              <label className="flex items-center justify-between py-1 cursor-pointer">
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
                   <Mail className="size-3.5 text-muted-foreground" />
-                  Has Email Address
+                  Has Any Email
                 </span>
                 <Switch
                   checked={!!filters.hasEmail}

@@ -2220,6 +2220,10 @@ export async function saveDirectoryLeadsToCampaignListAction(input: {
 
       for (const r of chunk) {
         if (!r.email) continue;
+        const customObj = r.raw_data ? JSON.parse(r.raw_data) : {};
+        if (r.work_email) customObj.work_email = r.work_email;
+        if (r.personal_email) customObj.personal_email = r.personal_email;
+
         batchValues.push({
           id: crypto.randomUUID(),
           userId: user.id,
@@ -2233,7 +2237,7 @@ export async function saveDirectoryLeadsToCampaignListAction(input: {
           linkedin: r.linkedin_url || "",
           location: r.location || "",
           industry: r.industry || "",
-          customFields: r.raw_data ? JSON.parse(r.raw_data) : {},
+          customFields: customObj,
         });
       }
 
@@ -2293,6 +2297,8 @@ export async function exportMatchingDirectoryLeadsCsvAction(
       "Company Name",
       "Company Website",
       "Primary Email",
+      "Work Email",
+      "Personal Email",
       "Email Status",
       "Phone",
       "Industry",
@@ -2312,6 +2318,8 @@ export async function exportMatchingDirectoryLeadsCsvAction(
       `"${(l.companyName || "").replace(/"/g, '""')}"`,
       `"${(l.companyWebsite || "").replace(/"/g, '""')}"`,
       `"${(l.email || "").replace(/"/g, '""')}"`,
+      `"${(l.workEmail || "").replace(/"/g, '""')}"`,
+      `"${(l.personalEmail || "").replace(/"/g, '""')}"`,
       `"${(l.emailStatus || "").replace(/"/g, '""')}"`,
       `"${(l.phone || "").replace(/"/g, '""')}"`,
       `"${(l.industry || "").replace(/"/g, '""')}"`,

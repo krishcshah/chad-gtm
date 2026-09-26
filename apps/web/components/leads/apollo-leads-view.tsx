@@ -79,6 +79,8 @@ export function ApolloLeadsView({
     teamSizes: [],
     revenueRanges: [],
     hasEmail: false,
+    hasWorkEmail: false,
+    hasPersonalEmail: false,
     hasPhone: false,
     hasLinkedin: false,
     page: 1,

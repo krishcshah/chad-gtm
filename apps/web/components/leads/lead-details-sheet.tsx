@@ -171,10 +171,19 @@ export function LeadDetailsSheet({
                     <Badge variant="default" className="text-[10px] py-0 px-1.5 bg-primary">
                       Primary
                     </Badge>
+                    {lead.workEmail === lead.email && (
+                      <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-primary/30 text-primary">
+                        Work
+                      </Badge>
+                    )}
+                    {lead.personalEmail === lead.email && (
+                      <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-sky-500/30 text-sky-400">
+                        Personal
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
-                    {lead.rawAttributes.primary_email_type ? `Type: ${lead.rawAttributes.primary_email_type} · ` : ""}
-                    Verified with 98%+ deliverability guarantee
+                    {lead.workEmail === lead.email ? "Corporate domain email" : "Personal / direct email"} · Verified with 98%+ deliverability guarantee
                   </p>
                 </div>
                 <Button
@@ -188,6 +197,50 @@ export function LeadDetailsSheet({
               </div>
             ) : (
               <p className="text-xs text-muted-foreground italic">No primary email on record.</p>
+            )}
+
+            {/* Distinct Work Email if not primary */}
+            {lead.workEmail && lead.workEmail !== lead.email && (
+              <div className="rounded-xl border border-border/60 bg-card/60 p-2.5 flex items-center justify-between gap-3 text-xs">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-foreground truncate select-all">{lead.workEmail}</span>
+                    <Badge variant="outline" className="text-[9px] py-0 px-1 border-primary/30 text-primary font-medium">
+                      Work Email
+                    </Badge>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => copyToClipboard(lead.workEmail!, "Work email")}
+                  className="h-7 px-2 text-xs"
+                >
+                  <Copy className="size-3 mr-1" /> Copy
+                </Button>
+              </div>
+            )}
+
+            {/* Distinct Personal Email if not primary */}
+            {lead.personalEmail && lead.personalEmail !== lead.email && (
+              <div className="rounded-xl border border-border/60 bg-card/60 p-2.5 flex items-center justify-between gap-3 text-xs">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-foreground truncate select-all">{lead.personalEmail}</span>
+                    <Badge variant="outline" className="text-[9px] py-0 px-1 border-sky-500/30 text-sky-400 font-medium">
+                      Personal Email
+                    </Badge>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => copyToClipboard(lead.personalEmail!, "Personal email")}
+                  className="h-7 px-2 text-xs"
+                >
+                  <Copy className="size-3 mr-1" /> Copy
+                </Button>
+              </div>
             )}
 
             {/* Additional Secondary Emails */}

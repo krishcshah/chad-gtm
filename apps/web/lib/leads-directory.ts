@@ -27,6 +27,8 @@ export interface DirectoryLead {
   phoneCount: number;
   sourceFile: string;
   rawAttributes: Record<string, string>;
+  workEmail?: string;
+  personalEmail?: string;
 }
 
 export interface DirectoryFacetItem {
@@ -52,6 +54,8 @@ export interface DirectorySearchParams {
   teamSizes?: string[];
   revenueRanges?: string[];
   hasEmail?: boolean;
+  hasWorkEmail?: boolean;
+  hasPersonalEmail?: boolean;
   hasPhone?: boolean;
   hasLinkedin?: boolean;
   page?: number;
@@ -148,7 +152,9 @@ export function getDirectoryDb(): DatabaseSync {
       email_count INTEGER DEFAULT 0,
       phone_count INTEGER DEFAULT 0,
       source_file TEXT,
-      raw_data TEXT
+      raw_data TEXT,
+      work_email TEXT,
+      personal_email TEXT
     );
 
     CREATE INDEX IF NOT EXISTS idx_leads_industry ON leads(industry);
@@ -156,7 +162,16 @@ export function getDirectoryDb(): DatabaseSync {
     CREATE INDEX IF NOT EXISTS idx_leads_company ON leads(company_name);
     CREATE INDEX IF NOT EXISTS idx_leads_job_title ON leads(job_title);
     CREATE INDEX IF NOT EXISTS idx_leads_email ON leads(email);
+    CREATE INDEX IF NOT EXISTS idx_leads_work_email ON leads(work_email);
+    CREATE INDEX IF NOT EXISTS idx_leads_personal_email ON leads(personal_email);
   `);
+
+  try {
+    db.exec(`ALTER TABLE leads ADD COLUMN work_email TEXT;`);
+  } catch {}
+  try {
+    db.exec(`ALTER TABLE leads ADD COLUMN personal_email TEXT;`);
+  } catch {}
 
   cachedDb = db;
   return db;
@@ -297,6 +312,12 @@ export function buildDirectoryWhereClause(params: DirectorySearchParams): { wher
   if (params.hasEmail) {
     whereClauses.push(`email IS NOT NULL AND email != ''`);
   }
+  if (params.hasWorkEmail) {
+    whereClauses.push(`work_email IS NOT NULL AND work_email != ''`);
+  }
+  if (params.hasPersonalEmail) {
+    whereClauses.push(`personal_email IS NOT NULL AND personal_email != ''`);
+  }
   if (params.hasPhone) {
     whereClauses.push(`phone IS NOT NULL AND phone != ''`);
   }
@@ -377,6 +398,8 @@ export function searchLeadsDirectory(params: DirectorySearchParams): DirectorySe
         phoneCount: r.phone_count || 0,
         sourceFile: r.source_file || "",
         rawAttributes: rawAttrs,
+        workEmail: r.work_email || "",
+        personalEmail: r.personal_email || "",
       };
     });
 
@@ -444,6 +467,8 @@ export function getMatchingDirectoryLeadsForExport(params: DirectorySearchParams
         phoneCount: r.phone_count || (r.phone ? 1 : 0),
         sourceFile: r.source_file || "",
         rawAttributes: rawAttrs,
+        workEmail: r.work_email || "",
+        personalEmail: r.personal_email || "",
       };
     });
   } catch (err) {

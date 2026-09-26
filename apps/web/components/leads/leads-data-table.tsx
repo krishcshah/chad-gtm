@@ -521,7 +521,7 @@ export function LeadsDataTable({
                     {/* Primary Email (ALWAYS FULLY VISIBLE) */}
                     <TableCell>
                       {lead.email ? (
-                        <div className="flex items-center gap-1.5 group/email">
+                        <div className="flex items-center gap-1.5 group/email flex-wrap">
                           <span className="font-mono text-xs text-foreground select-all break-all">
                             {lead.email}
                           </span>
@@ -537,6 +537,23 @@ export function LeadsDataTable({
                               <Copy className="size-3" />
                             )}
                           </button>
+                          {lead.workEmail === lead.email ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[9px] h-3.5 px-1 bg-primary/10 text-primary border-primary/20 font-medium"
+                              title="Work Email"
+                            >
+                              Work
+                            </Badge>
+                          ) : lead.personalEmail === lead.email ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[9px] h-3.5 px-1 bg-sky-500/10 text-sky-400 border-sky-500/20 font-medium"
+                              title="Personal Email"
+                            >
+                              Personal
+                            </Badge>
+                          ) : null}
                           {lead.emailCount > 1 && (
                             <Badge
                               variant="outline"
