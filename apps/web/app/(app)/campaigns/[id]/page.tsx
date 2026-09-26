@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Layers, Mail, Timer, Users } from "lucide-react";
-import { requireUser } from "@/lib/session";
+import { requireWorkspace } from "@/lib/session";
 import { getCampaign, getTemplate, listSenders } from "@/lib/queries";
 import { getCampaignSequence } from "@/lib/actions";
 import { Badge, Button, Card, CardContent, Progress, StatePanel, statusVariant, cn } from "@smartreach/ui";
@@ -25,16 +25,16 @@ export default async function CampaignDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ tab?: string; from?: string; to?: string }>;
 }) {
-  const user = await requireUser();
+  const { user, workspace } = await requireWorkspace();
   const { id } = await params;
   const sp = await searchParams;
-  const c = await getCampaign(user.id, id);
+  const c = await getCampaign(user.id, id, workspace.id, workspace.isDefault);
   if (!c) notFound();
 
   const [sequence, template, allSenders] = await Promise.all([
     getCampaignSequence(id),
     c.templateId ? getTemplate(user.id, c.templateId) : Promise.resolve(null),
-    listSenders(user.id),
+    listSenders(user.id, workspace.id, workspace.isDefault),
   ]);
 
   const total = Number(c.stats?.total ?? 0);

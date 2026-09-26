@@ -295,9 +295,12 @@ export async function fetchLeadsPage(params: {
   pageSize?: number;
 }) {
   const user = await requireUser();
+  const workspace = await getActiveWorkspace(user.id);
   const { listLeads } = await import("./queries");
   const { items, nextCursor } = await listLeads(user.id, {
     listId: params.listId,
+    workspaceId: workspace.id,
+    isDefault: workspace.isDefault,
     search: params.search,
     status: params.status,
     cursor: params.cursor,
@@ -308,7 +311,8 @@ export async function fetchLeadsPage(params: {
 
 export async function createLead(input: unknown): Promise<ActionResult<{ id: string }>> {
   const user = await requireUser();
-  const result = await createLeadForUser(getDb(), user.id, input);
+  const workspace = await getActiveWorkspace(user.id);
+  const result = await createLeadForUser(getDb(), user.id, input, workspace.id);
   if (result.ok) revalidatePath("/leads");
   return result;
 }
@@ -619,6 +623,7 @@ export async function importSendersCsv(rows: unknown[]): Promise<
   ActionResult<{ imported: number; failed: { row: number; error: string }[] }>
 > {
   const user = await requireUser();
+  const workspace = await getActiveWorkspace(user.id);
   const db = getDb();
   const failed: { row: number; error: string }[] = [];
   let imported = 0;
@@ -656,6 +661,7 @@ export async function importSendersCsv(rows: unknown[]): Promise<
           fromName: parsed.data.senderName,
           replyTo: "",
         }),
+        workspaceId: workspace.id,
       });
       existingSet.add(email);
       imported++;
@@ -1274,6 +1280,39 @@ export async function setUniboxReplyTag(input: {
   }
 }
 
+/** Check IMAP mailboxes for new inbound replies for active workspace senders on demand. */
+export async function syncUniboxRepliesAction(): Promise<ActionResult<{ found: number }>> {
+  const user = await requireUser();
+  const workspace = await getActiveWorkspace(user.id);
+  const db = getDb();
+  try {
+    const { syncSenderReplies } = await import("@smartreach/email-engine");
+    const { wsCondition } = await import("./queries");
+    const conds = [
+      eq(senderAccounts.userId, user.id),
+      isNull(senderAccounts.deletedAt),
+      sql`${senderAccounts.imapHost} != ''`,
+    ];
+    const sWs = wsCondition(senderAccounts.workspaceId, workspace.id, workspace.isDefault);
+    if (sWs) conds.push(sWs);
+
+    const senders = await db
+      .select()
+      .from(senderAccounts)
+      .where(and(...conds));
+
+    let totalFound = 0;
+    for (const sender of senders) {
+      const res = await syncSenderReplies(db as any, sender as any);
+      totalFound += res.found;
+    }
+    revalidatePath("/unibox");
+    return { ok: true, data: { found: totalFound } };
+  } catch (e) {
+    return err(e);
+  }
+}
+
 /* ═══ SETTINGS — test connection placeholder (worker does the real test) ═══ */
 
 export async function sendTestEmail(): Promise<ActionResult> {
@@ -1411,6 +1450,7 @@ export async function listSuppressions(params: unknown = {}): Promise<
       search: parsed.data.search,
       kind: parsed.data.kind,
       workspaceId: workspace.id,
+      isDefault: workspace.isDefault,
     });
     return {
       ok: true,

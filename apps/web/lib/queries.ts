@@ -20,7 +20,7 @@ const {
 const today = () => new Date().toISOString().slice(0, 10);
 const nowIso = () => new Date().toISOString();
 
-function wsCondition(column: any, workspaceId?: string, isDefault = false) {
+export function wsCondition(column: any, workspaceId?: string, isDefault = false) {
   if (!workspaceId) return undefined;
   if (workspaceId === "primary-default" || isDefault) {
     return sql`(${column} = ${workspaceId} OR ${column} IS NULL)`;
@@ -204,30 +204,37 @@ export async function getActiveCampaigns(userId: string, workspaceId?: string, i
   const cWs = wsCondition(campaigns.workspaceId, workspaceId, isDefault);
   if (cWs) conds.push(cWs);
 
-  return db
-    .select({
-      id: campaigns.id,
-      name: campaigns.name,
-      status: campaigns.status,
-      total: count(campaignLeads.id),
-      sent: count(sql`case when ${campaignLeads.status} in ('sent','replied') then 1 end`),
-      replied: count(sql`case when ${campaignLeads.status} = 'replied' then 1 end`),
-    })
-    .from(campaigns)
-    .leftJoin(campaignLeads, eq(campaignLeads.campaignId, campaigns.id))
-    .where(and(...conds))
-    .groupBy(campaigns.id)
-    .orderBy(desc(campaigns.createdAt))
-    .limit(20);
+  return (
+    await db
+      .select({
+        id: campaigns.id,
+        name: campaigns.name,
+        status: campaigns.status,
+        total: count(campaignLeads.id),
+        sent: count(sql`case when ${campaignLeads.status} in ('sent','replied') then 1 end`),
+        replied: count(sql`case when ${campaignLeads.status} = 'replied' then 1 end`),
+      })
+      .from(campaigns)
+      .leftJoin(campaignLeads, eq(campaignLeads.campaignId, campaigns.id))
+      .where(and(...conds))
+      .groupBy(campaigns.id)
+      .orderBy(desc(campaigns.createdAt))
+      .limit(20)
+  ).map((r) => ({
+    ...r,
+    total: Number(r.total ?? 0),
+    sent: Number(r.sent ?? 0),
+    replied: Number(r.replied ?? 0),
+  }));
 }
 
-export async function listLeadLists(userId: string, workspaceId?: string) {
+export async function listLeadLists(userId: string, workspaceId?: string, isDefault = false) {
   const db = getDb();
   const conds = [eq(leadLists.userId, userId), isNull(leadLists.deletedAt)];
-  const lWs = wsCondition(leadLists.workspaceId, workspaceId);
+  const lWs = wsCondition(leadLists.workspaceId, workspaceId, isDefault);
   if (lWs) conds.push(lWs);
 
-  return db
+  const rows = await db
     .select({
       id: leadLists.id,
       name: leadLists.name,
@@ -239,11 +246,14 @@ export async function listLeadLists(userId: string, workspaceId?: string) {
     .where(and(...conds))
     .groupBy(leadLists.id)
     .orderBy(desc(leadLists.createdAt));
+
+  return rows.map((r) => ({ ...r, leadCount: Number(r.leadCount ?? 0) }));
 }
 
 export interface LeadsPageParams {
   listId?: string;
   workspaceId?: string;
+  isDefault?: boolean;
   /** Case-insensitive match on email, firstName, lastName, company (P03). */
   search?: string;
   status?: string;
@@ -260,7 +270,7 @@ export async function listLeads(userId: string, params: LeadsPageParams) {
   const db = getDb();
   const size = Math.min(params.pageSize ?? 50, 200);
   const conds = [eq(leads.userId, userId), isNull(leads.deletedAt)];
-  const lWs = wsCondition(leads.workspaceId, params.workspaceId);
+  const lWs = wsCondition(leads.workspaceId, params.workspaceId, params.isDefault);
   if (lWs) conds.push(lWs);
   if (params.listId) conds.push(eq(leads.listId, params.listId));
   if (params.status) conds.push(eq(leads.status, params.status as never));
@@ -413,15 +423,26 @@ export async function listCampaigns(userId: string, workspaceId?: string, isDefa
     .where(and(...conds))
     .groupBy(campaigns.id)
     .orderBy(desc(campaigns.createdAt));
-  return rows.map((r) => ({ ...r, bounced: Number(r.bounced ?? 0) })) as CampaignRow[];
+  return rows.map((r) => ({
+    ...r,
+    total: Number(r.total ?? 0),
+    sent: Number(r.sent ?? 0),
+    replied: Number(r.replied ?? 0),
+    failed: Number(r.failed ?? 0),
+    bounced: Number(r.bounced ?? 0),
+  })) as CampaignRow[];
 }
 
-export async function getCampaign(userId: string, id: string) {
+export async function getCampaign(userId: string, id: string, workspaceId?: string, isDefault = false) {
   const db = getDb();
+  const conds = [eq(campaigns.id, id), eq(campaigns.userId, userId), isNull(campaigns.deletedAt)];
+  const cWs = wsCondition(campaigns.workspaceId, workspaceId, isDefault);
+  if (cWs) conds.push(cWs);
+
   const [c] = await db
     .select()
     .from(campaigns)
-    .where(and(eq(campaigns.id, id), eq(campaigns.userId, userId), isNull(campaigns.deletedAt)))
+    .where(and(...conds))
     .limit(1);
   if (!c) return null;
   // Parallel: reads are independent of one another.
@@ -463,7 +484,14 @@ export async function getCampaign(userId: string, id: string) {
     ...c,
     leadListName: leadListRow?.name ?? null,
     stats: stats
-      ? { ...stats, pending: Number(stats.pending ?? 0), bounced: Number(stats.bounced ?? 0) }
+      ? {
+          total: Number(stats.total ?? 0),
+          pending: Number(stats.pending ?? 0),
+          sent: Number(stats.sent ?? 0),
+          replied: Number(stats.replied ?? 0),
+          failed: Number(stats.failed ?? 0),
+          bounced: Number(stats.bounced ?? 0),
+        }
       : { total: 0, pending: 0, sent: 0, replied: 0, failed: 0, bounced: 0 },
     senders,
   };
@@ -521,6 +549,7 @@ export async function listReplies(
 
 export interface SuppressionsPageParams {
   workspaceId?: string;
+  isDefault?: boolean;
   cursor?: string;
   limit?: number;
   search?: string;
@@ -535,7 +564,7 @@ export async function listSuppressions(userId: string, params: SuppressionsPageP
   const db = getDb();
   const size = Math.min(params.limit ?? 50, 200);
   const conds = [eq(suppressions.userId, userId)];
-  const sWs = wsCondition(suppressions.workspaceId, params.workspaceId);
+  const sWs = wsCondition(suppressions.workspaceId, params.workspaceId, params.isDefault);
   if (sWs) conds.push(sWs);
   if (params.kind) conds.push(eq(suppressions.kind, params.kind));
   if (params.search) {

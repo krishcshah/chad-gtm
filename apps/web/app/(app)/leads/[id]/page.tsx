@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { requireUser } from "@/lib/session";
+import { requireWorkspace } from "@/lib/session";
 import { getLeadList, listLeads, listTags } from "@/lib/queries";
 import { LeadTable, type LeadRow } from "./lead-table";
 
@@ -12,14 +12,21 @@ export default async function LeadListPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ search?: string; status?: string }>;
 }) {
-  const user = await requireUser();
+  const { user, workspace } = await requireWorkspace();
   const { id } = await params;
   const sp = await searchParams;
   const list = await getLeadList(user.id, id);
   if (!list) notFound();
 
   const [{ items, nextCursor }, tags] = await Promise.all([
-    listLeads(user.id, { listId: id, search: sp.search, status: sp.status, pageSize: 50 }),
+    listLeads(user.id, {
+      listId: id,
+      workspaceId: workspace.id,
+      isDefault: workspace.isDefault,
+      search: sp.search,
+      status: sp.status,
+      pageSize: 50,
+    }),
     listTags(user.id),
   ]);
 

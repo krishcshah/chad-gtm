@@ -1,12 +1,12 @@
-import { requireUser } from "@/lib/session";
+import { requireWorkspace } from "@/lib/session";
 import { listLeadLists } from "@/lib/queries";
 import { LeadImport } from "./lead-import";
 
 export const dynamic = "force-dynamic";
 
 export default async function LeadImportPage() {
-  const user = await requireUser();
-  const lists = await listLeadLists(user.id);
+  const { user, workspace } = await requireWorkspace();
+  const lists = await listLeadLists(user.id, workspace.id, workspace.isDefault);
   return (
     <div className="mx-auto w-full min-w-0 max-w-5xl p-6 lg:p-10">
       <h1 className="text-2xl font-semibold tracking-tight">Import Leads</h1>

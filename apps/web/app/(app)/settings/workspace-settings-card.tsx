@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   Briefcase,
   Check,
@@ -105,14 +106,15 @@ export function WorkspaceSettingsCard({
     try {
       const res = await deleteWorkspaceAction(wsId);
       if (!res.ok) {
-        alert(res.error);
+        toast.error(res.error);
         setLoadingDelete(false);
         return;
       }
+      toast.success("Workspace deleted");
       setDeletingId(null);
       router.refresh();
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to delete workspace");
+      toast.error(err instanceof Error ? err.message : "Failed to delete workspace");
     } finally {
       setLoadingDelete(false);
     }

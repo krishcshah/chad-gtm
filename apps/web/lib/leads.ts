@@ -37,23 +37,26 @@ export async function createLeadForUser(
   db: any,
   userId: string,
   input: unknown,
+  workspaceId?: string | null,
 ): Promise<LeadActionResult<{ id: string }>> {
   const parsed = leadCreateSchema.safeParse(input);
   if (!parsed.success) return zodFail(parsed.error);
 
   const data = parsed.data;
   const [list] = await db
-    .select({ id: leadLists.id })
+    .select({ id: leadLists.id, workspaceId: leadLists.workspaceId })
     .from(leadLists)
     .where(and(eq(leadLists.id, data.listId), eq(leadLists.userId, userId), isNull(leadLists.deletedAt)));
   if (!list) return { ok: false, error: "List not found" };
 
+  const targetWorkspaceId = workspaceId ?? list.workspaceId ?? null;
   const email = normalizeEmail(data.email);
   try {
     const [row] = await db
       .insert(leads)
       .values({
         userId,
+        workspaceId: targetWorkspaceId,
         listId: data.listId,
         email,
         firstName: data.firstName ?? null,

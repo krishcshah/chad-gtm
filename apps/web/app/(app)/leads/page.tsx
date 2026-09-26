@@ -12,7 +12,7 @@ export const metadata = { title: "Leads · SmartReach" };
 
 export default async function LeadsPage() {
   const { user, workspace } = await requireWorkspace();
-  const lists = await listLeadLists(user.id, workspace.id);
+  const lists = await listLeadLists(user.id, workspace.id, workspace.isDefault);
   const totalLeads = lists.reduce((acc, l) => acc + Number(l.leadCount || 0), 0);
 
   return (

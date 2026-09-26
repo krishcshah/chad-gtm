@@ -16,7 +16,7 @@ import {
   Textarea,
   cn,
 } from "@smartreach/ui";
-import { getUniboxThread, sendUniboxReply, setUniboxReplyTag } from "@/lib/actions";
+import { getUniboxThread, sendUniboxReply, setUniboxReplyTag, syncUniboxRepliesAction } from "@/lib/actions";
 import { messagePreview, prepareMessageBody, resolveBubbleSide, threadDayKey, threadDayLabel } from "@/lib/message-body";
 import { groupUniboxConversations } from "@/lib/unibox-conversations";
 import type { UniboxThreadMessage } from "@/lib/unibox-thread";
@@ -162,6 +162,11 @@ function ThreadTranscript({ messages }: { messages: UniboxThreadMessage[] }) {
 export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]; initialTag?: string }) {
   const router = useRouter();
   const [rows, setRows] = useState<ReplyRow[]>(initial);
+
+  useEffect(() => {
+    setRows(initial);
+  }, [initial]);
+
   const [tagFilter, setTagFilter] = useState(initialTag);
   const conversations = useMemo(() => groupUniboxConversations(rows), [rows]);
   const [activeId, setActiveId] = useState<string | null>(() => groupUniboxConversations(initial)[0]?.latest.id ?? null);
@@ -273,6 +278,15 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
 
   const refresh = () => {
     startRefresh(async () => {
+      try {
+        const syncRes = await syncUniboxRepliesAction();
+        if (syncRes.ok && syncRes.data && syncRes.data.found > 0) {
+          toast.success(`Found ${syncRes.data.found} new ${syncRes.data.found === 1 ? "reply" : "replies"}`);
+        }
+      } catch {
+        // Fallback silently if sync fails or IMAP is not configured
+      }
+
       if (activeId) {
         const res = await getUniboxThread({ replyId: activeId });
         if (res.ok && res.data?.messages) {
