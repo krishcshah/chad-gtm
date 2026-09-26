@@ -45,7 +45,7 @@ export default function SignupPage() {
             100% Free Forever
           </Badge>
           <span className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
-            <GermanFlag className="h-2.5 w-3.5" /> Made in Germany
+            <GermanFlag className="h-2.5 w-3.5" /> 100% EU-Hosted
           </span>
         </div>
         <CardTitle className="text-xl">Create your account</CardTitle>

@@ -102,10 +102,10 @@ export default async function LandingPage() {
             {/* Pill Banner */}
             <div className="inline-flex flex-wrap items-center justify-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-xs font-semibold text-foreground backdrop-blur-md mb-6 shadow-xs">
               <span className="flex items-center gap-1.5 text-amber-300">
-                <GermanFlag className="h-3 w-4.5" /> Made in Germany
+                <GermanFlag className="h-3 w-4.5" /> 100% EU-Hosted (Frankfurt, Germany)
               </span>
               <span className="text-muted-foreground/50">·</span>
-              <span className="text-primary font-medium">100% Source Available</span>
+              <span className="text-primary font-medium">Strict GDPR Data Sovereignty</span>
               <span className="text-muted-foreground/50">·</span>
               <span className="text-emerald-400 font-medium">100% Free Forever & Unlimited</span>
             </div>
@@ -150,7 +150,7 @@ export default async function LandingPage() {
             <div className="mt-10 flex flex-wrap items-center justify-center gap-6 text-xs text-muted-foreground">
               <div className="flex items-center gap-1.5 font-medium text-foreground">
                 <GermanFlag className="h-3 w-4.5" />
-                <span>Made in Germany</span>
+                <span>100% EU-Hosted in Frankfurt</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="size-4 text-emerald-400" />
@@ -262,7 +262,7 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        {/* Made in Germany Highlight Section */}
+        {/* Made in Germany & 100% EU-Hosted Highlight Section */}
         <section className="py-16 border-t border-border/40 bg-gradient-to-r from-amber-500/5 via-card/50 to-primary/5">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="rounded-3xl border border-border/80 bg-card/70 p-8 sm:p-12 shadow-xl backdrop-blur relative overflow-hidden">
@@ -271,39 +271,39 @@ export default async function LandingPage() {
                 <div className="max-w-2xl">
                   <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3.5 py-1 text-xs font-semibold text-amber-400 mb-3 shadow-xs">
                     <GermanFlag className="h-3 w-4.5" />
-                    <span>MADE IN GERMANY · SOURCE AVAILABLE & SECURE</span>
+                    <span>100% EU-HOSTED IN FRANKFURT · STRICT GDPR DATA SOVEREIGNTY</span>
                   </div>
                   <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-foreground">
                     Engineered with German Precision.{" "}
                     <span className="bg-gradient-to-r from-amber-400 via-primary to-cyan-400 bg-clip-text text-transparent">
-                      100% Free & Source Available.
+                      100% EU-Hosted in Frankfurt.
                     </span>
                   </h2>
                   <p className="mt-3 text-sm sm:text-base leading-relaxed text-muted-foreground">
-                    Forget expensive closed-source platforms subject to surprise monthly price hikes and hidden data tracking. SmartReach is proudly engineered with German standards of precision, privacy, and architectural cleanliness. Enjoy complete GDPR compliance, native privacy protection, zero third-party telemetry, hardware-grade AES-256 encryption, and an auditable source-available engine.
+                    Forget expensive closed-source US platforms subject to surprise monthly price hikes, cross-border surveillance, and hidden data tracking. SmartReach is 100% hosted on enterprise cloud infrastructure in Frankfurt, Germany (EU). Every campaign, lead database, and background worker operates with strict European GDPR compliance, zero third-party telemetry, hardware-grade AES-256 encryption, and an auditable source-available engine.
                   </p>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full lg:w-auto shrink-0">
                   <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[200px]">
-                    <div className="text-xs text-muted-foreground font-medium">Code Transparency</div>
+                    <div className="text-xs text-muted-foreground font-medium">Datacenter & Location</div>
                     <div className="mt-1 text-sm font-bold text-foreground flex items-center gap-1.5">
-                      <span>⚡ 100% Source Available</span>
+                      <span>🇩🇪 Frankfurt, Germany</span>
                     </div>
-                    <p className="mt-1 text-[11px] text-emerald-400">Auditable, no proprietary lock-in</p>
+                    <p className="mt-1 text-[11px] text-emerald-400">100% EU-Hosted (eu-frankfurt-1)</p>
                   </div>
                   <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[200px]">
-                    <div className="text-xs text-muted-foreground font-medium">Privacy Protection</div>
+                    <div className="text-xs text-muted-foreground font-medium">Privacy & Compliance</div>
                     <div className="mt-1 text-sm font-bold text-foreground flex items-center gap-1.5">
-                      <span>🛡️ Strict Privacy by Design</span>
+                      <span>🛡️ Strict GDPR Sovereignty</span>
                     </div>
-                    <p className="mt-1 text-[11px] text-emerald-400">Zero data selling or profiling</p>
+                    <p className="mt-1 text-[11px] text-emerald-400">Zero cross-border US data transfers</p>
                   </div>
                   <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[200px]">
-                    <div className="text-xs text-muted-foreground font-medium">Credential Security</div>
+                    <div className="text-xs text-muted-foreground font-medium">Database & Credentials</div>
                     <div className="mt-1 text-sm font-bold text-foreground flex items-center gap-1.5">
-                      <span>🔒 AES-256 GCM</span>
+                      <span>🔒 Local PostgreSQL & AES-256</span>
                     </div>
-                    <p className="mt-1 text-[11px] text-emerald-400">Encrypted at rest</p>
+                    <p className="mt-1 text-[11px] text-emerald-400">Encrypted on local EU storage</p>
                   </div>
                   <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[200px]">
                     <div className="text-xs text-muted-foreground font-medium">Pricing Model</div>
@@ -353,6 +353,22 @@ export default async function LandingPage() {
                     <td className="p-4 sm:p-5 text-muted-foreground">$97 / mo</td>
                     <td className="p-4 sm:p-5 text-muted-foreground">$94 / mo</td>
                     <td className="p-4 sm:p-5 text-muted-foreground">$119 / mo</td>
+                  </tr>
+                  <tr>
+                    <td className="p-4 sm:p-5 font-medium">Hosting & Data Residency</td>
+                    <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5 flex items-center gap-1.5">
+                      <GermanFlag className="h-3 w-4.5" /> 100% EU-Hosted (Frankfurt, DE)
+                    </td>
+                    <td className="p-4 sm:p-5 text-muted-foreground">US Cloud (AWS/GCP)</td>
+                    <td className="p-4 sm:p-5 text-muted-foreground">US Cloud (AWS)</td>
+                    <td className="p-4 sm:p-5 text-muted-foreground">US / Mixed Cloud</td>
+                  </tr>
+                  <tr>
+                    <td className="p-4 sm:p-5 font-medium">GDPR & Data Sovereignty</td>
+                    <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5">Strict EU Sovereignty</td>
+                    <td className="p-4 sm:p-5 text-muted-foreground">US CLOUD Act jurisdiction</td>
+                    <td className="p-4 sm:p-5 text-muted-foreground">US CLOUD Act jurisdiction</td>
+                    <td className="p-4 sm:p-5 text-muted-foreground">Varies</td>
                   </tr>
                   <tr>
                     <td className="p-4 sm:p-5 font-medium">Engineering & Standards</td>
@@ -525,6 +541,10 @@ export default async function LandingPage() {
                   a: "No! There are no artificial paywalls, mailbox limits, or lead caps. You can import extensive CSV lists with your prospect contacts, map custom attributes, and connect as many mailboxes as your campaign requires.",
                 },
                 {
+                  q: "Where is my data hosted and is SmartReach GDPR compliant?",
+                  a: "SmartReach is 100% hosted in the European Union on enterprise cloud infrastructure located in Frankfurt, Germany (eu-frankfurt-1). All campaign data, prospect contacts, database records, and authentication sessions remain strictly within the EU, giving you full data sovereignty and effortless GDPR compliance without US CLOUD Act exposure.",
+                },
+                {
                   q: "How does SmartReach protect email deliverability?",
                   a: "By distributing outreach across multiple sender accounts, randomizing intervals between sends, respecting human working hours, and maintaining clean deliverability standards so your emails land right in the primary inbox.",
                 },
@@ -576,7 +596,7 @@ export default async function LandingPage() {
             <Logo compact />
             <span>© {new Date().getFullYear()} SmartReach.</span>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-2.5 py-0.5 text-[11px] font-medium text-foreground shadow-xs">
-              <GermanFlag className="h-2.5 w-3.5" /> Made in Germany
+              <GermanFlag className="h-2.5 w-3.5" /> 100% EU-Hosted · Frankfurt, Germany
             </span>
           </div>
           <div className="flex items-center gap-6">
