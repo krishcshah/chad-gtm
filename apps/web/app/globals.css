@@ -143,6 +143,8 @@
 html {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 body {
@@ -151,6 +153,8 @@ body {
   letter-spacing: -0.011em;
   font-size: var(--text-base);
   line-height: 1.5;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 /* Keyboard focus — WCAG AA visible ring on interactive controls */

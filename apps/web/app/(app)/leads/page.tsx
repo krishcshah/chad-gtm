@@ -32,7 +32,7 @@ export default async function LeadsPage() {
   }));
 
   return (
-    <div className="w-full">
+    <div className="w-full max-w-full min-w-0 overflow-x-hidden">
       <ApolloLeadsView
         initialResult={initialResult}
         initialFacets={facets}

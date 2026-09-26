@@ -92,12 +92,12 @@ export function LeadsDataTable({
   const someSelected = leads.some((l) => selectedLeadIds.has(l.id)) && !isAllSelected;
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-card/60 border border-border/70 rounded-xl overflow-hidden shadow-sm backdrop-blur-sm">
+    <div className="w-full max-w-full min-w-0 flex-1 flex flex-col bg-card/60 border border-border/70 rounded-xl overflow-hidden shadow-sm backdrop-blur-sm">
       {/* Table Header Bar */}
-      <div className="p-4 border-b border-border/70 bg-muted/20 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+      <div className="p-3 sm:p-4 border-b border-border/70 bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full max-w-full min-w-0">
+        <div className="flex items-center gap-3 min-w-0">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="font-bold text-base text-foreground tracking-tight">
                 {isLoading ? (
                   <span className="flex items-center gap-2 text-muted-foreground text-sm font-normal">
@@ -113,7 +113,7 @@ export function LeadsDataTable({
               </span>
               <Badge
                 variant="outline"
-                className="text-[11px] font-medium border-emerald-500/30 text-emerald-400 bg-emerald-500/10"
+                className="text-[11px] font-medium border-emerald-500/30 text-emerald-400 bg-emerald-500/10 whitespace-nowrap"
               >
                 100% Unmasked & Direct
               </Badge>
@@ -125,16 +125,16 @@ export function LeadsDataTable({
         </div>
 
         {/* Action Controls */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           {selectedLeadIds.size > 0 && (
             <Button
               size="sm"
               variant="default"
               onClick={onOpenAddToList}
-              className="gap-1.5 h-8 font-semibold bg-primary text-primary-foreground shadow-sm"
+              className="gap-1.5 h-8 font-semibold bg-primary text-primary-foreground shadow-sm text-xs"
             >
               <UserPlus className="size-3.5" />
-              Add {selectedLeadIds.size} Selected to List
+              Add {selectedLeadIds.size} Selected
             </Button>
           )}
 
@@ -160,13 +160,13 @@ export function LeadsDataTable({
           </Button>
 
           {/* Page size selector */}
-          <div className="flex items-center gap-1.5 ml-1 border-l border-border/60 pl-2">
+          <div className="flex items-center gap-1.5 ml-auto sm:ml-1 border-l border-border/60 pl-2">
             <span className="text-xs text-muted-foreground hidden sm:inline">Per page:</span>
             <Select
               value={String(pageSize)}
               onValueChange={(val) => onPageSizeChange(Number(val))}
             >
-              <SelectTrigger className="h-8 w-20 text-xs">
+              <SelectTrigger className="h-8 w-18 sm:w-20 text-xs">
                 <SelectValue placeholder={String(pageSize)} />
               </SelectTrigger>
               <SelectContent>
@@ -180,9 +180,9 @@ export function LeadsDataTable({
         </div>
       </div>
 
-      {/* Main Table Surface */}
-      <div className="flex-1 overflow-x-auto min-h-[460px]">
-        <Table>
+      {/* Main Table Surface - ONLY this section is horizontally scrollable */}
+      <div className="w-full max-w-full min-w-0 flex-1 min-h-[460px]">
+        <Table className="min-w-[1050px]">
           <TableHeader className="bg-muted/40 sticky top-0 z-10 text-[11px] uppercase tracking-wider text-muted-foreground">
             <TableRow className="border-border/60 hover:bg-transparent">
               <TableHead className="w-10 px-3 text-center">
@@ -486,8 +486,8 @@ export function LeadsDataTable({
       </div>
 
       {/* Pagination Footer Bar */}
-      <div className="p-3 border-t border-border/70 bg-muted/20 flex flex-wrap items-center justify-between gap-3">
-        <div className="text-xs text-muted-foreground">
+      <div className="p-3 border-t border-border/70 bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full max-w-full min-w-0">
+        <div className="text-xs text-muted-foreground text-center sm:text-left">
           Showing{" "}
           <span className="font-semibold text-foreground">
             {total > 0 ? (page - 1) * pageSize + 1 : 0}
@@ -500,7 +500,7 @@ export function LeadsDataTable({
         </div>
 
         {/* Page Nav Controls */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center justify-center sm:justify-end gap-1 sm:gap-1.5 flex-wrap">
           <Button
             size="sm"
             variant="outline"
@@ -517,13 +517,13 @@ export function LeadsDataTable({
             variant="outline"
             onClick={() => onPageChange(page - 1)}
             disabled={page <= 1 || isLoading}
-            className="h-8 px-2.5 gap-1 text-xs"
+            className="h-8 px-2 sm:px-2.5 gap-1 text-xs"
           >
             <ChevronLeft className="size-3.5" />
-            Previous
+            <span className="hidden xs:inline">Prev</span>
           </Button>
 
-          <div className="flex items-center px-2 text-xs font-medium text-foreground">
+          <div className="flex items-center px-1.5 sm:px-2 text-xs font-medium text-foreground">
             <span>
               Page <span className="font-bold">{page}</span> / {totalPages || 1}
             </span>
@@ -534,9 +534,9 @@ export function LeadsDataTable({
             variant="outline"
             onClick={() => onPageChange(page + 1)}
             disabled={page >= totalPages || isLoading}
-            className="h-8 px-2.5 gap-1 text-xs"
+            className="h-8 px-2 sm:px-2.5 gap-1 text-xs"
           >
-            Next
+            <span className="hidden xs:inline">Next</span>
             <ChevronRight className="size-3.5" />
           </Button>
 

@@ -208,7 +208,7 @@ export function LeadFiltersPanel({
     (filters.hasLinkedin ? 1 : 0);
 
   return (
-    <aside className="w-full lg:w-80 shrink-0 flex flex-col bg-card/60 border border-border/70 rounded-xl overflow-hidden shadow-sm backdrop-blur-sm">
+    <aside className="w-full lg:w-80 shrink-0 flex flex-col bg-card/60 border border-border/70 rounded-xl overflow-hidden shadow-sm backdrop-blur-sm max-w-full min-w-0">
       {/* Panel Header */}
       <div className="p-4 border-b border-border/70 bg-muted/20 flex items-center justify-between">
         <div className="flex items-center gap-2">

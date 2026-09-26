@@ -233,17 +233,17 @@ export function ApolloLeadsView({
   const totalSavedLeads = existingLists.reduce((acc, l) => acc + Number(l.leadCount || 0), 0);
 
   return (
-    <div className="apollo-leads-root space-y-5 w-full">
+    <div className="apollo-leads-root space-y-5 w-full max-w-full min-w-0">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-5">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-5 w-full max-w-full min-w-0">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
               Leads & Prospect Intelligence
             </h1>
             <Badge
               variant="outline"
-              className="bg-primary/10 text-primary border-primary/20 text-xs font-semibold px-2 py-0.5"
+              className="bg-primary/10 text-primary border-primary/20 text-xs font-semibold px-2 py-0.5 whitespace-nowrap"
             >
               {facets.totalLeads.toLocaleString()} Leads Database
             </Badge>
@@ -254,7 +254,7 @@ export function ApolloLeadsView({
         </div>
 
         {/* Global Action Buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
             variant="outline"
@@ -278,17 +278,17 @@ export function ApolloLeadsView({
       <Tabs
         value={activeTab}
         onValueChange={(val) => setActiveTab(val as "directory" | "saved-lists")}
-        className="w-full space-y-4"
+        className="w-full max-w-full min-w-0 space-y-4"
       >
-        <div className="flex items-center justify-between border-b border-border/60 pb-2">
-          <TabsList className="bg-muted/40 p-1">
-            <TabsTrigger value="directory" className="gap-2 text-xs font-semibold">
-              <Database className="size-3.5 text-primary" />
-              B2B Lead Directory ({facets.totalLeads.toLocaleString()})
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border/60 pb-2 gap-2">
+          <TabsList className="grid grid-cols-2 sm:inline-flex w-full sm:w-auto bg-muted/40 p-1 h-auto">
+            <TabsTrigger value="directory" className="gap-2 text-xs font-semibold py-2 px-3">
+              <Database className="size-3.5 text-primary shrink-0" />
+              <span className="truncate">Directory ({facets.totalLeads.toLocaleString()})</span>
             </TabsTrigger>
-            <TabsTrigger value="saved-lists" className="gap-2 text-xs font-semibold">
-              <FileSpreadsheet className="size-3.5 text-violet-400" />
-              My Campaign Lists ({existingLists.length})
+            <TabsTrigger value="saved-lists" className="gap-2 text-xs font-semibold py-2 px-3">
+              <FileSpreadsheet className="size-3.5 text-violet-400 shrink-0" />
+              <span className="truncate">Saved Lists ({existingLists.length})</span>
             </TabsTrigger>
           </TabsList>
 
@@ -305,8 +305,8 @@ export function ApolloLeadsView({
         </div>
 
         {/* TAB 1: APOLLO.IO B2B DIRECTORY SEARCH */}
-        <TabsContent value="directory" className="mt-0 space-y-4 outline-none">
-          <div className="flex flex-col lg:flex-row items-start gap-4 w-full min-w-0">
+        <TabsContent value="directory" className="mt-0 space-y-4 outline-none w-full max-w-full min-w-0">
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-start gap-4 w-full max-w-full min-w-0">
             {/* Left Filter Panel */}
             <LeadFiltersPanel
               facets={facets}
@@ -339,7 +339,7 @@ export function ApolloLeadsView({
         </TabsContent>
 
         {/* TAB 2: MY SAVED CAMPAIGN LISTS */}
-        <TabsContent value="saved-lists" className="mt-0 space-y-6 outline-none">
+        <TabsContent value="saved-lists" className="mt-0 space-y-6 outline-none w-full max-w-full min-w-0">
           {/* Summary Strip */}
           <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
             <div className="rounded-xl border border-border/60 bg-card/40 p-4 backdrop-blur">
