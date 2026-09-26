@@ -235,26 +235,8 @@ export function LeadFiltersPanel({
         )}
       </div>
 
-      {/* Prominent Action Button Top */}
-      <div className="p-3 bg-muted/10 border-b border-border/60">
-        <Button
-          type="button"
-          onClick={onApply}
-          disabled={isLoading}
-          className="w-full font-semibold shadow-md gap-2 h-10 bg-primary text-primary-foreground hover:bg-primary/90 transition-all cursor-pointer"
-        >
-          <Filter className="size-4" />
-          {isLoading ? "Filtering leads..." : "Filter Leads"}
-          {totalResults !== undefined && (
-            <span className="ml-auto text-xs bg-white/20 px-2 py-0.5 rounded-full font-normal">
-              {totalResults.toLocaleString()}
-            </span>
-          )}
-        </Button>
-      </div>
-
       {/* Scrollable Filters Body */}
-      <div className="flex-1 overflow-y-auto max-h-[calc(100vh-280px)] divide-y divide-border/50 text-sm">
+      <div className="flex-1 overflow-y-auto max-h-[calc(100vh-230px)] divide-y divide-border/50 text-sm">
         {/* Quick Search Section */}
         <div className="p-3.5 space-y-2.5">
           <div
@@ -669,7 +651,12 @@ export function LeadFiltersPanel({
           className="w-full font-semibold shadow-md gap-2 h-10 bg-primary text-primary-foreground hover:bg-primary/90 transition-all cursor-pointer"
         >
           <Filter className="size-4" />
-          {isLoading ? "Filtering..." : "Filter Leads"}
+          {isLoading ? "Filtering leads..." : "Filter Leads"}
+          {totalResults !== undefined && (
+            <span className="ml-auto text-xs bg-white/20 px-2 py-0.5 rounded-full font-normal">
+              {totalResults.toLocaleString()}
+            </span>
+          )}
         </Button>
       </div>
     </aside>
