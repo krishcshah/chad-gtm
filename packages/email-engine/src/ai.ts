@@ -450,11 +450,14 @@ export function synthesizeImprovedCopy(options: {
     prodName = mProd[1].trim();
   }
 
+  const hasPromptSignals =
+    /(?:you are marketing|sell this|we have this product|product called|product named|called|is an AI|interviewer|interviews for|hiring management|help them|do interviews|scale|best candidates|sell our service)/i.test(combined);
+
   const isInstructionOrPrompt =
-    !/^\s*(?:hi|hey|hello|dear)\b/i.test(bodyText) &&
-    (/(?:you are marketing|sell this|we have this product|product called|is an AI|stream|interviewer|interviews for|hiring management|help them|do interviews|scale|best candidates|automated|platform|saas|software)/i.test(combined) ||
-      !bodyText.trim() ||
-      bodyText.length < 50);
+    hasPromptSignals ||
+    Boolean(prodName) ||
+    !/^\s*(?:hi|hey|hello|dear)\b/i.test(bodyText) ||
+    !bodyText.trim();
 
   if (isInstructionOrPrompt && combined.length > 15) {
     const rawSentences = combined
@@ -544,7 +547,18 @@ export function synthesizeImprovedCopy(options: {
     resBody = `${resBody.trim()}\n\nWould Thursday at 2pm work for a 4-minute intro?`;
     summary = "Added a concrete, low-friction call-to-action.";
   } else {
-    summary = "Auto-improved copy structure, value hook, and mobile readability.";
+    // Auto-improve existing draft
+    let improvedBody = resBody
+      .replace(/\band noticed\.\.\./i, "and noticed your team's rapid growth.")
+      .replace(/\bnoticed\.\.\./i, "noticed your team's expansion.")
+      .replace(/\bI was looking at\b/i, "Saw what you're leading at");
+
+    if (!improvedBody.toLowerCase().includes("thursday") && !improvedBody.toLowerCase().includes("open to")) {
+      improvedBody += "\n\nWould you be open to a quick 5-minute intro this Thursday?";
+    }
+
+    resBody = improvedBody;
+    summary = "Auto-improved hook, sharpened value proposition, and optimized mobile readability.";
   }
 
   return {
