@@ -614,18 +614,25 @@ export default async function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-border/40 py-10 bg-card/20">
-        <div className="mx-auto max-w-7xl px-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground sm:px-6 lg:px-8">
-          <div className="flex flex-wrap items-center gap-2.5">
+        <div className="mx-auto max-w-7xl px-4 flex flex-col sm:flex-row items-center justify-between gap-5 sm:gap-6 text-xs text-muted-foreground sm:px-6 lg:px-8">
+          {/* Brand & Copyright */}
+          <div className="flex flex-col sm:flex-row items-center gap-2.5 sm:gap-3 text-center sm:text-left">
             <Logo compact />
-            <span>© {new Date().getFullYear()} SmartReach.</span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-300">
-              <GermanFlag className="h-2.5 w-3.5" /> Made in Germany
+            <span className="text-muted-foreground/80">© {new Date().getFullYear()} SmartReach.</span>
+          </div>
+
+          {/* Credentials */}
+          <div className="flex items-center justify-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-medium text-amber-300">
+              <GermanFlag className="h-2.5 w-3.5 shrink-0" /> Made in Germany
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-400">
-              <EuFlag className="h-2.5 w-3.5" /> 100% EU-Hosted
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-0.5 text-[11px] font-medium text-sky-400">
+              <EuFlag className="h-2.5 w-3.5 shrink-0" /> EU-Hosted
             </span>
           </div>
-          <div className="flex items-center gap-6">
+
+          {/* Navigation Links */}
+          <div className="flex flex-wrap items-center justify-center gap-5 sm:gap-6 font-medium">
             <a href="#features" className="hover:text-foreground transition-colors">
               Features
             </a>
