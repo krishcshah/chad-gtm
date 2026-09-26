@@ -21,6 +21,7 @@ import {
   Users,
 } from "lucide-react";
 import { saveDirectoryLeadsToCampaignListAction } from "@/lib/actions";
+import type { DirectorySearchParams } from "@/lib/leads-directory";
 import { toast } from "sonner";
 
 interface ExistingListOption {
@@ -33,6 +34,9 @@ interface AddToCampaignDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   selectedLeadIds: number[];
+  isSelectAllMatching?: boolean;
+  totalMatchingCount?: number;
+  searchParams?: DirectorySearchParams;
   existingLists: ExistingListOption[];
   onSuccess: () => void;
 }
@@ -41,6 +45,9 @@ export function AddToCampaignDialog({
   open,
   onOpenChange,
   selectedLeadIds,
+  isSelectAllMatching = false,
+  totalMatchingCount = 0,
+  searchParams,
   existingLists,
   onSuccess,
 }: AddToCampaignDialogProps) {
@@ -51,8 +58,10 @@ export function AddToCampaignDialog({
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const effectiveCount = isSelectAllMatching ? totalMatchingCount : selectedLeadIds.length;
+
   const handleAdd = async () => {
-    if (selectedLeadIds.length === 0) {
+    if (effectiveCount === 0) {
       toast.error("No leads selected");
       return;
     }
@@ -70,7 +79,9 @@ export function AddToCampaignDialog({
     try {
       setIsSubmitting(true);
       const res = await saveDirectoryLeadsToCampaignListAction({
-        leadIds: selectedLeadIds,
+        selectAllMatching: isSelectAllMatching,
+        searchParams: isSelectAllMatching ? searchParams : undefined,
+        leadIds: isSelectAllMatching ? [] : selectedLeadIds,
         listName: mode === "new" ? newListName.trim() : undefined,
         listId: mode === "existing" ? selectedListId : undefined,
       });
@@ -103,7 +114,9 @@ export function AddToCampaignDialog({
                 Add to Campaign List
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
-                Import {selectedLeadIds.length} verified leads into an active SmartReach list for email sequences.
+                {isSelectAllMatching
+                  ? `Import all ${effectiveCount.toLocaleString()} leads matching current filters into an active SmartReach list for email sequences.`
+                  : `Import ${effectiveCount.toLocaleString()} verified leads into an active SmartReach list for email sequences.`}
               </DialogDescription>
             </div>
           </div>

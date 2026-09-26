@@ -1999,6 +1999,8 @@ import {
   getDirectoryFacets,
   ingestCsvContent,
   getDirectoryDb,
+  buildDirectoryWhereClause,
+  getMatchingDirectoryLeadsForExport,
   type DirectorySearchParams,
   type DirectorySearchResult,
   type DirectoryFacets,
@@ -2058,9 +2060,12 @@ export async function ingestCsvDirectoryAction(
 
 /**
  * Import selected directory leads into a campaign lead list.
+ * Supports importing specific lead IDs or ALL leads matching active search parameters.
  */
 export async function saveDirectoryLeadsToCampaignListAction(input: {
-  leadIds: number[];
+  leadIds?: number[];
+  selectAllMatching?: boolean;
+  searchParams?: DirectorySearchParams;
   listName?: string;
   listId?: string;
 }): Promise<ActionResult<{ leadListId: string; count: number }>> {
@@ -2086,23 +2091,37 @@ export async function saveDirectoryLeadsToCampaignListAction(input: {
       return { ok: false, error: "Failed to determine target lead list" };
     }
 
-    if (!input.leadIds.length) {
+    let rows: any[] = [];
+    if (input.selectAllMatching) {
+      const { whereSql, bindings } = buildDirectoryWhereClause(input.searchParams || {});
+      // Fetch matching leads up to 5,000 for responsive serverless insertion
+      rows = dirDb
+        .prepare(`SELECT * FROM leads ${whereSql} ORDER BY id ASC LIMIT 5000`)
+        .all(...bindings) as any[];
+    } else if (input.leadIds && input.leadIds.length > 0) {
+      const placeholders = input.leadIds.map(() => "?").join(",");
+      rows = dirDb
+        .prepare(`SELECT * FROM leads WHERE id IN (${placeholders})`)
+        .all(...input.leadIds) as any[];
+    } else {
       return { ok: false, error: "No leads selected" };
     }
 
-    // Fetch leads from directory
-    const placeholders = input.leadIds.map(() => "?").join(",");
-    const rows = dirDb
-      .prepare(`SELECT * FROM leads WHERE id IN (${placeholders})`)
-      .all(...input.leadIds) as any[];
+    if (rows.length === 0) {
+      return { ok: false, error: "No matching leads found to import" };
+    }
 
     let insertedCount = 0;
-    for (const r of rows) {
-      if (!r.email) continue;
-      const leadId = crypto.randomUUID();
-      try {
-        await db.insert(schema.leads).values({
-          id: leadId,
+    // Chunk inserts into batches of 200 for fast Drizzle insertion
+    const chunkSize = 200;
+    for (let i = 0; i < rows.length; i += chunkSize) {
+      const chunk = rows.slice(i, i + chunkSize);
+      const batchValues = [];
+
+      for (const r of chunk) {
+        if (!r.email) continue;
+        batchValues.push({
+          id: crypto.randomUUID(),
           userId: user.id,
           listId: targetListId,
           email: r.email,
@@ -2116,9 +2135,21 @@ export async function saveDirectoryLeadsToCampaignListAction(input: {
           industry: r.industry || "",
           customFields: r.raw_data ? JSON.parse(r.raw_data) : {},
         });
-        insertedCount++;
-      } catch {
-        // Skip duplicate emails within the same list
+      }
+
+      if (batchValues.length > 0) {
+        try {
+          await db.insert(schema.leads).values(batchValues).onConflictDoNothing();
+          insertedCount += batchValues.length;
+        } catch {
+          // Fallback to row-by-row on error
+          for (const val of batchValues) {
+            try {
+              await db.insert(schema.leads).values(val).onConflictDoNothing();
+              insertedCount++;
+            } catch {}
+          }
+        }
       }
     }
 
@@ -2133,7 +2164,71 @@ export async function saveDirectoryLeadsToCampaignListAction(input: {
     return {
       ok: true,
       data: { leadListId: targetListId, count: insertedCount },
-      message: `Successfully added ${insertedCount} leads to your campaign list!`,
+      message: `Successfully added ${insertedCount.toLocaleString()} leads to your campaign list!`,
+    };
+  } catch (e) {
+    return err(e);
+  }
+}
+
+/**
+ * Export all matching directory leads to CSV.
+ */
+export async function exportMatchingDirectoryLeadsCsvAction(
+  params: DirectorySearchParams,
+  maxRows = 15000
+): Promise<ActionResult<{ csv: string; count: number; filename: string }>> {
+  try {
+    await requireUser();
+    const leads = getMatchingDirectoryLeadsForExport(params, maxRows);
+    if (!leads.length) {
+      return { ok: false, error: "No leads match current filters" };
+    }
+
+    const headers = [
+      "Full Name",
+      "First Name",
+      "Last Name",
+      "Job Title",
+      "Company Name",
+      "Company Website",
+      "Primary Email",
+      "Email Status",
+      "Phone",
+      "Industry",
+      "Country",
+      "City",
+      "State",
+      "Team Size",
+      "Revenue Range",
+      "LinkedIn URL",
+    ];
+
+    const rows = leads.map((l) => [
+      `"${(l.fullName || "").replace(/"/g, '""')}"`,
+      `"${(l.firstName || "").replace(/"/g, '""')}"`,
+      `"${(l.lastName || "").replace(/"/g, '""')}"`,
+      `"${(l.jobTitle || "").replace(/"/g, '""')}"`,
+      `"${(l.companyName || "").replace(/"/g, '""')}"`,
+      `"${(l.companyWebsite || "").replace(/"/g, '""')}"`,
+      `"${(l.email || "").replace(/"/g, '""')}"`,
+      `"${(l.emailStatus || "").replace(/"/g, '""')}"`,
+      `"${(l.phone || "").replace(/"/g, '""')}"`,
+      `"${(l.industry || "").replace(/"/g, '""')}"`,
+      `"${(l.country || "").replace(/"/g, '""')}"`,
+      `"${(l.city || "").replace(/"/g, '""')}"`,
+      `"${(l.state || "").replace(/"/g, '""')}"`,
+      `"${(l.teamSize || "").replace(/"/g, '""')}"`,
+      `"${(l.revenueRange || "").replace(/"/g, '""')}"`,
+      `"${(l.linkedinUrl || "").replace(/"/g, '""')}"`,
+    ]);
+
+    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const filename = `smartreach_all_matching_leads_${Date.now()}.csv`;
+
+    return {
+      ok: true,
+      data: { csv, count: leads.length, filename },
     };
   } catch (e) {
     return err(e);

@@ -233,6 +233,82 @@ export function getDirectoryFacets(): DirectoryFacets {
 }
 
 /**
+ * Build reusable SQL WHERE clause and bindings for directory leads.
+ */
+export function buildDirectoryWhereClause(params: DirectorySearchParams): { whereSql: string; bindings: any[] } {
+  const whereClauses: string[] = [];
+  const bindings: any[] = [];
+
+  // General text search
+  if (params.query && params.query.trim()) {
+    const q = `%${params.query.trim().toLowerCase()}%`;
+    whereClauses.push(`(
+      LOWER(full_name) LIKE ? OR 
+      LOWER(job_title) LIKE ? OR 
+      LOWER(company_name) LIKE ? OR 
+      LOWER(email) LIKE ? OR 
+      LOWER(location) LIKE ?
+    )`);
+    bindings.push(q, q, q, q, q);
+  }
+
+  // Company name filter
+  if (params.companyName && params.companyName.trim()) {
+    whereClauses.push(`LOWER(company_name) LIKE ?`);
+    bindings.push(`%${params.companyName.trim().toLowerCase()}%`);
+  }
+
+  // Industries filter
+  if (params.industries && params.industries.length > 0) {
+    const placeholders = params.industries.map(() => "?").join(",");
+    whereClauses.push(`industry IN (${placeholders})`);
+    bindings.push(...params.industries);
+  }
+
+  // Countries filter
+  if (params.countries && params.countries.length > 0) {
+    const placeholders = params.countries.map(() => "?").join(",");
+    whereClauses.push(`country IN (${placeholders})`);
+    bindings.push(...params.countries);
+  }
+
+  // Job Titles filter
+  if (params.jobTitles && params.jobTitles.length > 0) {
+    const titleClauses = params.jobTitles.map(() => `LOWER(job_title) LIKE ?`).join(" OR ");
+    whereClauses.push(`(${titleClauses})`);
+    params.jobTitles.forEach((t) => bindings.push(`%${t.trim().toLowerCase()}%`));
+  }
+
+  // Team sizes filter
+  if (params.teamSizes && params.teamSizes.length > 0) {
+    const placeholders = params.teamSizes.map(() => "?").join(",");
+    whereClauses.push(`team_size IN (${placeholders})`);
+    bindings.push(...params.teamSizes);
+  }
+
+  // Revenue ranges filter
+  if (params.revenueRanges && params.revenueRanges.length > 0) {
+    const placeholders = params.revenueRanges.map(() => "?").join(",");
+    whereClauses.push(`revenue_range IN (${placeholders})`);
+    bindings.push(...params.revenueRanges);
+  }
+
+  // Quality switches
+  if (params.hasEmail) {
+    whereClauses.push(`email IS NOT NULL AND email != ''`);
+  }
+  if (params.hasPhone) {
+    whereClauses.push(`phone IS NOT NULL AND phone != ''`);
+  }
+  if (params.hasLinkedin) {
+    whereClauses.push(`linkedin_url IS NOT NULL AND linkedin_url != ''`);
+  }
+
+  const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+  return { whereSql, bindings };
+}
+
+/**
  * Filter & paginate leads from the directory.
  */
 export function searchLeadsDirectory(params: DirectorySearchParams): DirectorySearchResult {
@@ -242,75 +318,7 @@ export function searchLeadsDirectory(params: DirectorySearchParams): DirectorySe
     const pageSize = Math.min(100, Math.max(5, params.pageSize || 20));
     const offset = (page - 1) * pageSize;
 
-    const whereClauses: string[] = [];
-    const bindings: any[] = [];
-
-    // General text search
-    if (params.query && params.query.trim()) {
-      const q = `%${params.query.trim().toLowerCase()}%`;
-      whereClauses.push(`(
-        LOWER(full_name) LIKE ? OR 
-        LOWER(job_title) LIKE ? OR 
-        LOWER(company_name) LIKE ? OR 
-        LOWER(email) LIKE ? OR 
-        LOWER(location) LIKE ?
-      )`);
-      bindings.push(q, q, q, q, q);
-    }
-
-    // Company name filter
-    if (params.companyName && params.companyName.trim()) {
-      whereClauses.push(`LOWER(company_name) LIKE ?`);
-      bindings.push(`%${params.companyName.trim().toLowerCase()}%`);
-    }
-
-    // Industries filter
-    if (params.industries && params.industries.length > 0) {
-      const placeholders = params.industries.map(() => "?").join(",");
-      whereClauses.push(`industry IN (${placeholders})`);
-      bindings.push(...params.industries);
-    }
-
-    // Countries filter
-    if (params.countries && params.countries.length > 0) {
-      const placeholders = params.countries.map(() => "?").join(",");
-      whereClauses.push(`country IN (${placeholders})`);
-      bindings.push(...params.countries);
-    }
-
-    // Job Titles filter
-    if (params.jobTitles && params.jobTitles.length > 0) {
-      const titleClauses = params.jobTitles.map(() => `LOWER(job_title) LIKE ?`).join(" OR ");
-      whereClauses.push(`(${titleClauses})`);
-      params.jobTitles.forEach((t) => bindings.push(`%${t.trim().toLowerCase()}%`));
-    }
-
-    // Team sizes filter
-    if (params.teamSizes && params.teamSizes.length > 0) {
-      const placeholders = params.teamSizes.map(() => "?").join(",");
-      whereClauses.push(`team_size IN (${placeholders})`);
-      bindings.push(...params.teamSizes);
-    }
-
-    // Revenue ranges filter
-    if (params.revenueRanges && params.revenueRanges.length > 0) {
-      const placeholders = params.revenueRanges.map(() => "?").join(",");
-      whereClauses.push(`revenue_range IN (${placeholders})`);
-      bindings.push(...params.revenueRanges);
-    }
-
-    // Quality switches
-    if (params.hasEmail) {
-      whereClauses.push(`email IS NOT NULL AND email != ''`);
-    }
-    if (params.hasPhone) {
-      whereClauses.push(`phone IS NOT NULL AND phone != ''`);
-    }
-    if (params.hasLinkedin) {
-      whereClauses.push(`linkedin_url IS NOT NULL AND linkedin_url != ''`);
-    }
-
-    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+    const { whereSql, bindings } = buildDirectoryWhereClause(params);
 
     // Count query
     const countSql = `SELECT COUNT(*) as total FROM leads ${whereSql}`;
@@ -390,6 +398,57 @@ export function searchLeadsDirectory(params: DirectorySearchParams): DirectorySe
       pageSize: params.pageSize || 20,
       totalPages: 0,
     };
+  }
+}
+
+/**
+ * Fetch all matching leads from directory for bulk operations (like CSV export).
+ * Default cap at 25,000 to maintain optimal memory and response time.
+ */
+export function getMatchingDirectoryLeadsForExport(params: DirectorySearchParams, maxRows = 25000): DirectoryLead[] {
+  try {
+    const db = getDirectoryDb();
+    const { whereSql, bindings } = buildDirectoryWhereClause(params);
+    const dataSql = `SELECT * FROM leads ${whereSql} ORDER BY id ASC LIMIT ?`;
+    const rawRows = db.prepare(dataSql).all(...bindings, maxRows) as any[];
+
+    return rawRows.map((r) => {
+      let rawAttrs: Record<string, string> = {};
+      try {
+        if (r.raw_data) {
+          rawAttrs = JSON.parse(r.raw_data);
+        }
+      } catch {}
+
+      return {
+        id: r.id,
+        leadId: r.lead_id || `lead_${r.id}`,
+        firstName: r.first_name || "",
+        lastName: r.last_name || "",
+        fullName: r.full_name || `${r.first_name || ""} ${r.last_name || ""}`.trim(),
+        jobTitle: r.job_title || "",
+        companyName: r.company_name || "",
+        companyWebsite: r.company_website || "",
+        linkedinUrl: r.linkedin_url || "",
+        location: r.location || "",
+        city: r.city || "",
+        state: r.state || "",
+        country: r.country || "",
+        industry: r.industry || "",
+        teamSize: r.team_size || "",
+        revenueRange: r.revenue_range || "",
+        email: r.email || "",
+        emailStatus: r.email_status || (r.email ? "verified" : "unknown"),
+        phone: r.phone || "",
+        emailCount: r.email_count || (r.email ? 1 : 0),
+        phoneCount: r.phone_count || (r.phone ? 1 : 0),
+        sourceFile: r.source_file || "",
+        rawAttributes: rawAttrs,
+      };
+    });
+  } catch (err) {
+    console.error("[leads-directory] Export error:", err);
+    return [];
   }
 }
 

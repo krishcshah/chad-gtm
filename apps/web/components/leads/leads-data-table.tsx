@@ -5,6 +5,12 @@ import {
   Badge,
   Button,
   Checkbox,
+  cn,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
   Select,
   SelectContent,
   SelectItem,
@@ -21,6 +27,8 @@ import {
   Briefcase,
   Building2,
   Check,
+  CheckSquare,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -51,9 +59,14 @@ interface LeadsDataTableProps {
   pageSize: number;
   totalPages: number;
   isLoading: boolean;
+  isExporting?: boolean;
   selectedLeadIds: Set<number>;
+  isSelectAllMatching?: boolean;
   onSelectLead: (id: number) => void;
   onSelectAll: () => void;
+  onSelectCurrentPage?: () => void;
+  onSelectAllMatching?: () => void;
+  onClearSelection?: () => void;
   onPageChange: (newPage: number) => void;
   onPageSizeChange: (newSize: number) => void;
   onViewLeadDetails: (lead: DirectoryLead) => void;
@@ -69,9 +82,14 @@ export function LeadsDataTable({
   pageSize,
   totalPages,
   isLoading,
+  isExporting = false,
   selectedLeadIds,
+  isSelectAllMatching = false,
   onSelectLead,
   onSelectAll,
+  onSelectCurrentPage,
+  onSelectAllMatching,
+  onClearSelection,
   onPageChange,
   onPageSizeChange,
   onViewLeadDetails,
@@ -90,6 +108,23 @@ export function LeadsDataTable({
 
   const isAllSelected = leads.length > 0 && leads.every((l) => selectedLeadIds.has(l.id));
   const someSelected = leads.some((l) => selectedLeadIds.has(l.id)) && !isAllSelected;
+  const isMasterChecked = isSelectAllMatching || isAllSelected;
+
+  const handleMasterToggle = () => {
+    if (isSelectAllMatching || isAllSelected) {
+      if (onClearSelection) {
+        onClearSelection();
+      } else {
+        onSelectAll();
+      }
+    } else {
+      if (onSelectCurrentPage) {
+        onSelectCurrentPage();
+      } else {
+        onSelectAll();
+      }
+    }
+  };
 
   return (
     <div className="w-full max-w-full min-w-0 flex-1 flex flex-col bg-card/60 border border-border/70 rounded-xl overflow-hidden shadow-sm backdrop-blur-sm">
@@ -126,7 +161,75 @@ export function LeadsDataTable({
 
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          {selectedLeadIds.size > 0 && (
+          {/* Select options dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 h-8 text-xs font-medium border-border/80"
+              >
+                <CheckSquare className="size-3.5 text-muted-foreground" />
+                <span>
+                  {isSelectAllMatching
+                    ? `All ${total.toLocaleString()} Selected`
+                    : selectedLeadIds.size > 0
+                    ? `${selectedLeadIds.size} Selected`
+                    : "Select"}
+                </span>
+                <ChevronDown className="size-3 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-64">
+              <DropdownMenuItem
+                onClick={() => (onSelectCurrentPage ? onSelectCurrentPage() : onSelectAll())}
+                className="gap-2 cursor-pointer"
+              >
+                <Check
+                  className={cn(
+                    "size-3.5 text-primary shrink-0",
+                    !isSelectAllMatching && isAllSelected ? "opacity-100" : "opacity-0"
+                  )}
+                />
+                <div>
+                  <div className="font-medium">Select this page</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    {leads.length} leads in current view
+                  </div>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => (onSelectAllMatching ? onSelectAllMatching() : onSelectAll())}
+                className="gap-2 cursor-pointer"
+              >
+                <Check
+                  className={cn(
+                    "size-3.5 text-primary shrink-0",
+                    isSelectAllMatching ? "opacity-100" : "opacity-0"
+                  )}
+                />
+                <div>
+                  <div className="font-semibold text-primary">Select all in list</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    All {total.toLocaleString()} leads matching current filters
+                  </div>
+                </div>
+              </DropdownMenuItem>
+              {(selectedLeadIds.size > 0 || isSelectAllMatching) && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => (onClearSelection ? onClearSelection() : onSelectAll())}
+                    className="text-muted-foreground cursor-pointer"
+                  >
+                    Clear selection
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {(selectedLeadIds.size > 0 || isSelectAllMatching) && (
             <Button
               size="sm"
               variant="default"
@@ -134,7 +237,9 @@ export function LeadsDataTable({
               className="gap-1.5 h-8 font-semibold bg-primary text-primary-foreground shadow-sm text-xs"
             >
               <UserPlus className="size-3.5" />
-              Add {selectedLeadIds.size} Selected
+              {isSelectAllMatching
+                ? `Add All ${total.toLocaleString()} to List`
+                : `Add ${selectedLeadIds.size} Selected`}
             </Button>
           )}
 
@@ -142,11 +247,25 @@ export function LeadsDataTable({
             size="sm"
             variant="outline"
             onClick={onExportCsv}
-            disabled={leads.length === 0}
+            disabled={leads.length === 0 || isExporting}
             className="gap-1.5 h-8 text-xs font-medium"
           >
-            <Download className="size-3.5" />
-            Export CSV
+            {isExporting ? (
+              <>
+                <Loader2 className="size-3.5 animate-spin text-primary" />
+                Exporting...
+              </>
+            ) : isSelectAllMatching ? (
+              <>
+                <Download className="size-3.5 text-primary" />
+                Export All ({total.toLocaleString()})
+              </>
+            ) : (
+              <>
+                <Download className="size-3.5" />
+                Export CSV
+              </>
+            )}
           </Button>
 
           <Button
@@ -180,17 +299,135 @@ export function LeadsDataTable({
         </div>
       </div>
 
+      {/* Contextual Selection Banner */}
+      {selectedLeadIds.size > 0 && !isSelectAllMatching && (
+        <div className="px-4 py-2 bg-primary/10 border-b border-primary/20 text-xs flex flex-wrap items-center justify-between gap-2 text-foreground">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="font-medium">
+              All <span className="font-bold">{leads.filter((l) => selectedLeadIds.has(l.id)).length}</span> leads on this page are selected.
+            </span>
+            {total > leads.length && onSelectAllMatching && (
+              <button
+                type="button"
+                onClick={onSelectAllMatching}
+                className="font-bold text-primary hover:underline transition-colors ml-1 cursor-pointer"
+              >
+                Select all {total.toLocaleString()} leads in this list
+              </button>
+            )}
+          </div>
+          {onClearSelection && (
+            <button
+              type="button"
+              onClick={onClearSelection}
+              className="text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
+            >
+              Clear selection
+            </button>
+          )}
+        </div>
+      )}
+
+      {isSelectAllMatching && (
+        <div className="px-4 py-2 bg-primary/15 border-b border-primary/30 text-xs flex flex-wrap items-center justify-between gap-2 text-foreground">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge
+              variant="outline"
+              className="bg-primary/20 text-primary border-primary/30 font-semibold text-[10px]"
+            >
+              All {total.toLocaleString()} Selected
+            </Badge>
+            <span className="font-medium">
+              All <span className="font-bold text-primary">{total.toLocaleString()}</span> leads in this list are selected across all pages.
+            </span>
+            {onSelectCurrentPage && (
+              <button
+                type="button"
+                onClick={onSelectCurrentPage}
+                className="text-muted-foreground hover:text-foreground hover:underline ml-1 cursor-pointer"
+              >
+                Only select this page ({leads.length})
+              </button>
+            )}
+          </div>
+          {onClearSelection && (
+            <button
+              type="button"
+              onClick={onClearSelection}
+              className="font-semibold text-primary hover:underline cursor-pointer"
+            >
+              Clear selection
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Main Table Surface - ONLY this section is horizontally scrollable */}
       <div className="w-full max-w-full min-w-0 flex-1 min-h-[460px]">
         <Table className="min-w-[1050px]">
           <TableHeader className="bg-muted/40 sticky top-0 z-10 text-[11px] uppercase tracking-wider text-muted-foreground">
             <TableRow className="border-border/60 hover:bg-transparent">
-              <TableHead className="w-10 px-3 text-center">
-                <Checkbox
-                  checked={isAllSelected || (someSelected ? "indeterminate" : false)}
-                  onCheckedChange={onSelectAll}
-                  aria-label="Select all on current page"
-                />
+              <TableHead className="w-14 px-2 text-center">
+                <div className="flex items-center justify-center gap-0.5">
+                  <Checkbox
+                    checked={isMasterChecked ? true : someSelected ? "indeterminate" : false}
+                    onCheckedChange={handleMasterToggle}
+                    aria-label="Select all on current page"
+                  />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-5 p-0 text-muted-foreground hover:text-foreground data-[state=open]:text-foreground"
+                        aria-label="Selection options"
+                      >
+                        <ChevronDown className="size-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-56">
+                      <DropdownMenuItem
+                        onClick={() => (onSelectCurrentPage ? onSelectCurrentPage() : onSelectAll())}
+                        className="gap-2 cursor-pointer"
+                      >
+                        <Check
+                          className={cn(
+                            "size-3.5 shrink-0",
+                            !isSelectAllMatching && isAllSelected
+                              ? "text-primary opacity-100"
+                              : "opacity-0"
+                          )}
+                        />
+                        <span>Select this page ({leads.length})</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => (onSelectAllMatching ? onSelectAllMatching() : onSelectAll())}
+                        className="gap-2 cursor-pointer"
+                      >
+                        <Check
+                          className={cn(
+                            "size-3.5 shrink-0",
+                            isSelectAllMatching ? "text-primary opacity-100" : "opacity-0"
+                          )}
+                        />
+                        <span className="font-semibold text-primary">
+                          Select all {total.toLocaleString()} leads
+                        </span>
+                      </DropdownMenuItem>
+                      {(selectedLeadIds.size > 0 || isSelectAllMatching) && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => (onClearSelection ? onClearSelection() : onSelectAll())}
+                            className="text-muted-foreground cursor-pointer"
+                          >
+                            Clear selection
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </TableHead>
               <TableHead className="min-w-[200px] font-semibold text-foreground">
                 Contact & Title
@@ -272,7 +509,7 @@ export function LeadsDataTable({
               </TableRow>
             ) : (
               leads.map((lead) => {
-                const isSelected = selectedLeadIds.has(lead.id);
+                const isSelected = isSelectAllMatching || selectedLeadIds.has(lead.id);
                 const leadName =
                   lead.fullName || `${lead.firstName} ${lead.lastName}`.trim() || "Lead Contact";
                 const emailKey = `email_${lead.id}`;

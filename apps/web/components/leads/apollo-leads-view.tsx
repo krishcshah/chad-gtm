@@ -31,7 +31,11 @@ import type {
   DirectorySearchParams,
   DirectorySearchResult,
 } from "@/lib/leads-directory";
-import { searchDirectoryLeadsAction, getDirectoryFacetsAction } from "@/lib/actions";
+import {
+  searchDirectoryLeadsAction,
+  getDirectoryFacetsAction,
+  exportMatchingDirectoryLeadsCsvAction,
+} from "@/lib/actions";
 import { LeadFiltersPanel } from "./lead-filters-panel";
 import { LeadsDataTable } from "./leads-data-table";
 import { LeadDetailsSheet } from "./lead-details-sheet";
@@ -86,6 +90,8 @@ export function ApolloLeadsView({
 
   // Selected leads
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<number>>(new Set());
+  const [isSelectAllMatching, setIsSelectAllMatching] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Modal states
   const [inspectingLead, setInspectingLead] = useState<DirectoryLead | null>(null);
@@ -116,6 +122,8 @@ export function ApolloLeadsView({
   };
 
   const handleApplyFilters = () => {
+    setSelectedLeadIds(new Set());
+    setIsSelectAllMatching(false);
     executeSearch({ page: 1 });
   };
 
@@ -125,6 +133,8 @@ export function ApolloLeadsView({
   };
 
   const handlePageSizeChange = (newSize: number) => {
+    setSelectedLeadIds(new Set());
+    setIsSelectAllMatching(false);
     setFilters((prev) => ({ ...prev, pageSize: newSize, page: 1 }));
     executeSearch({ pageSize: newSize, page: 1 });
   };
@@ -132,6 +142,12 @@ export function ApolloLeadsView({
   const handleSelectLead = (id: number) => {
     setSelectedLeadIds((prev) => {
       const next = new Set(prev);
+      if (isSelectAllMatching) {
+        searchResult.leads.forEach((l) => next.add(l.id));
+        next.delete(id);
+        setIsSelectAllMatching(false);
+        return next;
+      }
       if (next.has(id)) {
         next.delete(id);
       } else {
@@ -141,23 +157,70 @@ export function ApolloLeadsView({
     });
   };
 
-  const handleSelectAll = () => {
+  const handleSelectCurrentPage = () => {
     const currentPageIds = searchResult.leads.map((l) => l.id);
-    const allSelected = currentPageIds.every((id) => selectedLeadIds.has(id));
+    setSelectedLeadIds(new Set(currentPageIds));
+    setIsSelectAllMatching(false);
+    toast.info(`Selected ${currentPageIds.length} leads on this page`);
+  };
 
-    setSelectedLeadIds((prev) => {
-      const next = new Set(prev);
-      if (allSelected) {
-        currentPageIds.forEach((id) => next.delete(id));
-      } else {
-        currentPageIds.forEach((id) => next.add(id));
-      }
-      return next;
-    });
+  const handleSelectAllMatching = () => {
+    const currentPageIds = searchResult.leads.map((l) => l.id);
+    setSelectedLeadIds(new Set(currentPageIds));
+    setIsSelectAllMatching(true);
+    toast.success(`Selected all ${searchResult.total.toLocaleString()} leads in this list`);
+  };
+
+  const handleClearSelection = () => {
+    setSelectedLeadIds(new Set());
+    setIsSelectAllMatching(false);
+  };
+
+  const handleSelectAll = () => {
+    if (isSelectAllMatching) {
+      handleClearSelection();
+      return;
+    }
+    const currentPageIds = searchResult.leads.map((l) => l.id);
+    const allSelected =
+      currentPageIds.length > 0 && currentPageIds.every((id) => selectedLeadIds.has(id));
+
+    if (allSelected) {
+      handleClearSelection();
+    } else {
+      handleSelectCurrentPage();
+    }
   };
 
   // Export current view or selected leads as CSV
-  const handleExportCsv = () => {
+  const handleExportCsv = async () => {
+    if (isSelectAllMatching) {
+      try {
+        setIsExporting(true);
+        toast.info(`Preparing full CSV export for all matching leads...`);
+        const res = await exportMatchingDirectoryLeadsCsvAction(filters);
+        if (!res.ok) {
+          toast.error(res.error || "Failed to export CSV");
+        } else if (res.data) {
+          const blob = new Blob([res.data.csv], { type: "text/csv;charset=utf-8;" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.setAttribute("href", url);
+          link.setAttribute("download", res.data.filename);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+          toast.success(`Exported all ${res.data.count.toLocaleString()} matching leads to CSV`);
+        }
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to export leads");
+      } finally {
+        setIsExporting(false);
+      }
+      return;
+    }
+
     const leadsToExport =
       selectedLeadIds.size > 0
         ? searchResult.leads.filter((l) => selectedLeadIds.has(l.id))
@@ -206,7 +269,9 @@ export function ApolloLeadsView({
       `"${(l.linkedinUrl || "").replace(/"/g, '""')}"`,
     ]);
 
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -325,9 +390,14 @@ export function ApolloLeadsView({
               pageSize={searchResult.pageSize}
               totalPages={searchResult.totalPages}
               isLoading={isLoading}
+              isExporting={isExporting}
               selectedLeadIds={selectedLeadIds}
+              isSelectAllMatching={isSelectAllMatching}
               onSelectLead={handleSelectLead}
               onSelectAll={handleSelectAll}
+              onSelectCurrentPage={handleSelectCurrentPage}
+              onSelectAllMatching={handleSelectAllMatching}
+              onClearSelection={handleClearSelection}
               onPageChange={handlePageChange}
               onPageSizeChange={handlePageSizeChange}
               onViewLeadDetails={(lead) => setInspectingLead(lead)}
@@ -424,9 +494,13 @@ export function ApolloLeadsView({
         open={isAddToListOpen}
         onOpenChange={setIsAddToListOpen}
         selectedLeadIds={Array.from(selectedLeadIds)}
+        isSelectAllMatching={isSelectAllMatching}
+        totalMatchingCount={searchResult.total}
+        searchParams={filters}
         existingLists={existingLists}
         onSuccess={() => {
           setSelectedLeadIds(new Set());
+          setIsSelectAllMatching(false);
         }}
       />
     </div>
