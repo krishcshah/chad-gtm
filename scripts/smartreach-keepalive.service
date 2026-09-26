@@ -1,0 +1,15 @@
+[Unit]
+Description=SmartReach Oracle Cloud Keep-Alive Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python3 /usr/local/bin/smartreach-keepalive.py
+Restart=always
+RestartSec=10
+Nice=19
+CPUSchedulingPolicy=other
+
+[Install]
+WantedBy=multi-user.target
