@@ -27,8 +27,8 @@ type Preset = 5 | 10 | 20 | "custom";
 
 export function DonationModal({ userEmail, userId, userName }: DonationModalProps) {
   const [isOpen, setIsOpen] = React.useState(false);
-  const [frequency, setFrequency] = React.useState<Frequency>("monthly");
-  const [preset, setPreset] = React.useState<Preset>(10);
+  const [frequency, setFrequency] = React.useState<Frequency>("one-time");
+  const [preset, setPreset] = React.useState<Preset>(20);
   const [customAmount, setCustomAmount] = React.useState<string>("");
   const [isSubmitted, setIsSubmitted] = React.useState(false);
 
@@ -90,7 +90,7 @@ export function DonationModal({ userEmail, userId, userName }: DonationModalProp
   const getEffectiveAmount = (): number => {
     if (preset === "custom") {
       const parsed = parseFloat(customAmount);
-      return isNaN(parsed) || parsed <= 0 ? 15 : parsed;
+      return isNaN(parsed) || parsed <= 0 ? 25 : parsed;
     }
     return preset;
   };
@@ -170,18 +170,6 @@ export function DonationModal({ userEmail, userId, userName }: DonationModalProp
               <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-muted/40 border border-border/60">
                 <button
                   type="button"
-                  onClick={() => setFrequency("monthly")}
-                  className={`flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-all ${
-                    frequency === "monthly"
-                      ? "bg-card text-foreground shadow-xs border border-border/80"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <Heart className="size-3 text-rose-500 fill-rose-500" />
-                  <span>Monthly Support</span>
-                </button>
-                <button
-                  type="button"
                   onClick={() => setFrequency("one-time")}
                   className={`flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-all ${
                     frequency === "one-time"
@@ -191,6 +179,18 @@ export function DonationModal({ userEmail, userId, userName }: DonationModalProp
                 >
                   <Sparkles className="size-3 text-amber-400" />
                   <span>One-Time Gift</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFrequency("monthly")}
+                  className={`flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-all ${
+                    frequency === "monthly"
+                      ? "bg-card text-foreground shadow-xs border border-border/80"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Heart className="size-3 text-rose-500 fill-rose-500" />
+                  <span>Monthly Support</span>
                 </button>
               </div>
             </div>
@@ -214,7 +214,7 @@ export function DonationModal({ userEmail, userId, userName }: DonationModalProp
                           : "border-border/70 bg-card/60 text-foreground hover:border-border hover:bg-muted/30"
                       }`}
                     >
-                      {amt === 10 && (
+                      {amt === 20 && (
                         <span className="absolute -top-2 rounded-full bg-primary px-1.5 py-0.2 text-[9px] font-extrabold text-primary-foreground shadow-xs">
                           POPULAR
                         </span>
@@ -242,21 +242,24 @@ export function DonationModal({ userEmail, userId, userName }: DonationModalProp
                 </button>
               </div>
 
-              {/* Custom Input Field */}
+              {/* Custom Input Field (No up/down arrows) */}
               {preset === "custom" && (
                 <div className="mt-3 relative flex items-center">
                   <span className="absolute left-3.5 text-sm font-bold text-muted-foreground">$</span>
                   <Input
-                    type="number"
-                    min="1"
-                    step="1"
-                    placeholder="15"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="25"
                     value={customAmount}
-                    onChange={(e) => setCustomAmount(e.target.value)}
-                    className="pl-8 h-10 text-sm font-semibold rounded-xl bg-card border-border/80"
+                    onChange={(e) => {
+                      const digitsOnly = e.target.value.replace(/[^0-9]/g, "");
+                      setCustomAmount(digitsOnly);
+                    }}
+                    className="pl-8 pr-20 h-10 text-sm font-semibold rounded-xl bg-card border-border/80 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     autoFocus
                   />
-                  <span className="absolute right-3 text-xs text-muted-foreground">
+                  <span className="absolute right-3 text-xs text-muted-foreground pointer-events-none select-none">
                     {frequency === "monthly" ? "/ month" : "one-time"}
                   </span>
                 </div>
