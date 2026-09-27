@@ -307,41 +307,64 @@ export async function scheduleCampaign(
         ? appendSignature(content.bodyHtml, pick.sender)
         : content.bodyHtml;
 
-    await db.insert(schema.emailJobs).values({
-      id: crypto.randomUUID(),
-      campaignId: campaign.id,
-      campaignLeadId: cl.id,
-      senderId: pick.sender.id,
-      leadId: cl.leadId,
-      toEmail: lead.email,
-      subject: content.subject,
-      bodyText,
-      bodyHtml,
-      stepPosition: content.stepPosition,
-      sequenceStepId: content.sequenceStepId,
-      variantId: content.variantId,
-      status: "pending",
-      scheduledFor: scheduleAt.toISOString(),
-      attempts: 0,
-      maxAttempts: campaign.retryFailed ? campaign.retryCount : 1,
-      dryRun,
-    });
+    try {
+      await db
+        .insert(schema.emailJobs)
+        .values({
+          id: crypto.randomUUID(),
+          campaignId: campaign.id,
+          campaignLeadId: cl.id,
+          senderId: pick.sender.id,
+          leadId: cl.leadId,
+          toEmail: lead.email,
+          subject: content.subject,
+          bodyText,
+          bodyHtml,
+          stepPosition: content.stepPosition,
+          sequenceStepId: content.sequenceStepId,
+          variantId: content.variantId,
+          status: "pending",
+          scheduledFor: scheduleAt.toISOString(),
+          attempts: 0,
+          maxAttempts: campaign.retryFailed ? campaign.retryCount : 1,
+          dryRun,
+        })
+        .onConflictDoNothing();
+
+      await db
+        .update(schema.campaignLeads)
+        .set({ scheduledFor: scheduleAt.toISOString(), updatedAt: nowIsoS })
+        .where(eq(schema.campaignLeads.id, cl.id));
+      // Leave leads.status as "new" until send success promotes it to "contacted".
+
+      // advance rotation + randomized pace
+      cursor = pick.index;
+      daily.set(pick.sender.id, (daily.get(pick.sender.id) ?? 0) + 1);
+      scheduleAt = addSeconds(
+        scheduleAt,
+        randomBetween(campaign.minDelaySec, campaign.maxDelaySec),
+      );
+      handledIds.add(cl.id);
+      enqueued++;
+      if (--budget <= 0) break;
+    } catch (err: any) {
+      console.error(`[scheduler] Failed to enqueue lead ${cl.id}:`, err);
+      // Unclaim lead so it doesn't stay permanently stuck in 'scheduled'
+      await db
+        .update(schema.campaignLeads)
+        .set({ status: "queued", lastError: String(err?.message || err), updatedAt: nowIsoS })
+        .where(eq(schema.campaignLeads.id, cl.id));
+      handledIds.add(cl.id);
+    }
+  }
+
+  // Ensure any untouched claimed leads are returned to 'queued' state
+  const remainingIds = claimedRows.filter((r) => !handledIds.has(r.id)).map((r) => r.id);
+  if (remainingIds.length > 0) {
     await db
       .update(schema.campaignLeads)
-      .set({ scheduledFor: scheduleAt.toISOString(), updatedAt: nowIsoS })
-      .where(eq(schema.campaignLeads.id, cl.id));
-    // Leave leads.status as "new" until send success promotes it to "contacted".
-
-    // advance rotation + randomized pace
-    cursor = pick.index;
-    daily.set(pick.sender.id, (daily.get(pick.sender.id) ?? 0) + 1);
-    scheduleAt = addSeconds(
-      scheduleAt,
-      randomBetween(campaign.minDelaySec, campaign.maxDelaySec),
-    );
-    handledIds.add(cl.id);
-    enqueued++;
-    if (--budget <= 0) break;
+      .set({ status: "queued", updatedAt: nowIsoS })
+      .where(inArray(schema.campaignLeads.id, remainingIds));
   }
 
   await db

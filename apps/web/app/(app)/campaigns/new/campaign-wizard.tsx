@@ -447,7 +447,7 @@ export function CampaignWizard({
             !!templateId)
         );
       case 5:
-        return (startMode === "now" || !!scheduledAt) && maxDelay >= minDelay;
+        return (startMode === "now" || !!scheduledAt) && Number(minDelay) >= 5 && Number(maxDelay) >= Number(minDelay);
       case 6:
         return true;
       default:
@@ -460,7 +460,7 @@ export function CampaignWizard({
     2: "Select a lead list to continue.",
     3: "Select at least one sender account.",
     4: "Write a subject or body for your initial sequence step.",
-    5: "Max delay must be ≥ min delay, and pick a start time if scheduled.",
+    5: "Min delay must be ≥ 5s, max delay must be ≥ min delay, and pick a start time if scheduled.",
     6: "",
   };
 

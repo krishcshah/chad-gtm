@@ -1,0 +1,189 @@
+[
+  {
+    "alias": "M01",
+    "role": "Sender in QA Workspace A",
+    "description": "Outbound sender, rotation, rate caps",
+    "maskedEmail": "n2x…@ethereal.email",
+    "provider": "Ethereal (Nodemailer Sandbox)",
+    "domain": "ethereal.email",
+    "smtp": "smtp.ethereal.email:587 (PASS, 580ms)",
+    "imap": "imap.ethereal.email:993 (PASS, 1335ms)",
+    "status": "HEALTHY"
+  },
+  {
+    "alias": "M02",
+    "role": "Sender in QA Workspace A",
+    "description": "Outbound sender, rotation",
+    "maskedEmail": "n2x…@ethereal.email",
+    "provider": "Ethereal (Nodemailer Sandbox)",
+    "domain": "ethereal.email",
+    "smtp": "smtp.ethereal.email:587 (PASS, 541ms)",
+    "imap": "imap.ethereal.email:993 (PASS, 2127ms)",
+    "status": "HEALTHY"
+  },
+  {
+    "alias": "M03",
+    "role": "Sender in QA Workspace A",
+    "description": "Outbound sender, rotation",
+    "maskedEmail": "n2x…@ethereal.email",
+    "provider": "Ethereal (Nodemailer Sandbox)",
+    "domain": "ethereal.email",
+    "smtp": "smtp.ethereal.email:587 (PASS, 1942ms)",
+    "imap": "imap.ethereal.email:993 (PASS, 2090ms)",
+    "status": "HEALTHY"
+  },
+  {
+    "alias": "M04",
+    "role": "Sender in QA Workspace A",
+    "description": "Outbound sender, rotation, failure testing",
+    "maskedEmail": "n2x…@ethereal.email",
+    "provider": "Ethereal (Nodemailer Sandbox)",
+    "domain": "ethereal.email",
+    "smtp": "smtp.ethereal.email:587 (PASS, 648ms)",
+    "imap": "imap.ethereal.email:993 (PASS, 1189ms)",
+    "status": "HEALTHY"
+  },
+  {
+    "alias": "M05",
+    "role": "Sender in QA Workspace A",
+    "description": "Outbound sender, caps, pacing",
+    "maskedEmail": "n2x…@ethereal.email",
+    "provider": "Ethereal (Nodemailer Sandbox)",
+    "domain": "ethereal.email",
+    "smtp": "smtp.ethereal.email:587 (PASS, 446ms)",
+    "imap": "imap.ethereal.email:993 (PASS, 1164ms)",
+    "status": "HEALTHY"
+  },
+  {
+    "alias": "M06",
+    "role": "Sender in QA Workspace B",
+    "description": "Workspace B isolation checks",
+    "maskedEmail": "n2x…@ethereal.email",
+    "provider": "Ethereal (Nodemailer Sandbox)",
+    "domain": "ethereal.email",
+    "smtp": "smtp.ethereal.email:587 (PASS, 444ms)",
+    "imap": "imap.ethereal.email:993 (PASS, 1184ms)",
+    "status": "HEALTHY"
+  },
+  {
+    "alias": "M07",
+    "role": "Lead / Recipient",
+    "description": "Full 3-step sequence without replying",
+    "maskedEmail": "n2x…@ethereal.email",
+    "provider": "Ethereal (Nodemailer Sandbox)",
+    "domain": "ethereal.email",
+    "smtp": "smtp.ethereal.email:587 (PASS, 447ms)",
+    "imap": "imap.ethereal.email:993 (PASS, 1182ms)",
+    "status": "HEALTHY"
+  },
+  {
+    "alias": "M08",
+    "role": "Lead / Recipient",
+    "description": "Reply after initial email before follow-up (Stop-on-reply)",
+    "maskedEmail": "n2x…@ethereal.email",
+    "provider": "Ethereal (Nodemailer Sandbox)",
+    "domain": "ethereal.email",
+    "smtp": "smtp.ethereal.email:587 (PASS, 627ms)",
+    "imap": "imap.ethereal.email:993 (PASS, 1144ms)",
+    "status": "HEALTHY"
+  },
+  {
+    "alias": "M09",
+    "role": "Lead / Recipient",
+    "description": "Reply after first follow-up before final step",
+    "maskedEmail": "n2x…@ethereal.email",
+    "provider": "Ethereal (Nodemailer Sandbox)",
+    "domain": "ethereal.email",
+    "smtp": "smtp.ethereal.email:587 (PASS, 1947ms)",
+    "imap": "imap.ethereal.email:993 (PASS, 2121ms)",
+    "status": "HEALTHY"
+  },
+  {
+    "alias": "M10",
+    "role": "Lead / Recipient",
+    "description": "Negative response, opt-out text & manual status changes",
+    "maskedEmail": "n2x…@ethereal.email",
+    "provider": "Ethereal (Nodemailer Sandbox)",
+    "domain": "ethereal.email",
+    "smtp": "smtp.ethereal.email:587 (PASS, 1367ms)",
+    "imap": "imap.ethereal.email:993 (PASS, 1153ms)",
+    "status": "HEALTHY"
+  },
+  {
+    "alias": "M11",
+    "role": "Lead / Recipient",
+    "description": "Unsubscribe and suppression link execution",
+    "maskedEmail": "n2x…@ethereal.email",
+    "provider": "Ethereal (Nodemailer Sandbox)",
+    "domain": "ethereal.email",
+    "smtp": "smtp.ethereal.email:587 (PASS, 567ms)",
+    "imap": "imap.ethereal.email:993 (PASS, 1170ms)",
+    "status": "HEALTHY"
+  },
+  {
+    "alias": "M12",
+    "role": "Lead / Recipient",
+    "description": "Out-of-office / automatic acknowledgment response",
+    "maskedEmail": "n2x…@ethereal.email",
+    "provider": "Ethereal (Nodemailer Sandbox)",
+    "domain": "ethereal.email",
+    "smtp": "smtp.ethereal.email:587 (PASS, 428ms)",
+    "imap": "imap.ethereal.email:993 (PASS, 1141ms)",
+    "status": "HEALTHY"
+  },
+  {
+    "alias": "M13",
+    "role": "Lead / Recipient",
+    "description": "Same-subject and ambiguous-thread tests",
+    "maskedEmail": "n2x…@ethereal.email",
+    "provider": "Ethereal (Nodemailer Sandbox)",
+    "domain": "ethereal.email",
+    "smtp": "smtp.ethereal.email:587 (PASS, 444ms)",
+    "imap": "imap.ethereal.email:993 (PASS, 1135ms)",
+    "status": "HEALTHY"
+  },
+  {
+    "alias": "M14",
+    "role": "Lead / Recipient",
+    "description": "Unicode, multipart HTML/text, quoted replies",
+    "maskedEmail": "n2x…@ethereal.email",
+    "provider": "Ethereal (Nodemailer Sandbox)",
+    "domain": "ethereal.email",
+    "smtp": "smtp.ethereal.email:587 (PASS, 433ms)",
+    "imap": "imap.ethereal.email:993 (PASS, 1167ms)",
+    "status": "HEALTHY"
+  },
+  {
+    "alias": "M15",
+    "role": "Lead / Recipient",
+    "description": "Cross-campaign & cross-workspace isolated test record",
+    "maskedEmail": "n2x…@ethereal.email",
+    "provider": "Ethereal (Nodemailer Sandbox)",
+    "domain": "ethereal.email",
+    "smtp": "smtp.ethereal.email:587 (PASS, 445ms)",
+    "imap": "imap.ethereal.email:993 (PASS, 1150ms)",
+    "status": "HEALTHY"
+  },
+  {
+    "alias": "M16",
+    "role": "Reserve / Rotating",
+    "description": "Replacement sender / reconnect / role reversal",
+    "maskedEmail": "n2x…@ethereal.email",
+    "provider": "Ethereal (Nodemailer Sandbox)",
+    "domain": "ethereal.email",
+    "smtp": "smtp.ethereal.email:587 (PASS, 537ms)",
+    "imap": "imap.ethereal.email:993 (PASS, 1149ms)",
+    "status": "HEALTHY"
+  },
+  {
+    "alias": "M17",
+    "role": "Reserve / Rotating",
+    "description": "Recipient response / concurrency & recovery",
+    "maskedEmail": "n2x…@ethereal.email",
+    "provider": "Ethereal (Nodemailer Sandbox)",
+    "domain": "ethereal.email",
+    "smtp": "smtp.ethereal.email:587 (PASS, 441ms)",
+    "imap": "imap.ethereal.email:993 (PASS, 1195ms)",
+    "status": "HEALTHY"
+  }
+]

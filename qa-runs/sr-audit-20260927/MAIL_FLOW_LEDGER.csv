@@ -1,0 +1,3 @@
+type,alias,to,from,subject,messageId,inReplyTo,timestamp
+"campaign_send","M07","n2xp3zcd3xc6pzyl@ethereal.email","n2xp3zcd3xc6pzyl@ethereal.email","[QA J01 S1] Partnership inquiry for Schmidt Systems","<b00dfa19-4ee8-07da-58ca-35e24a125dc3@ethereal.email>","","2026-09-27T20:04:49.250Z"
+"inbound_reply","M08","n2xp3zcd3xc6pzyl@ethereal.email","n2xp3zcd3xc6pzyl@ethereal.email","Re: [QA J01 S1] Partnership inquiry for Schmidt Systems","<26ca0e84-32af-4997-af23-214ae0acd6ce@ethereal.email>","<b00dfa19-4ee8-07da-58ca-35e24a125dc3@ethereal.email>","2026-09-27T20:04:49.967Z"

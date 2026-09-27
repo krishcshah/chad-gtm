@@ -456,9 +456,10 @@ export function prepareReplyBodies(rawText: string, rawHtml: string): PreparedBo
 /** Sync one sender's inbox. Returns count of new replies recorded. */
 export async function syncSenderReplies(db: EngineDb, sender: SenderRow): Promise<{ found: number; error?: string }> {
   if (!sender.imapHost || !sender.imapPasswordEnc) return { found: 0 };
-  const client = makeImapClient(sender);
   let found = 0;
+  let client: any = null;
   try {
+    client = makeImapClient(sender);
     await client.connect();
     await client.mailboxOpen("INBOX");
 
@@ -498,7 +499,7 @@ export async function syncSenderReplies(db: EngineDb, sender: SenderRow): Promis
     return { found, error: message };
   } finally {
     try {
-      if (client.usable) await client.logout();
+      if (client?.usable) await client.logout();
     } catch {
       /* noop */
     }

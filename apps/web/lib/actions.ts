@@ -1302,9 +1302,13 @@ export async function sendUniboxReply(input: {
     const rowId = crypto.randomUUID();
     const fromName = (sender.fromName || sender.senderName || "").trim();
     const fromEmail = sender.email;
+    const activeWs = await getActiveWorkspace(user.id);
+    const workspaceId = sender.workspaceId || activeWs?.id || null;
+
     await db.insert(schema.uniboxMessages).values({
       id: rowId,
       userId: user.id,
+      workspaceId,
       replyId: reply.id,
       leadId: reply.leadId,
       campaignId: reply.campaignId,
