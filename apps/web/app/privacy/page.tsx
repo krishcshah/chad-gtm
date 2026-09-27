@@ -50,8 +50,8 @@ export default function PrivacyPage() {
             <p>Deutschland / Germany</p>
             <p className="pt-2">
               <strong className="text-foreground">E-Mail für Datenschutzanfragen:</strong>{" "}
-              <a href="mailto:de.krish.shah@gmail.com" className="text-primary hover:underline">
-                de.krish.shah@gmail.com
+              <a href="mailto:hence-body-eskimo@duck.com" className="text-primary hover:underline">
+                hence-body-eskimo@duck.com
               </a>
             </p>
           </div>

@@ -147,7 +147,7 @@ export function DpaCard() {
               <section className="space-y-1.5">
                 <h4 className="font-semibold text-foreground text-sm">6. Contact for DPA Inquiries</h4>
                 <p>
-                  For formal executed copies or data protection queries: <a href="mailto:de.krish.shah@gmail.com" className="text-primary hover:underline">de.krish.shah@gmail.com</a>
+                  For formal executed copies or data protection queries: <a href="mailto:hence-body-eskimo@duck.com" className="text-primary hover:underline">hence-body-eskimo@duck.com</a>
                 </p>
               </section>
             </div>

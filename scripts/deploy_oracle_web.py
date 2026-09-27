@@ -25,8 +25,9 @@ git reset --hard origin/main
 echo "=== BUILDING NEXT.JS ON SERVER ==="
 npm run build --workspace @smartreach/web
 
-echo "=== RESTARTING WEB SERVICE WITH PM2 ==="
+echo "=== RESTARTING WEB SERVICE & WORKER WITH PM2 ==="
 pm2 reload smartreach-web || pm2 restart smartreach-web
+pm2 restart smartreach-worker
 
 echo "=== ALL DONE ==="
 pm2 status

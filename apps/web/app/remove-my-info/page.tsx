@@ -65,8 +65,8 @@ export default function RemoveMyInfoPage() {
         <div className="text-center text-xs text-muted-foreground space-y-1 pt-4">
           <p>
             You can also submit erasure requests directly via email to:{" "}
-            <a href="mailto:de.krish.shah@gmail.com" className="text-primary hover:underline font-medium">
-              de.krish.shah@gmail.com
+            <a href="mailto:hence-body-eskimo@duck.com" className="text-primary hover:underline font-medium">
+              hence-body-eskimo@duck.com
             </a>
           </p>
           <p>Operated by Krish Shah · Frankfurt am Main, Germany</p>
