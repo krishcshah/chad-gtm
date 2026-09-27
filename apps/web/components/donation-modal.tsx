@@ -29,7 +29,7 @@ export function DonationModal({ userEmail, userId, userName }: DonationModalProp
   const [isOpen, setIsOpen] = React.useState(false);
   const [frequency, setFrequency] = React.useState<Frequency>("monthly");
   const [preset, setPreset] = React.useState<Preset>(10);
-  const [customAmount, setCustomAmount] = React.useState<string>("15");
+  const [customAmount, setCustomAmount] = React.useState<string>("");
   const [isSubmitted, setIsSubmitted] = React.useState(false);
 
   const searchParams = useSearchParams();
@@ -90,7 +90,7 @@ export function DonationModal({ userEmail, userId, userName }: DonationModalProp
   const getEffectiveAmount = (): number => {
     if (preset === "custom") {
       const parsed = parseFloat(customAmount);
-      return isNaN(parsed) || parsed <= 0 ? 5 : parsed;
+      return isNaN(parsed) || parsed <= 0 ? 15 : parsed;
     }
     return preset;
   };
@@ -138,7 +138,7 @@ export function DonationModal({ userEmail, userId, userName }: DonationModalProp
           <DialogDescription className="mt-1.5 text-xs sm:text-[13px] leading-relaxed text-muted-foreground">
             {isSubmitted
               ? "Your support keeps our servers running and this platform completely free for the entire community."
-              : "We pay for 100% of the servers, database infrastructure, and maintenance completely out of our own pockets so anyone can do cold email without $100+/mo subscriptions."}
+              : "Right now we pay for everything out of our own pockets — development, hosting, and maintenance. We want to keep SmartReach free forever, and we can’t do it without your help. Every dollar helps!"}
           </DialogDescription>
         </div>
 
@@ -250,7 +250,7 @@ export function DonationModal({ userEmail, userId, userName }: DonationModalProp
                     type="number"
                     min="1"
                     step="1"
-                    placeholder="Enter amount"
+                    placeholder="15"
                     value={customAmount}
                     onChange={(e) => setCustomAmount(e.target.value)}
                     className="pl-8 h-10 text-sm font-semibold rounded-xl bg-card border-border/80"
