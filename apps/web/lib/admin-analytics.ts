@@ -1,7 +1,8 @@
 import { desc, eq, isNull, sql } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { getDb } from "./db";
-import { requireAdmin } from "./admin";
+import { requireAdmin, isAdminEmail } from "./admin";
+import { getAllB2bAccessMap } from "./b2b-access";
 
 export interface UserAnalyticsSummary {
   userId: string;
@@ -15,6 +16,7 @@ export interface UserAnalyticsSummary {
   failingMailboxes: number;
   topPages: { path: string; count: number }[];
   lastActiveAt: string | null;
+  hasB2bAccess: boolean;
 }
 
 export interface AdminAnalyticsKPIs {
@@ -232,6 +234,8 @@ export async function getAdminUserAnalytics(
   }
 
   // Assemble Per-User Analytics
+  const b2bAccessMap = await getAllB2bAccessMap();
+
   const userSummaries: UserAnalyticsSummary[] = rawUsers.map((u) => {
     const mb = mailboxMap.get(u.id) || { total: 0, active: 0, failing: 0 };
     const pv = userPageViewMap.get(u.id) || {
@@ -246,6 +250,11 @@ export async function getAdminUserAnalytics(
       .sort((a, b) => b.count - a.count)
       .slice(0, 4);
 
+    const hasB2b =
+      isAdminEmail(u.email) ||
+      u.email.toLowerCase() === "demo@ratecompany.com" ||
+      Boolean(b2bAccessMap[u.id]);
+
     return {
       userId: u.id,
       email: u.email,
@@ -258,6 +267,7 @@ export async function getAdminUserAnalytics(
       failingMailboxes: mb.failing,
       topPages,
       lastActiveAt: pv.lastActive,
+      hasB2bAccess: hasB2b,
     };
   });
 

@@ -18,6 +18,8 @@ import {
   ShieldCheck,
   Server,
   ArrowUpDown,
+  Check,
+  Lock,
 } from "lucide-react";
 import {
   Button,
@@ -29,6 +31,8 @@ import {
 } from "@smartreach/ui";
 import { AdminUserDetailModal } from "./admin-user-detail-modal";
 import type { AdminAnalyticsPayload, UserAnalyticsSummary } from "@/lib/admin-analytics";
+import { adminToggleB2bAccessAction } from "@/lib/b2b-access-actions";
+import { toast } from "sonner";
 
 export function AdminAnalyticsView({
   initialAnalytics,
@@ -36,6 +40,8 @@ export function AdminAnalyticsView({
   initialAnalytics: AdminAnalyticsPayload;
 }) {
   const [data] = useState<AdminAnalyticsPayload>(initialAnalytics);
+  const [usersList, setUsersList] = useState<UserAnalyticsSummary[]>(initialAnalytics.users);
+  const [togglingB2bId, setTogglingB2bId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<"all" | "has_mailboxes" | "no_mailboxes" | "active">("all");
   const [sortBy, setSortBy] = useState<"views" | "mailboxes" | "newest" | "last_active">("views");
@@ -45,11 +51,30 @@ export function AdminAnalyticsView({
   const [page, setPage] = useState(1);
   const pageSize = 15;
 
-  const { kpis, users, topRoutes, recentActivity } = data;
+  const { kpis, topRoutes, recentActivity } = data;
+
+  const handleToggleB2bAccess = async (targetUserId: string, grant: boolean) => {
+    setTogglingB2bId(targetUserId);
+    try {
+      const res = await adminToggleB2bAccessAction(targetUserId, grant);
+      if (res.success) {
+        setUsersList((prev) =>
+          prev.map((u) => (u.userId === targetUserId ? { ...u, hasB2bAccess: grant } : u))
+        );
+        toast.success(grant ? "B2B Database access granted!" : "B2B Database access revoked.");
+      } else {
+        toast.error(res.error || "Action failed");
+      }
+    } catch {
+      toast.error("Failed to update B2B access");
+    } finally {
+      setTogglingB2bId(null);
+    }
+  };
 
   // Filter & sort users
   const filteredUsers = useMemo(() => {
-    return users.filter((u) => {
+    return usersList.filter((u) => {
       // Filter criteria
       if (filterType === "has_mailboxes" && u.mailboxCount === 0) return false;
       if (filterType === "no_mailboxes" && u.mailboxCount > 0) return false;
@@ -68,7 +93,7 @@ export function AdminAnalyticsView({
         u.userId.toLowerCase().includes(query)
       );
     });
-  }, [users, filterType, search]);
+  }, [usersList, filterType, search]);
 
   const sortedUsers = useMemo(() => {
     const list = [...filteredUsers];
@@ -359,7 +384,7 @@ export function AdminAnalyticsView({
                   filterType === "all" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                All ({users.length})
+                All ({usersList.length})
               </button>
               <button
                 type="button"
@@ -371,7 +396,7 @@ export function AdminAnalyticsView({
                   filterType === "has_mailboxes" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                With Mailboxes ({users.filter((u) => u.mailboxCount > 0).length})
+                With Mailboxes ({usersList.filter((u) => u.mailboxCount > 0).length})
               </button>
               <button
                 type="button"
@@ -425,6 +450,7 @@ export function AdminAnalyticsView({
                 <tr>
                   <th className="py-3 px-3.5">User Identity</th>
                   <th className="py-3 px-3.5">Signed Up</th>
+                  <th className="py-3 px-3.5">B2B Database</th>
                   <th className="py-3 px-3.5">Mailboxes</th>
                   <th className="py-3 px-3.5">Pages Visited</th>
                   <th className="py-3 px-3.5">Top Application Sections</th>
@@ -435,7 +461,7 @@ export function AdminAnalyticsView({
               <tbody className="divide-y divide-border/40">
                 {currentPageUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-muted-foreground">
+                    <td colSpan={8} className="py-12 text-center text-muted-foreground">
                       No users match the search and filter criteria.
                     </td>
                   </tr>
@@ -470,6 +496,50 @@ export function AdminAnalyticsView({
                         <td className="py-3 px-3.5 text-muted-foreground whitespace-nowrap">
                           <div>{new Date(u.createdAt).toLocaleDateString()}</div>
                           <div className="text-[10px] text-muted-foreground/80">{formatRelativeTime(u.createdAt)}</div>
+                        </td>
+
+                        {/* B2B Database Access */}
+                        <td className="py-3 px-3.5 whitespace-nowrap">
+                          {isAdmin ? (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[11px] font-semibold text-amber-400">
+                              <ShieldCheck className="size-3" />
+                              <span>Admin Lifetime</span>
+                            </span>
+                          ) : u.hasB2bAccess ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-semibold text-emerald-400">
+                                <Check className="size-3" />
+                                <span>Unlocked</span>
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={togglingB2bId === u.userId}
+                                onClick={() => handleToggleB2bAccess(u.userId, false)}
+                                className="h-6 px-1.5 text-[10px] text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10"
+                                title="Revoke B2B Database access"
+                              >
+                                {togglingB2bId === u.userId ? "..." : "Revoke"}
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                                <Lock className="size-3 text-muted-foreground/70" />
+                                <span>Paywalled</span>
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={togglingB2bId === u.userId}
+                                onClick={() => handleToggleB2bAccess(u.userId, true)}
+                                className="h-6 px-1.5 text-[10px] text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 font-semibold"
+                                title="Grant lifetime B2B Database access"
+                              >
+                                {togglingB2bId === u.userId ? "..." : "Grant"}
+                              </Button>
+                            </div>
+                          )}
                         </td>
 
                         {/* Mailboxes */}

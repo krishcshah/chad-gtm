@@ -74,6 +74,28 @@ export const subscriptions = pgTable(
   ],
 );
 
+/* ─── B2B Database Access & Paywall ──────────────────────────────────── */
+
+export const b2bDatabaseAccess = pgTable(
+  "b2b_database_access",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    stripeSessionId: text("stripe_session_id"),
+    amountCents: integer("amount_cents").notNull().default(9900),
+    status: text("status").notNull().default("active"), // active, revoked
+    source: text("source").notNull().default("stripe_checkout"), // stripe_checkout, admin_grant, lifetime_demo
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("b2b_database_access_user_idx").on(t.userId),
+    index("b2b_database_access_status_idx").on(t.status),
+  ],
+);
+
 /* ─── Lead lists & leads ───────────────────────────────────────────────── */
 
 export const leadLists = pgTable(

@@ -56,6 +56,7 @@ interface ApolloLeadsViewProps {
   existingLists: ExistingListOption[];
   workspaceName: string;
   defaultTab?: "directory" | "saved-lists";
+  hideTabs?: boolean;
 }
 
 export function ApolloLeadsView({
@@ -64,6 +65,7 @@ export function ApolloLeadsView({
   existingLists,
   workspaceName,
   defaultTab = "directory",
+  hideTabs = false,
 }: ApolloLeadsViewProps) {
   const [activeTab, setActiveTab] = useState<"directory" | "saved-lists">(defaultTab);
 
@@ -318,34 +320,61 @@ export function ApolloLeadsView({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-              Leads & Prospect Intelligence
+              {activeTab === "saved-lists" ? "My Leads & Contact Lists" : "B2B Leads Database"}
             </h1>
-            <Badge
-              variant="outline"
-              className="bg-primary/10 text-primary border-primary/20 text-xs font-semibold px-2 py-0.5 whitespace-nowrap"
-            >
-              {facets.totalLeads.toLocaleString()} Leads Database
-            </Badge>
+            {activeTab === "directory" ? (
+              <Badge
+                variant="outline"
+                className="bg-primary/10 text-primary border-primary/20 text-xs font-semibold px-2 py-0.5 whitespace-nowrap"
+              >
+                {facets.totalLeads.toLocaleString()} Leads Database
+              </Badge>
+            ) : (
+              <Badge
+                variant="outline"
+                className="bg-violet-500/10 text-violet-400 border-violet-500/20 text-xs font-semibold px-2 py-0.5 whitespace-nowrap"
+              >
+                {existingLists.length} Saved Lists
+              </Badge>
+            )}
+            {activeTab === "directory" && (
+              <div className="hidden sm:inline-flex items-center gap-3 text-xs text-muted-foreground ml-2">
+                <span className="flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-emerald-400 inline-block" />
+                  Sub-15ms Index
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-blue-400 inline-block" />
+                  100% Unmasked Emails
+                </span>
+              </div>
+            )}
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Search verified contacts, filter by industry & location, and import directly into {workspaceName} campaigns.
+            {activeTab === "saved-lists"
+              ? `Manage custom contact lists, uploaded CSVs, and enrolled prospects across ${workspaceName}.`
+              : `Search verified contacts, filter by industry & location, and import directly into ${workspaceName} campaigns.`}
           </p>
         </div>
 
         {/* Global Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="outline" asChild className="gap-1.5 shadow-sm text-xs font-semibold">
-            <Link href="/leads/import">
-              <Upload className="h-4 w-4 text-primary" />
-              Import CSV
-            </Link>
-          </Button>
-          <Button size="sm" variant="outline" asChild className="gap-1.5 shadow-sm text-xs font-semibold">
-            <Link href="/leads/new">
-              <Plus className="h-4 w-4" />
-              New List
-            </Link>
-          </Button>
+          {activeTab === "saved-lists" && (
+            <>
+              <Button size="sm" variant="outline" asChild className="gap-1.5 shadow-sm text-xs font-semibold">
+                <Link href="/leads/import">
+                  <Upload className="h-4 w-4 text-primary" />
+                  Import CSV
+                </Link>
+              </Button>
+              <Button size="sm" variant="outline" asChild className="gap-1.5 shadow-sm text-xs font-semibold">
+                <Link href="/leads/new">
+                  <Plus className="h-4 w-4" />
+                  New List
+                </Link>
+              </Button>
+            </>
+          )}
           <Button size="sm" asChild className="gap-1.5 shadow-sm text-xs font-semibold">
             <Link href="/campaigns/new">
               <Sparkles className="h-4 w-4" />
@@ -361,29 +390,31 @@ export function ApolloLeadsView({
         onValueChange={(val) => setActiveTab(val as "directory" | "saved-lists")}
         className="w-full max-w-full min-w-0 space-y-4"
       >
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border/60 pb-2 gap-2">
-          <TabsList className="grid grid-cols-2 sm:inline-flex w-full sm:w-auto bg-muted/40 p-1 h-auto">
-            <TabsTrigger value="directory" className="gap-2 text-xs font-semibold py-2 px-3">
-              <Database className="size-3.5 text-primary shrink-0" />
-              <span className="truncate">Directory ({facets.totalLeads.toLocaleString()})</span>
-            </TabsTrigger>
-            <TabsTrigger value="saved-lists" className="gap-2 text-xs font-semibold py-2 px-3">
-              <FileSpreadsheet className="size-3.5 text-violet-400 shrink-0" />
-              <span className="truncate">Saved Lists ({existingLists.length})</span>
-            </TabsTrigger>
-          </TabsList>
+        {!hideTabs && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border/60 pb-2 gap-2">
+            <TabsList className="grid grid-cols-2 sm:inline-flex w-full sm:w-auto bg-muted/40 p-1 h-auto">
+              <TabsTrigger value="directory" className="gap-2 text-xs font-semibold py-2 px-3">
+                <Database className="size-3.5 text-primary shrink-0" />
+                <span className="truncate">Directory ({facets.totalLeads.toLocaleString()})</span>
+              </TabsTrigger>
+              <TabsTrigger value="saved-lists" className="gap-2 text-xs font-semibold py-2 px-3">
+                <FileSpreadsheet className="size-3.5 text-violet-400 shrink-0" />
+                <span className="truncate">Saved Lists ({existingLists.length})</span>
+              </TabsTrigger>
+            </TabsList>
 
-          <div className="hidden sm:flex items-center gap-4 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-emerald-400 inline-block" />
-              Sub-15ms Index
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-blue-400 inline-block" />
-              100% Unmasked Emails
-            </span>
+            <div className="hidden sm:flex items-center gap-4 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-emerald-400 inline-block" />
+                Sub-15ms Index
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-blue-400 inline-block" />
+                100% Unmasked Emails
+              </span>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* TAB 1: APOLLO.IO B2B DIRECTORY SEARCH */}
         <TabsContent value="directory" className="mt-0 space-y-4 outline-none w-full max-w-full min-w-0">

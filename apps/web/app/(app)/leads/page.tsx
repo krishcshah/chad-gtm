@@ -44,7 +44,8 @@ export default async function LeadsPage({
         initialFacets={facets}
         existingLists={existingLists}
         workspaceName={workspace.name}
-        defaultTab={defaultTab}
+        defaultTab="saved-lists"
+        hideTabs={true}
       />
     </div>
   );
