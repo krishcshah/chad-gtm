@@ -44,6 +44,7 @@ function draft(overrides: Partial<CampaignDraftSeed> & Pick<CampaignDraftSeed, "
     stopOnReply: true,
     retryFailed: true,
     retryCount: 2,
+    trackOpens: true,
     startMode: "now",
     ...overrides,
   };

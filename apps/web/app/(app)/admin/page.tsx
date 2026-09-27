@@ -2,15 +2,16 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { isAdmin } from "@/lib/admin";
 import { listAllBugReportsForAdmin } from "@/lib/bug-reports";
-import { AdminBugReportsView } from "./admin-bug-reports-view";
+import { listAllDataRemovalRequestsForAdmin } from "@/lib/data-removal";
+import { AdminConsoleView } from "./admin-console-view";
 import { ShieldCheck, ShieldAlert } from "lucide-react";
 import { PermissionDenied } from "@smartreach/ui";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Admin Console · Bug Reports & System Feedback · SmartReach",
-  description: "Administrative oversight of bug reports and platform feedback.",
+  title: "Admin Console · Bug Reports & Data Erasure · SmartReach",
+  description: "Administrative oversight of bug reports, system feedback, and GDPR data removal requests.",
 };
 
 export default async function AdminPage() {
@@ -31,7 +32,10 @@ export default async function AdminPage() {
     );
   }
 
-  const reports = await listAllBugReportsForAdmin(user);
+  const [reports, removalRequests] = await Promise.all([
+    listAllBugReportsForAdmin(user),
+    listAllDataRemovalRequestsForAdmin(user),
+  ]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 p-4 sm:p-6 lg:p-8">
@@ -48,16 +52,19 @@ export default async function AdminPage() {
 
         <div className="mt-2">
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Admin Console · Bug Reports
+            Admin Console
           </h1>
           <p className="text-sm text-muted-foreground">
-            Review bug submissions from all users, investigate errors, update resolution status, and download records as CSV.
+            Review user bug submissions, manage GDPR data removal requests, investigate errors, update resolution status, and download records as CSV.
           </p>
         </div>
       </div>
 
-      {/* Interactive Reports Table & CSV Export */}
-      <AdminBugReportsView initialReports={reports} />
+      {/* Tabbed Interactive Views (Bug Reports & Data Removals) */}
+      <AdminConsoleView
+        initialBugReports={reports}
+        initialDataRemovals={removalRequests}
+      />
     </div>
   );
 }

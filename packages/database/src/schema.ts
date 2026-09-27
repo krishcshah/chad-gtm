@@ -268,6 +268,7 @@ export const campaigns = pgTable(
     stopOnReply: boolean("stop_on_reply").notNull().default(true),
     retryFailed: boolean("retry_failed").notNull().default(true),
     retryCount: integer("retry_count").notNull().default(3),
+    trackOpens: boolean("track_opens").notNull().default(true),
     /** round-robin cursor into campaign_senders */
     lastSenderIdx: integer("last_sender_idx").notNull().default(0),
     /** temporary pause for cross-campaign per-sender daily cap */
@@ -658,6 +659,29 @@ export const bugReports = pgTable(
     index("bug_reports_user_idx").on(t.userId),
     index("bug_reports_created_idx").on(t.createdAt),
     index("bug_reports_status_idx").on(t.status),
+  ],
+);
+
+/* ─── Data Removal Requests (GDPR Right to Erasure / Remove My Info) ──── */
+
+export const dataRemovalRequests = pgTable(
+  "data_removal_requests",
+  {
+    id: id(),
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    contactEmail: text("contact_email").notNull(),
+    description: text("description").notNull(),
+    status: text("status", { enum: ["pending", "in_progress", "completed", "rejected"] })
+      .notNull()
+      .default("pending"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("data_removal_user_idx").on(t.userId),
+    index("data_removal_email_idx").on(t.contactEmail),
+    index("data_removal_status_idx").on(t.status),
+    index("data_removal_created_idx").on(t.createdAt),
   ],
 );
 

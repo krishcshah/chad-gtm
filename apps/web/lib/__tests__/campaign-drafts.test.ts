@@ -26,6 +26,7 @@ type CampaignRow = {
   stopOnReply: boolean;
   retryFailed: boolean;
   retryCount: number;
+  trackOpens: boolean;
   startedAt: string | null;
   [k: string]: unknown;
 };
@@ -274,6 +275,7 @@ function doInsert(ctx: { table: string; values: unknown }) {
         stopOnReply: v.stopOnReply !== undefined ? Boolean(v.stopOnReply) : true,
         retryFailed: v.retryFailed !== undefined ? Boolean(v.retryFailed) : true,
         retryCount: Number(v.retryCount ?? 3),
+        trackOpens: v.trackOpens !== undefined ? Boolean(v.trackOpens) : true,
         startedAt: (v.startedAt as string | null) ?? null,
         deletedAt: null,
       };
@@ -322,6 +324,7 @@ function seedDraft(overrides: Partial<CampaignRow> = {}): CampaignRow {
     stopOnReply: true,
     retryFailed: true,
     retryCount: 3,
+    trackOpens: true,
     startedAt: null,
     deletedAt: null,
     ...overrides,

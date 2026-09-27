@@ -147,6 +147,7 @@ export interface CampaignDraftSeed {
   stopOnReply: boolean;
   retryFailed: boolean;
   retryCount: number;
+  trackOpens?: boolean;
   startMode: "now" | "later";
 }
 
@@ -256,6 +257,7 @@ export function CampaignWizard({
   const [stopOnReply, setStopOnReply] = useState(initialDraft?.stopOnReply ?? true);
   const [retryFailed, setRetryFailed] = useState(initialDraft?.retryFailed ?? true);
   const [retryCount, setRetryCount] = useState(initialDraft?.retryCount ?? 2);
+  const [trackOpens, setTrackOpens] = useState(initialDraft?.trackOpens ?? true);
 
   // Sequence state
   const [steps, setSteps] = useState<DraftStep[]>(() => {
@@ -548,6 +550,7 @@ export function CampaignWizard({
           stopOnReply,
           retryFailed,
           retryCount: Number(retryCount),
+          trackOpens,
           wizardStep: step,
         });
         if (res.ok && res.data?.id) {
@@ -594,6 +597,7 @@ export function CampaignWizard({
           stopOnReply,
           retryFailed,
           retryCount: Number(retryCount),
+          trackOpens,
         };
 
         if (draftId) {
@@ -1657,6 +1661,13 @@ export function CampaignWizard({
                 <span className="text-sm">Retry failed emails</span>
                 <Switch checked={retryFailed} onCheckedChange={setRetryFailed} />
               </label>
+              <label className="flex cursor-pointer items-center justify-between rounded-lg border p-3">
+                <div>
+                  <span className="text-sm font-medium">Track email opens</span>
+                  <p className="text-xs text-muted-foreground mt-0.5">Embed a 1x1 tracking pixel to detect when recipients open emails</p>
+                </div>
+                <Switch checked={trackOpens} onCheckedChange={setTrackOpens} />
+              </label>
             </div>
           </div>
         )}
@@ -1727,6 +1738,10 @@ export function CampaignWizard({
                   <div className="pt-2 flex justify-between">
                     <span className="text-muted-foreground">Stop on reply</span>
                     <span className="font-medium text-foreground">{stopOnReply ? "Yes" : "No"}</span>
+                  </div>
+                  <div className="pt-2 flex justify-between">
+                    <span className="text-muted-foreground">Track opens</span>
+                    <span className="font-medium text-foreground">{trackOpens ? "Yes (1x1 pixel)" : "No"}</span>
                   </div>
                 </div>
               </div>

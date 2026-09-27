@@ -292,7 +292,7 @@ export default async function LandingPage() {
                     </span>
                   </h2>
                   <p className="mt-3 text-sm sm:text-base leading-relaxed text-muted-foreground">
-                    SmartReach combines German software engineering excellence with dedicated European cloud infrastructure. Avoid closed-source US platforms with surveillance risks, surprise monthly price hikes, and vendor lock-in. Your campaigns, lead directories, and sender credentials remain strictly within the European Union under GDPR data sovereignty.
+                    SmartReach combines German software engineering excellence with dedicated European cloud infrastructure. Avoid closed-source US platforms with surprise monthly price hikes and vendor lock-in. Your campaigns, lead lists, and sender credentials remain strictly hosted within the European Union under EU data sovereignty.
                   </p>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full lg:w-auto shrink-0">
@@ -319,9 +319,9 @@ export default async function LandingPage() {
                   <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[210px]">
                     <div className="text-xs text-muted-foreground font-medium">Data Sovereignty</div>
                     <div className="mt-1.5 text-sm font-bold text-foreground flex items-center gap-1.5">
-                      <span>🛡️ Strict GDPR Privacy</span>
+                      <span>🛡️ EU Data Sovereignty</span>
                     </div>
-                    <p className="mt-1 text-[11px] text-emerald-400">Zero US CLOUD Act exposure</p>
+                    <p className="mt-1 text-[11px] text-emerald-400">Frankfurt cloud data residency</p>
                   </div>
                   <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[210px]">
                     <div className="text-xs text-muted-foreground font-medium">Pricing Model</div>
@@ -572,8 +572,8 @@ export default async function LandingPage() {
                   a: "No! There are no artificial paywalls, mailbox limits, or lead caps. You can import extensive CSV lists with your prospect contacts, map custom attributes, and connect as many mailboxes as your campaign requires.",
                 },
                 {
-                  q: "Where is my data hosted and is SmartReach GDPR compliant?",
-                  a: "SmartReach is 100% hosted in the European Union on enterprise cloud infrastructure. All campaign data, prospect contacts, database records, and authentication sessions remain strictly within the EU, giving you full data sovereignty and effortless GDPR compliance without US CLOUD Act exposure.",
+                  q: "Where is my data hosted and how is data privacy handled?",
+                  a: "SmartReach is 100% hosted in the European Union (Frankfurt, Germany) on enterprise cloud infrastructure. Your databases, authentication sessions, and sender credentials remain strictly within the EU, giving you European data sovereignty without relying on US database clusters. Users maintain direct control over their prospect lists, unsubscribe headers, and compliance settings.",
                 },
                 {
                   q: "How does SmartReach protect email deliverability?",
@@ -639,7 +639,7 @@ export default async function LandingPage() {
             </span>
           </div>
 
-          {/* Navigation Links */}
+          {/* Navigation Links & Legal */}
           <div className="flex flex-wrap items-center justify-center gap-5 sm:gap-6 font-medium">
             <a href="#features" className="hover:text-foreground transition-colors">
               Features
@@ -650,6 +650,15 @@ export default async function LandingPage() {
             <a href="#pricing" className="hover:text-foreground transition-colors">
               Pricing ($0)
             </a>
+            <Link href="/impressum" className="hover:text-foreground transition-colors">
+              Impressum
+            </Link>
+            <Link href="/privacy" className="hover:text-foreground transition-colors">
+              Privacy Policy
+            </Link>
+            <Link href="/remove-my-info" className="hover:text-foreground transition-colors">
+              Remove My Info
+            </Link>
             <Link href="/login" className="hover:text-foreground transition-colors">
               Sign In
             </Link>

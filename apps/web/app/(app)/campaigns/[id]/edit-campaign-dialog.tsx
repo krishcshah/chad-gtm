@@ -36,6 +36,7 @@ interface CampaignData {
   sendingTimezone: string | null;
   businessDaysOnly: boolean | null;
   stopOnReply: boolean | null;
+  trackOpens?: boolean | null;
   minDelaySec: number | null;
   maxDelaySec: number | null;
   senders: { id: string; email: string; senderName?: string }[];
@@ -61,6 +62,7 @@ export function EditCampaignDialog({
   const [sendingTimezone, setSendingTimezone] = useState(campaign.sendingTimezone || "UTC");
   const [businessDaysOnly, setBusinessDaysOnly] = useState(campaign.businessDaysOnly ?? true);
   const [stopOnReply, setStopOnReply] = useState(campaign.stopOnReply ?? true);
+  const [trackOpens, setTrackOpens] = useState(campaign.trackOpens ?? true);
   const [minDelaySec, setMinDelaySec] = useState(String(campaign.minDelaySec ?? 120));
   const [maxDelaySec, setMaxDelaySec] = useState(String(campaign.maxDelaySec ?? 300));
   const [selectedSenderIds, setSelectedSenderIds] = useState<string[]>(
@@ -92,6 +94,7 @@ export function EditCampaignDialog({
         sendingTimezone: sendingTimezone.trim() || "UTC",
         businessDaysOnly,
         stopOnReply,
+        trackOpens,
         minDelaySec: parseInt(minDelaySec, 10) || 120,
         maxDelaySec: parseInt(maxDelaySec, 10) || 300,
         senderIds: selectedSenderIds,
@@ -269,6 +272,18 @@ export function EditCampaignDialog({
                   id="stop-reply"
                   checked={stopOnReply}
                   onCheckedChange={setStopOnReply}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="track-opens" className="text-xs font-medium cursor-pointer">Track Email Opens</Label>
+                  <p className="text-[11px] text-muted-foreground">Embed a 1x1 tracking pixel to record email open events</p>
+                </div>
+                <Switch
+                  id="track-opens"
+                  checked={trackOpens}
+                  onCheckedChange={setTrackOpens}
                 />
               </div>
             </div>

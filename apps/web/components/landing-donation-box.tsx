@@ -62,7 +62,7 @@ export function LandingDonationSection() {
           <h2 className="text-3xl font-extrabold tracking-tight sm:text-5xl text-foreground">
             We Want to Keep SmartReach Free Forever
             <span className="block mt-2 text-transparent bg-clip-text bg-gradient-to-r from-rose-400 via-amber-300 to-rose-400">
-              — But We Cannot Do This Without Your Support
+              But We Cannot Do This Without Your Support
             </span>
           </h2>
 

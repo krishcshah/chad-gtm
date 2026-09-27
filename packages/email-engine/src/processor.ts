@@ -29,9 +29,15 @@ export interface ProcessResult {
   skipped: number;
 }
 
-export function injectEmailTracking(html: string, jobId: string, baseUrl: string): string {
+export function injectEmailTracking(
+  html: string,
+  jobId: string,
+  baseUrl: string,
+  options?: { trackOpens?: boolean }
+): string {
   if (!html) return html;
   const cleanBaseUrl = baseUrl.replace(/\/+$/, "");
+  const trackOpens = options?.trackOpens ?? true;
 
   // Rewrite standard web links for click tracking (ignore mailto:, tel:, #, and already tracked links)
   const trackedHtml = html.replace(
@@ -44,6 +50,11 @@ export function injectEmailTracking(html: string, jobId: string, baseUrl: string
       return `<a${prefix}href=${quote}${trackingUrl}${quote}${suffix}>`;
     }
   );
+
+  // If open tracking is disabled for this campaign, return HTML with only click tracking
+  if (!trackOpens) {
+    return trackedHtml;
+  }
 
   // Append 1x1 transparent open pixel
   const openPixel = `<img src="${cleanBaseUrl}/api/track/open?jid=${encodeURIComponent(jobId)}" width="1" height="1" alt="" style="display:none;width:1px;height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;" />`;
@@ -167,7 +178,9 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
     // {{unsubscribe_url}} is resolved at schedule time when the template includes it.
     const textBody = job.bodyText || "";
     const rawHtml = job.bodyHtml || job.bodyText || "";
-    const htmlBody = injectEmailTracking(rawHtml, job.id, trackingAppUrl);
+    const htmlBody = injectEmailTracking(rawHtml, job.id, trackingAppUrl, {
+      trackOpens: campaign.trackOpens ?? true,
+    });
     const dryRun = isEngineDryRun();
 
     // Dry-run: prove enqueue→process path without live SMTP

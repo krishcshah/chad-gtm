@@ -244,6 +244,7 @@ export const campaignCreateSchema = z
     stopOnReply: z.boolean().default(true),
     retryFailed: z.boolean().default(true),
     retryCount: z.coerce.number().int().min(0).max(10).default(DEFAULTS.retryCount),
+    trackOpens: z.boolean().default(true),
   })
   .refine((v) => v.maxDelaySec >= v.minDelaySec, {
     message: "Max delay must be ≥ min delay",
@@ -285,6 +286,7 @@ export const campaignDraftSchema = z
     stopOnReply: z.boolean().optional(),
     retryFailed: z.boolean().optional(),
     retryCount: z.coerce.number().int().min(0).max(10).optional(),
+    trackOpens: z.boolean().optional(),
     wizardStep: z.coerce.number().int().min(1).max(20).optional(),
   })
   .superRefine((v, ctx) => {

@@ -49,6 +49,7 @@ const CAMPAIGN_FIELD_KEYS = [
   "stopOnReply",
   "retryFailed",
   "retryCount",
+  "trackOpens",
   "wizardStep",
 ] as const;
 
@@ -206,6 +207,7 @@ export async function saveCampaignDraftForUser(
     if (d.stopOnReply !== undefined) insertValues.stopOnReply = d.stopOnReply;
     if (d.retryFailed !== undefined) insertValues.retryFailed = d.retryFailed;
     if (d.retryCount !== undefined) insertValues.retryCount = d.retryCount;
+    if (d.trackOpens !== undefined) insertValues.trackOpens = d.trackOpens;
 
     const [row] = await db
       .insert(campaigns)
@@ -258,6 +260,7 @@ export async function publishCampaignForUser(
     stopOnReply: d.stopOnReply,
     retryFailed: d.retryFailed,
     retryCount: d.retryCount,
+    trackOpens: d.trackOpens,
     wizardStep: null as null,
     startedAt,
     updatedAt: nowIso(),
@@ -368,6 +371,7 @@ export type CampaignWizardState = {
   stopOnReply: boolean;
   retryFailed: boolean;
   retryCount: number;
+  trackOpens: boolean;
   startMode: "now" | "later";
 };
 
@@ -416,6 +420,7 @@ export async function getCampaignWizardStateForUser(
         stopOnReply: c.stopOnReply,
         retryFailed: c.retryFailed,
         retryCount: c.retryCount,
+        trackOpens: c.trackOpens ?? true,
         startMode: c.scheduledAt ? "later" : "now",
       },
     };

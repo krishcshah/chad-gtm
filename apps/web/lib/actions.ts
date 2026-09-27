@@ -1018,6 +1018,7 @@ export async function campaignAction(
             stopOnReply: c.stopOnReply,
             retryFailed: c.retryFailed,
             retryCount: c.retryCount,
+            trackOpens: c.trackOpens,
           })
           .returning({ id: campaigns.id });
         const senders = await db
@@ -1083,6 +1084,7 @@ export async function duplicateCampaignToDraft(
         stopOnReply: c.stopOnReply,
         retryFailed: c.retryFailed,
         retryCount: c.retryCount,
+        trackOpens: c.trackOpens,
         wizardStep: 1,
       })
       .returning({ id: campaigns.id });
@@ -1129,6 +1131,7 @@ export async function updateCampaignSettings(
     sendingTimezone?: string;
     businessDaysOnly?: boolean;
     stopOnReply?: boolean;
+    trackOpens?: boolean;
     minDelaySec?: number;
     maxDelaySec?: number;
     senderIds?: string[];
@@ -1151,6 +1154,7 @@ export async function updateCampaignSettings(
     if (typeof input.sendingTimezone === "string") updateData.sendingTimezone = input.sendingTimezone;
     if (typeof input.businessDaysOnly === "boolean") updateData.businessDaysOnly = input.businessDaysOnly;
     if (typeof input.stopOnReply === "boolean") updateData.stopOnReply = input.stopOnReply;
+    if (typeof input.trackOpens === "boolean") updateData.trackOpens = input.trackOpens;
     if (typeof input.minDelaySec === "number") updateData.minDelaySec = input.minDelaySec;
     if (typeof input.maxDelaySec === "number") updateData.maxDelaySec = input.maxDelaySec;
 

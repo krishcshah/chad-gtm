@@ -67,7 +67,23 @@ async function seedAdmin() {
 
       console.log(`Admin user created successfully! (${ADMIN_EMAIL} / ${ADMIN_PASSWORD})`);
     } else {
-      console.log(`Admin user ${ADMIN_EMAIL} already exists with ID: ${existing.rows[0].id}`);
+      const uId = existing.rows[0].id;
+      console.log(`Admin user ${ADMIN_EMAIL} exists with ID: ${uId}. Ensuring credential password...`);
+      const passwordHash = await hashPassword(ADMIN_PASSWORD);
+      const acc = await client.query('SELECT id FROM accounts WHERE user_id = $1 AND provider_id = $2', [uId, 'credential']);
+      if (acc.rows.length === 0) {
+        await client.query(
+          `INSERT INTO accounts (id, account_id, provider_id, user_id, password, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
+          [crypto.randomUUID(), uId, 'credential', uId, passwordHash]
+        );
+      } else {
+        await client.query(
+          `UPDATE accounts SET password = $1, updated_at = NOW() WHERE user_id = $2 AND provider_id = 'credential'`,
+          [passwordHash, uId]
+        );
+      }
+      console.log(`Password for ${ADMIN_EMAIL} ensured as: ${ADMIN_PASSWORD}`);
     }
   } finally {
     client.release();

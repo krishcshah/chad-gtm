@@ -12,6 +12,8 @@ import { AiSettingsCard } from "@/components/ai/ai-settings-card";
 import { GermanFlag } from "@/components/german-flag";
 import { SupportProjectButton } from "@/components/support-project-button";
 import { Heart } from "lucide-react";
+import { DpaCard } from "./dpa-card";
+import { RemoveMyInfoCard } from "./remove-my-info-card";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +95,10 @@ export default async function SettingsPage() {
           source: s.source,
         }))}
       />
+
+      <DpaCard />
+
+      <RemoveMyInfoCard userEmail={user.email} />
 
       <Card>
         <CardContent className="p-6">
