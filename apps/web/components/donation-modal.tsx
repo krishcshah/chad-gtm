@@ -13,7 +13,7 @@ import {
   Badge,
   Input,
 } from "@smartreach/ui";
-import { STRIPE_PAYMENT_LINK, getCheckoutUrl } from "@/lib/subscription";
+import { STRIPE_PAYMENT_LINK, getCheckoutUrl } from "@/lib/donation";
 import { Heart, Sparkles, Coffee, Zap, Rocket, Check, ArrowRight, PartyPopper } from "lucide-react";
 
 interface DonationModalProps {
