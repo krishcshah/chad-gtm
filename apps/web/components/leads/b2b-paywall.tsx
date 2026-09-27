@@ -33,7 +33,7 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
-import { getB2BCheckoutUrl } from "@/lib/b2b-access";
+import { getB2BCheckoutUrl } from "@/lib/b2b-constants";
 import { unlockB2bAccessAction } from "@/lib/b2b-access-actions";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";

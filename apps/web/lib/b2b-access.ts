@@ -3,24 +3,7 @@ import { schema } from "@smartreach/database";
 import { getDb } from "./db";
 import { isAdminEmail } from "./admin";
 
-/**
- * Base Stripe Payment Link for $99 lifetime B2B database access
- * Uses the live custom payment link from Stripe account acct_1QXsSpRxeTlyT7jA
- * with prefilled_amount=9900 ($99.00 USD)
- */
-export const STRIPE_B2B_CHECKOUT_BASE = "https://donate.stripe.com/aFafZjgJy2y5azOgPY6wE0q";
-
-export function getB2BCheckoutUrl(email?: string, userId?: string): string {
-  try {
-    const url = new URL(STRIPE_B2B_CHECKOUT_BASE);
-    url.searchParams.set("prefilled_amount", "9900"); // $99.00
-    if (email) url.searchParams.set("prefilled_email", email);
-    if (userId) url.searchParams.set("client_reference_id", userId);
-    return url.toString();
-  } catch {
-    return `${STRIPE_B2B_CHECKOUT_BASE}?prefilled_amount=9900`;
-  }
-}
+export { STRIPE_B2B_CHECKOUT_BASE, getB2BCheckoutUrl } from "./b2b-constants";
 
 let schemaEnsured = false;
 
