@@ -151,6 +151,34 @@ async function run() {
     console.log(`Saved: ${settingsModalPath}`);
   }
 
+  // 4. DESKTOP SIDEBAR "MADE IN GERMANY" HEART SUPPORT BUTTON
+  console.log('\nTesting Sidebar "Support" Heart Button next to Made in Germany...');
+  await page.goto(`${BASE_URL}/dashboard`, { waitUntil: 'networkidle2' });
+  await sleep(1500);
+
+  // Close any existing modal if open
+  await page.keyboard.press('Escape');
+  await sleep(500);
+
+  // Find the Support button in the sidebar footer
+  const sidebarSupportBtn = await page.$('button[title*="Support the Free Forever mission"]');
+  if (sidebarSupportBtn) {
+    console.log('Found Sidebar Support heart button! Taking sidebar screenshot...');
+    const sidebarSection = await page.$('aside');
+    if (sidebarSection) {
+      await sidebarSection.screenshot({ path: path.join(SCREENSHOTS_DIR, 'sidebar_made_in_germany_support.png') });
+      console.log('Saved: sidebar_made_in_germany_support.png');
+    }
+
+    console.log('Clicking Sidebar Support button...');
+    await sidebarSupportBtn.click();
+    await sleep(1000);
+
+    const sidebarModalPath = path.join(SCREENSHOTS_DIR, 'modal_opened_from_sidebar_heart.png');
+    await page.screenshot({ path: sidebarModalPath });
+    console.log(`Saved: ${sidebarModalPath}`);
+  }
+
   await browser.close();
   console.log('All donation modal tests completed successfully!');
 }

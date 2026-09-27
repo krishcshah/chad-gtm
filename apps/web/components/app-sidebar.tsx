@@ -3,6 +3,7 @@
 import {
   Ban,
   BarChart3,
+  Heart,
   Inbox,
   Layers,
   LayoutDashboard,
@@ -202,17 +203,31 @@ export function AppSidebar({
           </div>
         </div>
 
-        {/* Subtle Made in Germany Corner Branding */}
+        {/* Subtle Made in Germany Corner Branding & Support Heart Button */}
         <div
           className={cn(
-            "border-t border-border/30 py-2 flex items-center text-[10px] text-muted-foreground/60 select-none transition-all duration-300",
-            collapsed ? "justify-center px-1" : "justify-between px-4"
+            "border-t border-border/30 py-2 flex items-center text-[10px] select-none transition-all duration-300",
+            collapsed ? "flex-col gap-1.5 justify-center px-1" : "justify-between px-3"
           )}
         >
-          <span className="flex items-center gap-1.5 font-medium tracking-tight">
+          <span className="flex items-center gap-1.5 font-medium tracking-tight text-muted-foreground/60">
             <GermanFlag className="h-2.5 w-3.5 shrink-0" />
             {!collapsed && <span>Made in Germany</span>}
           </span>
+
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent("open-donation-modal"))}
+            title="Support the Free Forever mission"
+            aria-label="Support the Free Forever mission"
+            className={cn(
+              "group inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose-500/50 cursor-pointer",
+              collapsed && "p-1"
+            )}
+          >
+            <Heart className="size-3 fill-rose-500/20 text-rose-400 group-hover:scale-115 group-hover:fill-rose-500 transition-all" />
+            {!collapsed && <span>Support</span>}
+          </button>
         </div>
       </aside>
 

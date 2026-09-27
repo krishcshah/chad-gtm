@@ -103,13 +103,10 @@ export function DonationModal({ userEmail, userId, userName }: DonationModalProp
       localStorage.setItem("smartreach_has_donated", "1");
     } catch {}
 
-    // Open Stripe / Donation Checkout link if configured
+    // Open Stripe / Donation Checkout link
     try {
-      const checkoutUrl = getCheckoutUrl(userEmail, userId);
-      const url = new URL(checkoutUrl);
-      url.searchParams.set("amount", String(currentAmount));
-      url.searchParams.set("frequency", frequency);
-      window.open(url.toString(), "_blank", "noopener,noreferrer");
+      const checkoutUrl = getCheckoutUrl(userEmail, userId, currentAmount, frequency);
+      window.open(checkoutUrl, "_blank", "noopener,noreferrer");
     } catch {
       window.open(STRIPE_PAYMENT_LINK, "_blank", "noopener,noreferrer");
     }
