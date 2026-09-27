@@ -5,16 +5,19 @@ import { ApolloLeadsView } from "@/components/leads/apollo-leads-view";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "My Leads & Contact Lists · SmartReach" };
+export const metadata = {
+  title: "B2B Database · 350k+ Verified Leads · SmartReach",
+  description: "Search 350,000+ verified B2B decision-makers, filter by company size, seniority, and industry, and export directly to campaigns.",
+};
 
-export default async function LeadsPage({
+export default async function B2bDatabasePage({
   searchParams,
 }: {
   searchParams?: Promise<{ tab?: string }>;
 }) {
   const { user, workspace } = await requireWorkspace();
   const sp = searchParams ? await searchParams : {};
-  const defaultTab = sp.tab === "directory" ? "directory" : "saved-lists";
+  const defaultTab = sp.tab === "saved-lists" ? "saved-lists" : "directory";
 
   // Fetch campaign lists, aggregated facets, and initial page of directory leads in parallel
   const [lists, facets, initialResult] = await Promise.all([

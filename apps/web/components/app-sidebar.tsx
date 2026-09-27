@@ -4,6 +4,7 @@ import {
   Ban,
   BarChart3,
   Bug,
+  Database,
   Heart,
   Inbox,
   Layers,
@@ -35,10 +36,9 @@ const nav = [
   { href: "/unibox", label: "UniBox", icon: Inbox, badge: "Live" },
   { href: "/campaigns", label: "Campaigns", icon: Rocket },
   { href: "/leads", label: "Leads", icon: Users },
+  { href: "/b2b-database", label: "B2B Database", icon: Database, badge: "350k+" },
   { href: "/senders", label: "Senders", icon: Mail },
   { href: "/templates", label: "Sequences", icon: Layers },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/blocklist", label: "Blocklist", icon: Ban },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -76,31 +76,36 @@ export function AppSidebar({
       >
         {/* Logo and Brand Header with Collapse Toggle */}
         <div
+          onClick={collapsed ? toggleCollapsed : undefined}
+          title={collapsed ? "Click to expand sidebar" : undefined}
           className={cn(
             "flex h-16 items-center border-b border-border/40 transition-all duration-300",
-            collapsed ? "justify-center px-2" : "justify-between px-4"
+            collapsed
+              ? "justify-center px-2 cursor-pointer hover:bg-accent/40"
+              : "justify-between px-4"
           )}
         >
           {collapsed ? (
-            <Logo compact />
+            <div className="flex items-center justify-center">
+              <Logo compact />
+            </div>
           ) : (
             <div className="flex items-center gap-2">
               <Logo />
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            aria-label={collapsed ? "Expand sidebar (Ctrl+B)" : "Collapse sidebar (Ctrl+B)"}
-            title={collapsed ? "Expand sidebar (Ctrl+B)" : "Collapse sidebar (Ctrl+B)"}
-            className={cn(
-              "flex size-7 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors shrink-0",
-              collapsed && "mt-2"
-            )}
-          >
-            {collapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
-          </button>
+          {!collapsed && (
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              aria-label="Collapse sidebar (Ctrl+B)"
+              title="Collapse sidebar (Ctrl+B)"
+              className="flex size-7 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors shrink-0"
+            >
+              <PanelLeftClose className="size-4" />
+            </button>
+          )}
         </div>
 
         {/* Workspace Switcher */}
@@ -180,29 +185,37 @@ export function AppSidebar({
           )}
         >
           <div
-            title={`${user.name ?? "User"} (${user.email})`}
-            className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/30 to-info/30 text-xs font-bold text-primary shadow-xs border border-primary/20"
+            role="button"
+            tabIndex={0}
+            onClick={() => router.push("/settings")}
+            title="Open Account Settings"
+            className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer group hover:opacity-85 transition-opacity"
           >
-            {userInitial}
-          </div>
-
-          {!collapsed && (
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <p className="truncate text-xs font-semibold text-foreground leading-tight">
-                  {user.name ?? "User"}
-                </p>
-                {userIsAdmin && (
-                  <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 uppercase tracking-wider">
-                    Admin
-                  </span>
-                )}
-              </div>
-              <p className="truncate text-[11px] text-muted-foreground mt-0.5">
-                {user.email}
-              </p>
+            <div
+              title={`${user.name ?? "User"} (${user.email})`}
+              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/30 to-info/30 text-xs font-bold text-primary shadow-xs border border-primary/20 group-hover:border-primary/50 transition-colors"
+            >
+              {userInitial}
             </div>
-          )}
+
+            {!collapsed && (
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <p className="truncate text-xs font-semibold text-foreground leading-tight group-hover:text-primary transition-colors">
+                    {user.name ?? "User"}
+                  </p>
+                  {userIsAdmin && (
+                    <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 uppercase tracking-wider">
+                      Admin
+                    </span>
+                  )}
+                </div>
+                <p className="truncate text-[11px] text-muted-foreground mt-0.5">
+                  {user.email}
+                </p>
+              </div>
+            )}
+          </div>
 
           <div className={cn("flex items-center", collapsed ? "flex-col gap-1 mt-1" : "gap-1")}>
             <ThemeToggle />

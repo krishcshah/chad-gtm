@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, Card, CardContent, Separator } from "@smartreac
 import { ThemeToggle } from "@/components/theme-toggle";
 import { eq, desc } from "drizzle-orm";
 import { ComplianceForms } from "./compliance-forms";
+import { SettingsBlocklistCard } from "./blocklist-card";
 import { WorkspaceSettingsCard } from "./workspace-settings-card";
 import { AiSettingsCard } from "@/components/ai/ai-settings-card";
 import { GermanFlag } from "@/components/german-flag";
@@ -14,6 +15,7 @@ import { SupportProjectButton } from "@/components/support-project-button";
 import { Heart } from "lucide-react";
 import { DpaCard } from "./dpa-card";
 import { RemoveMyInfoCard } from "./remove-my-info-card";
+import { DangerZoneCard } from "./danger-zone-card";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +48,7 @@ export default async function SettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Workspaces, account, compliance, appearance, and sending engine.
+          Workspaces, account, compliance, blocklist, appearance, and sending engine.
         </p>
       </div>
 
@@ -87,7 +89,11 @@ export default async function SettingsPage() {
           postalAddress: settings?.postalAddress ?? "",
           unsubscribeBaseUrl: settings?.unsubscribeBaseUrl ?? "",
         }}
-        suppressions={suppressions.map((s: { id: string; value: string; kind: string; reason: string; source: string }) => ({
+      />
+
+      {/* Blocklist Card inside Settings */}
+      <SettingsBlocklistCard
+        initialSuppressions={suppressions.map((s: { id: string; value: string; kind: string; reason: string; source: string }) => ({
           id: s.id,
           value: s.value,
           kind: s.kind,
@@ -127,6 +133,9 @@ export default async function SettingsPage() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Danger Zone: Permanent Account Deletion */}
+      <DangerZoneCard userEmail={user.email} />
 
       {/* Subtle Made in Germany System Card */}
       <div className="rounded-xl border border-border/50 bg-card/30 p-4 text-center">
