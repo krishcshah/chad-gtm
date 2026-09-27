@@ -1,4 +1,4 @@
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
 const path = require('path');
 const fs = require('fs');
 
@@ -16,8 +16,10 @@ async function run() {
 
   console.log(`Starting Puppeteer verification against: ${BASE_URL}`);
   const browser = await puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--ignore-certificate-errors'],
+    executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    headless: true,
+    ignoreHTTPSErrors: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
   });
 
   const page = await browser.newPage();
@@ -39,7 +41,7 @@ async function run() {
   console.log('Found #community-support section. Scrolling into view...');
   await page.evaluate(() => {
     const el = document.getElementById('community-support');
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (el) el.scrollIntoView({ behavior: 'instant', block: 'center' });
   });
   await sleep(1000);
 
@@ -95,6 +97,19 @@ async function run() {
   const mobileScreenshot = path.join(ARTIFACTS_DIR, 'landing_donation_section_mobile.png');
   await page.screenshot({ path: mobileScreenshot });
   console.log(`Saved mobile screenshot: ${mobileScreenshot}`);
+
+  // Also full section screenshot on mobile
+  await page.evaluate(() => {
+    const el = document.getElementById('community-support');
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      window.scrollTo(0, window.scrollY + rect.top + 300);
+    }
+  });
+  await sleep(600);
+  const mobileCardScreenshot = path.join(ARTIFACTS_DIR, 'landing_donation_card_mobile.png');
+  await page.screenshot({ path: mobileCardScreenshot });
+  console.log(`Saved mobile card screenshot: ${mobileCardScreenshot}`);
 
   console.log('All landing page donation tests passed successfully!');
   await browser.close();
