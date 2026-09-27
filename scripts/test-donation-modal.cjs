@@ -164,15 +164,18 @@ async function run() {
   const sidebarSupportBtn = await page.$('button[title*="Support the Free Forever mission"]');
   if (sidebarSupportBtn) {
     console.log('Found Sidebar Support heart button! Taking sidebar screenshot...');
-    const sidebarSection = await page.$('aside');
-    if (sidebarSection) {
-      await sidebarSection.screenshot({ path: path.join(SCREENSHOTS_DIR, 'sidebar_made_in_germany_support.png') });
-      console.log('Saved: sidebar_made_in_germany_support.png');
-    }
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, 'sidebar_made_in_germany_support.png'),
+      clip: { x: 0, y: 750, width: 300, height: 150 },
+    });
+    console.log('Saved: sidebar_made_in_germany_support.png');
 
     console.log('Clicking Sidebar Support button...');
-    await sidebarSupportBtn.click();
-    await sleep(1000);
+    await page.evaluate(() => {
+      const btn = document.querySelector('button[title*="Support the Free Forever mission"]');
+      if (btn) btn.click();
+    });
+    await sleep(1200);
 
     const sidebarModalPath = path.join(SCREENSHOTS_DIR, 'modal_opened_from_sidebar_heart.png');
     await page.screenshot({ path: sidebarModalPath });

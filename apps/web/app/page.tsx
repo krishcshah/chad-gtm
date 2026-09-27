@@ -25,6 +25,7 @@ import { GermanFlag } from "@/components/german-flag";
 import { EuFlag } from "@/components/eu-flag";
 import { getSession } from "@/lib/session";
 import { InteractiveShowcase } from "@/components/landing/interactive-showcase";
+import { LandingDonationSection } from "@/components/landing-donation-box";
 
 export const dynamic = "force-dynamic";
 
@@ -532,6 +533,9 @@ export default async function LandingPage() {
             </div>
           </div>
         </section>
+ 
+        {/* Community Donation & Support Section */}
+        <LandingDonationSection />
 
         {/* FAQ Section */}
         <section id="faq" className="py-20 border-t border-border/40">
