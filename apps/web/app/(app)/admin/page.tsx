@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/session";
 import { isAdmin } from "@/lib/admin";
 import { listAllBugReportsForAdmin } from "@/lib/bug-reports";
 import { listAllDataRemovalRequestsForAdmin } from "@/lib/data-removal";
+import { getAdminUserAnalytics } from "@/lib/admin-analytics";
 import { AdminConsoleView } from "./admin-console-view";
 import { ShieldCheck, ShieldAlert } from "lucide-react";
 import { PermissionDenied } from "@smartreach/ui";
@@ -10,8 +11,8 @@ import { PermissionDenied } from "@smartreach/ui";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Admin Console · Bug Reports & Data Erasure · SmartReach",
-  description: "Administrative oversight of bug reports, system feedback, and GDPR data removal requests.",
+  title: "Admin Console · User Analytics & Tracking · SmartReach",
+  description: "Administrative oversight of registered users, page view analytics, mailbox adoption, bug reports, and GDPR data requests.",
 };
 
 export default async function AdminPage() {
@@ -32,7 +33,8 @@ export default async function AdminPage() {
     );
   }
 
-  const [reports, removalRequests] = await Promise.all([
+  const [analytics, reports, removalRequests] = await Promise.all([
+    getAdminUserAnalytics(user),
     listAllBugReportsForAdmin(user),
     listAllDataRemovalRequestsForAdmin(user),
   ]);
@@ -55,13 +57,14 @@ export default async function AdminPage() {
             Admin Console
           </h1>
           <p className="text-sm text-muted-foreground">
-            Review user bug submissions, manage GDPR data removal requests, investigate errors, update resolution status, and download records as CSV.
+            Monitor real-time user behavior, page view telemetry, mailbox infrastructure, bug submissions, and GDPR data requests.
           </p>
         </div>
       </div>
 
-      {/* Tabbed Interactive Views (Bug Reports & Data Removals) */}
+      {/* Tabbed Interactive Views (Analytics, Bug Reports, Data Removals) */}
       <AdminConsoleView
+        initialAnalytics={analytics}
         initialBugReports={reports}
         initialDataRemovals={removalRequests}
       />

@@ -10,6 +10,7 @@ import { getActiveWorkspace, getFallbackWorkspace, listUserWorkspaces, type Work
 import { SidebarProvider } from "@/components/layout/sidebar-context";
 import { AppShell, AppMainContent } from "@/components/layout/app-shell";
 import { DonationModal } from "@/components/donation-modal";
+import { PageTracker } from "@/components/page-tracker";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
@@ -39,6 +40,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <ImportJobProvider>
         <AppShell>
           <NavigationProgress />
+          <PageTracker />
           <AppSidebar
             user={user}
             workspaces={workspaces}

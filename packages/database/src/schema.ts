@@ -685,6 +685,29 @@ export const dataRemovalRequests = pgTable(
   ],
 );
 
+/* ─── Page view analytics (Admin tracking) ────────────────────────── */
+
+export const pageViews = pgTable(
+  "page_views",
+  {
+    id: id(),
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
+    path: text("path").notNull(),
+    pageTitle: text("page_title"),
+    referrer: text("referrer"),
+    userAgent: text("user_agent"),
+    ipAddress: text("ip_address"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("page_views_user_idx").on(t.userId),
+    index("page_views_path_idx").on(t.path),
+    index("page_views_created_at_idx").on(t.createdAt),
+    index("page_views_user_created_idx").on(t.userId, t.createdAt),
+  ],
+);
+
 /* ─── Re-export auth tables so drizzle sees the whole graph ────────────── */
 export * from "./schema-auth";
 
