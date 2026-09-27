@@ -77,13 +77,8 @@ async function seedAdmin() {
            VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
           [crypto.randomUUID(), uId, 'credential', uId, passwordHash]
         );
-      } else {
-        await client.query(
-          `UPDATE accounts SET password = $1, updated_at = NOW() WHERE user_id = $2 AND provider_id = 'credential'`,
-          [passwordHash, uId]
-        );
+        console.log(`Admin account for ${ADMIN_EMAIL} already exists with a password configured. Leaving password unchanged.`);
       }
-      console.log(`Password for ${ADMIN_EMAIL} ensured as: ${ADMIN_PASSWORD}`);
     }
   } finally {
     client.release();
