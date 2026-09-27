@@ -19,7 +19,14 @@ import {
   Server,
   ArrowUpDown,
 } from "lucide-react";
-import { Button } from "@smartreach/ui";
+import {
+  Button,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@smartreach/ui";
 import { AdminUserDetailModal } from "./admin-user-detail-modal";
 import type { AdminAnalyticsPayload, UserAnalyticsSummary } from "@/lib/admin-analytics";
 
@@ -395,16 +402,17 @@ export function AdminAnalyticsView({
             {/* Sorter Dropdown */}
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <ArrowUpDown className="size-3" />
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="rounded-lg border border-border/70 bg-background px-2.5 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              >
-                <option value="views">Most Pages Visited</option>
-                <option value="mailboxes">Most Mailboxes</option>
-                <option value="newest">Newest Signups</option>
-                <option value="last_active">Last Active</option>
-              </select>
+              <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
+                <SelectTrigger className="h-7 w-[165px] rounded-lg border-border/70 bg-background px-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="end">
+                  <SelectItem value="views">Most Pages Visited</SelectItem>
+                  <SelectItem value="mailboxes">Most Mailboxes</SelectItem>
+                  <SelectItem value="newest">Newest Signups</SelectItem>
+                  <SelectItem value="last_active">Last Active</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>

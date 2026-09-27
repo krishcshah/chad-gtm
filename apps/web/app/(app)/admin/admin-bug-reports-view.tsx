@@ -11,12 +11,18 @@ import {
   Filter,
   User,
   ExternalLink,
-  ChevronDown,
   Loader2,
   ShieldCheck,
 } from "lucide-react";
 import type { BugReportDTO, BugReportStatus } from "@/lib/bug-reports";
 import { updateBugReportStatusAction } from "@/lib/bug-report-actions";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@smartreach/ui";
 
 export function AdminBugReportsView({ initialReports }: { initialReports: BugReportDTO[] }) {
   const [reports, setReports] = useState<BugReportDTO[]>(initialReports);
@@ -156,17 +162,18 @@ export function AdminBugReportsView({ initialReports }: { initialReports: BugRep
           </div>
 
           {/* Status filter dropdown */}
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-xl border border-border/60 bg-muted/40 px-3 py-2 text-xs font-medium text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          >
-            <option value="all">All Statuses</option>
-            <option value="open">Open</option>
-            <option value="investigating">Investigating</option>
-            <option value="resolved">Resolved</option>
-            <option value="closed">Closed</option>
-          </select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[145px] h-9 rounded-xl border border-border/60 bg-muted/40 px-3 text-xs font-medium text-foreground focus:ring-1 focus:ring-primary">
+              <SelectValue placeholder="All Statuses" />
+            </SelectTrigger>
+            <SelectContent align="end">
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="open">Open</SelectItem>
+              <SelectItem value="investigating">Investigating</SelectItem>
+              <SelectItem value="resolved">Resolved</SelectItem>
+              <SelectItem value="closed">Closed</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Download CSV Button */}
@@ -239,12 +246,13 @@ export function AdminBugReportsView({ initialReports }: { initialReports: BugRep
 
                   {/* Right: Status Pill & Changer */}
                   <div className="flex items-center gap-2 shrink-0 sm:pt-1">
-                    <div className="relative">
-                      <select
-                        value={report.status}
-                        disabled={isUpdating && updatingId === report.id}
-                        onChange={(e) => handleStatusChange(report.id, e.target.value as BugReportStatus)}
-                        className={`text-xs font-semibold rounded-lg px-2.5 py-1.5 border appearance-none pr-7 cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary transition-all ${
+                    <Select
+                      value={report.status}
+                      disabled={isUpdating && updatingId === report.id}
+                      onValueChange={(val) => handleStatusChange(report.id, val as BugReportStatus)}
+                    >
+                      <SelectTrigger
+                        className={`h-7 w-[125px] text-xs font-semibold rounded-lg px-2.5 border transition-all ${
                           report.status === "open"
                             ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
                             : report.status === "investigating"
@@ -254,21 +262,15 @@ export function AdminBugReportsView({ initialReports }: { initialReports: BugRep
                             : "bg-muted text-muted-foreground border-border/40"
                         }`}
                       >
-                        <option value="open" className="bg-popover text-foreground">
-                          Open
-                        </option>
-                        <option value="investigating" className="bg-popover text-foreground">
-                          Investigating
-                        </option>
-                        <option value="resolved" className="bg-popover text-foreground">
-                          Resolved
-                        </option>
-                        <option value="closed" className="bg-popover text-foreground">
-                          Closed
-                        </option>
-                      </select>
-                      <ChevronDown className="absolute right-2 top-1/2 size-3.5 -translate-y-1/2 pointer-events-none opacity-60" />
-                    </div>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent align="end">
+                        <SelectItem value="open">Open</SelectItem>
+                        <SelectItem value="investigating">Investigating</SelectItem>
+                        <SelectItem value="resolved">Resolved</SelectItem>
+                        <SelectItem value="closed">Closed</SelectItem>
+                      </SelectContent>
+                    </Select>
 
                     {isUpdating && updatingId === report.id && (
                       <Loader2 className="size-3.5 animate-spin text-primary" />

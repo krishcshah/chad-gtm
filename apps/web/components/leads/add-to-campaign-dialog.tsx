@@ -11,6 +11,11 @@ import {
   DialogTitle,
   Input,
   Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@smartreach/ui";
 import {
   CheckCircle2,
@@ -170,17 +175,18 @@ export function AddToCampaignDialog({
           ) : (
             <div className="space-y-2">
               <Label className="text-xs font-semibold">Select Destination List</Label>
-              <select
-                value={selectedListId}
-                onChange={(e) => setSelectedListId(e.target.value)}
-                className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                {existingLists.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name} ({l.leadCount || 0} leads)
-                  </option>
-                ))}
-              </select>
+              <Select value={selectedListId} onValueChange={setSelectedListId}>
+                <SelectTrigger className="w-full h-9 rounded-md border-input bg-background px-3 py-1 text-xs shadow-sm focus:ring-1 focus:ring-ring">
+                  <SelectValue placeholder="Choose a destination list..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {existingLists.map((l) => (
+                    <SelectItem key={l.id} value={l.id}>
+                      {l.name} ({l.leadCount || 0} leads)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="text-[11px] text-muted-foreground">
                 Duplicates are automatically skipped to prevent emailing the same contact twice.
               </p>

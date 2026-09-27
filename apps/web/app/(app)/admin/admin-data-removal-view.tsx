@@ -11,13 +11,19 @@ import {
   Filter,
   UserX,
   Mail,
-  ChevronDown,
   Loader2,
   ShieldCheck,
   XCircle,
 } from "lucide-react";
 import type { DataRemovalRequestDTO, DataRemovalStatus } from "@/lib/data-removal";
 import { updateDataRemovalStatusAction } from "@/lib/data-removal-actions";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@smartreach/ui";
 
 export function AdminDataRemovalView({ initialRequests }: { initialRequests: DataRemovalRequestDTO[] }) {
   const [requests, setRequests] = useState<DataRemovalRequestDTO[]>(initialRequests);
@@ -186,17 +192,18 @@ export function AdminDataRemovalView({ initialRequests }: { initialRequests: Dat
 
           <div className="flex items-center gap-1.5 shrink-0">
             <Filter className="size-3.5 text-muted-foreground" />
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-9 rounded-lg border border-border/80 bg-card px-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
-            >
-              <option value="all">All Statuses ({totalCount})</option>
-              <option value="pending">Pending ({pendingCount})</option>
-              <option value="in_progress">In Progress ({inProgressCount})</option>
-              <option value="completed">Completed ({completedCount})</option>
-              <option value="rejected">Rejected</option>
-            </select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-9 w-[170px] rounded-lg border border-border/80 bg-card px-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary">
+                <SelectValue placeholder={`All Statuses (${totalCount})`} />
+              </SelectTrigger>
+              <SelectContent align="end">
+                <SelectItem value="all">All Statuses ({totalCount})</SelectItem>
+                <SelectItem value="pending">Pending ({pendingCount})</SelectItem>
+                <SelectItem value="in_progress">In Progress ({inProgressCount})</SelectItem>
+                <SelectItem value="completed">Completed ({completedCount})</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
@@ -273,22 +280,26 @@ export function AdminDataRemovalView({ initialRequests }: { initialRequests: Dat
                         <div className="space-y-1.5">
                           <div>{getStatusBadge(req.status)}</div>
                           <div className="flex items-center gap-1.5 pt-0.5">
-                            <select
+                            <Select
                               disabled={isRowUpdating}
                               value={req.status}
-                              onChange={(e) =>
+                              onValueChange={(val) =>
                                 handleStatusChange(
                                   req.id,
-                                  e.target.value as DataRemovalStatus
+                                  val as DataRemovalStatus
                                 )
                               }
-                              className="h-7 rounded border border-border/80 bg-background px-2 text-[11px] text-foreground focus:border-primary focus:outline-none"
                             >
-                              <option value="pending">Mark Pending</option>
-                              <option value="in_progress">Mark In Progress</option>
-                              <option value="completed">Mark Purged/Done</option>
-                              <option value="rejected">Mark Rejected</option>
-                            </select>
+                              <SelectTrigger className="h-7 w-[130px] rounded border border-border/80 bg-background px-2 text-[11px] text-foreground">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent align="start">
+                                <SelectItem value="pending">Mark Pending</SelectItem>
+                                <SelectItem value="in_progress">Mark In Progress</SelectItem>
+                                <SelectItem value="completed">Mark Purged/Done</SelectItem>
+                                <SelectItem value="rejected">Mark Rejected</SelectItem>
+                              </SelectContent>
+                            </Select>
                             {isRowUpdating && (
                               <Loader2 className="size-3 animate-spin text-muted-foreground" />
                             )}
