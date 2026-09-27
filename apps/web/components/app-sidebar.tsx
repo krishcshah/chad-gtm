@@ -3,6 +3,7 @@
 import {
   Ban,
   BarChart3,
+  Bug,
   Heart,
   Inbox,
   Layers,
@@ -13,6 +14,7 @@ import {
   PanelLeftOpen,
   Rocket,
   Settings,
+  ShieldCheck,
   Sparkles,
   Users,
 } from "lucide-react";
@@ -20,6 +22,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@smartreach/ui";
 import { authClient } from "@/lib/auth-client";
+import { isAdmin } from "@/lib/admin";
 import { Logo } from "./logo";
 import { ThemeToggle } from "./theme-toggle";
 import { WorkspaceSwitcher } from "./workspace-switcher";
@@ -53,6 +56,14 @@ export function AppSidebar({
   const { collapsed, toggleCollapsed } = useSidebar();
 
   const userInitial = (user.name ?? user.email ?? "U").slice(0, 1).toUpperCase();
+  const userIsAdmin = isAdmin(user);
+
+  const navItems = [
+    ...nav,
+    userIsAdmin
+      ? { href: "/admin", label: "Admin", icon: ShieldCheck, badge: "Root" }
+      : { href: "/bug-report", label: "Bug Report", icon: Bug },
+  ];
 
   return (
     <>
@@ -105,7 +116,7 @@ export function AppSidebar({
 
         {/* Navigation items */}
         <nav className={cn("flex-1 space-y-1 overflow-y-auto py-3 transition-all duration-300", collapsed ? "px-2" : "px-3")}>
-          {nav.map((item) => {
+          {navItems.map((item) => {
             const active = pathname.startsWith(item.href);
             return (
               <Link
@@ -177,9 +188,16 @@ export function AppSidebar({
 
           {!collapsed && (
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold text-foreground leading-tight">
-                {user.name ?? "User"}
-              </p>
+              <div className="flex items-center gap-1.5">
+                <p className="truncate text-xs font-semibold text-foreground leading-tight">
+                  {user.name ?? "User"}
+                </p>
+                {userIsAdmin && (
+                  <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 uppercase tracking-wider">
+                    Admin
+                  </span>
+                )}
+              </div>
               <p className="truncate text-[11px] text-muted-foreground mt-0.5">
                 {user.email}
               </p>
@@ -243,7 +261,7 @@ export function AppSidebar({
           />
         )}
         <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {nav.map((item) => (
+          {navItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}

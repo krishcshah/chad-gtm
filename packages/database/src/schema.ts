@@ -633,5 +633,34 @@ export const emailTrackingEvents = pgTable(
   ],
 );
 
+/* ─── Bug Reports ──────────────────────────────────────────────────────── */
+
+export const bugReports = pgTable(
+  "bug_reports",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    userEmail: text("user_email").notNull(),
+    userName: text("user_name"),
+    workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
+    heading: text("heading").notNull(),
+    description: text("description").notNull(),
+    url: text("url"),
+    status: text("status", { enum: ["open", "investigating", "resolved", "closed"] })
+      .notNull()
+      .default("open"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("bug_reports_user_idx").on(t.userId),
+    index("bug_reports_created_idx").on(t.createdAt),
+    index("bug_reports_status_idx").on(t.status),
+  ],
+);
+
 /* ─── Re-export auth tables so drizzle sees the whole graph ────────────── */
 export * from "./schema-auth";
+
