@@ -9,6 +9,7 @@ import { getActiveWorkspace, getFallbackWorkspace, listUserWorkspaces, type Work
 
 import { SidebarProvider } from "@/components/layout/sidebar-context";
 import { AppShell, AppMainContent } from "@/components/layout/app-shell";
+import { DonationModal } from "@/components/donation-modal";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
@@ -45,6 +46,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           />
           <AppMainContent>{children}</AppMainContent>
           <CommandPalette />
+          <DonationModal userEmail={user.email} userId={user.id} userName={user.name} />
         </AppShell>
       </ImportJobProvider>
     </SidebarProvider>

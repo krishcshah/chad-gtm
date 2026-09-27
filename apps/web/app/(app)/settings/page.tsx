@@ -10,6 +10,8 @@ import { ComplianceForms } from "./compliance-forms";
 import { WorkspaceSettingsCard } from "./workspace-settings-card";
 import { AiSettingsCard } from "@/components/ai/ai-settings-card";
 import { GermanFlag } from "@/components/german-flag";
+import { SupportProjectButton } from "@/components/support-project-button";
+import { Heart } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -129,6 +131,20 @@ export default async function SettingsPage() {
         <p className="mt-1 text-[11px] text-muted-foreground">
           Engineered with German precision. Strict privacy standards, zero third-party tracking, and encrypted credential storage.
         </p>
+      </div>
+
+      {/* Community Support & Independent Mission Card */}
+      <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-center space-y-2.5">
+        <div className="flex items-center justify-center gap-2 text-xs font-semibold text-foreground">
+          <Heart className="size-4 fill-rose-500 text-rose-500" />
+          <span>Support the Free Forever Mission</span>
+        </div>
+        <p className="text-[11px] text-muted-foreground max-w-md mx-auto leading-relaxed">
+          We pay for 100% of the servers, database infrastructure, and maintenance out of our own pockets. If SmartReach brings value to your workflow, consider chipping in.
+        </p>
+        <div className="pt-0.5">
+          <SupportProjectButton />
+        </div>
       </div>
 
       <p className="text-center text-xs text-muted-foreground">

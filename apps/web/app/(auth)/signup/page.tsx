@@ -34,7 +34,13 @@ export default function SignupPage() {
     setError("");
     const res = await authClient.signUp.email(values);
     if (res.error) return setError(res.error.message ?? "Could not create account");
-    router.push("/dashboard");
+    if (typeof window !== "undefined") {
+      try {
+        sessionStorage.setItem("smartreach_just_signed_up", "1");
+        localStorage.setItem("smartreach_just_signed_up", "1");
+      } catch {}
+    }
+    router.push("/dashboard?new_signup=1");
     router.refresh();
   });
 
