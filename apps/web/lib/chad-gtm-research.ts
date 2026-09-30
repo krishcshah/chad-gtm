@@ -443,26 +443,32 @@ Respond STRICTLY with a valid JSON object matching this structure:
         }),
       });
       if (!res.ok) {
-        if ((res.status === 404 || res.status === 400) && model !== "gemini-2.5-flash") {
-          const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`;
-          const fbRes = await fetch(fallbackUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: {
-                responseMimeType: "application/json",
-                temperature: 0.7,
-              },
-            }),
-          });
-          if (fbRes.ok) {
-            const data = await fbRes.json();
-            rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-          } else {
-            throw new Error(`Gemini error ${res.status}`);
-          }
-        } else {
+        const candidateModels = ["gemini-3-flash-preview", "gemini-2.5-flash", "gemini-flash-latest"];
+        let resolved = false;
+        for (const fbModel of candidateModels) {
+          if (fbModel === model) continue;
+          try {
+            const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/${fbModel}:generateContent?key=${encodeURIComponent(geminiKey)}`;
+            const fbRes = await fetch(fallbackUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                  responseMimeType: "application/json",
+                  temperature: 0.7,
+                },
+              }),
+            });
+            if (fbRes.ok) {
+              const data = await fbRes.json();
+              rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+              resolved = true;
+              break;
+            }
+          } catch {}
+        }
+        if (!resolved) {
           throw new Error(`Gemini error ${res.status}`);
         }
       } else {
