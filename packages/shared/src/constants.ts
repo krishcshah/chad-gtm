@@ -1,5 +1,5 @@
-export const APP_NAME = "SmartReach";
-export const APP_TAGLINE = "Everything you need. Nothing you don't.";
+export const APP_NAME = "ChadGTM";
+export const APP_TAGLINE = "Autonomous Go-To-Market & Cold Outreach Engine";
 
 export const LEAD_STATUSES = [
   "new",

@@ -5,7 +5,7 @@ import { ChadGtmWizard } from "./chad-gtm-wizard";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "ChadGTM · Autonomous Go-To-Market & Cold Outreach · SmartReach",
+  title: "ChadGTM · Autonomous Go-To-Market & Cold Outreach Engine",
   description:
     "Self-driving cold outreach engine. Enter your company URL, extract verified Apollo leads, calibrate tone via swipe deck, and dispatch through pre-warmed shared mailboxes.",
 };

@@ -41,7 +41,7 @@ export function RemoveMyInfoCard({ userEmail }: { userEmail?: string | null }) {
               <h2 className="font-semibold text-base text-foreground">Remove My Info</h2>
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Exercise your GDPR Art. 17 &quot;Right to Erasure&quot;. Request the permanent removal of your email, company, or personal data from the SmartReach database and search index.
+              Exercise your GDPR Art. 17 &quot;Right to Erasure&quot;. Request the permanent removal of your email, company, or personal data from the ChadGTM database and search index.
             </p>
           </div>
           <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 text-[10px] font-semibold text-rose-400 shrink-0">

@@ -1,12 +1,11 @@
 import Link from "next/link";
 import { ArrowLeft, UserX, ShieldCheck, Mail } from "lucide-react";
-import { Logo } from "@/components/logo";
-import { GermanFlag } from "@/components/german-flag";
+import { ChadGtmLogo } from "@/components/chad-gtm-logo";
 import { PublicRemoveMyInfoForm } from "./public-remove-form";
 
 export const metadata = {
-  title: "Remove My Info · GDPR Data Erasure Request · SmartReach",
-  description: "Request the removal of your personal or business email from the SmartReach database under GDPR Art. 17.",
+  title: "Remove My Info · Data Erasure Request · ChadGTM",
+  description: "Request the removal of your personal or business email from the ChadGTM database under GDPR Art. 17.",
 };
 
 export default function RemoveMyInfoPage() {
@@ -16,8 +15,8 @@ export default function RemoveMyInfoPage() {
       <header className="border-b border-border/40 bg-card/40 backdrop-blur-xl sticky top-0 z-20">
         <div className="mx-auto max-w-3xl px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Logo compact />
-            <span className="font-semibold text-sm tracking-tight text-foreground">SmartReach</span>
+            <ChadGtmLogo compact />
+            <span className="font-semibold text-sm tracking-tight text-foreground">ChadGTM</span>
           </div>
           <Link
             href="/"
@@ -32,13 +31,13 @@ export default function RemoveMyInfoPage() {
       <main className="mx-auto max-w-3xl px-4 sm:px-6 py-12 space-y-8">
         <div className="space-y-2 border-b border-border/40 pb-6">
           <div className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/20 bg-rose-500/10 px-2.5 py-0.5 text-[11px] font-medium text-rose-400 mb-2">
-            <ShieldCheck className="size-3.5" /> GDPR Art. 17 Recht auf Löschung
+            <ShieldCheck className="size-3.5" /> Data Erasure Request
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl text-foreground">
             Remove My Info
           </h1>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            If your professional email or contact details are listed in the SmartReach outreach database or if you wish to permanently purge your data from our systems, please submit your request below.
+            If your professional email or contact details are listed in the ChadGTM outreach directory or if you wish to permanently purge your data from our systems, please submit your request below.
           </p>
         </div>
 

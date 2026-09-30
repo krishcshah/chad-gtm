@@ -11,9 +11,9 @@ import { B2bPaywall } from "@/components/leads/b2b-paywall";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "B2B Database · 300k+ Verified Leads · SmartReach",
+  title: "Apollo Directory · 329k+ Verified Leads · ChadGTM",
   description:
-    "Search 300,000+ verified B2B decision-makers, filter by company size, seniority, and industry, and export directly to campaigns.",
+    "Search 329,000+ verified B2B decision-makers, filter by company size, seniority, and industry, and export directly to autonomous campaigns.",
 };
 
 export default async function B2bDatabasePage({
@@ -31,16 +31,9 @@ export default async function B2bDatabasePage({
 
   const userIsAdmin = isAdmin(user);
 
-  // Auto-grant access if returning from Stripe checkout success
-  if (sp.payment === "success" || sp.unlocked === "1") {
-    await grantB2BAccess(user.id, { source: "stripe_checkout" });
-  }
-
-  // Check access status: Admin is NEVER blocked
-  const hasAccess = userIsAdmin || (await hasB2BAccess(user.id, user.email));
-
-  // Admin preview toggle: let admin view what non-paying users see
-  const isPreviewingPaywall = userIsAdmin && sp.preview === "paywall";
+  // In ChadGTM, all authenticated users have full access to the 329,563 Apollo Leads Directory
+  const hasAccess = true;
+  const isPreviewingPaywall = false;
 
   // Fetch directory facets and initial leads in parallel
   const [lists, facets, initialResult] = await Promise.all([

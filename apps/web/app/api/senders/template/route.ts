@@ -31,7 +31,7 @@ export async function GET() {
   return new NextResponse(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": 'attachment; filename="smartreach-senders-template.csv"',
+      "Content-Disposition": 'attachment; filename="chadgtm-senders-template.csv"',
     },
   });
 }

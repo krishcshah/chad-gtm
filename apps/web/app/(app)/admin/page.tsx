@@ -13,7 +13,7 @@ import { PermissionDenied } from "@smartreach/ui";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Admin Console · Mailbox Pool & Lead Directory · SmartReach",
+  title: "Admin Console · Mailbox Pool & Lead Directory · ChadGTM",
   description:
     "Administrative oversight of shared mailbox infrastructure, Apollo B2B directory, registered users, page view analytics, bug reports, and GDPR data requests.",
 };

@@ -19,9 +19,7 @@ import {
   Label,
 } from "@smartreach/ui";
 import { authClient } from "@/lib/auth-client";
-import { GermanFlag } from "@/components/german-flag";
-import { EuFlag } from "@/components/eu-flag";
-import { ArrowRight, CheckCircle2 } from "lucide-react";
+import { ArrowRight, CheckCircle2, Sparkles, Zap } from "lucide-react";
 
 import { claimAdminAccountAction } from "@/lib/admin-claim-action";
 
@@ -73,72 +71,104 @@ export default function SignupPage() {
   });
 
   return (
-    <Card className="w-full max-w-sm shadow-md">
-      <CardHeader className="pb-4">
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 bg-emerald-500/10 text-[10px] py-0.5">
-            100% Free Forever
+    <div className="w-full max-w-md rounded-3xl border border-white/10 bg-zinc-950/80 p-8 shadow-2xl backdrop-blur-2xl">
+      <div className="mb-6 space-y-2 text-center">
+        <div className="flex items-center justify-center gap-2 mb-3">
+          <Badge variant="outline" className="border-violet-500/40 text-violet-300 bg-violet-500/10 text-[10px] py-0.5">
+            <Sparkles className="size-3 text-cyan-300 mr-1" />
+            Autonomous Outbound
           </Badge>
-          <div className="flex items-center gap-2.5 text-[11px] font-medium text-muted-foreground">
-            <span className="inline-flex items-center gap-1" title="Made in Germany">
-              <GermanFlag className="h-2.5 w-3.5" /> Made in Germany
-            </span>
-            <span className="inline-flex items-center gap-1" title="EU-Hosted">
-              <EuFlag className="h-2.5 w-3.5" /> EU-Hosted
-            </span>
+          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+            $0/mo Core Platform
+          </span>
+        </div>
+        <h1 className="text-2xl font-extrabold tracking-tight text-white">Create your account</h1>
+        <p className="text-xs text-zinc-400">
+          Turn your company URL into an autonomous outbound engine in 60 seconds.
+        </p>
+      </div>
+
+      <form onSubmit={onSubmit} className="space-y-4" noValidate>
+        <div className="space-y-1.5">
+          <Label htmlFor="name" className="text-xs font-medium text-zinc-300">
+            Full Name
+          </Label>
+          <Input
+            id="name"
+            placeholder="Elena Rostova"
+            autoComplete="name"
+            className="rounded-xl border-white/10 bg-white/[0.03] text-sm text-white placeholder:text-zinc-600 focus:border-violet-500/50 focus:ring-violet-500/20"
+            {...register("name")}
+          />
+          {formState.errors.name && <p className="text-xs text-rose-400">{formState.errors.name.message}</p>}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="email" className="text-xs font-medium text-zinc-300">
+            Work Email
+          </Label>
+          <Input
+            id="email"
+            type="email"
+            placeholder="you@company.com"
+            autoComplete="email"
+            className="rounded-xl border-white/10 bg-white/[0.03] text-sm text-white placeholder:text-zinc-600 focus:border-violet-500/50 focus:ring-violet-500/20"
+            {...register("email")}
+          />
+          {formState.errors.email && <p className="text-xs text-rose-400">{formState.errors.email.message}</p>}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="password" className="text-xs font-medium text-zinc-300">
+            Password
+          </Label>
+          <Input
+            id="password"
+            type="password"
+            autoComplete="new-password"
+            className="rounded-xl border-white/10 bg-white/[0.03] text-sm text-white placeholder:text-zinc-600 focus:border-violet-500/50 focus:ring-violet-500/20"
+            {...register("password")}
+          />
+          {formState.errors.password && <p className="text-xs text-rose-400">{formState.errors.password.message}</p>}
+        </div>
+
+        {error && (
+          <Alert variant="destructive" className="rounded-xl border-rose-500/30 bg-rose-500/10 text-rose-300">
+            <AlertDescription className="text-xs">{error}</AlertDescription>
+          </Alert>
+        )}
+
+        <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3 space-y-1.5 text-[11px] text-zinc-400">
+          <div className="flex items-center gap-1.5 text-zinc-200 font-medium">
+            <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
+            <span>329,563 Verified Apollo leads included</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <CheckCircle2 className="size-3.5 text-cyan-400 shrink-0" />
+            <span>Shared pre-warmed mailbox pool @ 3¢/email</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
+            <span>$0/mo software fee · No credit card required</span>
           </div>
         </div>
-        <CardTitle className="text-xl">Create your account</CardTitle>
-        <CardDescription className="text-xs">
-          Start sending cold email in under five minutes. Zero limits, forever.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={onSubmit} className="space-y-4" noValidate>
-          <div className="space-y-1.5">
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" placeholder="Your name" autoComplete="name" {...register("name")} />
-            {formState.errors.name && <p className="text-xs text-destructive">{formState.errors.name.message}</p>}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" placeholder="you@company.com" autoComplete="email" {...register("email")} />
-            {formState.errors.email && <p className="text-xs text-destructive">{formState.errors.email.message}</p>}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="password">Password</Label>
-            <Input id="password" type="password" autoComplete="new-password" {...register("password")} />
-            {formState.errors.password && <p className="text-xs text-destructive">{formState.errors.password.message}</p>}
-          </div>
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
 
-          <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 space-y-1.5 text-[11px] text-muted-foreground">
-            <div className="flex items-center gap-1.5 text-foreground font-medium">
-              <CheckCircle2 className="size-3 text-emerald-400 shrink-0" />
-              <span>Unlimited mailboxes, leads, & sequences</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="size-3 text-emerald-400 shrink-0" />
-              <span>$0/month · No credit card required</span>
-            </div>
-          </div>
+        <Button
+          type="submit"
+          className="w-full rounded-xl bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 font-bold text-white shadow-lg shadow-indigo-600/25 hover:opacity-95 text-xs h-10 transition-all gap-1.5 cursor-pointer"
+          disabled={formState.isSubmitting}
+        >
+          {formState.isSubmitting ? "Creating Mission Control..." : "Launch ChadGTM ($0/mo)"}
+          <ArrowRight className="size-3.5" />
+        </Button>
+      </form>
 
-          <Button type="submit" className="w-full gap-1.5 font-semibold" disabled={formState.isSubmitting}>
-            {formState.isSubmitting ? "Creating account…" : "Start Sending Free Forever"}
-            <ArrowRight className="size-3.5" />
-          </Button>
-        </form>
-        <p className="mt-5 text-center text-[13px] text-muted-foreground">
-          Already have an account?{" "}
-          <Link href="/login" className="font-medium text-primary hover:underline">
-            Sign in
-          </Link>
-        </p>
-      </CardContent>
-    </Card>
+      <div className="mt-6 border-t border-white/5 pt-5 text-center text-xs text-zinc-500">
+        Already have an account?{" "}
+        <Link href="/login" className="font-semibold text-violet-400 hover:text-violet-300 transition-colors">
+          Sign in
+        </Link>
+      </div>
+    </div>
   );
 }

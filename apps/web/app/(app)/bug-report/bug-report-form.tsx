@@ -55,7 +55,7 @@ export function BugReportForm() {
           <div>
             <p className="font-semibold text-emerald-300">Bug report sent successfully!</p>
             <p className="mt-0.5 text-xs text-emerald-400/90 leading-relaxed">
-              Thank you for helping us improve SmartReach. Our engineering team has received your report and will look into it promptly.
+              Thank you for helping us improve ChadGTM. Our engineering team has received your report and will look into it promptly.
             </p>
           </div>
         </div>

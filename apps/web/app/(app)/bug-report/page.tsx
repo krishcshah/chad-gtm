@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@smar
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Bug Report · SmartReach",
+  title: "Bug Report · ChadGTM",
   description: "Report an issue or bug directly to the engineering team.",
 };
 

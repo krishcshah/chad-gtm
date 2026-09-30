@@ -35,43 +35,71 @@ export default function LoginPage() {
   });
 
   return (
-    <Card className="w-full max-w-sm shadow-md">
-      <CardHeader>
-        <CardTitle className="text-xl">Welcome back</CardTitle>
-        <CardDescription>Sign in to your SmartReach account</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={onSubmit} className="space-y-4" noValidate>
-          <div className="space-y-1.5">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" placeholder="you@company.com" autoComplete="email" {...register("email")} />
-            {formState.errors.email && (
-              <p className="text-xs text-destructive">{formState.errors.email.message}</p>
-            )}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="password">Password</Label>
-            <Input id="password" type="password" autoComplete="current-password" {...register("password")} />
-            {formState.errors.password && (
-              <p className="text-xs text-destructive">{formState.errors.password.message}</p>
-            )}
-          </div>
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          <Button type="submit" className="w-full" disabled={formState.isSubmitting}>
-            {formState.isSubmitting ? "Signing in…" : "Sign in"}
-          </Button>
-        </form>
-        <p className="mt-5 text-center text-[13px] text-muted-foreground">
-          No account?{" "}
-          <Link href="/signup" className="font-medium text-primary hover:underline">
-            Create one
-          </Link>
+    <div className="w-full max-w-md rounded-3xl border border-white/10 bg-zinc-950/80 p-8 shadow-2xl backdrop-blur-2xl">
+      <div className="mb-6 space-y-1.5 text-center">
+        <h1 className="text-2xl font-extrabold tracking-tight text-white">Welcome back</h1>
+        <p className="text-xs text-zinc-400">
+          Sign in to your ChadGTM Autonomous Outbound Hub
         </p>
-      </CardContent>
-    </Card>
+      </div>
+
+      <form onSubmit={onSubmit} className="space-y-4" noValidate>
+        <div className="space-y-1.5">
+          <Label htmlFor="email" className="text-xs font-medium text-zinc-300">
+            Work Email
+          </Label>
+          <Input
+            id="email"
+            type="email"
+            placeholder="you@company.com"
+            autoComplete="email"
+            className="rounded-xl border-white/10 bg-white/[0.03] text-sm text-white placeholder:text-zinc-600 focus:border-violet-500/50 focus:ring-violet-500/20"
+            {...register("email")}
+          />
+          {formState.errors.email && (
+            <p className="text-xs text-rose-400">{formState.errors.email.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="password" className="text-xs font-medium text-zinc-300">
+              Password
+            </Label>
+          </div>
+          <Input
+            id="password"
+            type="password"
+            autoComplete="current-password"
+            className="rounded-xl border-white/10 bg-white/[0.03] text-sm text-white placeholder:text-zinc-600 focus:border-violet-500/50 focus:ring-violet-500/20"
+            {...register("password")}
+          />
+          {formState.errors.password && (
+            <p className="text-xs text-rose-400">{formState.errors.password.message}</p>
+          )}
+        </div>
+
+        {error && (
+          <Alert variant="destructive" className="rounded-xl border-rose-500/30 bg-rose-500/10 text-rose-300">
+            <AlertDescription className="text-xs">{error}</AlertDescription>
+          </Alert>
+        )}
+
+        <Button
+          type="submit"
+          className="w-full rounded-xl bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 font-bold text-white shadow-lg shadow-indigo-600/25 hover:opacity-95 text-xs h-10 transition-all cursor-pointer"
+          disabled={formState.isSubmitting}
+        >
+          {formState.isSubmitting ? "Authenticating..." : "Sign in to Mission Control"}
+        </Button>
+      </form>
+
+      <div className="mt-6 border-t border-white/5 pt-5 text-center text-xs text-zinc-500">
+        New to ChadGTM?{" "}
+        <Link href="/signup" className="font-semibold text-violet-400 hover:text-violet-300 transition-colors">
+          Create free account ($0/mo)
+        </Link>
+      </div>
+    </div>
   );
 }

@@ -10,9 +10,7 @@ import { ComplianceForms } from "./compliance-forms";
 import { SettingsBlocklistCard } from "./blocklist-card";
 import { WorkspaceSettingsCard } from "./workspace-settings-card";
 import { AiSettingsCard } from "@/components/ai/ai-settings-card";
-import { GermanFlag } from "@/components/german-flag";
-import { SupportProjectButton } from "@/components/support-project-button";
-import { Heart } from "lucide-react";
+import { ShieldCheck, Sparkles, Zap } from "lucide-react";
 import { DpaCard } from "./dpa-card";
 import { RemoveMyInfoCard } from "./remove-my-info-card";
 import { DangerZoneCard } from "./danger-zone-card";
@@ -70,7 +68,7 @@ export default async function SettingsPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="font-medium">Theme</p>
-              <p className="text-sm text-muted-foreground">Dark is optimized for SmartReach.</p>
+              <p className="text-sm text-muted-foreground">Dark is optimized for ChadGTM.</p>
             </div>
             <ThemeToggle />
           </div>
@@ -137,33 +135,27 @@ export default async function SettingsPage() {
       {/* Danger Zone: Permanent Account Deletion */}
       <DangerZoneCard userEmail={user.email} />
 
-      {/* Subtle Made in Germany System Card */}
-      <div className="rounded-xl border border-border/50 bg-card/30 p-4 text-center">
-        <div className="flex items-center justify-center gap-2 text-xs font-semibold text-foreground">
-          <GermanFlag className="h-3 w-4.5" />
-          <span>Made in Germany</span>
+      {/* ChadGTM Infrastructure Card */}
+      <div className="rounded-2xl border border-white/10 bg-zinc-950/60 p-5 backdrop-blur-xl">
+        <div className="flex items-center gap-2 text-xs font-bold text-white mb-2">
+          <Sparkles className="size-4 text-cyan-400" />
+          <span>ChadGTM Autonomous Outbound Engine</span>
         </div>
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          Engineered with German precision. Strict privacy standards, zero third-party tracking, and encrypted credential storage.
+        <p className="text-xs text-zinc-400 leading-relaxed max-w-xl">
+          Powered by Gemini 3.8 Flash, 329k+ verified Apollo decision-maker prospects, and autonomous managed mailboxes with safe 30/day delivery pacing.
         </p>
-      </div>
-
-      {/* Community Support & Independent Mission Card */}
-      <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-center space-y-2.5">
-        <div className="flex items-center justify-center gap-2 text-xs font-semibold text-foreground">
-          <Heart className="size-4 fill-rose-500 text-rose-500" />
-          <span>Support the Free Forever Mission</span>
-        </div>
-        <p className="text-[11px] text-muted-foreground max-w-md mx-auto leading-relaxed">
-          We pay for 100% of the servers, database infrastructure, and maintenance out of our own pockets. If SmartReach brings value to your workflow, consider chipping in.
-        </p>
-        <div className="pt-0.5">
-          <SupportProjectButton />
+        <div className="mt-3 flex items-center gap-4 text-[11px] font-mono text-zinc-500">
+          <span className="flex items-center gap-1.5">
+            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Infrastructure Status: Optimal
+          </span>
+          <span>•</span>
+          <span>Shared Mailbox Pool: 3¢/email</span>
         </div>
       </div>
 
-      <p className="text-center text-xs text-muted-foreground">
-        {APP_NAME} · Everything you need. Nothing you don&apos;t.
+      <p className="text-center text-xs text-zinc-500">
+        ChadGTM · Autonomous Go-To-Market & Cold Outreach Engine
       </p>
     </div>
   );

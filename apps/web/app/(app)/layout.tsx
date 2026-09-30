@@ -3,13 +3,11 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { CommandPalette } from "@/components/command-palette";
 import { NavigationProgress } from "@/components/navigation-progress";
 import { ImportJobProvider } from "@/components/import-job-provider";
-import { GermanFlag } from "@/components/german-flag";
 import { getSession } from "@/lib/session";
 import { getActiveWorkspace, getFallbackWorkspace, listUserWorkspaces, type WorkspaceItem } from "@/lib/workspaces";
 
 import { SidebarProvider } from "@/components/layout/sidebar-context";
 import { AppShell, AppMainContent } from "@/components/layout/app-shell";
-import { DonationModal } from "@/components/donation-modal";
 import { PageTracker } from "@/components/page-tracker";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -48,7 +46,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           />
           <AppMainContent>{children}</AppMainContent>
           <CommandPalette />
-          <DonationModal userEmail={user.email} userId={user.id} userName={user.name} />
         </AppShell>
       </ImportJobProvider>
     </SidebarProvider>

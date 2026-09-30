@@ -260,7 +260,7 @@ export default async function LandingPage() {
               {[
                 {
                   q: "Why is the core software $0/month?",
-                  a: "We believe cold email software should not cost $97/month in recurring seat licenses. The core SmartReach and ChadGTM platform is 100% free forever for unlimited campaigns, sequences, and lead storage. We sustain our infrastructure through our optional managed autonomous mailbox pool.",
+                  a: "We believe cold email software should not cost $97/month in recurring seat licenses. The core ChadGTM platform is 100% free ($0/mo) for unlimited campaigns, sequences, and lead storage. When using our autonomous shared mailbox pool, you pay strictly 3¢ per email.",
                 },
                 {
                   q: "How does the 'Pay Just 3 Cents Per Email' model work?",

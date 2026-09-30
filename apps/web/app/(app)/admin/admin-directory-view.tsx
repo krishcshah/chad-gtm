@@ -66,7 +66,7 @@ export function AdminDirectoryView({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", "smartreach_apollo_leads_template.csv");
+    link.setAttribute("download", "chadgtm_apollo_leads_template.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

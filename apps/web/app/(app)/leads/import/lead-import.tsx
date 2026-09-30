@@ -587,7 +587,7 @@ export function LeadImport({
                 <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1.1fr)] items-center gap-3 border-b bg-muted px-4 py-2.5 text-xs font-medium text-muted-foreground">
                   <span>CSV column</span>
                   <span className="w-6" />
-                  <span>SmartReach field / variable</span>
+                  <span>ChadGTM field / variable</span>
                 </div>
                 {csv.headers.map((col, index) => {
                   const val = mapping[col] ?? CUSTOM;

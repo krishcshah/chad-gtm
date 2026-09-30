@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { ArrowLeft, ShieldCheck, Lock, UserX, FileText } from "lucide-react";
-import { Logo } from "@/components/logo";
-import { GermanFlag } from "@/components/german-flag";
+import { ChadGtmLogo } from "@/components/chad-gtm-logo";
 
 export const metadata = {
-  title: "Privacy Policy (Datenschutzerklärung) · SmartReach",
-  description: "Datenschutzerklärung und Hinweise zur Verarbeitung personenbezogener Daten nach DSGVO.",
+  title: "Privacy Policy · ChadGTM",
+  description: "Privacy policy and GDPR data processing notice for ChadGTM.",
 };
 
 export default function PrivacyPage() {
@@ -15,8 +14,8 @@ export default function PrivacyPage() {
       <header className="border-b border-border/40 bg-card/40 backdrop-blur-xl sticky top-0 z-20">
         <div className="mx-auto max-w-4xl px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Logo compact />
-            <span className="font-semibold text-sm tracking-tight text-foreground">SmartReach</span>
+            <ChadGtmLogo compact />
+            <span className="font-semibold text-sm tracking-tight text-foreground">ChadGTM</span>
           </div>
           <Link
             href="/"
@@ -31,27 +30,25 @@ export default function PrivacyPage() {
       <main className="mx-auto max-w-4xl px-4 sm:px-6 py-12 space-y-10">
         <div className="space-y-2 border-b border-border/40 pb-6">
           <div className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-0.5 text-[11px] font-medium text-sky-400 mb-2">
-            <ShieldCheck className="size-3.5" /> Datenschutz nach EU-DSGVO / GDPR
+            <ShieldCheck className="size-3.5" /> Data Protection & Privacy Notice
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl text-foreground">
-            Privacy Policy & Datenschutzerklärung
+            Privacy Policy
           </h1>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Informationen über die Erhebung, Verarbeitung und Nutzung personenbezogener Daten bei der Nutzung von SmartReach gemäß Art. 13 und 14 der Datenschutz-Grundverordnung (DSGVO).
+            Information regarding data collection and processing on the ChadGTM platform.
           </p>
         </div>
 
         {/* 1. Verantwortlicher */}
         <section className="space-y-3">
-          <h2 className="text-lg font-bold text-foreground">1. Verantwortlicher (Data Controller)</h2>
+          <h2 className="text-lg font-bold text-foreground">1. Data Controller</h2>
           <div className="rounded-xl border border-border/60 bg-card/50 p-5 text-sm space-y-1 text-muted-foreground">
-            <p className="font-semibold text-foreground">Krish Shah</p>
-            <p>SmartReach Open Community Project</p>
-            <p>Deutschland / Germany</p>
+            <p className="font-semibold text-foreground">ChadGTM Platform</p>
             <p className="pt-2">
-              <strong className="text-foreground">E-Mail für Datenschutzanfragen:</strong>{" "}
-              <a href="mailto:hence-body-eskimo@duck.com" className="text-primary hover:underline">
-                hence-body-eskimo@duck.com
+              <strong className="text-foreground">Email for Privacy Requests:</strong>{" "}
+              <a href="mailto:de.krish.shah@gmail.com" className="text-primary hover:underline">
+                de.krish.shah@gmail.com
               </a>
             </p>
           </div>

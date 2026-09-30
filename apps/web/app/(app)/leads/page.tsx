@@ -5,7 +5,7 @@ import { ApolloLeadsView } from "@/components/leads/apollo-leads-view";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "My Leads & Contact Lists · SmartReach" };
+export const metadata = { title: "Prospects & Lead Directory · ChadGTM" };
 
 export default async function LeadsPage({
   searchParams,

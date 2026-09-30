@@ -96,7 +96,7 @@ export function DpaCard() {
               <section className="space-y-1.5 border-b border-border/40 pb-3">
                 <h4 className="font-semibold text-foreground text-sm">1. Parties & Scope</h4>
                 <p>
-                  This Data Processing Addendum (&quot;DPA&quot;) supplements the SmartReach terms between the workspace owner (&quot;Controller&quot;) and SmartReach / Krish Shah (&quot;Processor&quot;). It governs the processing of personal data uploaded by Controller or collected during campaign delivery.
+                  This Data Processing Addendum (&quot;DPA&quot;) supplements the ChadGTM terms between the workspace owner (&quot;Controller&quot;) and ChadGTM (&quot;Processor&quot;). It governs the processing of personal data uploaded by Controller or collected during campaign delivery.
                 </p>
               </section>
 

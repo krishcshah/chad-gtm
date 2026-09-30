@@ -6,7 +6,7 @@ import { MissionControlView } from "./mission-control-view";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Mission Control · ChadGTM · SmartReach",
+  title: "Mission Control · ChadGTM",
   description: "Live real-time telemetry, opens, replies, and controls for ChadGTM autonomous outreach.",
 };
 

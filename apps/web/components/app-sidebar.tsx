@@ -5,7 +5,6 @@ import {
   BarChart3,
   Bug,
   Database,
-  Heart,
   Inbox,
   Layers,
   LayoutDashboard,
@@ -27,7 +26,6 @@ import { isAdmin } from "@/lib/admin";
 import { ChadGtmLogo } from "./chad-gtm-logo";
 import { ThemeToggle } from "./theme-toggle";
 import { WorkspaceSwitcher } from "./workspace-switcher";
-import { GermanFlag } from "./german-flag";
 import { useSidebar } from "./layout/sidebar-context";
 import type { WorkspaceItem } from "@/lib/workspaces";
 
@@ -235,31 +233,23 @@ export function AppSidebar({
           </div>
         </div>
 
-        {/* Subtle Made in Germany Corner Branding & Support Heart Button */}
+        {/* Autonomous Engine Telemetry & System Status Footer */}
         <div
           className={cn(
-            "border-t border-border/30 py-2 flex items-center text-[10px] select-none transition-all duration-300",
-            collapsed ? "flex-col gap-1.5 justify-center px-1" : "justify-between px-3"
+            "border-t border-border/40 py-2.5 flex items-center text-[10px] select-none transition-all duration-300 bg-black/20",
+            collapsed ? "flex-col gap-2 justify-center px-1" : "justify-between px-3"
           )}
         >
-          <span className="flex items-center gap-1.5 font-medium tracking-tight text-muted-foreground/60">
-            <GermanFlag className="h-2.5 w-3.5 shrink-0" />
-            {!collapsed && <span>Made in Germany</span>}
-          </span>
+          <div className="flex items-center gap-1.5 font-mono text-zinc-400">
+            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            {!collapsed && <span>Gemini 3.8 Flash</span>}
+          </div>
 
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new CustomEvent("open-donation-modal"))}
-            title="Support the Free Forever mission"
-            aria-label="Support the Free Forever mission"
-            className={cn(
-              "group inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose-500/50 cursor-pointer",
-              collapsed && "p-1"
-            )}
-          >
-            <Heart className="size-3 fill-rose-500/20 text-rose-400 group-hover:scale-115 group-hover:fill-rose-500 transition-all" />
-            {!collapsed && <span>Support</span>}
-          </button>
+          {!collapsed && (
+            <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+              3¢ Pool Active
+            </span>
+          )}
         </div>
       </aside>
 

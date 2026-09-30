@@ -48,7 +48,7 @@ export function ChadGtmPricingCard({ isLoggedIn = false }: { isLoggedIn?: boolea
           </h2>
           <p className="mt-4 text-sm sm:text-base text-zinc-400 leading-relaxed">
             Never pay $97/month for cold email software or $100s for SDR seat licenses.
-            SmartReach software is $0 forever. When using our autonomous shared mailbox pool, you pay just 3¢ per email.
+            ChadGTM platform is $0/mo forever. When using our autonomous shared mailbox pool, you pay just 3¢ per email.
           </p>
         </div>
 
