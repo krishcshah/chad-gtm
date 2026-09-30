@@ -291,7 +291,7 @@ function simulatePersonalizedScript(options: GenerateOnTheFlyOptions): Generated
 async function callGemini(
   prompt: string,
   apiKey: string,
-  model = "gemini-1.5-flash",
+  model = "gemini-3.8-flash",
   timeoutMs = 12000,
 ): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
@@ -314,8 +314,8 @@ async function callGemini(
     });
 
     if (!res.ok) {
-      if ((res.status === 404 || res.status === 400) && model !== "gemini-1.5-flash") {
-        return callGemini(prompt, apiKey, "gemini-1.5-flash", timeoutMs);
+      if ((res.status === 404 || res.status === 400) && model !== "gemini-2.5-flash") {
+        return callGemini(prompt, apiKey, "gemini-2.5-flash", timeoutMs);
       }
       const errText = await res.text().catch(() => "");
       throw new Error(`Gemini API error (${res.status}): ${errText.slice(0, 300)}`);

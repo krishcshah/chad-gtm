@@ -40,6 +40,53 @@ export async function ensureAiColumns(db: Db) {
   }
 }
 
+let chadGtmMigrated = false;
+export async function ensureChadGtmTables(db: Db) {
+  if (chadGtmMigrated) return;
+  try {
+    await db.execute(
+      sql`ALTER TABLE "sender_accounts" ADD COLUMN IF NOT EXISTS "is_system_pool" boolean DEFAULT false NOT NULL`
+    );
+    await db.execute(
+      sql`CREATE INDEX IF NOT EXISTS "sender_accounts_pool_idx" ON "sender_accounts" ("is_system_pool")`
+    );
+    await db.execute(
+      sql`CREATE TABLE IF NOT EXISTS "chad_gtm_runs" (
+        "id" text PRIMARY KEY,
+        "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "workspace_id" text REFERENCES "workspaces"("id") ON DELETE CASCADE,
+        "url" text NOT NULL,
+        "company_name" text NOT NULL DEFAULT '',
+        "status" text NOT NULL DEFAULT 'analyzing',
+        "business_overview" jsonb NOT NULL DEFAULT '{}'::jsonb,
+        "icp_profile" jsonb NOT NULL DEFAULT '{}'::jsonb,
+        "offers" jsonb NOT NULL DEFAULT '[]'::jsonb,
+        "selected_industries" jsonb NOT NULL DEFAULT '[]'::jsonb,
+        "daily_email_limit" integer NOT NULL DEFAULT 30,
+        "campaign_id" text REFERENCES "campaigns"("id") ON DELETE SET NULL,
+        "approved_email_samples" jsonb NOT NULL DEFAULT '[]'::jsonb,
+        "created_at" text NOT NULL DEFAULT to_char((now() AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS.MSZ'),
+        "updated_at" text NOT NULL DEFAULT to_char((now() AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS.MSZ')
+      )`
+    );
+    await db.execute(
+      sql`CREATE INDEX IF NOT EXISTS "chad_gtm_runs_user_idx" ON "chad_gtm_runs" ("user_id")`
+    );
+    await db.execute(
+      sql`CREATE INDEX IF NOT EXISTS "chad_gtm_runs_workspace_idx" ON "chad_gtm_runs" ("workspace_id")`
+    );
+    await db.execute(
+      sql`CREATE INDEX IF NOT EXISTS "chad_gtm_runs_status_idx" ON "chad_gtm_runs" ("status")`
+    );
+    await db.execute(
+      sql`CREATE INDEX IF NOT EXISTS "chad_gtm_runs_campaign_idx" ON "chad_gtm_runs" ("campaign_id")`
+    );
+    chadGtmMigrated = true;
+  } catch (err) {
+    console.error("[db] ensureChadGtmTables error:", err);
+  }
+}
+
 export function getDb(): Db {
   if (!cached) {
     if (!isDbConfigured) throw new Error("DATABASE_URL is not configured");

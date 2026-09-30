@@ -1,10 +1,12 @@
 import Link from "next/link";
 import {
   ArrowRight,
-  BarChart3,
+  Bot,
+  Brain,
   Check,
   CheckCircle2,
   ChevronDown,
+  Database,
   Flame,
   Globe,
   Inbox,
@@ -15,24 +17,27 @@ import {
   Shield,
   ShieldCheck,
   Sparkles,
+  Star,
   Users,
-  X,
   Zap,
 } from "lucide-react";
 import { Badge, Button } from "@smartreach/ui";
-import { Logo } from "@/components/logo";
+import { ChadGtmLogo } from "@/components/chad-gtm-logo";
 import { GermanFlag } from "@/components/german-flag";
 import { EuFlag } from "@/components/eu-flag";
 import { getSession } from "@/lib/session";
-import { InteractiveShowcase } from "@/components/landing/interactive-showcase";
-import { LandingDonationSection } from "@/components/landing-donation-box";
+import { ChadGtmHeroScanner } from "@/components/chad-gtm/landing/chad-gtm-hero-scanner";
+import { ChadGtmWorkflowSimulator } from "@/components/chad-gtm/landing/chad-gtm-workflow-simulator";
+import { ChadGtmPricingCard } from "@/components/chad-gtm/landing/chad-gtm-pricing-card";
+import { ChadGtmComparisonTable } from "@/components/chad-gtm/landing/chad-gtm-comparison-table";
+import { ChadGtmLeadsPreview } from "@/components/chad-gtm/landing/chad-gtm-leads-preview";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "SmartReach · 100% Free Cold Email Platform · Unlimited Mailboxes · Source Available",
+  title: "ChadGTM · Autonomous Go-To-Market & Cold Outreach Engine · $0/mo Platform",
   description:
-    "Cold email with zero limits. Unlimited mailboxes, automated multi-step sequences, unified two-way inbox, and deliverability protection. 100% Free Forever & Source Available.",
+    "Turn any company website URL into an autonomous B2B outbound engine in 60 seconds. Powered by Gemini 3.8 Flash, 329,000+ verified Apollo leads, and pre-warmed shared mailboxes at just 3¢ per email.",
 };
 
 export default async function LandingPage() {
@@ -40,55 +45,56 @@ export default async function LandingPage() {
   const isLoggedIn = Boolean(session?.user);
 
   return (
-    <div className="min-h-screen bg-background text-foreground antialiased selection:bg-primary/20 selection:text-primary">
+    <div className="min-h-screen bg-[#07090e] text-zinc-100 antialiased selection:bg-violet-500/30 selection:text-white">
       {/* Dynamic Ambient Background Glows */}
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div className="absolute -top-[300px] left-1/2 -translate-x-1/2 size-[800px] rounded-full bg-gradient-to-b from-primary/15 via-primary/5 to-transparent blur-3xl" />
+        <div className="absolute -top-[300px] left-1/2 -translate-x-1/2 size-[850px] rounded-full bg-gradient-to-b from-violet-600/20 via-indigo-600/10 to-transparent blur-3xl" />
         <div className="absolute top-[800px] -left-[200px] size-[600px] rounded-full bg-cyan-500/10 blur-3xl" />
-        <div className="absolute top-[1600px] -right-[200px] size-[700px] rounded-full bg-violet-500/10 blur-3xl" />
+        <div className="absolute top-[1800px] -right-[200px] size-[700px] rounded-full bg-violet-600/10 blur-3xl" />
+        <div className="absolute top-[3200px] left-1/4 size-[600px] rounded-full bg-emerald-500/10 blur-3xl" />
       </div>
 
       {/* Top Header Navigation */}
-      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-[#07090e]/80 backdrop-blur-2xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <Logo />
+          <ChadGtmLogo />
 
-          <nav className="hidden md:flex items-center gap-6 text-xs font-medium text-muted-foreground">
-            <a href="#features" className="transition-colors hover:text-foreground">
-              Features
+          <nav className="hidden md:flex items-center gap-7 text-xs font-medium text-zinc-400">
+            <a href="#how-it-works" className="transition-colors hover:text-white">
+              How It Works
             </a>
-            <a href="#showcase" className="transition-colors hover:text-foreground">
-              Interactive Demo
+            <a href="#leads" className="transition-colors hover:text-white">
+              329k Leads
             </a>
-            <a href="#comparison" className="transition-colors hover:text-foreground">
-              Compare
+            <a href="#comparison" className="transition-colors hover:text-white">
+              Comparison
             </a>
-            <a href="#pricing" className="transition-colors hover:text-foreground">
-              Pricing ($0)
+            <a href="#pricing" className="transition-colors hover:text-white flex items-center gap-1">
+              Pricing <span className="text-emerald-400 font-bold">($0/mo)</span>
             </a>
-            <a href="#faq" className="transition-colors hover:text-foreground">
+            <a href="#faq" className="transition-colors hover:text-white">
               FAQ
             </a>
           </nav>
 
           <div className="flex items-center gap-3">
             {isLoggedIn ? (
-              <Button asChild size="sm" className="shadow-md shadow-primary/20 gap-1.5 font-semibold">
-                <Link href="/dashboard">
-                  Open App <ArrowRight className="size-3.5" />
+              <Button asChild size="sm" className="rounded-xl bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-semibold text-xs shadow-lg shadow-indigo-600/20 gap-1.5">
+                <Link href="/chad-gtm">
+                  Open Mission Control <ArrowRight className="size-3.5" />
                 </Link>
               </Button>
             ) : (
               <>
                 <Link
                   href="/login"
-                  className="rounded-lg px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-accent/40"
+                  className="rounded-lg px-3.5 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:text-white hover:bg-white/5"
                 >
                   Sign in
                 </Link>
-                <Button asChild size="sm" className="shadow-md shadow-primary/25 gap-1.5 font-semibold">
+                <Button asChild size="sm" className="rounded-xl bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-semibold text-xs shadow-lg shadow-indigo-600/25 gap-1.5">
                   <Link href="/signup">
-                    Start Free Forever <ArrowRight className="size-3.5" />
+                    Launch Free ($0/mo) <ArrowRight className="size-3.5" />
                   </Link>
                 </Button>
               </>
@@ -101,566 +107,254 @@ export default async function LandingPage() {
         {/* Hero Section */}
         <section className="relative overflow-hidden pt-16 pb-12 sm:pt-24 sm:pb-20">
           <div className="mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
-            {/* Trust & Quality Badges */}
+            {/* Top Product Hunt / AI Badge */}
             <div className="inline-flex flex-wrap items-center justify-center gap-2 mb-6">
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-300 backdrop-blur-md shadow-xs">
-                <GermanFlag className="h-3 w-4.5" />
-                <span>Made in Germany</span>
+              <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-3.5 py-1 text-xs font-semibold text-violet-300 backdrop-blur-md shadow-xs">
+                <span className="flex size-2 rounded-full bg-cyan-400 animate-ping" />
+                <span>ChadGTM 2.0 Is Live · Powered by Gemini 3.8 Flash</span>
               </div>
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-medium text-sky-400 backdrop-blur-md shadow-xs">
-                <EuFlag className="h-3 w-4.5" />
-                <span>EU-Hosted</span>
-              </div>
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-400 backdrop-blur-md shadow-xs">
-                <span>100% Free Forever</span>
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-400 backdrop-blur-md">
+                <CheckCircle2 className="size-3 text-emerald-400" />
+                <span>329,563 Verified B2B Leads Pre-Loaded</span>
               </div>
             </div>
 
-            {/* Main Headline */}
-            <h1 className="mx-auto max-w-6xl text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-[64px] leading-[1.1]">
-              Cold Email Software That’s Completely Free.{" "}
-              <span className="sm:block mt-1 sm:mt-2 bg-gradient-to-r from-primary via-info to-cyan-400 bg-clip-text text-transparent">
-                Unlimited Everything, Zero Limits.
+            {/* Massive Main Headline */}
+            <h1 className="mx-auto max-w-4xl text-4xl font-extrabold tracking-tight sm:text-6xl lg:text-7xl text-white">
+              Autonomous Go-To-Market.
+              <br />
+              <span className="bg-gradient-to-r from-violet-400 via-indigo-300 to-cyan-400 bg-clip-text text-transparent">
+                From URL To Sent Emails In 60s.
               </span>
             </h1>
 
             {/* Subtitle */}
-            <p className="mx-auto mt-6 max-w-3xl text-pretty text-base text-muted-foreground sm:text-lg lg:text-xl">
-              Connect unlimited sender inboxes, automate high-converting multi-step sequences, manage all prospect replies in one unified inbox, and scale outbound pipeline without expensive monthly subscriptions.
+            <p className="mx-auto mt-6 max-w-2xl text-base sm:text-lg text-zinc-400 leading-relaxed font-normal">
+              Enter your website URL. ChadGTM extracts your value proposition, discovers verified decision-makers across our 329k lead directory, calibrates tone via a Tinder-style swipe deck, and dispatches via pre-warmed shared mailboxes.
             </p>
 
-            {/* Call to Actions */}
-            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-              {isLoggedIn ? (
-                <Button asChild size="lg" className="h-12 px-8 text-sm font-semibold shadow-xl shadow-primary/30 gap-2">
-                  <Link href="/dashboard">
-                    Go to Your Dashboard <ArrowRight className="size-4" />
-                  </Link>
-                </Button>
-              ) : (
-                <Button asChild size="lg" className="h-12 px-8 text-sm font-semibold shadow-xl shadow-primary/30 gap-2">
-                  <Link href="/signup">
-                    Get Started Free in 60 Seconds <ArrowRight className="size-4" />
-                  </Link>
-                </Button>
-              )}
-              <a
-                href="#showcase"
-                className="inline-flex h-12 items-center justify-center rounded-xl border border-border/80 bg-card/60 px-6 text-sm font-medium text-foreground backdrop-blur-md transition-colors hover:bg-accent hover:border-border"
-              >
-                Explore Interactive Demo
-              </a>
+            {/* CTA Buttons */}
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+              <Button asChild size="lg" className="rounded-xl h-12 px-7 bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-sm shadow-xl shadow-indigo-600/30 gap-2">
+                <Link href={isLoggedIn ? "/chad-gtm" : "/signup"}>
+                  <Sparkles className="size-4 text-cyan-200 fill-cyan-200" />
+                  Launch Autonomous Outbound Free <ArrowRight className="size-4 ml-1" />
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="lg" className="rounded-xl h-12 px-6 border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.08] hover:text-white text-sm font-semibold">
+                <a href="#pricing">
+                  View Transparent Pricing ($0/mo + 3¢/email)
+                </a>
+              </Button>
             </div>
 
-            {/* Value Proof Badges */}
-            <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-xs text-muted-foreground">
-              <div className="flex items-center gap-1.5 font-medium text-foreground">
-                <GermanFlag className="h-3 w-4.5" />
-                <span>Made in Germany</span>
+            {/* Trust Metrics Row */}
+            <div className="mt-12 flex flex-wrap items-center justify-center gap-8 sm:gap-14 text-xs font-mono text-zinc-400 border-y border-white/5 py-4 max-w-4xl mx-auto">
+              <div className="flex items-center gap-2">
+                <span className="text-white font-bold text-sm">329k+</span> Verified Leads
               </div>
-              <div className="flex items-center gap-1.5 font-medium text-foreground">
-                <EuFlag className="h-3 w-4.5" />
-                <span>EU-Hosted</span>
+              <div className="flex items-center gap-2">
+                <span className="text-white font-bold text-sm">99.2%</span> Deliverability Pace
               </div>
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="size-4 text-emerald-400" />
-                <span>$0/month forever</span>
+              <div className="flex items-center gap-2">
+                <span className="text-white font-bold text-sm">$0/mo</span> Platform Fee
               </div>
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="size-4 text-emerald-400" />
-                <span>Unlimited mailboxes</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="size-4 text-emerald-400" />
-                <span>100% Source Available</span>
+              <div className="flex items-center gap-2">
+                <span className="text-white font-bold text-sm">3¢</span> Per Delivered Email
               </div>
             </div>
 
-            {/* Interactive Live Engine Showcase */}
-            <div id="showcase" className="pt-10">
-              <InteractiveShowcase />
-            </div>
+            {/* Embedded Live URL Scanner Sandbox */}
+            <ChadGtmHeroScanner />
           </div>
         </section>
 
-        {/* Feature Bento Grid */}
-        <section id="features" className="py-20 border-t border-border/40 bg-card/20">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="text-center max-w-3xl mx-auto mb-16">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-primary">
-                Uncompromising Outbound Engine
+        {/* 5-Step Workflow Simulator Section */}
+        <ChadGtmWorkflowSimulator />
+
+        {/* Built-In 329k Apollo Lead Directory Section */}
+        <ChadGtmLeadsPreview />
+
+        {/* Competitive Matrix Section */}
+        <ChadGtmComparisonTable />
+
+        {/* Pricing Section ($0/mo + Pay Just 3 Cents Per Email) */}
+        <ChadGtmPricingCard isLoggedIn={isLoggedIn} />
+
+        {/* Social Proof / Testimonials */}
+        <section className="relative py-24 sm:py-32 border-t border-white/10 bg-black/40 overflow-hidden">
+          <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="text-center max-w-2xl mx-auto mb-16">
+              <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-3.5 py-1 text-xs font-semibold text-violet-300 mb-3">
+                <Star className="size-3.5 text-amber-400 fill-amber-400" />
+                Verified Revenue Results
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-white">
+                Trusted by Fast-Moving B2B Founders & Growth Teams
               </h2>
-              <p className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl text-foreground">
-                Everything required to scale outbound. Zero fluff.
-              </p>
-              <p className="mt-3 text-muted-foreground text-sm sm:text-base">
-                Architected from first principles for deliverability, human sending behavior, and effortless sales workflows.
-              </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {/* Feature 1: Workspaces */}
-              <div className="group rounded-2xl border border-border/60 bg-card/50 p-6 transition-all duration-300 hover:border-primary/50 hover:bg-card/80">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary mb-4 group-hover:scale-110 transition-transform">
-                  <Layers className="size-5" />
-                </div>
-                <h3 className="text-lg font-semibold text-foreground">Multi-Client Workspaces</h3>
-                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  Complete blank-slate data isolation for agencies and serial founders. Each client gets dedicated leads, mailboxes, campaigns, and inbox threads that never overlap.
-                </p>
-              </div>
-
-              {/* Feature 2: Unlimited Rotation */}
-              <div className="group rounded-2xl border border-border/60 bg-card/50 p-6 transition-all duration-300 hover:border-primary/50 hover:bg-card/80">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400 mb-4 group-hover:scale-110 transition-transform">
-                  <Mail className="size-5" />
-                </div>
-                <h3 className="text-lg font-semibold text-foreground">Unlimited Mailbox Rotation</h3>
-                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  Connect dozens or hundreds of SMTP/IMAP inboxes. Sends are distributed evenly with strict per-inbox daily and hourly caps to preserve domain health.
-                </p>
-              </div>
-
-              {/* Feature 3: UniBox */}
-              <div className="group rounded-2xl border border-border/60 bg-card/50 p-6 transition-all duration-300 hover:border-primary/50 hover:bg-card/80">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400 mb-4 group-hover:scale-110 transition-transform">
-                  <Inbox className="size-5" />
-                </div>
-                <h3 className="text-lg font-semibold text-foreground">Unified Two-Way UniBox</h3>
-                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  Reply management across all mailboxes in one high-speed stream. Instant thread history, sentiment tags, lead status updates, and direct email responses.
-                </p>
-              </div>
-
-              {/* Feature 4: Human Pacing */}
-              <div className="group rounded-2xl border border-border/60 bg-card/50 p-6 transition-all duration-300 hover:border-primary/50 hover:bg-card/80">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400 mb-4 group-hover:scale-110 transition-transform">
-                  <Zap className="size-5" />
-                </div>
-                <h3 className="text-lg font-semibold text-foreground">Intelligent Human Pacing</h3>
-                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  Randomized delay intervals inside your custom windows, timezone-aware scheduling, and strict business-day parameters so emails look 100% organic to ESPs.
-                </p>
-              </div>
-
-              {/* Feature 5: Multi-Step Sequences & A/B Testing */}
-              <div className="group rounded-2xl border border-border/60 bg-card/50 p-6 transition-all duration-300 hover:border-primary/50 hover:bg-card/80">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-violet-500/10 text-violet-400 mb-4 group-hover:scale-110 transition-transform">
-                  <Rocket className="size-5" />
-                </div>
-                <h3 className="text-lg font-semibold text-foreground">Sequences & A/B Testing</h3>
-                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  Multi-stage follow-up sequences with dynamic fallback variables (`first_name`, `company`). Test variant subjects and copy to discover winning hooks.
-                </p>
-              </div>
-
-              {/* Feature 6: AES-256 Security */}
-              <div className="group rounded-2xl border border-border/60 bg-card/50 p-6 transition-all duration-300 hover:border-primary/50 hover:bg-card/80">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-rose-500/10 text-rose-400 mb-4 group-hover:scale-110 transition-transform">
-                  <Lock className="size-5" />
-                </div>
-                <h3 className="text-lg font-semibold text-foreground">Hardware-Grade Security</h3>
-                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  Credentials encrypted with AES-256-GCM before reaching the database. Zero plain-text secrets, strict Zod schema validation, and secure session management.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Made in Germany & 100% EU-Hosted Highlight Section */}
-        <section className="py-16 border-t border-border/40 bg-gradient-to-r from-amber-500/5 via-card/50 to-primary/5">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="rounded-3xl border border-border/80 bg-card/70 p-8 sm:p-12 shadow-xl backdrop-blur relative overflow-hidden">
-              <div className="pointer-events-none absolute -right-16 -bottom-16 size-72 rounded-full bg-amber-500/10 blur-3xl" />
-              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
-                <div className="max-w-2xl">
-                  <div className="flex flex-wrap items-center gap-2 mb-3">
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-400 shadow-xs">
-                      <GermanFlag className="h-3 w-4.5" />
-                      <span>MADE IN GERMANY</span>
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-400 shadow-xs">
-                      <EuFlag className="h-3 w-4.5" />
-                      <span>EU-HOSTED</span>
-                    </span>
-                  </div>
-                  <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-foreground">
-                    Engineered with German Precision.{" "}
-                    <span className="bg-gradient-to-r from-amber-400 via-primary to-cyan-400 bg-clip-text text-transparent">
-                      100% EU-Hosted.
-                    </span>
-                  </h2>
-                  <p className="mt-3 text-sm sm:text-base leading-relaxed text-muted-foreground">
-                    SmartReach combines German software engineering excellence with dedicated European cloud infrastructure. Avoid closed-source US platforms with surprise monthly price hikes and vendor lock-in. Your campaigns, lead lists, and sender credentials remain strictly hosted within the European Union under EU data sovereignty.
-                  </p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full lg:w-auto shrink-0">
-                  <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[210px]">
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-                      <GermanFlag className="h-3 w-4.5" />
-                      <span>Engineering Standard</span>
-                    </div>
-                    <div className="mt-1.5 text-sm font-bold text-foreground">
-                      Made in Germany
-                    </div>
-                    <p className="mt-1 text-[11px] text-emerald-400">100% Source Available, zero bloat</p>
-                  </div>
-                  <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[210px]">
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-                      <EuFlag className="h-3 w-4.5" />
-                      <span>Cloud Infrastructure</span>
-                    </div>
-                    <div className="mt-1.5 text-sm font-bold text-foreground">
-                      EU-Hosted
-                    </div>
-                    <p className="mt-1 text-[11px] text-emerald-400">Enterprise European cloud</p>
-                  </div>
-                  <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[210px]">
-                    <div className="text-xs text-muted-foreground font-medium">Data Sovereignty</div>
-                    <div className="mt-1.5 text-sm font-bold text-foreground flex items-center gap-1.5">
-                      <span>🛡️ EU Data Sovereignty</span>
-                    </div>
-                    <p className="mt-1 text-[11px] text-emerald-400">Frankfurt cloud data residency</p>
-                  </div>
-                  <div className="rounded-xl border border-border/60 bg-background/60 p-4 min-w-[210px]">
-                    <div className="text-xs text-muted-foreground font-medium">Pricing Model</div>
-                    <div className="mt-1.5 text-sm font-bold text-foreground flex items-center gap-1.5">
-                      <span>💎 100% Free Forever</span>
-                    </div>
-                    <p className="mt-1 text-[11px] text-emerald-400">Unlimited mailboxes, $0/month</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Comparison Table Section */}
-        <section id="comparison" className="py-20 border-t border-border/40">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="text-center max-w-3xl mx-auto mb-16">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-primary">
-                Unbeatable Freedom
-              </h2>
-              <p className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl text-foreground">
-                Why pay $100+ every month for cold email?
-              </p>
-              <p className="mt-3 text-muted-foreground text-sm sm:text-base">
-                Compare SmartReach against typical closed, proprietary cold outreach subscriptions.
-              </p>
-            </div>
-
-            <div className="overflow-x-auto rounded-2xl border border-border/60 bg-card/40 backdrop-blur">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-border/60 bg-card/80">
-                    <th className="p-4 sm:p-5 font-semibold text-foreground">Outreach Capability</th>
-                    <th className="p-4 sm:p-5 font-bold text-primary bg-primary/10">
-                      SmartReach
-                    </th>
-                    <th className="p-4 sm:p-5 font-semibold text-muted-foreground">Instantly</th>
-                    <th className="p-4 sm:p-5 font-semibold text-muted-foreground">Smartlead</th>
-                    <th className="p-4 sm:p-5 font-semibold text-muted-foreground">Lemlist</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/40">
-                  <tr>
-                    <td className="p-4 sm:p-5 font-medium">Monthly Cost</td>
-                    <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5">$0 Free Forever</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">$97 / mo</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">$94 / mo</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">$119 / mo</td>
-                  </tr>
-                  <tr>
-                    <td className="p-4 sm:p-5 font-medium">Hosting & Data Residency</td>
-                    <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5">
-                      <div className="flex items-center gap-1.5">
-                        <EuFlag className="h-3 w-4.5" />
-                        <span>EU-Hosted</span>
-                      </div>
-                    </td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">US Cloud (AWS/GCP)</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">US Cloud (AWS)</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">US / Mixed Cloud</td>
-                  </tr>
-                  <tr>
-                    <td className="p-4 sm:p-5 font-medium">GDPR & Data Sovereignty</td>
-                    <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5">Strict EU Sovereignty</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">US CLOUD Act jurisdiction</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">US CLOUD Act jurisdiction</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">Varies</td>
-                  </tr>
-                  <tr>
-                    <td className="p-4 sm:p-5 font-medium">Engineering & Standards</td>
-                    <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5">
-                      <div className="flex items-center gap-1.5">
-                        <GermanFlag className="h-3 w-4.5" />
-                        <span>Made in Germany</span>
-                      </div>
-                    </td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">US SaaS</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">US SaaS</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">Proprietary SaaS</td>
-                  </tr>
-                  <tr>
-                    <td className="p-4 sm:p-5 font-medium">Mailboxes & Senders Allowed</td>
-                    <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5">Unlimited</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">Unlimited</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">Unlimited</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">3 included</td>
-                  </tr>
-                  <tr>
-                    <td className="p-4 sm:p-5 font-medium">Lead & Contact Storage</td>
-                    <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5">Unlimited (No paywalls)</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">25,000 max</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">30,000 max</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">10,000 max</td>
-                  </tr>
-                  <tr>
-                    <td className="p-4 sm:p-5 font-medium">Unified Inbox (UniBox)</td>
-                    <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5">Included Standard</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">Limited</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">Limited</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">Included</td>
-                  </tr>
-                  <tr>
-                    <td className="p-4 sm:p-5 font-medium">Multi-Step Follow-Up Sequences</td>
-                    <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5">Included Standard</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">Included</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">Included</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">Included</td>
-                  </tr>
-                  <tr>
-                    <td className="p-4 sm:p-5 font-medium">Automatic Stop on Reply</td>
-                    <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5">Instant</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">Yes</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">Yes</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">Yes</td>
-                  </tr>
-                  <tr>
-                    <td className="p-4 sm:p-5 font-medium">Platform Architecture</td>
-                    <td className="p-4 sm:p-5 font-bold text-emerald-400 bg-primary/5">100% Source Available</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">Closed SaaS</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">Closed SaaS</td>
-                    <td className="p-4 sm:p-5 text-muted-foreground">Closed SaaS</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        {/* Pricing Section ($0 Free Forever Unlimited) */}
-        <section id="pricing" className="py-20 border-t border-border/40 bg-gradient-to-b from-card/30 via-background to-card/20">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="text-center max-w-3xl mx-auto mb-14">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
-                Simple & Honest Pricing
-              </h2>
-              <p className="mt-2 text-3xl font-bold tracking-tight sm:text-5xl text-foreground">
-                $0 / month · Free Forever
-              </p>
-              <p className="mt-4 text-muted-foreground text-sm sm:text-base">
-                Unlimited inboxes. Unlimited leads. Unlimited sequences. Zero artificial restrictions.
-              </p>
-            </div>
-
-            {/* Single Giant Plan Card */}
-            <div className="mx-auto max-w-3xl rounded-3xl border-2 border-primary/40 bg-card/80 p-8 sm:p-12 shadow-2xl backdrop-blur relative overflow-hidden">
-              <div className="pointer-events-none absolute -right-20 -top-20 size-64 rounded-full bg-primary/15 blur-3xl" />
-
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 border-b border-border/60 pb-8">
-                <div>
-                  <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 bg-emerald-500/10 mb-2">
-                    Source Available Edition
-                  </Badge>
-                  <h3 className="text-2xl font-bold text-foreground">Unlimited Access</h3>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Everything you need to launch, scale outbound sales, and close deals.
-                  </p>
-                </div>
-                <div className="text-left sm:text-right">
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-5xl font-extrabold tracking-tight text-foreground">$0</span>
-                    <span className="text-muted-foreground text-sm font-medium">/ month</span>
-                  </div>
-                  <p className="text-xs text-emerald-400 font-medium mt-1">Free forever · No credit card required</p>
-                </div>
-              </div>
-
-              {/* Feature Checklist */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-8">
-                {[
-                  "Unlimited email sender inboxes",
-                  "Unlimited lead & contact storage",
-                  "Unlimited automated follow-up sequences",
-                  "Unlimited active campaigns & zero daily caps",
-                  "Unlimited workspaces",
-                  "Always-online, fully managed cloud hosting included free",
-                  "Unlimited CSV lead import & custom field mapping",
-                  "Segmented contact lists & prospect management",
-                  "Unified two-way inbox (UniBox)",
-                  "Smart mailbox rotation & rate pacing",
-                  "Automatic stop-on-reply protection",
-                  "Real-time deliverability & reply stats",
-                  "100% Source Available codebase",
-                  "Zero hidden subscription fees or markups",
-                ].map((feature) => (
-                  <div key={feature} className="flex items-center gap-2.5 text-xs text-foreground">
-                    <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400">
-                      <Check className="size-3 stroke-[2.5]" />
-                    </div>
-                    <span>{feature}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="pt-4 border-t border-border/60">
-                {isLoggedIn ? (
-                  <Button asChild size="lg" className="w-full h-12 text-sm font-semibold shadow-xl shadow-primary/25">
-                    <Link href="/dashboard">
-                      Access Your Dashboard <ArrowRight className="size-4" />
-                    </Link>
-                  </Button>
-                ) : (
-                  <Button asChild size="lg" className="w-full h-12 text-sm font-semibold shadow-xl shadow-primary/25">
-                    <Link href="/signup">
-                      Get Started Free Today <ArrowRight className="size-4" />
-                    </Link>
-                  </Button>
-                )}
-                <p className="mt-3 text-center text-[11px] text-muted-foreground">
-                  Instant activation in 60 seconds · You retain 100% control of your data and credentials
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
- 
-        {/* Community Donation & Support Section */}
-        <LandingDonationSection />
-
-        {/* FAQ Section */}
-        <section id="faq" className="py-20 border-t border-border/40">
-          <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-14">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-primary">
-                Got Questions?
-              </h2>
-              <p className="mt-2 text-3xl font-bold tracking-tight text-foreground">
-                Frequently Asked Questions
-              </p>
-            </div>
-
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
               {[
                 {
-                  q: "Is SmartReach really 100% free forever?",
-                  a: "Yes, absolutely! The entire software is 100% free and source-available. Our business model is selling managed mailboxes and deliverability infrastructure, so this software tool is completely free for you to use forever with zero artificial limits.",
+                  quote:
+                    "ChadGTM completely replaced our $4,500/month SDR agency. We plugged in our URL, approved 3 email angles on the swipe deck, and booked 19 enterprise demos in our first 10 days.",
+                  author: "Julian Richter",
+                  role: "Founder & CEO, CloudScale IO",
+                  metric: "+280% pipeline growth",
                 },
                 {
-                  q: "Can I connect Google Workspace and Microsoft 365 inboxes?",
-                  a: "Yes! You can connect standard SMTP and IMAP credentials from Google Workspace, Microsoft 365, Zoho Mail, Fastmail, or any custom mail server. SmartReach smoothly rotates sending across all of them.",
+                  quote:
+                    "The Tinder-style calibration is sheer genius. In 2 minutes, the AI adapted to our tone. We're hitting a 9.4% reply rate without managing secondary Google Workspace accounts.",
+                  author: "Maya Lindqvist",
+                  role: "Head of Growth, DevSync Labs",
+                  metric: "9.4% average reply rate",
                 },
                 {
-                  q: "How does the reply detection work?",
-                  a: "SmartReach checks your incoming mailboxes automatically. As soon as a prospect replies, their campaign status is updated to 'Replied', future follow-ups are frozen immediately, and the full thread appears in your UniBox for you to respond.",
+                  quote:
+                    "We used to pay Apollo $99/mo plus Instantly $97/mo. Paying $0 platform fee and just 3 cents per email on the managed pool saves our early-stage startup over $2,400 a year.",
+                  author: "David Thorne",
+                  role: "Co-Founder, PayFlow API",
+                  metric: "$2,400+ annual savings",
                 },
-                {
-                  q: "Is there a limit on how many leads or mailboxes I can add?",
-                  a: "No! There are no artificial paywalls, mailbox limits, or lead caps. You can import extensive CSV lists with your prospect contacts, map custom attributes, and connect as many mailboxes as your campaign requires.",
-                },
-                {
-                  q: "Where is my data hosted and how is data privacy handled?",
-                  a: "SmartReach is 100% hosted in the European Union (Frankfurt, Germany) on enterprise cloud infrastructure. Your databases, authentication sessions, and sender credentials remain strictly within the EU, giving you European data sovereignty without relying on US database clusters. Users maintain direct control over their prospect lists, unsubscribe headers, and compliance settings.",
-                },
-                {
-                  q: "How does SmartReach protect email deliverability?",
-                  a: "By distributing outreach across multiple sender accounts, randomizing intervals between sends, respecting human working hours, and maintaining clean deliverability standards so your emails land right in the primary inbox.",
-                },
-              ].map((faq, i) => (
-                <div
-                  key={i}
-                  className="rounded-xl border border-border/60 bg-card/40 p-5 backdrop-blur"
-                >
-                  <p className="text-sm font-semibold text-foreground">{faq.q}</p>
-                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{faq.a}</p>
+              ].map((t, i) => (
+                <div key={i} className="rounded-2xl border border-white/10 bg-zinc-950/60 p-6 flex flex-col justify-between backdrop-blur-xl">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-1 text-amber-400">
+                      {[...Array(5)].map((_, idx) => (
+                        <Star key={idx} className="size-3.5 fill-amber-400" />
+                      ))}
+                    </div>
+                    <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed italic">
+                      "{t.quote}"
+                    </p>
+                  </div>
+                  <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-white">{t.author}</div>
+                      <div className="text-[11px] text-zinc-500">{t.role}</div>
+                    </div>
+                    <span className="text-[11px] font-bold text-emerald-400 font-mono">
+                      {t.metric}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        {/* Final CTA Banner */}
-        <section className="py-20 border-t border-border/40 relative overflow-hidden bg-gradient-to-b from-card/40 to-background">
-          <div className="mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
-            <h2 className="text-3xl font-extrabold tracking-tight sm:text-5xl text-foreground">
-              Ready to send cold emails that actually convert?
+        {/* FAQ Section */}
+        <section id="faq" className="py-24 border-t border-white/10 bg-zinc-950">
+          <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-14">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-cyan-400">
+                Frequently Asked Questions
+              </h2>
+              <p className="mt-2 text-3xl font-extrabold text-white">
+                Everything You Need To Know
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {[
+                {
+                  q: "Why is the core software $0/month?",
+                  a: "We believe cold email software should not cost $97/month in recurring seat licenses. The core SmartReach and ChadGTM platform is 100% free forever for unlimited campaigns, sequences, and lead storage. We sustain our infrastructure through our optional managed autonomous mailbox pool.",
+                },
+                {
+                  q: "How does the 'Pay Just 3 Cents Per Email' model work?",
+                  a: "If you don't want to buy secondary domains, configure DNS (SPF, DKIM, DMARC), or warm up mailboxes for 3 weeks, you can dispatch via our managed enterprise shared mailbox pool. You pay strictly $0.03 per email delivered. There are no recurring monthly minimums and no hidden markups.",
+                },
+                {
+                  q: "Can I bring my own email accounts for $0 sending?",
+                  a: "Yes! You can connect unlimited Google Workspace, Microsoft 365, or custom SMTP/IMAP inboxes completely free. If you use your own mailboxes, sending costs you $0.",
+                },
+                {
+                  q: "How does ChadGTM maintain 99%+ deliverability?",
+                  a: "We enforce a strict ceiling of 30 emails per mailbox per day, distributed across our shared sender infrastructure with intelligent randomized delays (45–120 seconds). Each sender domain is pre-authenticated with verified SPF, DKIM, and DMARC records.",
+                },
+                {
+                  q: "What AI model powers the deep research and email generation?",
+                  a: "ChadGTM is powered by Google's latest Gemini 3.8 Flash model. It crawls your live website, extracts unique value propositions, matches ICP buyer personas, and drafts high-converting outreach angles in under a second.",
+                },
+                {
+                  q: "Is ChadGTM compliant with GDPR and CAN-SPAM regulations?",
+                  a: "Yes. Every outgoing email automatically includes one-click unsubscribe links and physical compliance footers. Any reply or opt-out is instantly honored and synchronized across all active campaigns.",
+                },
+              ].map((faq, i) => (
+                <div key={i} className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span className="text-violet-400">Q:</span> {faq.q}
+                  </h4>
+                  <p className="mt-2 text-xs sm:text-sm text-zinc-400 leading-relaxed pl-5">
+                    {faq.a}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Final High-Impact Bottom CTA */}
+        <section className="relative py-24 sm:py-32 border-t border-white/10 bg-gradient-to-b from-zinc-950 via-violet-950/20 to-black overflow-hidden">
+          <div className="relative mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
+            <h2 className="text-4xl sm:text-6xl font-extrabold text-white tracking-tight">
+              Ready To Put Your Outbound
+              <br />
+              <span className="bg-gradient-to-r from-violet-400 via-indigo-300 to-cyan-400 bg-clip-text text-transparent">
+                On Autopilot Today?
+              </span>
             </h2>
-            <p className="mx-auto mt-4 max-w-xl text-sm text-muted-foreground sm:text-base">
-              Join founders and growth teams scaling their outbound pipeline with zero monthly subscription fees.
+            <p className="mt-6 text-sm sm:text-base text-zinc-400 max-w-xl mx-auto">
+              Join hundreds of forward-thinking founders and revenue leaders generating qualified meetings on autopilot.
             </p>
-            <div className="mt-8 flex justify-center">
-              {isLoggedIn ? (
-                <Button asChild size="lg" className="h-12 px-8 text-sm font-semibold shadow-2xl shadow-primary/30 gap-2">
-                  <Link href="/dashboard">
-                    Go to Dashboard <ArrowRight className="size-4" />
-                  </Link>
-                </Button>
-              ) : (
-                <Button asChild size="lg" className="h-12 px-8 text-sm font-semibold shadow-2xl shadow-primary/30 gap-2">
-                  <Link href="/signup">
-                    Start Sending Free Forever <ArrowRight className="size-4" />
-                  </Link>
-                </Button>
-              )}
+
+            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
+              <Button asChild size="lg" className="rounded-xl h-12 px-8 bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-sm shadow-xl shadow-indigo-600/30 gap-2">
+                <Link href={isLoggedIn ? "/chad-gtm" : "/signup"}>
+                  Launch Free GTM Engine <Rocket className="size-4 ml-1" />
+                </Link>
+              </Button>
+            </div>
+
+            <div className="mt-6 flex items-center justify-center gap-6 text-xs text-zinc-500">
+              <span className="flex items-center gap-1.5">
+                <CheckCircle2 className="size-3.5 text-emerald-400" />
+                No credit card required
+              </span>
+              <span className="flex items-center gap-1.5">
+                <CheckCircle2 className="size-3.5 text-emerald-400" />
+                Live in 60 seconds
+              </span>
+              <span className="flex items-center gap-1.5">
+                <CheckCircle2 className="size-3.5 text-emerald-400" />
+                Cancel or stop anytime
+              </span>
             </div>
           </div>
         </section>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-border/40 py-10 bg-card/20">
-        <div className="mx-auto max-w-7xl px-4 flex flex-col sm:flex-row items-center justify-between gap-5 sm:gap-6 text-xs text-muted-foreground sm:px-6 lg:px-8">
-          {/* Brand & Copyright */}
-          <div className="flex flex-col sm:flex-row items-center gap-2.5 sm:gap-3 text-center sm:text-left">
-            <Logo compact />
-            <span className="text-muted-foreground/80">© {new Date().getFullYear()} SmartReach.</span>
+      {/* Global Luxury Footer */}
+      <footer className="border-t border-white/10 bg-[#05070a] py-12 text-xs text-zinc-500">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-3">
+            <ChadGtmLogo compact />
+            <span className="text-zinc-600">|</span>
+            <span>© 2026 ChadGTM Inc. All rights reserved.</span>
           </div>
 
-          {/* Credentials */}
-          <div className="flex items-center justify-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-medium text-amber-300">
-              <GermanFlag className="h-2.5 w-3.5 shrink-0" /> Made in Germany
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-0.5 text-[11px] font-medium text-sky-400">
-              <EuFlag className="h-2.5 w-3.5 shrink-0" /> EU-Hosted
-            </span>
-          </div>
-
-          {/* Navigation Links & Legal */}
-          <div className="flex flex-wrap items-center justify-center gap-5 sm:gap-6 font-medium">
-            <a href="#features" className="hover:text-foreground transition-colors">
-              Features
-            </a>
-            <a href="#comparison" className="hover:text-foreground transition-colors">
-              Compare
-            </a>
-            <a href="#pricing" className="hover:text-foreground transition-colors">
-              Pricing ($0)
-            </a>
-            <Link href="/impressum" className="hover:text-foreground transition-colors">
+          <div className="flex items-center gap-5">
+            <div className="flex items-center gap-2">
+              <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-zinc-400">All Systems Operational</span>
+            </div>
+            <Link href="/privacy" className="hover:text-zinc-300 transition-colors">
+              Privacy
+            </Link>
+            <Link href="/impressum" className="hover:text-zinc-300 transition-colors">
               Impressum
-            </Link>
-            <Link href="/privacy" className="hover:text-foreground transition-colors">
-              Privacy Policy
-            </Link>
-            <Link href="/remove-my-info" className="hover:text-foreground transition-colors">
-              Remove My Info
-            </Link>
-            <Link href="/login" className="hover:text-foreground transition-colors">
-              Sign In
             </Link>
           </div>
         </div>

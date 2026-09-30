@@ -224,6 +224,7 @@ export const senderAccounts = pgTable(
       .default("untested"),
     lastSyncAt: text("last_sync_at"),
     repliedCount: integer("replied_count").notNull().default(0),
+    isSystemPool: boolean("is_system_pool").notNull().default(false),
     deletedAt: text("deleted_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -232,6 +233,7 @@ export const senderAccounts = pgTable(
     index("sender_accounts_user_idx").on(t.userId),
     index("sender_accounts_workspace_idx").on(t.workspaceId),
     index("sender_accounts_status_idx").on(t.status),
+    index("sender_accounts_pool_idx").on(t.isSystemPool),
     uniqueIndex("sender_accounts_user_email_active_unique").on(t.userId, t.email, t.deletedAt),
   ],
 );
@@ -727,6 +729,83 @@ export const pageViews = pgTable(
     index("page_views_path_idx").on(t.path),
     index("page_views_created_at_idx").on(t.createdAt),
     index("page_views_user_created_idx").on(t.userId, t.createdAt),
+  ],
+);
+
+/* ─── ChadGTM Autonomous Go-To-Market Runs ────────────────────────────── */
+
+export const chadGtmRuns = pgTable(
+  "chad_gtm_runs",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    url: text("url").notNull(),
+    companyName: text("company_name").notNull().default(""),
+    status: text("status", {
+      enum: ["analyzing", "reviewing", "calibrating", "ready", "active", "paused", "completed"],
+    })
+      .notNull()
+      .default("analyzing"),
+    businessOverview: jsonb("business_overview")
+      .$type<{
+        summary?: string;
+        valuePropositions?: string[];
+        keyDifferentiators?: string[];
+        targetMarket?: string;
+        [key: string]: any;
+      }>()
+      .notNull()
+      .default({}),
+    icpProfile: jsonb("icp_profile")
+      .$type<{
+        targetTitles?: string[];
+        companySizes?: string[];
+        industries?: string[];
+        painPoints?: string[];
+        [key: string]: any;
+      }>()
+      .notNull()
+      .default({}),
+    offers: jsonb("offers")
+      .$type<Array<{
+        title: string;
+        angle: string;
+        valueProp: string;
+        cta: string;
+      }>>()
+      .notNull()
+      .default([]),
+    selectedIndustries: jsonb("selected_industries")
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    dailyEmailLimit: integer("daily_email_limit").notNull().default(30),
+    campaignId: text("campaign_id").references(() => campaigns.id, { onDelete: "set null" }),
+    approvedEmailSamples: jsonb("approved_email_samples")
+      .$type<Array<{
+        leadId?: string;
+        recipientName?: string;
+        recipientCompany?: string;
+        recipientTitle?: string;
+        subject: string;
+        bodyText: string;
+        bodyHtml?: string;
+        approved: boolean;
+      }>>()
+      .notNull()
+      .default([]),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("chad_gtm_runs_user_idx").on(t.userId),
+    index("chad_gtm_runs_workspace_idx").on(t.workspaceId),
+    index("chad_gtm_runs_status_idx").on(t.status),
+    index("chad_gtm_runs_campaign_idx").on(t.campaignId),
   ],
 );
 

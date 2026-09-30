@@ -33,6 +33,7 @@ import type { WorkspaceItem } from "@/lib/workspaces";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/chad-gtm", label: "ChadGTM", icon: Sparkles, badge: "AI GTM" },
   { href: "/unibox", label: "UniBox", icon: Inbox, badge: "Live" },
   { href: "/campaigns", label: "Campaigns", icon: Rocket },
   { href: "/leads", label: "Leads", icon: Users },

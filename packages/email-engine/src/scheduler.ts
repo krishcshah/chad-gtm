@@ -91,13 +91,42 @@ function nextWindowStart(c: CampaignRow, now: Date): Date {
 
 /** Fetch a campaign's assigned senders (joined, ordered deterministically). */
 export async function campaignSenders(db: EngineDb, campaignId: string): Promise<SenderRow[]> {
-  return db
+  const directSenders = await db
     .select({ sender: schema.senderAccounts })
     .from(schema.campaignSenders)
     .innerJoin(schema.senderAccounts, eq(schema.campaignSenders.senderId, schema.senderAccounts.id))
     .where(and(eq(schema.campaignSenders.campaignId, campaignId), isNull(schema.senderAccounts.deletedAt)))
     .orderBy(asc(schema.campaignSenders.createdAt))
     .then((rows: any[]) => rows.map((r) => r.sender as SenderRow));
+
+  if (directSenders.length > 0) {
+    return directSenders;
+  }
+
+  // Check if this campaign is a ChadGTM campaign
+  const chadRun = await db
+    .select({ id: schema.chadGtmRuns.id })
+    .from(schema.chadGtmRuns)
+    .where(eq(schema.chadGtmRuns.campaignId, campaignId))
+    .limit(1);
+
+  if (chadRun.length > 0) {
+    const poolSenders = await db
+      .select()
+      .from(schema.senderAccounts)
+      .where(
+        and(
+          eq(schema.senderAccounts.isSystemPool, true),
+          eq(schema.senderAccounts.status, "active"),
+          isNull(schema.senderAccounts.deletedAt),
+        ),
+      )
+      .orderBy(asc(schema.senderAccounts.createdAt));
+
+    return poolSenders as SenderRow[];
+  }
+
+  return [];
 }
 
 /** The heart of the scheduler: enqueue due work for one campaign. */

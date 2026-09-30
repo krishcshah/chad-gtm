@@ -640,3 +640,206 @@ export async function ingestCsvContent(
     totalInDb: totalRow?.cnt || inserted,
   };
 }
+
+/**
+ * Invalidate cached facets so newly imported leads immediately reflect in UI.
+ */
+export function invalidateDirectoryFacetsCache(): void {
+  cachedFacets = null;
+}
+
+export interface IngestionResult {
+  totalParsed: number;
+  inserted: number;
+  duplicatesSkipped: number;
+  invalidRows: number;
+  totalInDb: number;
+}
+
+/**
+ * Fast admin bulk ingestion service with header normalization,
+ * batch transactions, email deduplication, and facet cache invalidation.
+ */
+export async function importDirectoryLeadsFromCsv(
+  records: Record<string, string>[],
+  sourceName = "admin_bulk_import.csv"
+): Promise<IngestionResult> {
+  const db = getDirectoryDb();
+  let inserted = 0;
+  let duplicatesSkipped = 0;
+  let invalidRows = 0;
+
+  const checkEmailStmt = db.prepare("SELECT 1 FROM leads WHERE LOWER(email) = ? LIMIT 1");
+  const insertStmt = db.prepare(`
+    INSERT INTO leads (
+      lead_id, first_name, last_name, full_name, job_title,
+      company_name, company_website, linkedin_url, location,
+      city, state, country, industry, team_size, revenue_range,
+      email, email_status, phone, email_count, phone_count, source_file, raw_data,
+      work_email, personal_email
+    ) VALUES (
+      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?,
+      ?, ?
+    )
+  `);
+
+  const seenInBatch = new Set<string>();
+  const CHUNK_SIZE = 1000;
+
+  for (let i = 0; i < records.length; i += CHUNK_SIZE) {
+    const chunk = records.slice(i, i + CHUNK_SIZE);
+    db.exec("BEGIN TRANSACTION;");
+    try {
+      for (const raw of chunk) {
+        const getVal = (...aliases: string[]) => {
+          for (const alias of aliases) {
+            const lowerAlias = alias.toLowerCase().replace(/[\s_-]+/g, "");
+            for (const [k, v] of Object.entries(raw)) {
+              const lowerK = k.toLowerCase().replace(/[\s_-]+/g, "");
+              if (lowerK === lowerAlias) return (v || "").trim();
+            }
+          }
+          return "";
+        };
+
+        const email = getVal("email", "work_email", "email_address", "corporate_email", "email1", "primary_email");
+        if (!email || !email.includes("@")) {
+          invalidRows++;
+          continue;
+        }
+
+        const normalizedEmail = email.toLowerCase().trim();
+        if (seenInBatch.has(normalizedEmail)) {
+          duplicatesSkipped++;
+          continue;
+        }
+
+        const existing = checkEmailStmt.get(normalizedEmail);
+        if (existing) {
+          duplicatesSkipped++;
+          seenInBatch.add(normalizedEmail);
+          continue;
+        }
+
+        seenInBatch.add(normalizedEmail);
+
+        const firstName = getVal("first_name", "firstname", "first", "fname");
+        const lastName = getVal("last_name", "lastname", "last", "lname");
+        const fullName = getVal("full_name", "fullname", "name", "contact_name") || `${firstName} ${lastName}`.trim();
+        const jobTitle = getVal("job_title", "title", "position", "role");
+        const companyName = getVal("company_name", "company", "account_name", "organization");
+        const companyWebsite = getVal("company_website", "website", "domain", "url");
+        const linkedinUrl = getVal("linkedin_url", "linkedin", "person_linkedin_url", "profile_url");
+        const industry = getVal("industry", "primary_industry", "sector", "category");
+        const country = getVal("country", "nation");
+        const city = getVal("city", "town");
+        const state = getVal("state", "region", "province");
+        const teamSize = getVal("team_size", "employees", "company_size", "headcount", "# employees");
+        const revenueRange = getVal("revenue_range", "annual_revenue", "revenue", "estimated_revenue", "arr");
+        const phone = getVal("phone", "direct_phone", "mobile_phone", "telephone", "phone1");
+        const location = [city, state, country].filter(Boolean).join(", ") || getVal("location", "address");
+
+        insertStmt.run(
+          `lead_${crypto.randomUUID()}`,
+          firstName,
+          lastName,
+          fullName,
+          jobTitle,
+          companyName,
+          companyWebsite,
+          linkedinUrl,
+          location,
+          city,
+          state,
+          country,
+          industry,
+          teamSize,
+          revenueRange,
+          normalizedEmail,
+          "verified",
+          phone,
+          1,
+          phone ? 1 : 0,
+          sourceName,
+          JSON.stringify(raw),
+          normalizedEmail,
+          ""
+        );
+        inserted++;
+      }
+      db.exec("COMMIT;");
+    } catch (err) {
+      db.exec("ROLLBACK;");
+      console.error("[leads-directory] Error in batch transaction:", err);
+      throw err;
+    }
+  }
+
+  // Invalidate facet cache immediately so counts refresh
+  cachedFacets = null;
+
+  const totalRow = db.prepare("SELECT COUNT(*) as cnt FROM leads").get() as { cnt: number };
+  return {
+    totalParsed: records.length,
+    inserted,
+    duplicatesSkipped,
+    invalidRows,
+    totalInDb: totalRow?.cnt || 0,
+  };
+}
+
+/**
+ * Get live database metrics for the admin telemetry view.
+ */
+export function getDirectoryStats(): {
+  totalLeads: number;
+  distinctIndustries: number;
+  distinctCountries: number;
+  verifiedEmailCount: number;
+  verifiedEmailPct: number;
+  fileSizeBytes: number;
+} {
+  try {
+    const db = getDirectoryDb();
+    const totalRow = db.prepare("SELECT COUNT(*) as cnt FROM leads").get() as { cnt: number };
+    const totalLeads = totalRow?.cnt || 0;
+
+    const indRow = db.prepare("SELECT COUNT(DISTINCT industry) as cnt FROM leads WHERE industry IS NOT NULL AND industry != ''").get() as { cnt: number };
+    const countryRow = db.prepare("SELECT COUNT(DISTINCT country) as cnt FROM leads WHERE country IS NOT NULL AND country != ''").get() as { cnt: number };
+    const emailRow = db.prepare("SELECT COUNT(*) as cnt FROM leads WHERE email IS NOT NULL AND email != ''").get() as { cnt: number };
+
+    const emailCount = emailRow?.cnt || 0;
+    const verifiedEmailPct = totalLeads > 0 ? Math.round((emailCount / totalLeads) * 100) : 0;
+
+    const dbPath = resolveDbPath();
+    let fileSizeBytes = 0;
+    try {
+      if (fs.existsSync(dbPath)) {
+        fileSizeBytes = fs.statSync(dbPath).size;
+      }
+    } catch {}
+
+    return {
+      totalLeads,
+      distinctIndustries: indRow?.cnt || 0,
+      distinctCountries: countryRow?.cnt || 0,
+      verifiedEmailCount: emailCount,
+      verifiedEmailPct,
+      fileSizeBytes,
+    };
+  } catch (err) {
+    console.error("[leads-directory] Failed to get stats:", err);
+    return {
+      totalLeads: 0,
+      distinctIndustries: 0,
+      distinctCountries: 0,
+      verifiedEmailCount: 0,
+      verifiedEmailPct: 0,
+      fileSizeBytes: 0,
+    };
+  }
+}
+

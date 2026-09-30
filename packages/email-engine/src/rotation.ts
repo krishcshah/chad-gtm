@@ -144,4 +144,20 @@ export async function campaignSentToday(
   return rows.length ? Number(rows[0]!.count) : 0;
 }
 
+/** Fetch all active shared system pool mailboxes. */
+export async function getActiveSystemPoolSenders(db: EngineDb): Promise<SenderRow[]> {
+  const rows = await db
+    .select()
+    .from(schema.senderAccounts)
+    .where(
+      and(
+        eq(schema.senderAccounts.isSystemPool, true),
+        eq(schema.senderAccounts.status, "active"),
+        sql`${schema.senderAccounts.deletedAt} is null`,
+      ),
+    )
+    .orderBy(sql`${schema.senderAccounts.createdAt} ASC`);
+  return rows as SenderRow[];
+}
+
 export { sql };

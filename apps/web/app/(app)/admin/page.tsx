@@ -4,6 +4,8 @@ import { isAdmin } from "@/lib/admin";
 import { listAllBugReportsForAdmin } from "@/lib/bug-reports";
 import { listAllDataRemovalRequestsForAdmin } from "@/lib/data-removal";
 import { getAdminUserAnalytics } from "@/lib/admin-analytics";
+import { getSystemMailboxPoolStats } from "@/lib/admin-gtm-actions";
+import { getDirectoryStats } from "@/lib/leads-directory";
 import { AdminConsoleView } from "./admin-console-view";
 import { ShieldCheck, ShieldAlert } from "lucide-react";
 import { PermissionDenied } from "@smartreach/ui";
@@ -11,8 +13,9 @@ import { PermissionDenied } from "@smartreach/ui";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Admin Console · User Analytics & Tracking · SmartReach",
-  description: "Administrative oversight of registered users, page view analytics, mailbox adoption, bug reports, and GDPR data requests.",
+  title: "Admin Console · Mailbox Pool & Lead Directory · SmartReach",
+  description:
+    "Administrative oversight of shared mailbox infrastructure, Apollo B2B directory, registered users, page view analytics, bug reports, and GDPR data requests.",
 };
 
 export default async function AdminPage() {
@@ -33,11 +36,14 @@ export default async function AdminPage() {
     );
   }
 
-  const [analytics, reports, removalRequests] = await Promise.all([
+  const [analytics, reports, removalRequests, poolStats] = await Promise.all([
     getAdminUserAnalytics(user),
     listAllBugReportsForAdmin(user),
     listAllDataRemovalRequestsForAdmin(user),
+    getSystemMailboxPoolStats(),
   ]);
+
+  const directoryStats = getDirectoryStats();
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 p-4 sm:p-6 lg:p-8">
@@ -57,16 +63,18 @@ export default async function AdminPage() {
             Admin Console
           </h1>
           <p className="text-sm text-muted-foreground">
-            Monitor real-time user behavior, page view telemetry, mailbox infrastructure, bug submissions, and GDPR data requests.
+            Monitor shared mailbox capacity, Apollo B2B lead ingestion, real-time user behavior, bug submissions, and GDPR compliance.
           </p>
         </div>
       </div>
 
-      {/* Tabbed Interactive Views (Analytics, Bug Reports, Data Removals) */}
+      {/* Tabbed Interactive Views */}
       <AdminConsoleView
         initialAnalytics={analytics}
         initialBugReports={reports}
         initialDataRemovals={removalRequests}
+        initialPoolStats={poolStats}
+        initialDirectoryStats={directoryStats}
       />
     </div>
   );
