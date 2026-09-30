@@ -55,15 +55,15 @@ export function VelocitySlider({
             className="w-full accent-primary h-2 bg-muted rounded-lg cursor-pointer"
           />
 
-          <div className="flex items-center justify-between text-[11px] text-muted-foreground font-medium">
-            <span>30 / day (Gentle start)</span>
-            <span>150 / day (Recommended)</span>
-            <span>500 / day (High Scale)</span>
+          <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-muted-foreground font-medium">
+            <span>30<span className="hidden sm:inline"> / day (Gentle start)</span><span className="sm:hidden">/d (Gentle)</span></span>
+            <span>150<span className="hidden sm:inline"> / day (Recommended)</span><span className="sm:hidden">/d (Rec.)</span></span>
+            <span>500<span className="hidden sm:inline"> / day (High Scale)</span><span className="sm:hidden">/d (High)</span></span>
           </div>
         </div>
 
         {/* Real-Time Impact Metric Cards */}
-        <div className="grid grid-cols-2 gap-3 pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
           <div className="rounded-xl border border-border/60 bg-muted/20 p-3.5 space-y-1">
             <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1">
               <Calendar className="size-3 text-emerald-400" /> Weekly Reach

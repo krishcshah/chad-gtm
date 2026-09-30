@@ -194,7 +194,13 @@ export function ChadGtmWizard({
           </div>
         </div>
 
-        {/* Step Ticker Badges */}
+        {/* Step Ticker Badges (Mobile + Desktop) */}
+        <div className="flex sm:hidden items-center text-xs">
+          <span className="rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-[11px] font-bold text-primary">
+            Step {step} of 5: {["URL Scan", "Strategy", "Apollo Leads", "Calibration", "Launch"][step - 1]}
+          </span>
+        </div>
+
         <div className="hidden sm:flex items-center gap-1.5 text-xs">
           {[
             { s: 1, label: "URL Scan" },
@@ -222,37 +228,39 @@ export function ChadGtmWizard({
 
       {/* STEP 1: The Hero Command Bar */}
       {step === 1 && (
-        <div className="mx-auto max-w-2xl py-8 space-y-8">
+        <div className="mx-auto max-w-2xl py-6 sm:py-8 space-y-6 sm:space-y-8">
           <div className="text-center space-y-3">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-xs font-bold text-primary">
               <Sparkles className="size-3.5" /> Self-Driving B2B Cold Outreach
             </span>
-            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">
+            <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-foreground">
               Autonomous Go-To-Market
             </h2>
-            <p className="text-sm text-muted-foreground max-w-lg mx-auto leading-relaxed">
+            <p className="text-xs sm:text-sm text-muted-foreground max-w-lg mx-auto leading-relaxed">
               Enter your company website. Our autonomous engine analyzes your product, cross-references 329k+ Apollo B2B prospects, and dispatches calibrated outreach through our pre-warmed shared mailbox pool.
             </p>
           </div>
 
           {/* Form */}
           <form onSubmit={handleLaunchAnalysis} className="space-y-4">
-            <div className="relative rounded-2xl border border-border/80 bg-card p-2 shadow-2xl transition-all focus-within:border-primary/80 focus-within:ring-2 focus-within:ring-primary/20">
-              <div className="flex items-center gap-3 px-3">
-                <Globe className="size-5 text-muted-foreground shrink-0" />
-                <input
-                  type="text"
-                  required
-                  placeholder="https://yourcompany.com"
-                  value={url}
-                  disabled={isAnalyzing}
-                  onChange={(e) => setUrl(e.target.value)}
-                  className="w-full bg-transparent py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
-                />
+            <div className="relative rounded-2xl border border-border/80 bg-card p-2 sm:p-2.5 shadow-2xl transition-all focus-within:border-primary/80 focus-within:ring-2 focus-within:ring-primary/20">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 px-1 sm:px-2">
+                <div className="flex items-center gap-2.5 flex-1 min-w-0 bg-muted/20 sm:bg-transparent rounded-xl px-3 py-1 sm:p-0">
+                  <Globe className="size-4.5 text-muted-foreground shrink-0" />
+                  <input
+                    type="text"
+                    required
+                    placeholder="https://yourcompany.com"
+                    value={url}
+                    disabled={isAnalyzing}
+                    onChange={(e) => setUrl(e.target.value)}
+                    className="w-full bg-transparent py-2.5 sm:py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+                  />
+                </div>
                 <Button
                   type="submit"
                   disabled={isAnalyzing || !url.trim()}
-                  className="h-11 px-5 rounded-xl text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground shrink-0 shadow-lg"
+                  className="h-11 px-5 rounded-xl text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground shrink-0 shadow-lg w-full sm:w-auto"
                 >
                   {isAnalyzing ? (
                     <>

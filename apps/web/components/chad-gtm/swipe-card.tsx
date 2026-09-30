@@ -138,12 +138,12 @@ export function SwipeCardDeck({
           <div className="absolute inset-x-6 -bottom-4 h-full rounded-2xl border border-border/20 bg-card/20 shadow-sm pointer-events-none" />
 
           {/* Active Card */}
-          <div className="relative rounded-2xl border border-border/70 bg-card/90 p-6 shadow-xl backdrop-blur-xl transition-all duration-200">
+          <div className="relative rounded-2xl border border-border/70 bg-card/90 p-4 sm:p-6 shadow-xl backdrop-blur-xl transition-all duration-200">
             {/* Prospect Metadata Chip Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-4 mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-3 mb-4">
               <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <User className="size-3.5 text-primary" />
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <User className="size-3.5 text-primary shrink-0" />
                   <span className="text-sm font-bold text-foreground">
                     {currentCard.recipientName}
                   </span>
@@ -151,7 +151,7 @@ export function SwipeCardDeck({
                     {currentCard.recipientTitle}
                   </span>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Building2 className="size-3 text-muted-foreground/70" />
                     {currentCard.recipientCompany}
@@ -236,7 +236,7 @@ export function SwipeCardDeck({
               The outreach engine is tuned to your brand voice.
             </p>
           </div>
-          <div className="flex items-center justify-center gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 sm:gap-3 pt-2">
             <Button
               type="button"
               variant="outline"
@@ -245,14 +245,14 @@ export function SwipeCardDeck({
                 setCurrentIndex(0);
                 setApprovedCount(0);
               }}
-              className="text-xs"
+              className="text-xs w-full sm:w-auto h-9"
             >
               <RotateCcw className="size-3 mr-1.5" /> Re-calibrate
             </Button>
             <Button
               type="button"
               onClick={handleFinish}
-              className="text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white"
+              className="text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white w-full sm:w-auto h-9"
             >
               Next: Set Daily Velocity <ChevronRight className="size-3.5 ml-1" />
             </Button>

@@ -151,13 +151,13 @@ export function MissionControlView({
         </div>
 
         {/* Global Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={handleExportInterested}
-            className="text-xs border-border/60 hover:bg-muted font-medium"
+            className="text-xs border-border/60 hover:bg-muted font-medium w-full sm:w-auto h-9"
           >
             <Download className="size-3.5 mr-1.5" /> Export Interested Leads
           </Button>
@@ -166,7 +166,7 @@ export function MissionControlView({
             type="button"
             onClick={handleToggleStatus}
             disabled={isPending}
-            className={`text-xs font-bold shadow-md ${
+            className={`text-xs font-bold shadow-md w-full sm:w-auto h-9 ${
               status === "active"
                 ? "bg-amber-600 hover:bg-amber-500 text-white"
                 : "bg-emerald-600 hover:bg-emerald-500 text-white"

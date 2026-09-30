@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import {
   Ban,
   BarChart3,
@@ -10,6 +11,7 @@ import {
   LayoutDashboard,
   LogOut,
   Mail,
+  Menu,
   PanelLeftClose,
   PanelLeftOpen,
   Rocket,
@@ -17,6 +19,7 @@ import {
   ShieldCheck,
   Sparkles,
   Users,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -53,6 +56,12 @@ export function AppSidebar({
   const pathname = usePathname();
   const router = useRouter();
   const { collapsed, toggleCollapsed } = useSidebar();
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Close mobile drawer when route changes
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   const userInitial = (user.name ?? user.email ?? "U").slice(0, 1).toUpperCase();
   const userIsAdmin = isAdmin(user);
@@ -254,34 +263,176 @@ export function AppSidebar({
       </aside>
 
       {/* Mobile Top Bar */}
-      <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-2 border-b border-border/50 bg-card/80 px-3 backdrop-blur-xl lg:hidden">
-        <ChadGtmLogo compact />
-        {activeWorkspace && (
-          <WorkspaceSwitcher
-            workspaces={workspaces}
-            activeWorkspace={activeWorkspace}
-            compact
-            className="max-w-[130px]"
-          />
+      <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-border/50 bg-card/90 px-3.5 backdrop-blur-xl lg:hidden">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <ChadGtmLogo compact />
+          {activeWorkspace && (
+            <WorkspaceSwitcher
+              workspaces={workspaces}
+              activeWorkspace={activeWorkspace}
+              compact
+              className="max-w-[130px] sm:max-w-[170px]"
+            />
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
+            aria-expanded={mobileOpen}
+            className="flex size-9 items-center justify-center rounded-xl bg-accent/60 text-foreground hover:bg-accent border border-border/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {mobileOpen ? <X className="size-4.5" /> : <Menu className="size-4.5" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile Slide-Over Backdrop */}
+      {mobileOpen && (
+        <div
+          role="presentation"
+          onClick={() => setMobileOpen(false)}
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm lg:hidden transition-opacity"
+        />
+      )}
+
+      {/* Mobile Slide-Over Drawer */}
+      <div
+        className={cn(
+          "fixed inset-y-0 right-0 z-50 flex w-76 sm:w-80 max-w-[85vw] flex-col border-l border-border/60 bg-card shadow-2xl backdrop-blur-2xl lg:hidden transition-transform duration-300 ease-out select-none",
+          mobileOpen ? "translate-x-0" : "translate-x-full"
         )}
-        <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-label={item.label}
-              aria-current={pathname.startsWith(item.href) ? "page" : undefined}
-              className={cn(
-                "flex size-9 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0",
-                pathname.startsWith(item.href)
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted-foreground hover:bg-accent/50"
-              )}
-            >
-              <item.icon className="size-4" />
-            </Link>
-          ))}
+      >
+        {/* Drawer Header */}
+        <div className="flex h-14 items-center justify-between border-b border-border/40 px-4">
+          <ChadGtmLogo />
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Close menu"
+            className="flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        {/* Workspace Switcher in Drawer */}
+        {activeWorkspace && (
+          <div className="p-3 border-b border-border/40 bg-accent/15">
+            <WorkspaceSwitcher
+              workspaces={workspaces}
+              activeWorkspace={activeWorkspace}
+            />
+          </div>
+        )}
+
+        {/* Full Nav Items with labels and badges */}
+        <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+          {navItems.map((item) => {
+            const active = pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileOpen(false)}
+                className={cn(
+                  "group relative flex items-center justify-between rounded-xl px-3.5 py-2.5 text-[13px] font-medium transition-all",
+                  active
+                    ? "bg-primary/15 text-primary font-semibold shadow-xs"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <item.icon
+                    className={cn(
+                      "size-4 shrink-0 transition-transform group-hover:scale-110",
+                      active ? "text-primary" : "text-muted-foreground"
+                    )}
+                  />
+                  <span className="truncate">{item.label}</span>
+                </div>
+                {item.badge && (
+                  <span
+                    className={cn(
+                      "text-[10px] font-semibold px-2 py-0.5 rounded-md",
+                      active
+                        ? "bg-primary/20 text-primary"
+                        : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {item.badge}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
         </nav>
+
+        {/* User Profile in Drawer */}
+        <div className="border-t border-border/50 bg-card/60 p-3.5 space-y-3">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => {
+              setMobileOpen(false);
+              router.push("/settings");
+            }}
+            className="flex items-center gap-3 cursor-pointer group hover:opacity-85 transition-opacity"
+          >
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/30 to-info/30 text-xs font-bold text-primary border border-primary/20">
+              {userInitial}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <p className="truncate text-xs font-semibold text-foreground group-hover:text-primary transition-colors">
+                  {user.name ?? "User"}
+                </p>
+                {userIsAdmin && (
+                  <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 uppercase tracking-wider">
+                    Admin
+                  </span>
+                )}
+              </div>
+              <p className="truncate text-[11px] text-muted-foreground mt-0.5">
+                {user.email}
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Actions Row */}
+          <div className="flex items-center justify-between pt-2 border-t border-border/30">
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <span className="text-xs text-muted-foreground font-medium">Appearance</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={async () => {
+                setMobileOpen(false);
+                await authClient.signOut();
+                router.push("/");
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-400 hover:bg-rose-500/10 transition-colors"
+            >
+              <LogOut className="size-3.5" />
+              <span>Sign out</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Autonomous Engine Telemetry & System Status Footer */}
+        <div className="border-t border-border/40 py-2.5 px-3.5 flex items-center justify-between text-[10px] select-none bg-black/20 font-mono text-zinc-400">
+          <div className="flex items-center gap-1.5">
+            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Gemini 3.8 Flash</span>
+          </div>
+          <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+            3¢ Pool Active
+          </span>
+        </div>
       </div>
     </>
   );

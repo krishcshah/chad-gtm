@@ -71,10 +71,10 @@ export function LeadMatcher({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-center">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-center flex items-center justify-between sm:block">
             <div className="text-xs font-medium text-muted-foreground">Verified Prospects</div>
-            <div className="text-lg font-bold text-emerald-400 flex items-center justify-center gap-1.5">
+            <div className="text-base sm:text-lg font-bold text-emerald-400 flex items-center justify-center gap-1.5 font-mono">
               {isPending ? (
                 <Loader2 className="size-4 animate-spin text-emerald-400" />
               ) : (
@@ -86,7 +86,7 @@ export function LeadMatcher({
           <Button
             type="button"
             onClick={() => onProceed(selectedIndustries)}
-            className="bg-primary text-primary-foreground font-semibold text-xs shadow-md"
+            className="bg-primary text-primary-foreground font-semibold text-xs shadow-md h-10 w-full sm:w-auto"
           >
             Calibrate Email Tone <ArrowRight className="size-3.5 ml-1.5" />
           </Button>
@@ -154,8 +154,8 @@ export function LeadMatcher({
           <span className="text-[10px] text-muted-foreground">100% Direct Corporate Emails</span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto [-webkit-overflow-scrolling:touch]">
+          <table className="w-full text-left text-xs min-w-[550px]">
             <thead className="border-b border-border/40 bg-muted/40 text-[10px] uppercase font-bold text-muted-foreground">
               <tr>
                 <th className="px-4 py-2.5">Prospect</th>

@@ -65,7 +65,7 @@ export default async function DashboardPage({
   return (
     <div className="page-stack space-y-8 max-w-7xl mx-auto">
       {/* Top GTM Command Banner */}
-      <div className="relative overflow-hidden rounded-3xl border border-violet-500/30 bg-gradient-to-r from-violet-950/40 via-zinc-950 to-zinc-950 p-6 sm:p-8 shadow-2xl backdrop-blur-2xl">
+      <div className="relative overflow-hidden rounded-3xl border border-violet-500/30 bg-gradient-to-r from-violet-950/40 via-zinc-950 to-zinc-950 p-5 sm:p-8 shadow-2xl backdrop-blur-2xl">
         <div className="pointer-events-none absolute -right-20 -top-20 size-72 rounded-full bg-cyan-500/15 blur-3xl" />
         <div className="pointer-events-none absolute -left-20 -bottom-20 size-72 rounded-full bg-violet-600/15 blur-3xl" />
 
@@ -90,14 +90,14 @@ export default async function DashboardPage({
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <Button asChild size="lg" className="rounded-xl bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-xs sm:text-sm shadow-xl shadow-indigo-600/30 gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
+            <Button asChild size="lg" className="rounded-xl bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-xs sm:text-sm shadow-xl shadow-indigo-600/30 gap-2 w-full sm:w-auto">
               <Link href="/chad-gtm">
                 <Sparkles className="size-4 text-cyan-200 fill-cyan-200" />
                 Launch New Autonomous Campaign
               </Link>
             </Button>
-            <Button asChild variant="outline" size="lg" className="rounded-xl border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.08] hover:text-white text-xs sm:text-sm font-semibold">
+            <Button asChild variant="outline" size="lg" className="rounded-xl border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.08] hover:text-white text-xs sm:text-sm font-semibold w-full sm:w-auto">
               <Link href="/b2b-database">
                 <Database className="size-4 mr-1.5 text-emerald-400" />
                 Browse 329k Leads
@@ -108,7 +108,7 @@ export default async function DashboardPage({
       </div>
 
       {/* Primary GTM Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div className="rounded-2xl border border-white/10 bg-zinc-950/60 p-4 sm:p-5 backdrop-blur-xl">
           <div className="flex items-center justify-between text-xs text-zinc-400 font-medium">
             <span>Verified Prospects</span>

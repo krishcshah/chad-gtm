@@ -103,30 +103,30 @@ export function ChadGtmLeadsPreview() {
         </div>
 
         {/* Directory Card Screen */}
-        <div className="mx-auto max-w-5xl rounded-3xl border border-white/10 bg-zinc-950/80 p-6 sm:p-8 shadow-2xl backdrop-blur-2xl">
+        <div className="mx-auto max-w-5xl rounded-3xl border border-white/10 bg-zinc-950/80 p-4 sm:p-8 shadow-2xl backdrop-blur-2xl">
           {/* Stats Header Bar */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pb-6 border-b border-white/10 text-center">
-            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5">
-              <div className="text-2xl font-extrabold text-white font-mono">329,563</div>
-              <div className="text-[11px] text-zinc-400 font-medium mt-0.5">Total B2B Leads</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4 pb-6 border-b border-white/10 text-center">
+            <div className="p-2.5 sm:p-3 rounded-xl bg-white/[0.02] border border-white/5">
+              <div className="text-xl sm:text-2xl font-extrabold text-white font-mono">329,563</div>
+              <div className="text-[10px] sm:text-[11px] text-zinc-400 font-medium mt-0.5">Total B2B Leads</div>
             </div>
-            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5">
-              <div className="text-2xl font-extrabold text-emerald-400 font-mono">236,104</div>
-              <div className="text-[11px] text-zinc-400 font-medium mt-0.5">Verified Work Emails</div>
+            <div className="p-2.5 sm:p-3 rounded-xl bg-white/[0.02] border border-white/5">
+              <div className="text-xl sm:text-2xl font-extrabold text-emerald-400 font-mono">236,104</div>
+              <div className="text-[10px] sm:text-[11px] text-zinc-400 font-medium mt-0.5">Verified Work Emails</div>
             </div>
-            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5">
-              <div className="text-2xl font-extrabold text-cyan-400 font-mono">114,482</div>
-              <div className="text-[11px] text-zinc-400 font-medium mt-0.5">Personal Emails</div>
+            <div className="p-2.5 sm:p-3 rounded-xl bg-white/[0.02] border border-white/5">
+              <div className="text-xl sm:text-2xl font-extrabold text-cyan-400 font-mono">114,482</div>
+              <div className="text-[10px] sm:text-[11px] text-zinc-400 font-medium mt-0.5">Personal Emails</div>
             </div>
-            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5">
-              <div className="text-2xl font-extrabold text-violet-400 font-mono">100% Free</div>
-              <div className="text-[11px] text-zinc-400 font-medium mt-0.5">No Export Credits</div>
+            <div className="p-2.5 sm:p-3 rounded-xl bg-white/[0.02] border border-white/5">
+              <div className="text-xl sm:text-2xl font-extrabold text-violet-400 font-mono">100% Free</div>
+              <div className="text-[10px] sm:text-[11px] text-zinc-400 font-medium mt-0.5">No Export Credits</div>
             </div>
           </div>
 
           {/* Search & Category Pills */}
           <div className="mt-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            <div className="relative flex-1 max-w-sm">
+            <div className="relative flex-1 w-full sm:max-w-sm">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-zinc-400" />
               <input
                 type="text"
@@ -156,8 +156,8 @@ export function ChadGtmLeadsPreview() {
           </div>
 
           {/* Prospects Table */}
-          <div className="mt-6 overflow-x-auto rounded-2xl border border-white/5 bg-black/40">
-            <table className="w-full text-left border-collapse text-xs">
+          <div className="mt-6 overflow-x-auto rounded-2xl border border-white/5 bg-black/40 [-webkit-overflow-scrolling:touch]">
+            <table className="w-full text-left border-collapse text-xs min-w-[560px]">
               <thead>
                 <tr className="border-b border-white/10 text-zinc-400 bg-white/[0.02]">
                   <th className="p-3.5 font-medium">Name & Role</th>
@@ -189,11 +189,11 @@ export function ChadGtmLeadsPreview() {
             </table>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="mt-6 pt-4 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
             <span className="text-xs text-zinc-400">
               Showing sample verified prospects · 329k+ available upon instant signup
             </span>
-            <Button asChild size="sm" className="rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black font-bold text-xs gap-1.5 shadow-md shadow-emerald-500/20">
+            <Button asChild size="sm" className="rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black font-bold text-xs gap-1.5 shadow-md shadow-emerald-500/20 w-full sm:w-auto">
               <Link href="/signup">
                 Access All 329k Leads Free <ArrowRight className="size-3.5" />
               </Link>

@@ -23,9 +23,8 @@ import {
 } from "lucide-react";
 import { Badge, Button } from "@smartreach/ui";
 import { ChadGtmLogo } from "@/components/chad-gtm-logo";
-import { GermanFlag } from "@/components/german-flag";
-import { EuFlag } from "@/components/eu-flag";
 import { getSession } from "@/lib/session";
+import { LandingHeader } from "@/components/chad-gtm/landing/landing-header";
 import { ChadGtmHeroScanner } from "@/components/chad-gtm/landing/chad-gtm-hero-scanner";
 import { ChadGtmWorkflowSimulator } from "@/components/chad-gtm/landing/chad-gtm-workflow-simulator";
 import { ChadGtmPricingCard } from "@/components/chad-gtm/landing/chad-gtm-pricing-card";
@@ -55,53 +54,7 @@ export default async function LandingPage() {
       </div>
 
       {/* Top Header Navigation */}
-      <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-[#07090e]/80 backdrop-blur-2xl">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <ChadGtmLogo />
-
-          <nav className="hidden md:flex items-center gap-7 text-xs font-medium text-zinc-400">
-            <a href="#how-it-works" className="transition-colors hover:text-white">
-              How It Works
-            </a>
-            <a href="#leads" className="transition-colors hover:text-white">
-              329k Leads
-            </a>
-            <a href="#comparison" className="transition-colors hover:text-white">
-              Comparison
-            </a>
-            <a href="#pricing" className="transition-colors hover:text-white flex items-center gap-1">
-              Pricing <span className="text-emerald-400 font-bold">($0/mo)</span>
-            </a>
-            <a href="#faq" className="transition-colors hover:text-white">
-              FAQ
-            </a>
-          </nav>
-
-          <div className="flex items-center gap-3">
-            {isLoggedIn ? (
-              <Button asChild size="sm" className="rounded-xl bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-semibold text-xs shadow-lg shadow-indigo-600/20 gap-1.5">
-                <Link href="/chad-gtm">
-                  Open Mission Control <ArrowRight className="size-3.5" />
-                </Link>
-              </Button>
-            ) : (
-              <>
-                <Link
-                  href="/login"
-                  className="rounded-lg px-3.5 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:text-white hover:bg-white/5"
-                >
-                  Sign in
-                </Link>
-                <Button asChild size="sm" className="rounded-xl bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-semibold text-xs shadow-lg shadow-indigo-600/25 gap-1.5">
-                  <Link href="/signup">
-                    Launch Free ($0/mo) <ArrowRight className="size-3.5" />
-                  </Link>
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
+      <LandingHeader isLoggedIn={isLoggedIn} />
 
       <main className="relative">
         {/* Hero Section */}
@@ -134,14 +87,14 @@ export default async function LandingPage() {
             </p>
 
             {/* CTA Buttons */}
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-              <Button asChild size="lg" className="rounded-xl h-12 px-7 bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-sm shadow-xl shadow-indigo-600/30 gap-2">
+            <div className="mt-8 flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 sm:gap-4 max-w-md sm:max-w-none mx-auto">
+              <Button asChild size="lg" className="rounded-xl h-12 px-7 bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-sm shadow-xl shadow-indigo-600/30 gap-2 w-full sm:w-auto">
                 <Link href={isLoggedIn ? "/chad-gtm" : "/signup"}>
                   <Sparkles className="size-4 text-cyan-200 fill-cyan-200" />
                   Launch Autonomous Outbound Free <ArrowRight className="size-4 ml-1" />
                 </Link>
               </Button>
-              <Button asChild variant="outline" size="lg" className="rounded-xl h-12 px-6 border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.08] hover:text-white text-sm font-semibold">
+              <Button asChild variant="outline" size="lg" className="rounded-xl h-12 px-6 border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.08] hover:text-white text-sm font-semibold w-full sm:w-auto">
                 <a href="#pricing">
                   View Transparent Pricing ($0/mo + 3¢/email)
                 </a>
@@ -149,17 +102,17 @@ export default async function LandingPage() {
             </div>
 
             {/* Trust Metrics Row */}
-            <div className="mt-12 flex flex-wrap items-center justify-center gap-8 sm:gap-14 text-xs font-mono text-zinc-400 border-y border-white/5 py-4 max-w-4xl mx-auto">
-              <div className="flex items-center gap-2">
+            <div className="mt-12 flex flex-wrap items-center justify-center gap-4 sm:gap-14 text-xs font-mono text-zinc-400 border-y border-white/5 py-4 max-w-4xl mx-auto">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <span className="text-white font-bold text-sm">329k+</span> Verified Leads
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <span className="text-white font-bold text-sm">99.2%</span> Deliverability Pace
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <span className="text-white font-bold text-sm">$0/mo</span> Platform Fee
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <span className="text-white font-bold text-sm">3¢</span> Per Delivered Email
               </div>
             </div>
@@ -310,15 +263,15 @@ export default async function LandingPage() {
               Join hundreds of forward-thinking founders and revenue leaders generating qualified meetings on autopilot.
             </p>
 
-            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Button asChild size="lg" className="rounded-xl h-12 px-8 bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-sm shadow-xl shadow-indigo-600/30 gap-2">
+            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 max-w-sm sm:max-w-none mx-auto">
+              <Button asChild size="lg" className="rounded-xl h-12 px-8 bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-sm shadow-xl shadow-indigo-600/30 gap-2 w-full sm:w-auto">
                 <Link href={isLoggedIn ? "/chad-gtm" : "/signup"}>
                   Launch Free GTM Engine <Rocket className="size-4 ml-1" />
                 </Link>
               </Button>
             </div>
 
-            <div className="mt-6 flex items-center justify-center gap-6 text-xs text-zinc-500">
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3 sm:gap-6 text-xs text-zinc-500">
               <span className="flex items-center gap-1.5">
                 <CheckCircle2 className="size-3.5 text-emerald-400" />
                 No credit card required
@@ -338,14 +291,14 @@ export default async function LandingPage() {
 
       {/* Global Luxury Footer */}
       <footer className="border-t border-white/10 bg-[#05070a] py-12 text-xs text-zinc-500">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-3">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-6 text-center sm:text-left">
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
             <ChadGtmLogo compact />
             <span className="text-zinc-600">|</span>
             <span>© 2026 ChadGTM Inc. All rights reserved.</span>
           </div>
 
-          <div className="flex items-center gap-5">
+          <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-5">
             <div className="flex items-center gap-2">
               <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
               <span className="text-zinc-400">All Systems Operational</span>

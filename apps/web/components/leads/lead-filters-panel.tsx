@@ -71,6 +71,7 @@ export function LeadFiltersPanel({
   const [showAllCountries, setShowAllCountries] = useState(false);
 
   const [isLg, setIsLg] = useState(false);
+  const [mobileExpanded, setMobileExpanded] = useState(false);
 
   React.useEffect(() => {
     const checkLg = () => setIsLg(window.innerWidth >= 1024);
@@ -235,7 +236,7 @@ export function LeadFiltersPanel({
       )}
     >
       {/* Panel Header */}
-      <div className="p-4 border-b border-border/70 bg-muted/20 flex items-center justify-between shrink-0">
+      <div className="p-3.5 sm:p-4 border-b border-border/70 bg-muted/20 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <SlidersHorizontal className="size-4 text-primary" />
           <span className="font-semibold text-sm text-foreground">Lead Filters</span>
@@ -248,20 +249,34 @@ export function LeadFiltersPanel({
             </Badge>
           )}
         </div>
-        {activeCount > 0 && (
+        <div className="flex items-center gap-2">
+          {activeCount > 0 && (
+            <button
+              type="button"
+              onClick={handleReset}
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+            >
+              <RotateCcw className="size-3" />
+              Reset
+            </button>
+          )}
+          {/* Mobile Collapse Toggle Button */}
           <button
             type="button"
-            onClick={handleReset}
-            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+            onClick={() => setMobileExpanded(!mobileExpanded)}
+            className="lg:hidden text-xs font-semibold text-primary hover:text-primary/80 flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 transition-colors"
           >
-            <RotateCcw className="size-3" />
-            Reset all
+            {mobileExpanded ? "Hide Filters" : "Show Filters"}
+            {mobileExpanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
           </button>
-        )}
+        </div>
       </div>
 
-      {/* Scrollable Filters Body */}
-      <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-border/50 text-sm">
+      {/* Scrollable Filters Body (Collapsible on Mobile) */}
+      <div className={cn(
+        "flex-1 min-h-0 overflow-y-auto divide-y divide-border/50 text-sm",
+        !mobileExpanded && "hidden lg:block"
+      )}>
         {/* Quick Search Section */}
         <div className="p-3.5 space-y-2.5">
           <div
@@ -690,10 +705,13 @@ export function LeadFiltersPanel({
       </div>
 
       {/* Sticky Bottom Apply Button */}
-      <div className="p-3 border-t border-border/70 bg-card/80 backdrop-blur-sm shrink-0">
+      <div className={cn("p-3 border-t border-border/70 bg-card/80 backdrop-blur-sm shrink-0", !mobileExpanded && "hidden lg:block")}>
         <Button
           type="button"
-          onClick={onApply}
+          onClick={() => {
+            setMobileExpanded(false);
+            onApply();
+          }}
           disabled={isLoading}
           className="w-full font-semibold shadow-md gap-2 h-10 bg-primary text-primary-foreground hover:bg-primary/90 transition-all cursor-pointer"
         >

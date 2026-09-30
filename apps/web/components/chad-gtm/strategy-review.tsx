@@ -73,7 +73,7 @@ export function StrategyReviewBoard({
               selectedOfferIndex,
             })
           }
-          className="bg-primary text-primary-foreground font-semibold text-xs shadow-md"
+          className="bg-primary text-primary-foreground font-semibold text-xs shadow-md w-full sm:w-auto h-10"
         >
           Confirm & Match Leads <ArrowRight className="size-3.5 ml-1.5" />
         </Button>
@@ -221,11 +221,12 @@ export function StrategyReviewBoard({
                 <button
                   key={idx}
                   type="button"
+                  title={offer.angle}
                   onClick={() => {
                     setActiveTab(idx);
                     setSelectedOfferIndex(idx);
                   }}
-                  className={`rounded-md py-1.5 px-2 text-[10px] font-bold transition-all ${
+                  className={`rounded-md py-1.5 px-1.5 text-[10px] font-bold transition-all truncate text-center ${
                     activeTab === idx
                       ? "bg-card text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground"

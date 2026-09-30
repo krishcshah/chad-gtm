@@ -91,9 +91,14 @@ export function ChadGtmComparisonTable() {
           </p>
         </div>
 
+        {/* Mobile Swipe Hint */}
+        <div className="sm:hidden text-center text-[11px] text-zinc-400 mb-3 flex items-center justify-center gap-1.5 font-mono">
+          <span className="text-cyan-400">←</span> Swipe horizontally to compare stacks <span className="text-cyan-400">→</span>
+        </div>
+
         <div className="mx-auto max-w-5xl rounded-3xl border border-white/10 bg-zinc-900/50 shadow-2xl backdrop-blur-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs sm:text-sm">
+          <div className="overflow-x-auto [-webkit-overflow-scrolling:touch]">
+            <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[680px]">
               <thead>
                 <tr className="border-b border-white/10 bg-white/[0.02]">
                   <th className="p-4 sm:p-5 font-bold text-zinc-400">Feature & Capabilities</th>

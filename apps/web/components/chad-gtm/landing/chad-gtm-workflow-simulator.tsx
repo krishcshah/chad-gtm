@@ -89,8 +89,8 @@ export function ChadGtmWorkflowSimulator() {
           </p>
         </div>
 
-        {/* Step Navigation Tabs */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 max-w-5xl mx-auto mb-10">
+        {/* Step Navigation Tabs - Smooth Horizontal Carousel on Mobile */}
+        <div className="flex gap-2 overflow-x-auto pb-3 sm:pb-0 sm:grid sm:grid-cols-5 max-w-5xl mx-auto mb-8 sm:mb-10 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden snap-x">
           {steps.map((s, idx) => {
             const Icon = s.icon;
             const isActive = activeStep === idx;
@@ -100,7 +100,7 @@ export function ChadGtmWorkflowSimulator() {
                 type="button"
                 onClick={() => setActiveStep(idx)}
                 className={cn(
-                  "flex flex-col items-start p-3 sm:p-4 rounded-2xl border text-left transition-all duration-200 select-none",
+                  "shrink-0 w-44 sm:w-auto snap-start flex flex-col items-start p-3 sm:p-4 rounded-2xl border text-left transition-all duration-200 select-none",
                   isActive
                     ? "border-violet-500/60 bg-violet-500/15 shadow-lg shadow-violet-500/20"
                     : "border-white/5 bg-white/[0.02] hover:border-white/15 hover:bg-white/[0.05]"
@@ -127,15 +127,15 @@ export function ChadGtmWorkflowSimulator() {
         </div>
 
         {/* Interactive Visual Playground Screen */}
-        <div className="relative max-w-5xl mx-auto rounded-3xl border border-white/10 bg-zinc-950/90 p-6 sm:p-10 shadow-2xl backdrop-blur-2xl">
+        <div className="relative max-w-5xl mx-auto rounded-3xl border border-white/10 bg-zinc-950/90 p-4 sm:p-10 shadow-2xl backdrop-blur-2xl">
           {activeStep === 0 && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-4">
                 <div>
-                  <h4 className="text-lg font-bold text-white">Step 1: Single Entry Point & Deep Neural Crawl</h4>
+                  <h4 className="text-base sm:text-lg font-bold text-white">Step 1: Single Entry Point & Deep Neural Crawl</h4>
                   <p className="text-xs text-zinc-400 mt-0.5">Simply provide your website URL. No manual prompt engineering required.</p>
                 </div>
-                <Badge variant="outline" className="border-cyan-500/30 text-cyan-300 bg-cyan-500/10 text-xs">
+                <Badge variant="outline" className="border-cyan-500/30 text-cyan-300 bg-cyan-500/10 text-xs w-fit">
                   Autonomous Web Scraper
                 </Badge>
               </div>

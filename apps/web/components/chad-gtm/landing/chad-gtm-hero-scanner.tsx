@@ -310,9 +310,9 @@ export function ChadGtmHeroScanner() {
 
               {/* Tinder-Style Email Calibration Card Preview */}
               <div className="relative rounded-xl border border-violet-500/30 bg-gradient-to-b from-violet-950/20 to-black/60 p-4 shadow-lg">
-                <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-white/10 pb-2 mb-3">
                   <div className="flex items-center gap-2">
-                    <Mail className="size-3.5 text-violet-400" />
+                    <Mail className="size-3.5 text-violet-400 shrink-0" />
                     <span className="text-xs font-semibold text-white">
                       Tinder-Style Voice Calibration Deck (Sample 1 of 10)
                     </span>
@@ -323,7 +323,7 @@ export function ChadGtmHeroScanner() {
                 </div>
 
                 <div className="space-y-2">
-                  <div className="rounded-md bg-black/60 px-3 py-1.5 font-mono text-[11px] text-zinc-300 border border-white/5">
+                  <div className="rounded-md bg-black/60 px-3 py-1.5 font-mono text-[11px] text-zinc-300 border border-white/5 break-words">
                     <span className="text-zinc-500">Subject: </span>
                     {selectedPreset.sampleEmail.subject}
                   </div>
@@ -333,13 +333,13 @@ export function ChadGtmHeroScanner() {
                 </div>
 
                 {/* Swipe Action Controls */}
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-white/5">
+                <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-white/5">
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => setSwipeLiked(false)}
                       className={cn(
-                        "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
+                        "flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-all",
                         swipeLiked === false
                           ? "border-rose-500 bg-rose-500/20 text-rose-300"
                           : "border-white/10 bg-white/5 text-zinc-400 hover:text-rose-400 hover:border-rose-500/40"
@@ -352,7 +352,7 @@ export function ChadGtmHeroScanner() {
                       type="button"
                       onClick={() => setSwipeLiked(true)}
                       className={cn(
-                        "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
+                        "flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-all",
                         swipeLiked === true
                           ? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
                           : "border-white/10 bg-white/5 text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/40"
@@ -364,13 +364,13 @@ export function ChadGtmHeroScanner() {
                   </div>
 
                   {swipeLiked !== null && (
-                    <span className="text-[11px] font-medium text-emerald-400 flex items-center gap-1">
+                    <span className="text-[11px] font-medium text-emerald-400 flex items-center justify-center sm:justify-start gap-1 py-1">
                       <CheckCircle2 className="size-3.5" />
                       Calibrated! Ready for Autonomous Dispatch
                     </span>
                   )}
 
-                  <Button asChild size="sm" className="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-black font-bold text-xs gap-1.5 ml-auto">
+                  <Button asChild size="sm" className="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-black font-bold text-xs gap-1.5 w-full sm:w-auto sm:ml-auto">
                     <Link href="/signup">
                       Launch With This Strategy ($0/mo) <ArrowRight className="size-3.5" />
                     </Link>

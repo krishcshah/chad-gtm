@@ -463,16 +463,25 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
               const shown = !threadLoading && messages.length === 0 ? [replyAsMessage(r)] : messages;
               return (
                 <>
-                  <div className="flex items-start justify-between border-b border-border/60 px-5 py-4">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between border-b border-border/60 px-3.5 sm:px-5 py-3 sm:py-4 gap-3">
                     <div className="min-w-0">
-                      <p className="truncate font-semibold">{r.subject || "(no subject)"}</p>
+                      <div className="flex items-center gap-2 mb-1.5 md:hidden">
+                        <button
+                          type="button"
+                          onClick={() => setActiveId(null)}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-primary"
+                        >
+                          ← Back to Threads
+                        </button>
+                      </div>
+                      <p className="truncate font-semibold text-sm sm:text-base">{r.subject || "(no subject)"}</p>
                       <p className="mt-0.5 truncate text-xs text-muted-foreground">
                         {name} {"<"}{r.fromEmail}{">"}
                         {r.senderEmail ? ` → ${r.senderEmail}` : ""}
                       </p>
-                      {r.campaignName && <span className="mt-2 inline-block rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">{r.campaignName}</span>}
+                      {r.campaignName && <span className="mt-1.5 inline-block rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">{r.campaignName}</span>}
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
                       <Select
                         value={activeConversation.tag ?? "none"}
                         onValueChange={(value) =>
@@ -480,7 +489,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
                         }
                         disabled={tagPending}
                       >
-                        <SelectTrigger className="h-8 w-[11.5rem]" aria-label="Reply tag">
+                        <SelectTrigger className="h-8 w-[9.5rem] sm:w-[11.5rem] text-xs" aria-label="Reply tag">
                           <SelectValue placeholder="No tag" />
                         </SelectTrigger>
                         <SelectContent>
@@ -490,7 +499,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
                           ))}
                         </SelectContent>
                       </Select>
-                      <button type="button" aria-label="Back to conversations" onClick={() => setActiveId(null)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent"><X className="size-4" /></button>
+                      <button type="button" aria-label="Back to conversations" onClick={() => setActiveId(null)} className="hidden md:flex rounded-lg p-1.5 text-muted-foreground hover:bg-accent"><X className="size-4" /></button>
                     </div>
                   </div>
                   <div ref={scrollerRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 pt-3 pb-12 sm:px-4 sm:pb-16">
