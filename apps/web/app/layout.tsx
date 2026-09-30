@@ -15,8 +15,9 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: { default: "SmartReach", template: "%s · SmartReach" },
-  description: "The fastest, cleanest cold email platform. Everything you need. Nothing you don't.",
+  title: { default: "ChadGTM · Autonomous Go-To-Market", template: "%s · ChadGTM" },
+  description:
+    "Autonomous Go-To-Market & Cold Outreach Engine. Turn any website URL into booked pipeline in 60 seconds with Gemini 3.8 Flash, 329k Apollo leads, and managed pre-warmed mailboxes.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

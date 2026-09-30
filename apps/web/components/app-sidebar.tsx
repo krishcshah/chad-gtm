@@ -24,7 +24,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@smartreach/ui";
 import { authClient } from "@/lib/auth-client";
 import { isAdmin } from "@/lib/admin";
-import { Logo } from "./logo";
+import { ChadGtmLogo } from "./chad-gtm-logo";
 import { ThemeToggle } from "./theme-toggle";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 import { GermanFlag } from "./german-flag";
@@ -32,15 +32,15 @@ import { useSidebar } from "./layout/sidebar-context";
 import type { WorkspaceItem } from "@/lib/workspaces";
 
 const nav = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/chad-gtm", label: "ChadGTM", icon: Sparkles, badge: "AI GTM" },
-  { href: "/unibox", label: "UniBox", icon: Inbox, badge: "Live" },
-  { href: "/campaigns", label: "Campaigns", icon: Rocket },
-  { href: "/leads", label: "Leads", icon: Users },
-  { href: "/b2b-database", label: "B2B Database", icon: Database, badge: "350k+" },
-  { href: "/senders", label: "Senders", icon: Mail },
-  { href: "/templates", label: "Sequences", icon: Layers },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard", label: "Executive Hub", icon: LayoutDashboard },
+  { href: "/chad-gtm", label: "Autonomous GTM", icon: Sparkles, badge: "Core" },
+  { href: "/b2b-database", label: "Apollo Directory", icon: Database, badge: "329k" },
+  { href: "/campaigns", label: "Outbound Runs", icon: Rocket },
+  { href: "/unibox", label: "Live Replies", icon: Inbox, badge: "AI Sync" },
+  { href: "/senders", label: "Mailbox Pool", icon: Mail, badge: "3¢ Pool" },
+  { href: "/leads", label: "Prospects", icon: Users },
+  { href: "/templates", label: "Email Angles", icon: Layers },
+  { href: "/settings", label: "Intelligence & Settings", icon: Settings },
 ];
 
 export function AppSidebar({
@@ -88,11 +88,11 @@ export function AppSidebar({
         >
           {collapsed ? (
             <div className="flex items-center justify-center">
-              <Logo compact />
+              <ChadGtmLogo compact />
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <Logo />
+              <ChadGtmLogo />
             </div>
           )}
 
@@ -265,7 +265,7 @@ export function AppSidebar({
 
       {/* Mobile Top Bar */}
       <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-2 border-b border-border/50 bg-card/80 px-3 backdrop-blur-xl lg:hidden">
-        <Logo compact />
+        <ChadGtmLogo compact />
         {activeWorkspace && (
           <WorkspaceSwitcher
             workspaces={workspaces}
