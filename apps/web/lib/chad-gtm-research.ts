@@ -401,7 +401,7 @@ Respond STRICTLY with a valid JSON object matching this structure:
 
   try {
     const provider = (aiOptions?.provider || "google").toLowerCase();
-    let rawJson: string;
+    let rawJson = "";
 
     if (provider === "openai" || (!process.env.GEMINI_API_KEY && process.env.OPENAI_API_KEY)) {
       const openAiKey = aiOptions?.apiKey || process.env.OPENAI_API_KEY!;
