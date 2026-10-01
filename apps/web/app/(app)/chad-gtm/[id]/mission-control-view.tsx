@@ -11,11 +11,7 @@ import {
   Send,
   Eye,
   MessageSquare,
-  Sparkles,
-  TrendingUp,
   Clock,
-  CheckCircle2,
-  AlertCircle,
   ExternalLink,
   ChevronLeft,
   Gauge,
@@ -110,40 +106,40 @@ export function MissionControlView({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-mono">
       {/* Top Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border/50 pb-5">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Link
               href="/chad-gtm"
-              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+              className="text-xs text-zinc-500 hover:text-white flex items-center gap-1 uppercase tracking-wider"
             >
               <ChevronLeft className="size-3.5" /> Back to ChadGTM
             </Link>
-            <span className="text-muted-foreground/40">•</span>
+            <span className="text-zinc-700">•</span>
             <span
-              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase ${
+              className={`inline-flex items-center gap-1 rounded-none px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest border ${
                 status === "active"
-                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                  : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                  ? "bg-zinc-900 text-white border-zinc-700"
+                  : "bg-black text-zinc-500 border-zinc-800"
               }`}
             >
-              <span className="size-1.5 rounded-full bg-current animate-pulse" />
+              <span className="size-1 rounded-none bg-white" />
               {status === "active" ? "Engine Active" : "Engine Paused"}
             </span>
           </div>
 
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white uppercase tracking-wider flex items-center gap-2">
             Mission Control: {run?.companyName || "Autonomous Outreach"}
           </h1>
-          <p className="text-xs text-muted-foreground">
-            Targeting URL:{" "}
+          <p className="text-xs text-zinc-500 font-mono">
+            Targeting:{" "}
             <a
               href={run?.url}
               target="_blank"
               rel="noreferrer"
-              className="text-primary hover:underline inline-flex items-center gap-1"
+              className="text-zinc-300 hover:underline inline-flex items-center gap-1"
             >
               {run?.url} <ExternalLink className="size-2.5" />
             </a>
@@ -151,25 +147,25 @@ export function MissionControlView({
         </div>
 
         {/* Global Controls */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={handleExportInterested}
-            className="text-xs border-border/60 hover:bg-muted font-medium w-full sm:w-auto h-9"
+            className="rounded-none text-xs font-mono uppercase tracking-wider border-zinc-800 hover:border-zinc-700 text-zinc-300 w-full sm:w-auto h-9"
           >
-            <Download className="size-3.5 mr-1.5" /> Export Interested Leads
+            <Download className="size-3.5 mr-1.5" /> Export Interested
           </Button>
 
           <Button
             type="button"
             onClick={handleToggleStatus}
             disabled={isPending}
-            className={`text-xs font-bold shadow-md w-full sm:w-auto h-9 ${
+            className={`rounded-none text-xs font-mono uppercase tracking-wider font-semibold border h-9 w-full sm:w-auto ${
               status === "active"
-                ? "bg-amber-600 hover:bg-amber-500 text-white"
-                : "bg-emerald-600 hover:bg-emerald-500 text-white"
+                ? "bg-black text-zinc-300 border-zinc-800 hover:bg-zinc-900 hover:text-white"
+                : "bg-white text-black border-white hover:bg-zinc-200"
             }`}
           >
             {status === "active" ? (
@@ -186,73 +182,73 @@ export function MissionControlView({
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Prospects Queued */}
-        <div className="rounded-2xl border border-border/70 bg-card p-4 space-y-1 shadow-sm">
-          <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <Mail className="size-3.5 text-primary" /> Target Prospects
+        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 space-y-1">
+          <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 flex items-center gap-1.5">
+            <Mail className="size-3 text-white" /> Target Prospects
           </span>
-          <div className="text-2xl font-bold text-foreground">
+          <div className="text-2xl font-bold text-white">
             {kpis.queuedProspects.toLocaleString()}
           </div>
-          <p className="text-[11px] text-muted-foreground">Verified Apollo B2B prospects queued</p>
+          <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Apollo B2B prospects queued</p>
         </div>
 
         {/* Emails Sent */}
-        <div className="rounded-2xl border border-border/70 bg-card p-4 space-y-1 shadow-sm">
-          <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <Send className="size-3.5 text-emerald-400" /> Dispatched
+        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 space-y-1">
+          <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 flex items-center gap-1.5">
+            <Send className="size-3 text-white" /> Dispatched
           </span>
-          <div className="text-2xl font-bold text-foreground">
-            {kpis.sentToday} <span className="text-xs font-normal text-muted-foreground">today</span>
+          <div className="text-2xl font-bold text-white">
+            {kpis.sentToday} <span className="text-xs font-normal text-zinc-500 uppercase">today</span>
           </div>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-[10px] text-zinc-500 uppercase tracking-wider">
             {kpis.sentLifetime.toLocaleString()} lifetime sends
           </p>
         </div>
 
         {/* Open Rate */}
-        <div className="rounded-2xl border border-border/70 bg-card p-4 space-y-1 shadow-sm">
-          <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <Eye className="size-3.5 text-amber-400" /> Open Rate
+        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 space-y-1">
+          <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 flex items-center gap-1.5">
+            <Eye className="size-3 text-white" /> Open Rate
           </span>
-          <div className="text-2xl font-bold text-foreground">
+          <div className="text-2xl font-bold text-white">
             {kpis.openRate}%
           </div>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-[10px] text-zinc-500 uppercase tracking-wider">
             {kpis.openCount.toLocaleString()} opens recorded
           </p>
         </div>
 
         {/* Replies & Sentiment */}
-        <div className="rounded-2xl border border-border/70 bg-card p-4 space-y-1 shadow-sm">
-          <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <MessageSquare className="size-3.5 text-primary" /> Replies & Positive Intent
+        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 space-y-1">
+          <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 flex items-center gap-1.5">
+            <MessageSquare className="size-3 text-white" /> Responses
           </span>
-          <div className="text-2xl font-bold text-foreground">
+          <div className="text-2xl font-bold text-white">
             {kpis.repliesCount}{" "}
-            <span className="text-xs font-semibold text-emerald-400">
+            <span className="text-xs font-normal text-zinc-400">
               ({kpis.positiveSentimentCount} interested)
             </span>
           </div>
-          <p className="text-[11px] text-muted-foreground">
-            {kpis.replyRate}% total response conversion
+          <p className="text-[10px] text-zinc-500 uppercase tracking-wider">
+            {kpis.replyRate}% conversion rate
           </p>
         </div>
       </div>
 
       {/* Main Grid: Velocity Adjuster & Live Activity Stream */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Left Column: Live Velocity Adjuster & Offer Angle */}
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Live Velocity Slider Card */}
-          <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm space-y-4">
+          <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 sm:p-5 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                <Gauge className="size-4 text-primary" /> Sending Velocity
+              <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                <Gauge className="size-3.5 text-white" /> Sending Velocity
               </span>
-              <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary">
-                {velocity} / day
+              <span className="rounded-none border border-zinc-800 bg-black px-2 py-0.5 text-xs font-bold text-white">
+                {velocity} / DAY
               </span>
             </div>
 
@@ -263,31 +259,31 @@ export function MissionControlView({
               step={10}
               value={velocity}
               onChange={(e) => handleUpdateVelocity(Number(e.target.value))}
-              className="w-full accent-primary h-2 bg-muted rounded-lg cursor-pointer"
+              className="w-full accent-white h-1.5 bg-zinc-800 rounded-none cursor-pointer"
             />
 
-            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-              <span>30 / day</span>
-              <span>250 / day</span>
-              <span>500 / day</span>
+            <div className="flex items-center justify-between text-[10px] text-zinc-500 uppercase tracking-widest">
+              <span>30/D</span>
+              <span>250/D</span>
+              <span>500/D</span>
             </div>
 
-            <div className="rounded-xl bg-muted/30 border border-border/40 p-3 text-xs text-muted-foreground space-y-1">
-              <span className="font-semibold text-foreground block">Horizontally Scaled:</span>
-              Automatically mapped across managed shared mailboxes with 30-email safety caps.
+            <div className="rounded-none bg-black border border-zinc-800 p-2.5 text-[10px] text-zinc-400 uppercase tracking-wider space-y-0.5">
+              <span className="font-bold text-white block">Horizontal Pacing:</span>
+              Mapped across shared pool with 30-email safety thresholds.
             </div>
           </div>
 
           {/* Active Campaign Angle Card */}
-          <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm space-y-3">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-foreground">
-              <Sparkles className="size-3.5 text-emerald-400" /> Calibrated Positioning
+          <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 sm:p-5 space-y-2">
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+              <span>Calibrated Angle</span>
             </div>
-            <div className="rounded-xl bg-muted/20 border border-border/40 p-3.5 text-xs space-y-2">
-              <span className="text-[10px] font-bold text-primary uppercase block">
+            <div className="rounded-none bg-black border border-zinc-800 p-3 text-xs space-y-1.5">
+              <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest block">
                 Primary Outreach Hook
               </span>
-              <p className="text-muted-foreground leading-relaxed">
+              <p className="text-zinc-300 font-sans leading-relaxed text-xs">
                 {(run?.offers as any[])?.[0]?.valueProp ||
                   "Intelligent B2B outreach tailored to operational decision-makers."}
               </p>
@@ -296,72 +292,72 @@ export function MissionControlView({
         </div>
 
         {/* Right Column (2 cols): Live Activity Feed */}
-        <div className="lg:col-span-2 rounded-2xl border border-border/70 bg-card shadow-sm overflow-hidden flex flex-col justify-between">
+        <div className="lg:col-span-2 rounded-none border border-zinc-800 bg-zinc-950 flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between border-b border-border/40 px-5 py-3.5 bg-muted/20">
+            <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3 bg-black">
               <div className="flex items-center gap-2">
-                <Clock className="size-4 text-primary" />
-                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
+                <Clock className="size-3.5 text-white" />
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider">
                   Live Dispatch & Engagement Feed
                 </h3>
               </div>
-              <span className="text-[10px] text-muted-foreground">Auto-refreshing</span>
+              <span className="text-[9px] text-zinc-500 uppercase tracking-widest">Live Sync</span>
             </div>
 
-            <div className="divide-y divide-border/30">
+            <div className="divide-y divide-zinc-800">
               {recentActivity.length > 0 ? (
                 recentActivity.map((activity: any) => (
                   <div
                     key={activity.id}
-                    className="flex items-start justify-between gap-4 p-4 hover:bg-muted/10 transition-colors"
+                    className="flex items-start justify-between gap-4 p-3.5 hover:bg-zinc-900/40 transition-colors"
                   >
                     <div className="flex items-start gap-3">
                       <div
-                        className={`size-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                        className={`size-7 rounded-none border flex items-center justify-center shrink-0 mt-0.5 ${
                           activity.type === "reply"
-                            ? "bg-emerald-500/10 text-emerald-400"
-                            : "bg-primary/10 text-primary"
+                            ? "border-white bg-white text-black"
+                            : "border-zinc-800 bg-black text-zinc-400"
                         }`}
                       >
                         {activity.type === "reply" ? (
-                          <MessageSquare className="size-4" />
+                          <MessageSquare className="size-3.5" />
                         ) : (
-                          <Send className="size-4" />
+                          <Send className="size-3.5" />
                         )}
                       </div>
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-foreground">
+                          <span className="text-xs font-bold text-white">
                             {activity.recipient}
                           </span>
                           <span
-                            className={`rounded-full px-2 py-0.2 text-[9px] font-extrabold uppercase ${
+                            className={`rounded-none px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider border ${
                               activity.type === "reply"
-                                ? "bg-emerald-500/15 text-emerald-400"
-                                : "bg-muted text-muted-foreground"
+                                ? "border-white bg-white text-black"
+                                : "border-zinc-800 bg-black text-zinc-400"
                             }`}
                           >
                             {activity.type}
                           </span>
                         </div>
-                        <p className="text-xs text-muted-foreground line-clamp-1">
+                        <p className="text-[11px] text-zinc-400 line-clamp-1 font-sans">
                           {activity.detail || "Dispatched via shared system mailbox pool"}
                         </p>
                       </div>
                     </div>
 
-                    <div className="text-[11px] text-muted-foreground/70 shrink-0">
+                    <div className="text-[10px] text-zinc-500 shrink-0">
                       {activity.timestamp ? new Date(activity.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just now"}
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="p-12 text-center space-y-2">
-                  <div className="mx-auto size-10 rounded-full bg-muted/40 flex items-center justify-center text-muted-foreground">
-                    <Clock className="size-5" />
+                <div className="p-10 text-center space-y-2">
+                  <div className="mx-auto size-8 rounded-none border border-zinc-800 bg-black flex items-center justify-center text-zinc-500">
+                    <Clock className="size-4" />
                   </div>
-                  <h4 className="text-xs font-bold text-foreground">Outreach Engine Initialized</h4>
-                  <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider">Outreach Engine Initialized</h4>
+                  <p className="text-xs text-zinc-500 font-sans max-w-sm mx-auto">
                     The background worker will begin dispatching during the active sending window. Live events will appear here in real time.
                   </p>
                 </div>
@@ -369,8 +365,8 @@ export function MissionControlView({
             </div>
           </div>
 
-          <div className="p-4 border-t border-border/40 bg-muted/10 text-center text-xs text-muted-foreground">
-            All sends protected by pre-warmed rotating mailboxes.
+          <div className="p-3 border-t border-zinc-800 bg-black text-center text-[10px] uppercase tracking-widest text-zinc-500">
+            Sends distributed across pre-warmed rotating mailboxes.
           </div>
         </div>
       </div>

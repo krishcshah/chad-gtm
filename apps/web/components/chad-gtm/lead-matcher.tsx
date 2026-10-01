@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
-import { Users, Search, Check, Plus, X, ArrowRight, Loader2, Database, Mail, MapPin, Building2 } from "lucide-react";
+import { Users, Search, Plus, X, ArrowRight, Loader2, Database, Mail, MapPin, Building2 } from "lucide-react";
 import { Button } from "@smartreach/ui";
 import { searchMatchingLeadsAction } from "@/lib/chad-gtm-actions";
 import type { DirectoryLead } from "@/lib/leads-directory";
@@ -53,32 +53,32 @@ export function LeadMatcher({
     .slice(0, 15);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-mono">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border/50 pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
-              <Database className="size-3" /> Step 3 of 5
+            <span className="rounded-none border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[10px] uppercase tracking-wider text-white">
+              STAGE 03 // APOLLO MATCH
             </span>
-            <span className="text-xs text-muted-foreground">Apollo B2B Lead Extraction</span>
+            <span className="text-[10px] uppercase tracking-widest text-zinc-500">Lead Extraction</span>
           </div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground mt-1">
-            Target Industry Matcher
+          <h2 className="text-lg sm:text-xl font-bold uppercase tracking-wider text-white mt-1">
+            Target Industry & Lead Matcher
           </h2>
-          <p className="text-xs text-muted-foreground">
-            Cross-referencing your ICP against the built-in Apollo-style 329k+ B2B directory.
+          <p className="text-xs text-zinc-400 font-sans mt-0.5">
+            Cross-referencing your ICP against the built-in 329k+ Apollo-style B2B directory.
           </p>
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-center flex items-center justify-between sm:block">
-            <div className="text-xs font-medium text-muted-foreground">Verified Prospects</div>
-            <div className="text-base sm:text-lg font-bold text-emerald-400 flex items-center justify-center gap-1.5 font-mono">
+          <div className="rounded-none border border-zinc-800 bg-zinc-950 px-3.5 py-1.5 text-center flex items-center justify-between sm:block">
+            <div className="text-[9px] uppercase tracking-widest text-zinc-500">Verified Leads Matched</div>
+            <div className="text-sm sm:text-base font-bold text-white flex items-center justify-center gap-1.5">
               {isPending ? (
-                <Loader2 className="size-4 animate-spin text-emerald-400" />
+                <Loader2 className="size-3.5 animate-spin text-white" />
               ) : (
-                `🎯 ${totalLeads.toLocaleString()}`
+                `${totalLeads.toLocaleString()} PROSPECTS`
               )}
             </div>
           </div>
@@ -86,54 +86,54 @@ export function LeadMatcher({
           <Button
             type="button"
             onClick={() => onProceed(selectedIndustries)}
-            className="bg-primary text-primary-foreground font-semibold text-xs shadow-md h-10 w-full sm:w-auto"
+            className="rounded-none bg-white text-black font-semibold text-xs font-mono uppercase tracking-wider hover:bg-zinc-200 border border-white h-10 px-5 w-full sm:w-auto"
           >
-            Calibrate Email Tone <ArrowRight className="size-3.5 ml-1.5" />
+            Calibrate Voice & Copy <ArrowRight className="size-3.5 ml-1.5" />
           </Button>
         </div>
       </div>
 
       {/* Interactive Selected Pills */}
-      <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm space-y-4">
+      <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 sm:p-5 space-y-4">
         <div>
-          <span className="text-xs font-bold text-foreground block mb-2">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 block mb-2">
             Active Target Industries ({selectedIndustries.length})
           </span>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {selectedIndustries.map((ind) => (
               <button
                 key={ind}
                 type="button"
                 onClick={() => toggleIndustry(ind)}
-                className="group flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary hover:bg-rose-500/10 hover:border-rose-500/30 hover:text-rose-400 transition-all"
+                className="group flex items-center gap-1.5 rounded-none border border-zinc-700 bg-black px-2.5 py-1 text-xs text-zinc-200 hover:border-white hover:text-white transition-colors"
               >
                 <span>{ind}</span>
-                <X className="size-3 transition-transform group-hover:scale-125" />
+                <X className="size-3 text-zinc-500 group-hover:text-white" />
               </button>
             ))}
           </div>
         </div>
 
         {/* Search & Add More Industries */}
-        <div className="pt-2 border-t border-border/40">
+        <div className="pt-3 border-t border-zinc-800">
           <div className="flex items-center gap-2 mb-2">
-            <Search className="size-3.5 text-muted-foreground" />
+            <Search className="size-3.5 text-zinc-500" />
             <input
               type="text"
-              placeholder="Search & add more target industries..."
+              placeholder="Search additional B2B industries..."
               value={industrySearch}
               onChange={(e) => setIndustrySearch(e.target.value)}
-              className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+              className="w-full bg-transparent text-xs text-white placeholder:text-zinc-600 focus:outline-none font-mono"
             />
           </div>
 
-          <div className="flex flex-wrap gap-1.5 pt-1">
+          <div className="flex flex-wrap gap-1 pt-1">
             {filteredIndustries.map((ind) => (
               <button
                 key={ind}
                 type="button"
                 onClick={() => toggleIndustry(ind)}
-                className="flex items-center gap-1 rounded-full border border-border/60 bg-muted/30 px-2.5 py-0.5 text-[11px] text-muted-foreground hover:bg-primary/10 hover:border-primary/30 hover:text-primary transition-all"
+                className="flex items-center gap-1 rounded-none border border-zinc-800 bg-black px-2 py-0.5 text-[10px] uppercase tracking-wider text-zinc-500 hover:border-zinc-700 hover:text-zinc-200 transition-colors"
               >
                 <Plus className="size-2.5" /> {ind}
               </button>
@@ -143,60 +143,60 @@ export function LeadMatcher({
       </div>
 
       {/* Top 10 Prospect Preview Table */}
-      <div className="rounded-2xl border border-border/70 bg-card shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between border-b border-border/40 px-5 py-3 bg-muted/20">
+      <div className="rounded-none border border-zinc-800 bg-zinc-950 overflow-hidden font-mono">
+        <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-2.5 bg-black">
           <div className="flex items-center gap-2">
-            <Users className="size-4 text-primary" />
-            <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
-              Live Prospect Preview (Top 10 of {totalLeads.toLocaleString()})
+            <Users className="size-3.5 text-white" />
+            <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+              Prospect Preview (Top 10 of {totalLeads.toLocaleString()})
             </h3>
           </div>
-          <span className="text-[10px] text-muted-foreground">100% Direct Corporate Emails</span>
+          <span className="text-[10px] text-zinc-500 uppercase tracking-widest">Verified Work Emails</span>
         </div>
 
         <div className="overflow-x-auto [-webkit-overflow-scrolling:touch]">
           <table className="w-full text-left text-xs min-w-[550px]">
-            <thead className="border-b border-border/40 bg-muted/40 text-[10px] uppercase font-bold text-muted-foreground">
+            <thead className="border-b border-zinc-800 bg-zinc-950 text-[10px] uppercase font-bold text-zinc-400">
               <tr>
-                <th className="px-4 py-2.5">Prospect</th>
-                <th className="px-4 py-2.5">Job Title</th>
-                <th className="px-4 py-2.5">Company</th>
-                <th className="px-4 py-2.5">Industry</th>
-                <th className="px-4 py-2.5">Location</th>
-                <th className="px-4 py-2.5 text-right">Status</th>
+                <th className="px-4 py-2">Prospect</th>
+                <th className="px-4 py-2">Job Title</th>
+                <th className="px-4 py-2">Company</th>
+                <th className="px-4 py-2">Industry</th>
+                <th className="px-4 py-2">Location</th>
+                <th className="px-4 py-2 text-right">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border/30">
+            <tbody className="divide-y divide-zinc-800">
               {sampleLeads.length > 0 ? (
                 sampleLeads.map((lead) => (
-                  <tr key={lead.id} className="hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-3 font-medium text-foreground">
+                  <tr key={lead.id} className="hover:bg-zinc-900/40 transition-colors">
+                    <td className="px-4 py-2.5 font-medium text-white">
                       {lead.fullName || `${lead.firstName} ${lead.lastName}`}
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">{lead.jobTitle}</td>
-                    <td className="px-4 py-3 font-semibold text-foreground/90">
+                    <td className="px-4 py-2.5 text-zinc-400 font-sans text-xs">{lead.jobTitle}</td>
+                    <td className="px-4 py-2.5 font-medium text-zinc-300">
                       <span className="flex items-center gap-1.5">
-                        <Building2 className="size-3 text-muted-foreground" />
+                        <Building2 className="size-3 text-zinc-500" />
                         {lead.companyName}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">{lead.industry}</td>
-                    <td className="px-4 py-3 text-muted-foreground">
+                    <td className="px-4 py-2.5 text-zinc-400">{lead.industry}</td>
+                    <td className="px-4 py-2.5 text-zinc-400">
                       <span className="flex items-center gap-1 text-[11px]">
-                        <MapPin className="size-2.5 text-muted-foreground" />
+                        <MapPin className="size-2.5 text-zinc-500" />
                         {lead.location || lead.country || "Global"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
-                        <Mail className="size-2.5" /> Verified
+                    <td className="px-4 py-2.5 text-right">
+                      <span className="inline-flex items-center gap-1 rounded-none border border-zinc-800 bg-black px-1.5 py-0.5 text-[9px] uppercase tracking-widest text-zinc-300">
+                        <Mail className="size-2.5 text-white" /> Verified
                       </span>
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-xs text-muted-foreground">
+                  <td colSpan={6} className="px-4 py-6 text-center text-xs text-zinc-500 font-mono">
                     {isPending ? "Filtering matching leads..." : "No leads found for this filter combination."}
                   </td>
                 </tr>

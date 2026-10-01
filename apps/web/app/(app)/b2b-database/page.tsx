@@ -89,18 +89,18 @@ export default async function B2bDatabasePage({
   return (
     <div className="w-full max-w-full min-w-0 overflow-x-hidden space-y-3">
       {userIsAdmin && (
-        <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/10 px-4 py-2 text-xs text-primary">
-          <span className="flex items-center gap-2 font-medium">
-            <ShieldCheck className="size-4 text-emerald-400" />
+        <div className="flex items-center justify-between rounded-none border border-zinc-700 bg-zinc-900 px-4 py-2 text-xs font-mono text-white">
+          <span className="flex items-center gap-2">
+            <ShieldCheck className="size-4 text-white" />
             <span>
-              <strong>Admin Access:</strong> You have permanent unrestricted access to the 300K+ B2B Leads Database.
+              <strong>ADMIN ACCESS:</strong> Unrestricted access to 329,563 B2B Leads Directory.
             </span>
           </span>
           <Link
             href="/b2b-database?preview=paywall"
-            className="text-[11px] font-semibold underline hover:text-foreground text-primary/80"
+            className="text-[10px] uppercase font-bold underline hover:text-zinc-300 text-zinc-400"
           >
-            Preview Paywall View
+            Preview Paywall
           </Link>
         </div>
       )}

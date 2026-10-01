@@ -47,48 +47,48 @@
   --spacing-section: var(--space-section);
 }
 
-/* ChadGTM Luxury Obsidian & Neural Violet Theme */
+/* ChadGTM Stripe-Style Architectural Monochromatic Theme (Black, White, Grey, Boxy) */
 :root,
 .dark {
   /* Colour */
-  --background: oklch(0.12 0.012 268);
-  --foreground: oklch(0.96 0.005 264);
-  --card: oklch(0.15 0.014 268);
-  --card-foreground: oklch(0.96 0.005 264);
-  --popover: oklch(0.17 0.016 268);
-  --popover-foreground: oklch(0.96 0.005 264);
-  --primary: oklch(0.65 0.22 280);
-  --primary-foreground: oklch(0.99 0.005 280);
-  --secondary: oklch(0.20 0.016 268);
-  --secondary-foreground: oklch(0.95 0.008 264);
-  --muted: oklch(0.19 0.014 268);
-  --muted-foreground: oklch(0.68 0.018 266);
-  --accent: oklch(0.24 0.035 280);
-  --accent-foreground: oklch(0.96 0.015 272);
-  --destructive: oklch(0.68 0.18 25);
-  --destructive-foreground: oklch(0.85 0.12 25);
-  --success: oklch(0.72 0.16 155);
-  --success-foreground: oklch(0.82 0.12 155);
-  --warning: oklch(0.80 0.14 75);
-  --warning-foreground: oklch(0.85 0.12 75);
-  --info: oklch(0.75 0.14 235);
-  --info-foreground: oklch(0.82 0.1 235);
-  --border: oklch(0.24 0.014 268);
-  --input: oklch(0.22 0.014 268);
-  --ring: oklch(0.65 0.22 280);
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: #09090b;
+  --card-foreground: #ffffff;
+  --popover: #09090b;
+  --popover-foreground: #ffffff;
+  --primary: #ffffff;
+  --primary-foreground: #000000;
+  --secondary: #18181b;
+  --secondary-foreground: #f4f4f5;
+  --muted: #121215;
+  --muted-foreground: #a1a1aa;
+  --accent: #27272a;
+  --accent-foreground: #ffffff;
+  --destructive: #27272a;
+  --destructive-foreground: #ffffff;
+  --success: #ffffff;
+  --success-foreground: #000000;
+  --warning: #e4e4e7;
+  --warning-foreground: #000000;
+  --info: #d4d4d8;
+  --info-foreground: #000000;
+  --border: #27272a;
+  --input: #27272a;
+  --ring: #ffffff;
 
-  /* Radius */
-  --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
+  /* Boxy Geometry - Razor-Sharp Corners */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
 
-  /* Shadow */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.6);
-  --shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.75);
-  --shadow-primary: 0 0 20px rgba(124, 58, 237, 0.35);
+  /* Shadows - Minimal & Crisp Architectural Borders */
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-primary: none;
 
   /* Type scale */
   --text-xs: 0.6875rem;
@@ -112,6 +112,7 @@ html {
   text-rendering: optimizeLegibility;
   max-width: 100vw;
   overflow-x: hidden;
+  background-color: #000000;
 }
 
 body {
@@ -126,17 +127,20 @@ body {
 
 /* Keyboard focus — WCAG AA visible ring on interactive controls */
 :focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
+  outline: 1px solid var(--ring);
+  outline-offset: 1px;
 }
 :focus:not(:focus-visible) {
   outline: none;
 }
 
+/* Stripe Architectural Grid Shell */
 .app-shell {
-  background:
-    radial-gradient(ellipse 80% 50% at 50% -20%, color-mix(in oklch, var(--primary) 8%, transparent), transparent),
-    var(--background);
+  background-color: #000000;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 32px 32px;
 }
 
 .page-stack {
@@ -149,28 +153,48 @@ body {
   flex-shrink: 0;
 }
 
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #000000; }
 ::-webkit-scrollbar-thumb {
-  background: color-mix(in oklch, var(--muted-foreground) 25%, transparent);
-  border-radius: 8px;
-  border: 2px solid transparent;
-  background-clip: content-box;
+  background: #27272a;
+  border-radius: 0px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
-  border: 2px solid transparent;
-  background-clip: content-box;
+  background: #3f3f46;
 }
 
 ::selection {
-  background: color-mix(in oklch, var(--primary) 25%, transparent);
+  background: #ffffff;
+  color: #000000;
+}
+
+/* Stripe Architectural Grid & Box Utilities */
+.stripe-grid {
+  background-color: #000000;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.stripe-grid-dense {
+  background-color: #000000;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.stripe-dot-grid {
+  background-color: #000000;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 0);
+  background-size: 20px 20px;
 }
 
 @keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
 @keyframes fade-out { from { opacity: 1 } to { opacity: 0 } }
-@keyframes zoom-in-95 { from { transform: scale(0.95) } to { transform: scale(1) } }
-@keyframes zoom-out-95 { from { transform: scale(1) } to { transform: scale(0.95) } }
+@keyframes zoom-in-95 { from { transform: scale(0.98) } to { transform: scale(1) } }
+@keyframes zoom-out-95 { from { transform: scale(1) } to { transform: scale(0.98) } }
 @keyframes slide-in-from-top-1 { from { transform: translateY(-4px) } to { transform: translateY(0) } }
 @keyframes slide-in-from-right { from { transform: translateX(24px) } to { transform: translateX(0) } }
 
@@ -191,58 +215,55 @@ body {
   tab-size: 2;
 }
 
-/* ================= SmartReach Switch (token-driven) ================= */
+/* ================= Stripe Boxy Switch ================= */
 .sr-switch {
   position: relative;
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  width: 44px;
-  height: 24px;
+  width: 40px;
+  height: 22px;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 9999px;
-  background: var(--muted);
+  border-radius: 0px;
+  background: #18181b;
   cursor: pointer;
-  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
   vertical-align: middle;
   -webkit-tap-highlight-color: transparent;
 }
 .sr-switch:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px color-mix(in oklch, var(--ring) 50%, transparent);
+  outline: 1px solid #ffffff;
 }
 .sr-switch[data-disabled] {
   opacity: 0.5;
   cursor: not-allowed;
 }
 .sr-switch[data-state="unchecked"] {
-  background: var(--muted);
-  border-color: var(--border);
+  background: #18181b;
+  border-color: #27272a;
 }
 .sr-switch[data-state="checked"] {
-  background: var(--primary);
-  border-color: var(--primary);
-  box-shadow: var(--shadow-primary);
+  background: #ffffff;
+  border-color: #ffffff;
 }
 .sr-switch-thumb {
   display: block;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   margin-left: 2px;
-  border-radius: 50%;
-  background: var(--card);
-  box-shadow: var(--shadow-sm);
+  border-radius: 0px;
+  background: #71717a;
   transform: translateX(0);
-  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.15s ease, background-color 0.15s ease;
   pointer-events: none;
 }
 .dark .sr-switch-thumb {
-  background: var(--foreground);
+  background: #a1a1aa;
 }
 .sr-switch[data-state="checked"] .sr-switch-thumb {
-  transform: translateX(20px);
-  background: var(--primary-foreground);
+  transform: translateX(18px);
+  background: #000000;
 }
 
 /* Unibox message sheet — light reading surface inside the dark app shell.

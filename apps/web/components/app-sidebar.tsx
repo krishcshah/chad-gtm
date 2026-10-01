@@ -75,10 +75,10 @@ export function AppSidebar({
 
   return (
     <>
-      {/* Desktop Luxury Collapsible Sidebar */}
+      {/* Desktop Stripe Architectural Collapsible Sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-border/50 bg-card/60 backdrop-blur-2xl lg:flex transition-all duration-300 ease-in-out select-none",
+          "fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-zinc-800 bg-black lg:flex transition-all duration-200 ease-in-out select-none",
           collapsed ? "w-16" : "w-64"
         )}
       >
@@ -87,9 +87,9 @@ export function AppSidebar({
           onClick={collapsed ? toggleCollapsed : undefined}
           title={collapsed ? "Click to expand sidebar" : undefined}
           className={cn(
-            "flex h-16 items-center border-b border-border/40 transition-all duration-300",
+            "flex h-16 items-center border-b border-zinc-800 transition-all duration-200",
             collapsed
-              ? "justify-center px-2 cursor-pointer hover:bg-accent/40"
+              ? "justify-center px-2 cursor-pointer hover:bg-zinc-900/60"
               : "justify-between px-4"
           )}
         >
@@ -109,7 +109,7 @@ export function AppSidebar({
               onClick={toggleCollapsed}
               aria-label="Collapse sidebar (Ctrl+B)"
               title="Collapse sidebar (Ctrl+B)"
-              className="flex size-7 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors shrink-0"
+              className="flex size-7 items-center justify-center rounded-none text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition-colors shrink-0"
             >
               <PanelLeftClose className="size-4" />
             </button>
@@ -118,7 +118,7 @@ export function AppSidebar({
 
         {/* Workspace Switcher */}
         {activeWorkspace && (
-          <div className={cn("border-b border-border/40 transition-all duration-300", collapsed ? "p-2 flex justify-center" : "p-3")}>
+          <div className={cn("border-b border-zinc-800 transition-all duration-200", collapsed ? "p-2 flex justify-center" : "p-3")}>
             <WorkspaceSwitcher
               workspaces={workspaces}
               activeWorkspace={activeWorkspace}
@@ -128,7 +128,7 @@ export function AppSidebar({
         )}
 
         {/* Navigation items */}
-        <nav className={cn("flex-1 space-y-1 overflow-y-auto py-3 transition-all duration-300", collapsed ? "px-2" : "px-3")}>
+        <nav className={cn("flex-1 space-y-0.5 overflow-y-auto py-2 transition-all duration-200", collapsed ? "px-1.5" : "px-2")}>
           {navItems.map((item) => {
             const active = pathname.startsWith(item.href);
             return (
@@ -138,22 +138,17 @@ export function AppSidebar({
                 title={collapsed ? `${item.label}${item.badge ? ` (${item.badge})` : ""}` : undefined}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "group relative flex items-center rounded-xl py-2.5 text-[13px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "group relative flex items-center rounded-none py-2 text-xs font-mono uppercase tracking-wider transition-colors outline-none focus-visible:outline-1 focus-visible:outline-white",
                   collapsed ? "justify-center px-0 h-10 w-full" : "gap-3 px-3",
                   active
-                    ? "bg-primary/10 text-primary font-semibold shadow-xs"
-                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                    ? "bg-zinc-900 text-white font-semibold border-l-2 border-white"
+                    : "text-zinc-400 hover:bg-zinc-900/60 hover:text-zinc-200"
                 )}
               >
-                {/* Active Indicator Bar on the left */}
-                {active && (
-                  <span className="absolute left-0 inset-y-1.5 w-1 rounded-r-full bg-primary" />
-                )}
-
                 <item.icon
                   className={cn(
-                    "size-4 shrink-0 transition-transform group-hover:scale-110",
-                    active ? "text-primary" : "text-muted-foreground"
+                    "size-4 shrink-0 transition-transform group-hover:scale-105",
+                    active ? "text-white" : "text-zinc-400 group-hover:text-zinc-200"
                   )}
                 />
 
@@ -164,10 +159,10 @@ export function AppSidebar({
                     {item.badge && (
                       <span
                         className={cn(
-                          "ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded-md",
+                          "ml-auto text-[9px] font-mono tracking-widest px-1.5 py-0.5 rounded-none uppercase border",
                           active
-                            ? "bg-primary/20 text-primary"
-                            : "bg-muted text-muted-foreground group-hover:bg-accent"
+                            ? "border-zinc-600 bg-zinc-800 text-white"
+                            : "border-zinc-800 bg-zinc-950 text-zinc-400 group-hover:border-zinc-700 group-hover:text-zinc-300"
                         )}
                       >
                         {item.badge}
@@ -178,7 +173,7 @@ export function AppSidebar({
 
                 {/* Collapsed dot badge */}
                 {collapsed && item.badge && (
-                  <span className="absolute top-2 right-2.5 size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="absolute top-2 right-2 size-1 rounded-none bg-white" />
                 )}
               </Link>
             );
@@ -188,8 +183,8 @@ export function AppSidebar({
         {/* User Footer Profile */}
         <div
           className={cn(
-            "border-t border-border/50 bg-card/40 flex items-center transition-all duration-300",
-            collapsed ? "flex-col gap-2 p-2" : "p-3.5 gap-3"
+            "border-t border-zinc-800 bg-black flex items-center transition-all duration-200",
+            collapsed ? "flex-col gap-2 p-2" : "p-3 gap-2.5"
           )}
         >
           <div
@@ -197,11 +192,11 @@ export function AppSidebar({
             tabIndex={0}
             onClick={() => router.push("/settings")}
             title="Open Account Settings"
-            className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer group hover:opacity-85 transition-opacity"
+            className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer group hover:opacity-90 transition-opacity"
           >
             <div
               title={`${user.name ?? "User"} (${user.email})`}
-              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/30 to-info/30 text-xs font-bold text-primary shadow-xs border border-primary/20 group-hover:border-primary/50 transition-colors"
+              className="flex size-8 shrink-0 items-center justify-center rounded-none border border-zinc-700 bg-zinc-900 text-xs font-mono font-bold text-white group-hover:border-white transition-colors"
             >
               {userInitial}
             </div>
@@ -209,16 +204,16 @@ export function AppSidebar({
             {!collapsed && (
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <p className="truncate text-xs font-semibold text-foreground leading-tight group-hover:text-primary transition-colors">
+                  <p className="truncate text-xs font-mono font-bold text-white leading-tight">
                     {user.name ?? "User"}
                   </p>
                   {userIsAdmin && (
-                    <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 uppercase tracking-wider">
+                    <span className="text-[9px] font-mono font-bold px-1 py-0.5 rounded-none bg-white text-black uppercase tracking-widest">
                       Admin
                     </span>
                   )}
                 </div>
-                <p className="truncate text-[11px] text-muted-foreground mt-0.5">
+                <p className="truncate text-[10px] font-mono text-zinc-500 mt-0.5">
                   {user.email}
                 </p>
               </div>
@@ -235,9 +230,9 @@ export function AppSidebar({
                 await authClient.signOut();
                 router.push("/");
               }}
-              className="flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex size-7 items-center justify-center rounded-none text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition-colors focus-visible:outline-1 focus-visible:outline-white"
             >
-              <LogOut className="size-4" />
+              <LogOut className="size-3.5" />
             </button>
           </div>
         </div>
@@ -245,17 +240,17 @@ export function AppSidebar({
         {/* Autonomous Engine Telemetry & System Status Footer */}
         <div
           className={cn(
-            "border-t border-border/40 py-2.5 flex items-center text-[10px] select-none transition-all duration-300 bg-black/20",
-            collapsed ? "flex-col gap-2 justify-center px-1" : "justify-between px-3"
+            "border-t border-zinc-800 py-2 flex items-center text-[10px] select-none transition-all duration-200 bg-zinc-950 font-mono",
+            collapsed ? "flex-col gap-1.5 justify-center px-1" : "justify-between px-3"
           )}
         >
-          <div className="flex items-center gap-1.5 font-mono text-zinc-400">
-            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            {!collapsed && <span>Gemini 3.8 Flash</span>}
+          <div className="flex items-center gap-2 text-zinc-400">
+            <span className="size-1.5 rounded-none bg-white animate-pulse" />
+            {!collapsed && <span className="uppercase tracking-wider text-[9px]">Gemini 3.8</span>}
           </div>
 
           {!collapsed && (
-            <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+            <span className="font-mono text-[9px] px-1.5 py-0.5 rounded-none bg-zinc-900 text-zinc-300 border border-zinc-800 uppercase tracking-widest">
               3¢ Pool Active
             </span>
           )}
@@ -263,7 +258,7 @@ export function AppSidebar({
       </aside>
 
       {/* Mobile Top Bar */}
-      <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-border/50 bg-card/90 px-3.5 backdrop-blur-xl lg:hidden">
+      <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-zinc-800 bg-black px-3.5 lg:hidden">
         <div className="flex items-center gap-2.5 min-w-0">
           <ChadGtmLogo compact />
           {activeWorkspace && (
@@ -282,9 +277,9 @@ export function AppSidebar({
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
             aria-expanded={mobileOpen}
-            className="flex size-9 items-center justify-center rounded-xl bg-accent/60 text-foreground hover:bg-accent border border-border/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex size-9 items-center justify-center rounded-none bg-zinc-900 text-white hover:bg-zinc-800 border border-zinc-800 transition-colors focus-visible:outline-1 focus-visible:outline-white"
           >
-            {mobileOpen ? <X className="size-4.5" /> : <Menu className="size-4.5" />}
+            {mobileOpen ? <X className="size-4" /> : <Menu className="size-4" />}
           </button>
         </div>
       </div>
@@ -294,25 +289,25 @@ export function AppSidebar({
         <div
           role="presentation"
           onClick={() => setMobileOpen(false)}
-          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm lg:hidden transition-opacity"
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-none lg:hidden transition-opacity"
         />
       )}
 
       {/* Mobile Slide-Over Drawer */}
       <div
         className={cn(
-          "fixed inset-y-0 right-0 z-50 flex w-76 sm:w-80 max-w-[85vw] flex-col border-l border-border/60 bg-card shadow-2xl backdrop-blur-2xl lg:hidden transition-transform duration-300 ease-out select-none",
+          "fixed inset-y-0 right-0 z-50 flex w-76 sm:w-80 max-w-[85vw] flex-col border-l border-zinc-800 bg-black shadow-none lg:hidden transition-transform duration-200 ease-out select-none",
           mobileOpen ? "translate-x-0" : "translate-x-full"
         )}
       >
         {/* Drawer Header */}
-        <div className="flex h-14 items-center justify-between border-b border-border/40 px-4">
+        <div className="flex h-14 items-center justify-between border-b border-zinc-800 px-4">
           <ChadGtmLogo />
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
             aria-label="Close menu"
-            className="flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
+            className="flex size-8 items-center justify-center rounded-none text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition-colors"
           >
             <X className="size-4" />
           </button>
@@ -320,7 +315,7 @@ export function AppSidebar({
 
         {/* Workspace Switcher in Drawer */}
         {activeWorkspace && (
-          <div className="p-3 border-b border-border/40 bg-accent/15">
+          <div className="p-3 border-b border-zinc-800 bg-zinc-950">
             <WorkspaceSwitcher
               workspaces={workspaces}
               activeWorkspace={activeWorkspace}
@@ -338,17 +333,17 @@ export function AppSidebar({
                 href={item.href}
                 onClick={() => setMobileOpen(false)}
                 className={cn(
-                  "group relative flex items-center justify-between rounded-xl px-3.5 py-2.5 text-[13px] font-medium transition-all",
+                  "group relative flex items-center justify-between rounded-none px-3 py-2.5 text-xs font-mono uppercase tracking-wider transition-colors",
                   active
-                    ? "bg-primary/15 text-primary font-semibold shadow-xs"
-                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                    ? "bg-zinc-900 text-white font-semibold border-l-2 border-white"
+                    : "text-zinc-400 hover:bg-zinc-900/60 hover:text-white"
                 )}
               >
                 <div className="flex items-center gap-3">
                   <item.icon
                     className={cn(
-                      "size-4 shrink-0 transition-transform group-hover:scale-110",
-                      active ? "text-primary" : "text-muted-foreground"
+                      "size-4 shrink-0 transition-transform group-hover:scale-105",
+                      active ? "text-white" : "text-zinc-400"
                     )}
                   />
                   <span className="truncate">{item.label}</span>
@@ -356,10 +351,10 @@ export function AppSidebar({
                 {item.badge && (
                   <span
                     className={cn(
-                      "text-[10px] font-semibold px-2 py-0.5 rounded-md",
+                      "text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded-none border",
                       active
-                        ? "bg-primary/20 text-primary"
-                        : "bg-muted text-muted-foreground"
+                        ? "border-zinc-600 bg-zinc-800 text-white"
+                        : "border-zinc-800 bg-zinc-950 text-zinc-400"
                     )}
                   >
                     {item.badge}
@@ -371,7 +366,7 @@ export function AppSidebar({
         </nav>
 
         {/* User Profile in Drawer */}
-        <div className="border-t border-border/50 bg-card/60 p-3.5 space-y-3">
+        <div className="border-t border-zinc-800 bg-black p-3 space-y-3">
           <div
             role="button"
             tabIndex={0}
@@ -379,33 +374,33 @@ export function AppSidebar({
               setMobileOpen(false);
               router.push("/settings");
             }}
-            className="flex items-center gap-3 cursor-pointer group hover:opacity-85 transition-opacity"
+            className="flex items-center gap-3 cursor-pointer group hover:opacity-90 transition-opacity"
           >
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/30 to-info/30 text-xs font-bold text-primary border border-primary/20">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-none border border-zinc-700 bg-zinc-900 text-xs font-mono font-bold text-white">
               {userInitial}
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
-                <p className="truncate text-xs font-semibold text-foreground group-hover:text-primary transition-colors">
+                <p className="truncate text-xs font-mono font-bold text-white">
                   {user.name ?? "User"}
                 </p>
                 {userIsAdmin && (
-                  <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 uppercase tracking-wider">
+                  <span className="text-[9px] font-mono font-bold px-1 py-0.5 rounded-none bg-white text-black uppercase tracking-widest">
                     Admin
                   </span>
                 )}
               </div>
-              <p className="truncate text-[11px] text-muted-foreground mt-0.5">
+              <p className="truncate text-[10px] font-mono text-zinc-500 mt-0.5">
                 {user.email}
               </p>
             </div>
           </div>
 
           {/* Quick Actions Row */}
-          <div className="flex items-center justify-between pt-2 border-t border-border/30">
+          <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
             <div className="flex items-center gap-2">
               <ThemeToggle />
-              <span className="text-xs text-muted-foreground font-medium">Appearance</span>
+              <span className="text-xs font-mono uppercase tracking-wider text-zinc-400">Appearance</span>
             </div>
 
             <button
@@ -415,7 +410,7 @@ export function AppSidebar({
                 await authClient.signOut();
                 router.push("/");
               }}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-400 hover:bg-rose-500/10 transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-none text-xs font-mono uppercase tracking-wider text-zinc-300 hover:text-white hover:bg-zinc-900 border border-zinc-800 transition-colors"
             >
               <LogOut className="size-3.5" />
               <span>Sign out</span>
@@ -424,12 +419,12 @@ export function AppSidebar({
         </div>
 
         {/* Autonomous Engine Telemetry & System Status Footer */}
-        <div className="border-t border-border/40 py-2.5 px-3.5 flex items-center justify-between text-[10px] select-none bg-black/20 font-mono text-zinc-400">
+        <div className="border-t border-zinc-800 py-2 px-3 flex items-center justify-between text-[9px] select-none bg-zinc-950 font-mono text-zinc-400 uppercase tracking-widest">
           <div className="flex items-center gap-1.5">
-            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Gemini 3.8 Flash</span>
+            <span className="size-1.5 rounded-none bg-white animate-pulse" />
+            <span>Gemini 3.8</span>
           </div>
-          <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+          <span className="px-1.5 py-0.5 rounded-none bg-zinc-900 text-zinc-300 border border-zinc-800">
             3¢ Pool Active
           </span>
         </div>

@@ -9,11 +9,6 @@ import {
   Alert,
   AlertDescription,
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
   Input,
   Label,
 } from "@smartreach/ui";
@@ -35,17 +30,17 @@ export default function LoginPage() {
   });
 
   return (
-    <div className="w-full max-w-md rounded-3xl border border-white/10 bg-zinc-950/80 p-8 shadow-2xl backdrop-blur-2xl">
+    <div className="w-full max-w-md rounded-none border border-zinc-800 bg-zinc-950 p-6 sm:p-8 font-mono shadow-none">
       <div className="mb-6 space-y-1.5 text-center">
-        <h1 className="text-2xl font-extrabold tracking-tight text-white">Welcome back</h1>
-        <p className="text-xs text-zinc-400">
-          Sign in to your ChadGTM Autonomous Outbound Hub
+        <h1 className="text-xl sm:text-2xl font-bold uppercase tracking-wider text-white">Sign In</h1>
+        <p className="text-xs text-zinc-500 font-mono">
+          ChadGTM Autonomous Outbound Engine
         </p>
       </div>
 
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         <div className="space-y-1.5">
-          <Label htmlFor="email" className="text-xs font-medium text-zinc-300">
+          <Label htmlFor="email" className="text-[10px] uppercase tracking-widest text-zinc-400">
             Work Email
           </Label>
           <Input
@@ -53,17 +48,17 @@ export default function LoginPage() {
             type="email"
             placeholder="you@company.com"
             autoComplete="email"
-            className="rounded-xl border-white/10 bg-white/[0.03] text-sm text-white placeholder:text-zinc-600 focus:border-violet-500/50 focus:ring-violet-500/20"
+            className="rounded-none border-zinc-800 bg-black text-xs text-white placeholder:text-zinc-600 focus:border-white font-mono"
             {...register("email")}
           />
           {formState.errors.email && (
-            <p className="text-xs text-rose-400">{formState.errors.email.message}</p>
+            <p className="text-[11px] text-zinc-400">{formState.errors.email.message}</p>
           )}
         </div>
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <Label htmlFor="password" className="text-xs font-medium text-zinc-300">
+            <Label htmlFor="password" className="text-[10px] uppercase tracking-widest text-zinc-400">
               Password
             </Label>
           </div>
@@ -71,33 +66,33 @@ export default function LoginPage() {
             id="password"
             type="password"
             autoComplete="current-password"
-            className="rounded-xl border-white/10 bg-white/[0.03] text-sm text-white placeholder:text-zinc-600 focus:border-violet-500/50 focus:ring-violet-500/20"
+            className="rounded-none border-zinc-800 bg-black text-xs text-white placeholder:text-zinc-600 focus:border-white font-mono"
             {...register("password")}
           />
           {formState.errors.password && (
-            <p className="text-xs text-rose-400">{formState.errors.password.message}</p>
+            <p className="text-[11px] text-zinc-400">{formState.errors.password.message}</p>
           )}
         </div>
 
         {error && (
-          <Alert variant="destructive" className="rounded-xl border-rose-500/30 bg-rose-500/10 text-rose-300">
-            <AlertDescription className="text-xs">{error}</AlertDescription>
+          <Alert variant="destructive" className="rounded-none border-zinc-700 bg-zinc-900 text-zinc-200">
+            <AlertDescription className="text-xs font-mono">{error}</AlertDescription>
           </Alert>
         )}
 
         <Button
           type="submit"
-          className="w-full rounded-xl bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 font-bold text-white shadow-lg shadow-indigo-600/25 hover:opacity-95 text-xs h-10 transition-all cursor-pointer"
+          className="w-full rounded-none bg-white font-semibold text-black hover:bg-zinc-200 text-xs font-mono uppercase tracking-wider h-10 border border-white cursor-pointer"
           disabled={formState.isSubmitting}
         >
-          {formState.isSubmitting ? "Authenticating..." : "Sign in to Mission Control"}
+          {formState.isSubmitting ? "Authenticating..." : "Sign In to Mission Control"}
         </Button>
       </form>
 
-      <div className="mt-6 border-t border-white/5 pt-5 text-center text-xs text-zinc-500">
+      <div className="mt-6 border-t border-zinc-800 pt-4 text-center text-xs text-zinc-500 font-mono">
         New to ChadGTM?{" "}
-        <Link href="/signup" className="font-semibold text-violet-400 hover:text-violet-300 transition-colors">
-          Create free account ($0/mo)
+        <Link href="/signup" className="text-white hover:underline transition-colors uppercase tracking-wider font-semibold">
+          Create Account ($0/mo)
         </Link>
       </div>
     </div>

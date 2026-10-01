@@ -8,19 +8,11 @@ import { signUpSchema, type SignUpInput } from "@smartreach/validation";
 import {
   Alert,
   AlertDescription,
-  Badge,
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
   Input,
   Label,
 } from "@smartreach/ui";
 import { authClient } from "@/lib/auth-client";
-import { ArrowRight, CheckCircle2, Sparkles, Zap } from "lucide-react";
-
 import { claimAdminAccountAction } from "@/lib/admin-claim-action";
 
 export default function SignupPage() {
@@ -71,40 +63,39 @@ export default function SignupPage() {
   });
 
   return (
-    <div className="w-full max-w-md rounded-3xl border border-white/10 bg-zinc-950/80 p-8 shadow-2xl backdrop-blur-2xl">
+    <div className="w-full max-w-md rounded-none border border-zinc-800 bg-zinc-950 p-6 sm:p-8 font-mono shadow-none">
       <div className="mb-6 space-y-2 text-center">
-        <div className="flex items-center justify-center gap-2 mb-3">
-          <Badge variant="outline" className="border-violet-500/40 text-violet-300 bg-violet-500/10 text-[10px] py-0.5">
-            <Sparkles className="size-3 text-cyan-300 mr-1" />
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <span className="rounded-none border border-zinc-700 bg-black px-2 py-0.5 text-[9px] uppercase tracking-widest text-zinc-300">
             Autonomous Outbound
-          </Badge>
-          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
-            $0/mo Core Platform
+          </span>
+          <span className="rounded-none border border-zinc-700 bg-black px-2 py-0.5 text-[9px] uppercase tracking-widest text-zinc-400">
+            $0/mo Base
           </span>
         </div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-white">Create your account</h1>
-        <p className="text-xs text-zinc-400">
-          Turn your company URL into an autonomous outbound engine in 60 seconds.
+        <h1 className="text-xl sm:text-2xl font-bold uppercase tracking-wider text-white">Create Account</h1>
+        <p className="text-xs text-zinc-500 font-sans">
+          Deploy an autonomous outbound engine in under 60 seconds.
         </p>
       </div>
 
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         <div className="space-y-1.5">
-          <Label htmlFor="name" className="text-xs font-medium text-zinc-300">
+          <Label htmlFor="name" className="text-[10px] uppercase tracking-widest text-zinc-400">
             Full Name
           </Label>
           <Input
             id="name"
             placeholder="Elena Rostova"
             autoComplete="name"
-            className="rounded-xl border-white/10 bg-white/[0.03] text-sm text-white placeholder:text-zinc-600 focus:border-violet-500/50 focus:ring-violet-500/20"
+            className="rounded-none border-zinc-800 bg-black text-xs text-white placeholder:text-zinc-600 focus:border-white font-mono"
             {...register("name")}
           />
-          {formState.errors.name && <p className="text-xs text-rose-400">{formState.errors.name.message}</p>}
+          {formState.errors.name && <p className="text-[11px] text-zinc-400">{formState.errors.name.message}</p>}
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="email" className="text-xs font-medium text-zinc-300">
+          <Label htmlFor="email" className="text-[10px] uppercase tracking-widest text-zinc-400">
             Work Email
           </Label>
           <Input
@@ -112,61 +103,45 @@ export default function SignupPage() {
             type="email"
             placeholder="you@company.com"
             autoComplete="email"
-            className="rounded-xl border-white/10 bg-white/[0.03] text-sm text-white placeholder:text-zinc-600 focus:border-violet-500/50 focus:ring-violet-500/20"
+            className="rounded-none border-zinc-800 bg-black text-xs text-white placeholder:text-zinc-600 focus:border-white font-mono"
             {...register("email")}
           />
-          {formState.errors.email && <p className="text-xs text-rose-400">{formState.errors.email.message}</p>}
+          {formState.errors.email && <p className="text-[11px] text-zinc-400">{formState.errors.email.message}</p>}
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="password" className="text-xs font-medium text-zinc-300">
+          <Label htmlFor="password" className="text-[10px] uppercase tracking-widest text-zinc-400">
             Password
           </Label>
           <Input
             id="password"
             type="password"
             autoComplete="new-password"
-            className="rounded-xl border-white/10 bg-white/[0.03] text-sm text-white placeholder:text-zinc-600 focus:border-violet-500/50 focus:ring-violet-500/20"
+            className="rounded-none border-zinc-800 bg-black text-xs text-white placeholder:text-zinc-600 focus:border-white font-mono"
             {...register("password")}
           />
-          {formState.errors.password && <p className="text-xs text-rose-400">{formState.errors.password.message}</p>}
+          {formState.errors.password && <p className="text-[11px] text-zinc-400">{formState.errors.password.message}</p>}
         </div>
 
         {error && (
-          <Alert variant="destructive" className="rounded-xl border-rose-500/30 bg-rose-500/10 text-rose-300">
-            <AlertDescription className="text-xs">{error}</AlertDescription>
+          <Alert variant="destructive" className="rounded-none border-zinc-700 bg-zinc-900 text-zinc-200">
+            <AlertDescription className="text-xs font-mono">{error}</AlertDescription>
           </Alert>
         )}
 
-        <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3 space-y-1.5 text-[11px] text-zinc-400">
-          <div className="flex items-center gap-1.5 text-zinc-200 font-medium">
-            <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
-            <span>329,563 Verified Apollo leads included</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <CheckCircle2 className="size-3.5 text-cyan-400 shrink-0" />
-            <span>Shared pre-warmed mailbox pool @ 3¢/email</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
-            <span>$0/mo software fee · No credit card required</span>
-          </div>
-        </div>
-
         <Button
           type="submit"
-          className="w-full rounded-xl bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 font-bold text-white shadow-lg shadow-indigo-600/25 hover:opacity-95 text-xs h-10 transition-all gap-1.5 cursor-pointer"
+          className="w-full rounded-none bg-white font-semibold text-black hover:bg-zinc-200 text-xs font-mono uppercase tracking-wider h-10 border border-white cursor-pointer"
           disabled={formState.isSubmitting}
         >
-          {formState.isSubmitting ? "Creating Mission Control..." : "Launch ChadGTM ($0/mo)"}
-          <ArrowRight className="size-3.5" />
+          {formState.isSubmitting ? "Creating Engine..." : "Deploy Engine Free ($0/mo)"}
         </Button>
       </form>
 
-      <div className="mt-6 border-t border-white/5 pt-5 text-center text-xs text-zinc-500">
+      <div className="mt-6 border-t border-zinc-800 pt-4 text-center text-xs text-zinc-500 font-mono">
         Already have an account?{" "}
-        <Link href="/login" className="font-semibold text-violet-400 hover:text-violet-300 transition-colors">
-          Sign in
+        <Link href="/login" className="text-white hover:underline transition-colors uppercase tracking-wider font-semibold">
+          Sign In
         </Link>
       </div>
     </div>

@@ -16,32 +16,31 @@ export function VelocitySlider({
   const [dailyLimit, setDailyLimit] = useState(initialLimit);
 
   const weeklyVolume = dailyLimit * 7;
-  // Based on target 30 emails/mailbox pace
   const mailboxesRequired = Math.max(1, Math.ceil(dailyLimit / 30));
 
   return (
-    <div className="mx-auto max-w-xl space-y-6">
+    <div className="mx-auto max-w-xl space-y-6 font-mono">
       <div className="text-center space-y-2">
-        <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-          <Sparkles className="size-3.5" /> Step 5 of 5
+        <span className="inline-flex items-center gap-1 rounded-none border border-zinc-700 bg-zinc-900 px-2.5 py-0.5 text-[10px] uppercase tracking-wider text-white">
+          STAGE 05 // VELOCITY
         </span>
-        <h2 className="text-2xl font-bold tracking-tight text-foreground">
-          Outreach Velocity & Daily Budget
+        <h2 className="text-xl sm:text-2xl font-bold uppercase tracking-wider text-white">
+          Outreach Velocity & Pacing
         </h2>
-        <p className="text-xs text-muted-foreground max-w-md mx-auto">
-          Set how many personalized emails the autonomous engine should deliver each day. Volume is automatically distributed across the shared mailbox pool.
+        <p className="text-xs text-zinc-400 font-sans max-w-md mx-auto">
+          Specify daily volume. Traffic is automatically load-balanced across our shared sender mailbox pool.
         </p>
       </div>
 
-      <div className="rounded-2xl border border-border/80 bg-card p-6 shadow-xl space-y-6">
+      <div className="rounded-none border border-zinc-800 bg-zinc-950 p-6 space-y-6">
         {/* Slider Controls */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Gauge className="size-3.5 text-primary" /> Daily Sending Pace
+        <div className="space-y-3">
+          <div className="flex items-center justify-between text-xs">
+            <span className="uppercase tracking-widest text-zinc-400 flex items-center gap-1.5 text-[11px]">
+              <Gauge className="size-3.5 text-white" /> Sending Velocity
             </span>
-            <span className="rounded-full bg-primary/10 px-3 py-1 text-sm font-extrabold text-primary">
-              {dailyLimit} emails / day
+            <span className="rounded-none border border-zinc-700 bg-black px-2.5 py-1 text-xs font-bold text-white">
+              {dailyLimit} EMAILS / DAY
             </span>
           </div>
 
@@ -52,46 +51,46 @@ export function VelocitySlider({
             step={10}
             value={dailyLimit}
             onChange={(e) => setDailyLimit(Number(e.target.value))}
-            className="w-full accent-primary h-2 bg-muted rounded-lg cursor-pointer"
+            className="w-full accent-white h-1.5 bg-zinc-800 rounded-none cursor-pointer"
           />
 
-          <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-muted-foreground font-medium">
-            <span>30<span className="hidden sm:inline"> / day (Gentle start)</span><span className="sm:hidden">/d (Gentle)</span></span>
-            <span>150<span className="hidden sm:inline"> / day (Recommended)</span><span className="sm:hidden">/d (Rec.)</span></span>
-            <span>500<span className="hidden sm:inline"> / day (High Scale)</span><span className="sm:hidden">/d (High)</span></span>
+          <div className="flex items-center justify-between text-[10px] text-zinc-500 uppercase tracking-widest">
+            <span>30/D (GENTLE)</span>
+            <span>150/D (RECOMMENDED)</span>
+            <span>500/D (MAX POOL)</span>
           </div>
         </div>
 
         {/* Real-Time Impact Metric Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-          <div className="rounded-xl border border-border/60 bg-muted/20 p-3.5 space-y-1">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1">
-              <Calendar className="size-3 text-emerald-400" /> Weekly Reach
+          <div className="rounded-none border border-zinc-800 bg-black p-3.5 space-y-1">
+            <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 flex items-center gap-1">
+              <Calendar className="size-3 text-white" /> Weekly Volume
             </span>
-            <div className="text-lg font-bold text-foreground">
+            <div className="text-lg font-bold text-white">
               ~{weeklyVolume.toLocaleString()}
             </div>
-            <p className="text-[11px] text-muted-foreground">Prospects contacted per week</p>
+            <p className="text-[10px] uppercase tracking-wider text-zinc-500">Prospects contacted weekly</p>
           </div>
 
-          <div className="rounded-xl border border-border/60 bg-muted/20 p-3.5 space-y-1">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1">
-              <Mail className="size-3 text-primary" /> Managed Mailboxes
+          <div className="rounded-none border border-zinc-800 bg-black p-3.5 space-y-1">
+            <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 flex items-center gap-1">
+              <Mail className="size-3 text-white" /> Required Mailboxes
             </span>
-            <div className="text-lg font-bold text-foreground">
+            <div className="text-lg font-bold text-white">
               {mailboxesRequired} {mailboxesRequired === 1 ? "Mailbox" : "Mailboxes"}
             </div>
-            <p className="text-[11px] text-muted-foreground">Paced strictly at 30/day cap</p>
+            <p className="text-[10px] uppercase tracking-wider text-zinc-500">Paced strictly at 30/day cap</p>
           </div>
         </div>
 
         {/* Deliverability Guarantee Note */}
-        <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-3.5 flex items-start gap-2.5 text-xs text-emerald-400">
-          <ShieldCheck className="size-4 shrink-0 mt-0.5" />
+        <div className="rounded-none bg-black border border-zinc-800 p-3.5 flex items-start gap-2.5 text-xs text-zinc-300">
+          <ShieldCheck className="size-4 text-white shrink-0 mt-0.5" />
           <div className="space-y-0.5">
-            <span className="font-bold">Autonomous Deliverability Guardrail:</span>
-            <p className="text-[11px] text-emerald-400/90 leading-relaxed">
-              No mailbox will exceed 30 emails/day. Jobs are rotated with random 60–180s human-like delays to safeguard domain reputation.
+            <span className="font-bold text-white uppercase tracking-wider text-[11px]">Deliverability Guardrail:</span>
+            <p className="text-[11px] text-zinc-400 font-sans leading-relaxed">
+              No mailbox exceeds 30 emails/day. Jobs are rotated with random 60–180s human-like delays to maintain IP & domain sender reputation.
             </p>
           </div>
         </div>
@@ -101,16 +100,16 @@ export function VelocitySlider({
           type="button"
           disabled={isLaunching}
           onClick={() => onLaunch(dailyLimit)}
-          className="w-full h-12 text-sm font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xl transition-all hover:scale-[1.01]"
+          className="w-full h-11 text-xs font-mono uppercase tracking-wider font-semibold bg-white hover:bg-zinc-200 text-black border border-white"
         >
           {isLaunching ? (
             <>
-              <Loader2 className="size-4 animate-spin mr-2" />
+              <Loader2 className="size-3.5 animate-spin mr-2" />
               Spinning up autonomous campaign & dispatching...
             </>
           ) : (
             <>
-              Start Autonomous Outreach <Rocket className="size-4 ml-2" />
+              Start Autonomous Outreach <Rocket className="size-3.5 ml-2" />
             </>
           )}
         </Button>

@@ -1,26 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
-  Bot,
   Check,
   CheckCircle2,
-  ChevronRight,
   Database,
-  Flame,
   Globe,
-  Heart,
   Loader2,
   Mail,
-  RefreshCw,
   Search,
   Sparkles,
   Target,
   ThumbsDown,
   ThumbsUp,
-  X,
   Zap,
 } from "lucide-react";
 import { Badge, Button, cn } from "@smartreach/ui";
@@ -45,7 +39,7 @@ const PRESETS: PresetTarget[] = [
   {
     name: "Stripe",
     url: "stripe.com",
-    category: "FinTech / Payments",
+    category: "FinTech / Infrastructure",
     tagline: "Financial Infrastructure for the Internet",
     icp: {
       titles: ["Head of Payments", "VP of Engineering", "Chief Revenue Officer"],
@@ -112,10 +106,10 @@ export function ChadGtmHeroScanner() {
   const [swipeLiked, setSwipeLiked] = useState<boolean | null>(null);
 
   const steps = [
-    "Crawling root DOM & heuristic subpages...",
-    "Extracting core value prop & differentiators (Gemini 3.8 Flash)...",
-    "Cross-referencing 329,563 Apollo verified leads...",
-    "Synthesizing 3 high-converting cold email angles...",
+    "CRAWLING ROOT DOM & SUBPAGES...",
+    "EXTRACTING CORE VALUE PROPOSITIONS & DIFFERENTIATORS...",
+    "CROSS-REFERENCING 329,563 APOLLO VERIFIED LEADS...",
+    "SYNTHESIZING COLD EMAIL ANGLES & ICP...",
   ];
 
   const handleRunScan = (preset?: PresetTarget) => {
@@ -133,63 +127,55 @@ export function ChadGtmHeroScanner() {
         setIsScanning(false);
         return prev;
       });
-    }, 450);
+    }, 400);
   };
 
   return (
     <div className="relative mx-auto mt-10 w-full max-w-4xl select-none">
-      {/* Outer ambient aura */}
-      <div className="pointer-events-none absolute -inset-2 rounded-3xl bg-gradient-to-r from-violet-600/30 via-indigo-600/20 to-cyan-500/30 opacity-70 blur-2xl transition-all duration-500" />
-
-      {/* Main glass frame */}
-      <div className="relative rounded-2xl border border-white/10 bg-zinc-950/80 p-4 sm:p-6 shadow-2xl backdrop-blur-2xl">
+      {/* Boxy Architectural Terminal Frame */}
+      <div className="relative rounded-none border border-zinc-800 bg-black p-4 sm:p-6 shadow-none">
         {/* Terminal Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-3 font-mono text-xs">
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5">
-              <span className="size-3 rounded-full bg-rose-500/80" />
-              <span className="size-3 rounded-full bg-amber-500/80" />
-              <span className="size-3 rounded-full bg-emerald-500/80" />
-            </div>
-            <span className="ml-2 text-xs font-mono font-medium text-zinc-400">
-              chadgtm://autonomous-scanner/v2.0
+            <span className="size-2 rounded-none bg-white" />
+            <span className="text-zinc-400 uppercase tracking-widest text-[11px]">
+              ENGINE // AUTONOMOUS_GTM_SCANNER.SYS
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-400">
-              <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Live Lead Engine (329k+ Active)
+            <span className="rounded-none border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-[10px] uppercase tracking-widest text-zinc-300">
+              329K+ B2B LEADS SYNCED
             </span>
           </div>
         </div>
 
         {/* Input Bar & Preset Quick-Select */}
-        <div className="mt-5 space-y-3">
+        <div className="mt-4 space-y-3">
           <div className="relative flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <div className="relative flex-1">
-              <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-zinc-400" />
+              <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
               <input
                 type="text"
                 value={targetUrl}
                 onChange={(e) => setTargetUrl(e.target.value)}
-                placeholder="Enter any domain (e.g. stripe.com, yourcompany.io)"
-                className="w-full rounded-xl border border-white/10 bg-white/[0.04] py-3 pl-10 pr-4 text-sm text-white placeholder-zinc-500 outline-none transition-all focus:border-violet-500/60 focus:bg-white/[0.07] focus:ring-2 focus:ring-violet-500/20"
+                placeholder="Enter company website (e.g. stripe.com)"
+                className="w-full rounded-none border border-zinc-800 bg-zinc-950 py-2.5 pl-10 pr-4 font-mono text-xs text-white placeholder-zinc-600 outline-none transition-colors focus:border-white"
               />
             </div>
             <Button
               type="button"
               onClick={() => handleRunScan()}
               disabled={isScanning}
-              className="h-11 px-5 rounded-xl bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-600 text-white font-semibold text-xs sm:text-sm shadow-lg shadow-indigo-600/30 hover:opacity-95 transition-all gap-2"
+              className="h-10 px-5 rounded-none bg-white text-black font-semibold text-xs font-mono uppercase tracking-wider hover:bg-zinc-200 border border-white transition-colors gap-2"
             >
               {isScanning ? (
                 <>
-                  <Loader2 className="size-4 animate-spin" />
+                  <Loader2 className="size-3.5 animate-spin" />
                   Analyzing Site...
                 </>
               ) : (
                 <>
-                  <Sparkles className="size-4 text-cyan-300" />
+                  <Sparkles className="size-3.5" />
                   Simulate GTM Scan
                 </>
               )}
@@ -197,10 +183,9 @@ export function ChadGtmHeroScanner() {
           </div>
 
           {/* Instant Demo Presets */}
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <span className="text-[11px] font-medium text-zinc-400 flex items-center gap-1">
-              <Zap className="size-3 text-amber-400" />
-              Test live presets:
+          <div className="flex flex-wrap items-center gap-2 pt-1 font-mono text-xs">
+            <span className="text-[10px] uppercase tracking-widest text-zinc-500">
+              Select Preset:
             </span>
             {PRESETS.map((p) => {
               const active = selectedPreset.name === p.name;
@@ -210,10 +195,10 @@ export function ChadGtmHeroScanner() {
                   type="button"
                   onClick={() => handleRunScan(p)}
                   className={cn(
-                    "rounded-lg px-2.5 py-1 text-xs font-medium transition-all border",
+                    "rounded-none px-2.5 py-1 text-[11px] font-mono uppercase tracking-wider transition-colors border",
                     active
-                      ? "border-violet-500/50 bg-violet-500/20 text-white shadow-xs"
-                      : "border-white/5 bg-white/[0.02] text-zinc-400 hover:border-white/15 hover:text-zinc-200"
+                      ? "border-white bg-white text-black font-semibold"
+                      : "border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700 hover:text-white"
                   )}
                 >
                   {p.name}
@@ -224,53 +209,52 @@ export function ChadGtmHeroScanner() {
         </div>
 
         {/* Dynamic Scanning State or Result Surface */}
-        <div className="mt-6 rounded-xl border border-white/10 bg-black/40 p-4 sm:p-5">
+        <div className="mt-5 rounded-none border border-zinc-800 bg-zinc-950 p-4 sm:p-5">
           {isScanning ? (
-            <div className="py-10 text-center space-y-4">
-              <div className="relative mx-auto flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600/20 to-cyan-500/20 border border-violet-500/40">
-                <Loader2 className="size-7 text-cyan-400 animate-spin" />
-                <span className="absolute -inset-1 rounded-2xl bg-cyan-400/20 blur-md animate-pulse" />
+            <div className="py-8 text-center space-y-4 font-mono">
+              <div className="mx-auto flex size-10 items-center justify-center border border-white bg-black">
+                <Loader2 className="size-5 text-white animate-spin" />
               </div>
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-white font-mono">
+                <p className="text-xs font-bold text-white uppercase tracking-wider">
                   {steps[scanStep]}
                 </p>
-                <p className="text-xs text-zinc-400">
-                  Step {scanStep + 1} of {steps.length} · Autonomous Neural Synthesis
+                <p className="text-[10px] text-zinc-500 uppercase tracking-widest">
+                  [STAGE {scanStep + 1} OF {steps.length}]
                 </p>
               </div>
-              <div className="w-full max-w-xs mx-auto bg-white/10 h-1.5 rounded-full overflow-hidden">
+              <div className="w-full max-w-xs mx-auto bg-zinc-900 h-1 rounded-none overflow-hidden border border-zinc-800">
                 <div
-                  className="h-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-all duration-300"
+                  className="h-full bg-white transition-all duration-200"
                   style={{ width: `${((scanStep + 1) / steps.length) * 100}%` }}
                 />
               </div>
             </div>
           ) : (
-            <div className="space-y-5">
+            <div className="space-y-4">
               {/* Top Synthesis Overview */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-3 font-mono">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-base font-bold text-white font-mono">
+                    <span className="text-sm font-bold text-white uppercase tracking-wider">
                       {selectedPreset.name}
                     </span>
-                    <Badge variant="outline" className="border-indigo-500/30 text-indigo-300 bg-indigo-500/10 text-[10px]">
+                    <span className="rounded-none border border-zinc-800 bg-black px-1.5 py-0.5 text-[9px] uppercase tracking-widest text-zinc-400">
                       {selectedPreset.category}
-                    </Badge>
+                    </span>
                   </div>
-                  <p className="text-xs text-zinc-400 mt-1">
+                  <p className="text-xs text-zinc-400 font-sans mt-0.5">
                     "{selectedPreset.tagline}"
                   </p>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1.5 text-right">
-                    <div className="text-[10px] font-medium uppercase tracking-wider text-emerald-400">
-                      Verified Leads
+                <div className="flex items-center gap-2">
+                  <div className="rounded-none border border-zinc-800 bg-black px-3 py-1.5 text-right font-mono">
+                    <div className="text-[9px] font-mono uppercase tracking-widest text-zinc-500">
+                      Matched Leads
                     </div>
-                    <div className="text-sm font-bold text-white font-mono flex items-center justify-end gap-1">
-                      <Target className="size-3.5 text-emerald-400" />
+                    <div className="text-xs font-bold text-white flex items-center justify-end gap-1">
+                      <Target className="size-3 text-zinc-400" />
                       {selectedPreset.icp.leadsMatched.toLocaleString()}
                     </div>
                   </div>
@@ -278,29 +262,29 @@ export function ChadGtmHeroScanner() {
               </div>
 
               {/* Matched ICP Badges */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3 space-y-1.5">
-                  <div className="text-[11px] font-medium text-zinc-400 flex items-center gap-1.5">
-                    <Target className="size-3 text-indigo-400" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs font-mono">
+                <div className="rounded-none border border-zinc-800 bg-black p-3 space-y-1.5">
+                  <div className="text-[10px] uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
+                    <Target className="size-3 text-zinc-400" />
                     Target Buyer Personas:
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {selectedPreset.icp.titles.map((t) => (
-                      <span key={t} className="rounded-md bg-white/5 border border-white/10 px-2 py-0.5 text-[11px] text-zinc-200">
+                      <span key={t} className="rounded-none bg-zinc-950 border border-zinc-800 px-2 py-0.5 text-[10px] text-zinc-300">
                         {t}
                       </span>
                     ))}
                   </div>
                 </div>
 
-                <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3 space-y-1.5">
-                  <div className="text-[11px] font-medium text-zinc-400 flex items-center gap-1.5">
-                    <Database className="size-3 text-cyan-400" />
-                    Extracted B2B Industries:
+                <div className="rounded-none border border-zinc-800 bg-black p-3 space-y-1.5">
+                  <div className="text-[10px] uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
+                    <Database className="size-3 text-zinc-400" />
+                    B2B Lead Facets:
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {selectedPreset.icp.industries.map((ind) => (
-                      <span key={ind} className="rounded-md bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 text-[11px] text-cyan-300">
+                      <span key={ind} className="rounded-none bg-zinc-950 border border-zinc-800 px-2 py-0.5 text-[10px] text-zinc-300">
                         {ind}
                       </span>
                     ))}
@@ -309,70 +293,70 @@ export function ChadGtmHeroScanner() {
               </div>
 
               {/* Tinder-Style Email Calibration Card Preview */}
-              <div className="relative rounded-xl border border-violet-500/30 bg-gradient-to-b from-violet-950/20 to-black/60 p-4 shadow-lg">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-white/10 pb-2 mb-3">
+              <div className="relative rounded-none border border-zinc-800 bg-black p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-zinc-800 pb-2 mb-3 font-mono text-xs">
                   <div className="flex items-center gap-2">
-                    <Mail className="size-3.5 text-violet-400 shrink-0" />
-                    <span className="text-xs font-semibold text-white">
-                      Tinder-Style Voice Calibration Deck (Sample 1 of 10)
+                    <Mail className="size-3.5 text-zinc-400 shrink-0" />
+                    <span className="font-semibold text-white uppercase tracking-wider text-[11px]">
+                      Voice Calibration Deck [Sample 1 of 10]
                     </span>
                   </div>
-                  <span className="text-[10px] text-zinc-400">
-                    AI Cold Angle: Direct ROI / Friction Reduction
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-widest">
+                    Angle: Direct ROI / Friction Reduction
                   </span>
                 </div>
 
                 <div className="space-y-2">
-                  <div className="rounded-md bg-black/60 px-3 py-1.5 font-mono text-[11px] text-zinc-300 border border-white/5 break-words">
+                  <div className="rounded-none bg-zinc-950 px-3 py-1.5 font-mono text-xs text-zinc-300 border border-zinc-800 break-words">
                     <span className="text-zinc-500">Subject: </span>
                     {selectedPreset.sampleEmail.subject}
                   </div>
-                  <div className="rounded-md bg-black/40 p-3 font-sans text-xs text-zinc-300 leading-relaxed border border-white/5 whitespace-pre-line max-h-36 overflow-y-auto">
+                  <div className="rounded-none bg-zinc-950 p-3 font-sans text-xs text-zinc-300 leading-relaxed border border-zinc-800 whitespace-pre-line max-h-36 overflow-y-auto">
                     {selectedPreset.sampleEmail.body}
                   </div>
                 </div>
 
                 {/* Swipe Action Controls */}
-                <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-white/5">
+                <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-zinc-800">
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => setSwipeLiked(false)}
                       className={cn(
-                        "flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-all",
+                        "flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 rounded-none border px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-colors",
                         swipeLiked === false
-                          ? "border-rose-500 bg-rose-500/20 text-rose-300"
-                          : "border-white/10 bg-white/5 text-zinc-400 hover:text-rose-400 hover:border-rose-500/40"
+                          ? "border-zinc-500 bg-zinc-800 text-white"
+                          : "border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-white hover:border-zinc-700"
                       )}
                     >
                       <ThumbsDown className="size-3.5" />
-                      Discard Angle
+                      Discard
                     </button>
                     <button
                       type="button"
                       onClick={() => setSwipeLiked(true)}
                       className={cn(
-                        "flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-all",
+                        "flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 rounded-none border px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-colors",
                         swipeLiked === true
-                          ? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
-                          : "border-white/10 bg-white/5 text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/40"
+                          ? "border-white bg-white text-black font-semibold"
+                          : "border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-white hover:border-zinc-700"
                       )}
                     >
                       <ThumbsUp className="size-3.5" />
-                      Approve Voice & Tone
+                      Approve Tone
                     </button>
                   </div>
 
                   {swipeLiked !== null && (
-                    <span className="text-[11px] font-medium text-emerald-400 flex items-center justify-center sm:justify-start gap-1 py-1">
-                      <CheckCircle2 className="size-3.5" />
-                      Calibrated! Ready for Autonomous Dispatch
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-300 flex items-center justify-center sm:justify-start gap-1 py-1">
+                      <CheckCircle2 className="size-3.5 text-white" />
+                      Voice Locked In
                     </span>
                   )}
 
-                  <Button asChild size="sm" className="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-black font-bold text-xs gap-1.5 w-full sm:w-auto sm:ml-auto">
+                  <Button asChild size="sm" className="rounded-none bg-white hover:bg-zinc-200 text-black font-semibold text-xs font-mono uppercase tracking-wider gap-1.5 w-full sm:w-auto sm:ml-auto">
                     <Link href="/signup">
-                      Launch With This Strategy ($0/mo) <ArrowRight className="size-3.5" />
+                      Launch Campaign <ArrowRight className="size-3.5" />
                     </Link>
                   </Button>
                 </div>

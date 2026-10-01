@@ -4,24 +4,24 @@ import * as React from "react";
 import { cn } from "./utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 active:scale-[0.98]",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-none text-xs font-mono uppercase tracking-wider transition-colors outline-none focus-visible:outline-1 focus-visible:outline-white disabled:pointer-events-none disabled:opacity-40 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 active:translate-y-[1px]",
   {
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground shadow-[0_1px_2px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.08)] hover:bg-primary/90",
-        destructive: "bg-destructive/15 text-destructive hover:bg-destructive/25 border border-destructive/30",
-        outline: "border border-border bg-transparent hover:bg-accent hover:text-accent-foreground",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border/60",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 hover:underline",
+          "bg-white text-black font-semibold hover:bg-zinc-200 border border-white shadow-none",
+        destructive: "bg-zinc-900 text-zinc-100 border border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700 hover:text-white",
+        outline: "border border-zinc-800 bg-black text-zinc-200 hover:bg-zinc-900 hover:border-zinc-700 hover:text-white",
+        secondary: "bg-zinc-900 text-zinc-100 border border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700",
+        ghost: "text-zinc-400 hover:bg-zinc-900 hover:text-white",
+        link: "text-white underline-offset-4 hover:underline lowercase font-sans font-normal",
       },
       size: {
         default: "h-9 px-4 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-10 rounded-lg px-6",
-        icon: "h-9 w-9",
-        "icon-sm": "h-7 w-7 rounded-md",
+        sm: "h-8 px-3 text-[11px]",
+        lg: "h-11 px-6 text-sm font-semibold",
+        icon: "h-9 w-9 p-0",
+        "icon-sm": "h-7 w-7 p-0 text-[10px]",
       },
     },
     defaultVariants: { variant: "default", size: "default" },

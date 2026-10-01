@@ -180,43 +180,43 @@ export function ChadGtmWizard({
   };
 
   return (
-    <div className="mx-auto max-w-5xl py-4 sm:py-8 space-y-8">
+    <div className="mx-auto max-w-5xl py-4 sm:py-8 space-y-6 sm:space-y-8 font-mono">
       {/* Step Indicator Header */}
-      <div className="flex items-center justify-between border-b border-border/40 pb-4">
-        <div className="flex items-center gap-2">
-          <div className="size-8 rounded-xl bg-gradient-to-tr from-primary to-emerald-400 flex items-center justify-center text-primary-foreground font-black text-sm shadow-md">
+      <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+        <div className="flex items-center gap-3">
+          <div className="size-8 rounded-none border border-white bg-black flex items-center justify-center text-white font-mono font-bold text-sm">
             ⚡
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-              ChadGTM <span className="text-xs font-normal text-muted-foreground">• Autonomous Go-To-Market</span>
+            <h1 className="text-sm sm:text-base font-bold uppercase tracking-wider text-white flex items-center gap-2">
+              ChadGTM <span className="text-zinc-500 font-normal text-xs">// Autonomous Engine</span>
             </h1>
           </div>
         </div>
 
         {/* Step Ticker Badges (Mobile + Desktop) */}
         <div className="flex sm:hidden items-center text-xs">
-          <span className="rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-[11px] font-bold text-primary">
-            Step {step} of 5: {["URL Scan", "Strategy", "Apollo Leads", "Calibration", "Launch"][step - 1]}
+          <span className="rounded-none bg-zinc-900 border border-zinc-700 px-2 py-0.5 text-[10px] uppercase font-bold text-white">
+            STAGE {step}/5: {["URL Scan", "Strategy", "Apollo Leads", "Calibration", "Launch"][step - 1]}
           </span>
         </div>
 
         <div className="hidden sm:flex items-center gap-1.5 text-xs">
           {[
-            { s: 1, label: "URL Scan" },
-            { s: 2, label: "Strategy" },
-            { s: 3, label: "Apollo Leads" },
-            { s: 4, label: "Calibration" },
-            { s: 5, label: "Launch" },
+            { s: 1, label: "01. URL Scan" },
+            { s: 2, label: "02. Strategy" },
+            { s: 3, label: "03. Apollo Leads" },
+            { s: 4, label: "04. Calibration" },
+            { s: 5, label: "05. Launch" },
           ].map((item) => (
             <div
               key={item.s}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-none text-[10px] uppercase tracking-wider border font-mono transition-colors ${
                 step === item.s
-                  ? "bg-primary text-primary-foreground shadow-sm"
+                  ? "bg-white text-black border-white font-semibold"
                   : step > item.s
-                  ? "bg-emerald-500/10 text-emerald-400"
-                  : "text-muted-foreground/60 bg-muted/30"
+                  ? "border-zinc-700 bg-zinc-900 text-zinc-300"
+                  : "border-zinc-800 bg-black text-zinc-600"
               }`}
             >
               <span>{item.s < step ? "✓" : item.s}</span>
@@ -228,25 +228,25 @@ export function ChadGtmWizard({
 
       {/* STEP 1: The Hero Command Bar */}
       {step === 1 && (
-        <div className="mx-auto max-w-2xl py-6 sm:py-8 space-y-6 sm:space-y-8">
-          <div className="text-center space-y-3">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-xs font-bold text-primary">
-              <Sparkles className="size-3.5" /> Self-Driving B2B Cold Outreach
+        <div className="mx-auto max-w-2xl py-4 sm:py-6 space-y-6">
+          <div className="text-center space-y-2">
+            <span className="inline-flex items-center gap-1.5 rounded-none border border-zinc-800 bg-zinc-950 px-2.5 py-0.5 text-[10px] uppercase tracking-widest text-zinc-400">
+              <Sparkles className="size-3" /> Autonomous Pipeline Synthesis
             </span>
-            <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-foreground">
-              Autonomous Go-To-Market
+            <h2 className="text-2xl sm:text-3xl font-bold uppercase tracking-wider text-white">
+              Launch Outbound Engine
             </h2>
-            <p className="text-xs sm:text-sm text-muted-foreground max-w-lg mx-auto leading-relaxed">
+            <p className="text-xs text-zinc-400 max-w-lg mx-auto font-sans leading-relaxed">
               Enter your company website. Our autonomous engine analyzes your product, cross-references 329k+ Apollo B2B prospects, and dispatches calibrated outreach through our pre-warmed shared mailbox pool.
             </p>
           </div>
 
           {/* Form */}
-          <form onSubmit={handleLaunchAnalysis} className="space-y-4">
-            <div className="relative rounded-2xl border border-border/80 bg-card p-2 sm:p-2.5 shadow-2xl transition-all focus-within:border-primary/80 focus-within:ring-2 focus-within:ring-primary/20">
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 px-1 sm:px-2">
-                <div className="flex items-center gap-2.5 flex-1 min-w-0 bg-muted/20 sm:bg-transparent rounded-xl px-3 py-1 sm:p-0">
-                  <Globe className="size-4.5 text-muted-foreground shrink-0" />
+          <form onSubmit={handleLaunchAnalysis} className="space-y-3 font-mono">
+            <div className="relative rounded-none border border-zinc-800 bg-zinc-950 p-2 transition-colors focus-within:border-white">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 px-1">
+                <div className="flex items-center gap-2 flex-1 min-w-0 bg-black sm:bg-transparent px-3 py-1 sm:p-0">
+                  <Globe className="size-4 text-zinc-500 shrink-0" />
                   <input
                     type="text"
                     required
@@ -254,21 +254,21 @@ export function ChadGtmWizard({
                     value={url}
                     disabled={isAnalyzing}
                     onChange={(e) => setUrl(e.target.value)}
-                    className="w-full bg-transparent py-2.5 sm:py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+                    className="w-full bg-transparent py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none font-mono"
                   />
                 </div>
                 <Button
                   type="submit"
                   disabled={isAnalyzing || !url.trim()}
-                  className="h-11 px-5 rounded-xl text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground shrink-0 shadow-lg w-full sm:w-auto"
+                  className="h-10 px-5 rounded-none text-xs font-mono uppercase tracking-wider font-semibold bg-white hover:bg-zinc-200 text-black border border-white shrink-0 w-full sm:w-auto"
                 >
                   {isAnalyzing ? (
                     <>
-                      <Loader2 className="size-4 animate-spin mr-1.5" /> Analyzing...
+                      <Loader2 className="size-3.5 animate-spin mr-1.5" /> Analyzing...
                     </>
                   ) : (
                     <>
-                      Launch Deep AI Analysis <Sparkles className="size-3.5 ml-1.5" />
+                      Launch Analysis <Sparkles className="size-3.5 ml-1.5" />
                     </>
                   )}
                 </Button>
@@ -276,13 +276,13 @@ export function ChadGtmWizard({
             </div>
 
             {/* Optional Context Drawer */}
-            <div className="rounded-xl border border-border/40 bg-card/40 overflow-hidden">
+            <div className="rounded-none border border-zinc-800 bg-zinc-950 overflow-hidden font-mono">
               <button
                 type="button"
                 onClick={() => setShowNotesDrawer(!showNotesDrawer)}
-                className="w-full flex items-center justify-between p-3 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                className="w-full flex items-center justify-between p-3 text-xs uppercase tracking-wider text-zinc-400 hover:text-white transition-colors"
               >
-                <span>Additional Context / Specific Offer Hook (Optional)</span>
+                <span>Additional Context / Specific Angle (Optional)</span>
                 {showNotesDrawer ? (
                   <ChevronUp className="size-3.5" />
                 ) : (
@@ -291,13 +291,13 @@ export function ChadGtmWizard({
               </button>
 
               {showNotesDrawer && (
-                <div className="p-3 pt-0 border-t border-border/20">
+                <div className="p-3 pt-0 border-t border-zinc-800">
                   <textarea
                     rows={3}
                     placeholder="e.g. We are offering a free 14-day benchmark trial for Series B SaaS engineering teams..."
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    className="w-full rounded-lg border border-border/60 bg-muted/30 p-2.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary leading-relaxed"
+                    className="w-full rounded-none border border-zinc-800 bg-black p-2.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-white leading-relaxed font-mono"
                   />
                 </div>
               )}
@@ -306,25 +306,25 @@ export function ChadGtmWizard({
 
           {/* Interactive Scanning HUD */}
           {isAnalyzing && (
-            <div className="rounded-2xl border border-primary/30 bg-primary/5 p-6 shadow-xl space-y-4 animate-in fade-in duration-300">
+            <div className="rounded-none border border-zinc-700 bg-zinc-950 p-5 space-y-3 font-mono">
               <div className="flex items-center gap-3">
-                <div className="size-8 rounded-xl bg-primary/20 flex items-center justify-center text-primary">
+                <div className="size-8 rounded-none border border-white bg-black flex items-center justify-center text-white">
                   <Loader2 className="size-4 animate-spin" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">
-                    Autonomous Research Pipeline Running
+                  <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+                    Research Pipeline Active
                   </h4>
-                  <p className="text-sm font-semibold text-primary">
+                  <p className="text-xs font-bold text-white uppercase tracking-wider mt-0.5">
                     {TICKER_MESSAGES[tickerIndex]}
                   </p>
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div className="space-y-1">
+                <div className="h-1 w-full bg-zinc-900 border border-zinc-800">
                   <div
-                    className="h-full bg-primary transition-all duration-500 animate-pulse"
+                    className="h-full bg-white transition-all duration-300"
                     style={{
                       width: `${((tickerIndex + 1) / TICKER_MESSAGES.length) * 100}%`,
                     }}
@@ -335,26 +335,26 @@ export function ChadGtmWizard({
           )}
 
           {/* Feature Highlights Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 text-xs text-muted-foreground">
-            <div className="flex items-start gap-2.5 p-3 rounded-xl border border-border/40 bg-card/30">
-              <Cpu className="size-4 text-primary shrink-0 mt-0.5" />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs font-mono">
+            <div className="flex items-start gap-2.5 p-3 rounded-none border border-zinc-800 bg-zinc-950">
+              <Cpu className="size-4 text-white shrink-0 mt-0.5" />
               <div>
-                <span className="font-semibold text-foreground block">Zero SMTP Setup</span>
-                Uses our pre-warmed shared mailbox pool.
+                <span className="font-bold text-white block uppercase tracking-wider text-[11px]">Zero SMTP Setup</span>
+                <span className="text-zinc-500 font-sans text-xs">Pre-warmed pool dispatch.</span>
               </div>
             </div>
-            <div className="flex items-start gap-2.5 p-3 rounded-xl border border-border/40 bg-card/30">
-              <Search className="size-4 text-emerald-400 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2.5 p-3 rounded-none border border-zinc-800 bg-zinc-950">
+              <Search className="size-4 text-white shrink-0 mt-0.5" />
               <div>
-                <span className="font-semibold text-foreground block">329k+ Apollo Leads</span>
-                Automatic B2B prospect extraction.
+                <span className="font-bold text-white block uppercase tracking-wider text-[11px]">329k Apollo Leads</span>
+                <span className="text-zinc-500 font-sans text-xs">Instant B2B matching.</span>
               </div>
             </div>
-            <div className="flex items-start gap-2.5 p-3 rounded-xl border border-border/40 bg-card/30">
-              <ShieldCheck className="size-4 text-amber-400 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2.5 p-3 rounded-none border border-zinc-800 bg-zinc-950">
+              <ShieldCheck className="size-4 text-white shrink-0 mt-0.5" />
               <div>
-                <span className="font-semibold text-foreground block">Tinder Tone Calibration</span>
-                Swipe to approve personalized copy.
+                <span className="font-bold text-white block uppercase tracking-wider text-[11px]">Voice Calibration</span>
+                <span className="text-zinc-500 font-sans text-xs">Tinder-style approval deck.</span>
               </div>
             </div>
           </div>
@@ -385,13 +385,13 @@ export function ChadGtmWizard({
       {step === 4 && (
         <>
           {isCalibrating ? (
-            <div className="py-20 text-center space-y-4">
-              <Loader2 className="mx-auto size-8 animate-spin text-primary" />
+            <div className="py-16 text-center space-y-4 font-mono">
+              <Loader2 className="mx-auto size-7 animate-spin text-white" />
               <div>
-                <h3 className="text-base font-bold text-foreground">
-                  Generating Tailored Calibration Deck...
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                  Generating Calibration Deck...
                 </h3>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-zinc-500 uppercase tracking-widest mt-1">
                   Synthesizing ~10 hyper-personalized cold outreach angles against matched prospects.
                 </p>
               </div>
