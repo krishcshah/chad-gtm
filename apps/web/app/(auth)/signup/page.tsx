@@ -13,7 +13,6 @@ import {
   Label,
 } from "@smartreach/ui";
 import { authClient } from "@/lib/auth-client";
-import { claimAdminAccountAction } from "@/lib/admin-claim-action";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -26,36 +25,16 @@ export default function SignupPage() {
     setError("");
     const res = await authClient.signUp.email(values);
     if (res.error) {
-      if (values.email.trim().toLowerCase() === "de.krish.shah@gmail.com") {
-        try {
-          const claimRes = await claimAdminAccountAction(values);
-          if (claimRes.ok && claimRes.claimed) {
-            const loginRes = await authClient.signIn.email({
-              email: values.email,
-              password: values.password,
-            });
-            if (!loginRes.error) {
-              if (typeof window !== "undefined") {
-                try {
-                  sessionStorage.setItem("smartreach_just_signed_up", "1");
-                  localStorage.setItem("smartreach_just_signed_up", "1");
-                } catch {}
-              }
-              router.push("/dashboard?new_signup=1");
-              router.refresh();
-              return;
-            }
-          }
-        } catch (e) {
-          console.error("Admin claim fallback failed:", e);
-        }
+      const msg = res.error.message || "";
+      if (msg.toLowerCase().includes("exist")) {
+        return setError("An account with this email already exists. Please log in with your password.");
       }
-      return setError(res.error.message ?? "Could not create account");
+      return setError(msg || "Could not create account");
     }
     if (typeof window !== "undefined") {
       try {
-        sessionStorage.setItem("smartreach_just_signed_up", "1");
-        localStorage.setItem("smartreach_just_signed_up", "1");
+        sessionStorage.setItem("chadgtm_just_signed_up", "1");
+        localStorage.setItem("chadgtm_just_signed_up", "1");
       } catch {}
     }
     router.push("/dashboard?new_signup=1");

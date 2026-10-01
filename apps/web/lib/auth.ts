@@ -32,7 +32,7 @@ const trustedOrigins = resolveTrustedOrigins({
 });
 
 export const auth = betterAuth({
-  appName: "SmartReach",
+  appName: "ChadGTM",
   baseURL: env.BETTER_AUTH_URL,
   secret: env.BETTER_AUTH_SECRET,
   database: drizzleAdapter(lazyDb(), { provider: "pg", schema: authSchema }),

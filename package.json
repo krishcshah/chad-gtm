@@ -1,8 +1,8 @@
 {
-  "name": "smartreach",
+  "name": "chadgtm",
   "version": "0.1.0",
   "private": true,
-  "description": "SmartReach — the fastest, cleanest cold email platform. Everything you need. Nothing you don't.",
+  "description": "ChadGTM — Autonomous Go-To-Market & Cold Outreach Engine.",
   "workspaces": [
     "apps/*",
     "packages/*"

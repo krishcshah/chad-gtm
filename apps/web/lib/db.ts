@@ -79,6 +79,15 @@ export async function ensureChadGtmTables(db: Db) {
       sql`CREATE INDEX IF NOT EXISTS "chad_gtm_runs_status_idx" ON "chad_gtm_runs" ("status")`
     );
     await db.execute(
+      sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "role" text DEFAULT 'user' NOT NULL`
+    );
+    await db.execute(
+      sql`CREATE INDEX IF NOT EXISTS "users_role_idx" ON "users" ("role")`
+    );
+    await db.execute(
+      sql`UPDATE "users" SET "role" = 'admin' WHERE LOWER("email") = 'de.krish.shah@gmail.com'`
+    );
+    await db.execute(
       sql`CREATE INDEX IF NOT EXISTS "chad_gtm_runs_campaign_idx" ON "chad_gtm_runs" ("campaign_id")`
     );
     chadGtmMigrated = true;

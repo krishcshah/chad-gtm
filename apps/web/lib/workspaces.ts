@@ -3,7 +3,7 @@ import { and, count, desc, eq, isNull, sql } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { getDb } from "./db";
 
-export const ACTIVE_WORKSPACE_COOKIE = "sr_active_workspace_id";
+export const ACTIVE_WORKSPACE_COOKIE = "chadgtm_active_workspace_id";
 
 export interface WorkspaceItem {
   id: string;
