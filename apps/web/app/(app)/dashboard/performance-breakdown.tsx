@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, CheckCircle2, Flame, Inbox, Mail, Rocket, ShieldCheck, Zap } from "lucide-react";
-import { Badge, Button, Progress, cn } from "@smartreach/ui";
+import { ArrowUpRight, Rocket } from "lucide-react";
+import { Badge, Progress, cn } from "@smartreach/ui";
 
 interface CampaignItem {
   id: string;
@@ -14,277 +13,124 @@ interface CampaignItem {
   replied: number;
 }
 
-interface SenderItem {
-  id: string;
-  senderName: string;
-  email: string;
-  status: string;
-  health: number;
-  dailyLimit: number;
-  hourlyLimit: number;
-  usedToday?: number;
-  repliedCount?: number;
-}
-
 interface PerformanceBreakdownProps {
   campaigns: CampaignItem[];
-  senders: SenderItem[];
 }
 
-export function PerformanceBreakdown({ campaigns = [], senders = [] }: PerformanceBreakdownProps) {
-  const [activeTab, setActiveTab] = useState<"campaigns" | "senders">("campaigns");
-
+export function PerformanceBreakdown({ campaigns = [] }: PerformanceBreakdownProps) {
   return (
-    <div className="rounded-2xl border border-border/70 bg-card/60 backdrop-blur shadow-xs overflow-hidden shrink-0">
-      {/* ReachInbox / Instantly Header & Tab Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/60 bg-muted/20 px-5 py-3.5 shrink-0">
+    <div className="rounded-none border border-zinc-800 bg-zinc-950 overflow-hidden font-mono shadow-none shrink-0">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-800 bg-black px-4 py-3 shrink-0">
         <div className="flex items-center gap-2">
-          <div className="flex items-center rounded-xl bg-background/80 p-1 border border-border/70 shadow-2xs">
-            <button
-              type="button"
-              onClick={() => setActiveTab("campaigns")}
-              className={cn(
-                "rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all",
-                activeTab === "campaigns"
-                  ? "bg-primary text-primary-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              Campaigns ({campaigns.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("senders")}
-              className={cn(
-                "rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all",
-                activeTab === "senders"
-                  ? "bg-primary text-primary-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              Email Accounts ({senders.length})
-            </button>
-          </div>
+          <Rocket className="size-3.5 text-white" />
+          <span className="text-xs font-bold uppercase tracking-wider text-white">
+            Campaign Delivery Pacing ({campaigns.length})
+          </span>
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {activeTab === "campaigns" ? (
-            <Link
-              href="/campaigns"
-              className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
-            >
-              View all campaigns <ArrowUpRight className="size-3.5" />
-            </Link>
-          ) : (
-            <Link
-              href="/senders"
-              className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
-            >
-              Manage inboxes <ArrowUpRight className="size-3.5" />
-            </Link>
-          )}
+        <div className="flex items-center gap-2 text-xs">
+          <Link
+            href="/campaigns"
+            className="inline-flex items-center gap-1 text-[11px] font-mono uppercase tracking-wider text-zinc-400 hover:text-white"
+          >
+            All Campaigns & Leads <ArrowUpRight className="size-3" />
+          </Link>
         </div>
       </div>
 
       {/* Campaigns Table */}
-      {activeTab === "campaigns" && (
-        <div className="overflow-x-auto min-h-[140px]">
-          {campaigns.length === 0 ? (
-            <div className="py-12 px-6 text-center text-xs text-muted-foreground flex flex-col items-center justify-center gap-2.5">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Rocket className="size-5" />
-              </div>
-              <div className="space-y-0.5">
-                <p className="font-semibold text-foreground text-sm">No campaigns yet</p>
-                <p className="text-muted-foreground text-xs">Create your first cold outreach campaign to track delivery and reply performance.</p>
-              </div>
-              <Button size="sm" asChild className="h-8 text-xs font-semibold gap-1.5 mt-1 shadow-xs">
-                <Link href="/campaigns/new">
-                  <Rocket className="size-3.5" /> Create Campaign
-                </Link>
-              </Button>
+      <div className="overflow-x-auto min-h-[140px]">
+        {campaigns.length === 0 ? (
+          <div className="py-10 px-6 text-center text-xs text-zinc-500 flex flex-col items-center justify-center gap-2">
+            <div className="flex size-9 items-center justify-center rounded-none border border-zinc-800 bg-black text-white">
+              <Rocket className="size-4" />
             </div>
-          ) : (
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-border/50 bg-muted/10 text-muted-foreground font-medium">
-                  <th className="px-5 py-3">Campaign Name</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Leads Contacted</th>
-                  <th className="px-4 py-3 text-right">Replies</th>
-                  <th className="px-4 py-3 text-right">Emails Sent</th>
-                  <th className="px-4 py-3 text-right">Insight</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/40">
-                {campaigns.map((c) => {
-                  const sent = Number(c.sent || 0);
-                  const replied = Number(c.replied || 0);
-                  const total = Number(c.total || 0);
-                  const replyRate = sent > 0 ? ((replied / sent) * 100).toFixed(1) : "0.0";
-                  const isHighReply = Number(replyRate) >= 3.0;
+            <div className="space-y-0.5">
+              <p className="font-bold text-white uppercase tracking-wider text-xs">No active campaigns running</p>
+              <p className="text-zinc-500 text-[11px] font-sans">
+                Autonomous GTM runs will report real-time email delivery and pacing here.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <table className="w-full text-left text-xs font-mono">
+            <thead>
+              <tr className="border-b border-zinc-800 bg-black/60 text-zinc-400 uppercase tracking-widest text-[10px]">
+                <th className="px-4 py-2.5 font-bold">Campaign & Leads</th>
+                <th className="px-4 py-2.5 font-bold">Status</th>
+                <th className="px-4 py-2.5 font-bold">Pacing</th>
+                <th className="px-4 py-2.5 text-right font-bold">Dispatched</th>
+                <th className="px-4 py-2.5 text-right font-bold">Replies</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-900">
+              {campaigns.map((c) => {
+                const total = Number(c.total || 0);
+                const sent = Number(c.sent || 0);
+                const replied = Number(c.replied || 0);
+                const pct = total > 0 ? Math.min(100, Math.round((sent / total) * 100)) : 0;
 
-                  return (
-                    <tr key={c.id} className="hover:bg-muted/20 transition-colors">
-                      <td className="px-5 py-3.5 font-medium text-foreground">
+                return (
+                  <tr key={c.id} className="hover:bg-zinc-900/40 transition-colors">
+                    <td className="px-4 py-3">
+                      <div>
                         <Link
-                          href={c.status === "draft" ? `/campaigns/new?draft=${c.id}` : `/campaigns/${c.id}`}
-                          className="hover:text-primary transition-colors flex items-center gap-1.5"
+                          href={`/campaigns/${c.id}`}
+                          className="font-bold text-white uppercase tracking-wider hover:underline text-xs"
                         >
-                          <span>{c.name}</span>
-                          <ArrowUpRight className="size-3 opacity-0 group-hover:opacity-100 text-muted-foreground" />
+                          {c.name}
                         </Link>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
-                            c.status === "running" && "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
-                            c.status === "scheduled" && "bg-blue-500/10 text-blue-400 border border-blue-500/20",
-                            c.status === "paused" && "bg-amber-500/10 text-amber-400 border border-amber-500/20",
-                            c.status === "draft" && "bg-muted text-muted-foreground border border-border/60",
-                            c.status === "completed" && "bg-purple-500/10 text-purple-400 border border-purple-500/20",
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "size-1.5 rounded-full",
-                              c.status === "running" && "bg-emerald-400 animate-pulse",
-                              c.status === "scheduled" && "bg-blue-400",
-                              c.status === "paused" && "bg-amber-400",
-                              c.status === "draft" && "bg-muted-foreground",
-                              c.status === "completed" && "bg-purple-400",
-                            )}
-                          />
-                          {c.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3.5 text-right font-medium text-foreground tabular-nums">
-                        {sent.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3.5 text-right tabular-nums">
-                        <span className="font-semibold text-emerald-400">{replied}</span>{" "}
-                        <span className="text-[11px] text-muted-foreground">({replyRate}%)</span>
-                      </td>
-                      <td className="px-4 py-3.5 text-right text-muted-foreground tabular-nums">
-                        {total > 0 ? `${sent}/${total}` : sent.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3.5 text-right">
-                        {isHighReply ? (
-                          <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 bg-emerald-500/10 text-[10px] gap-1">
-                            <Flame className="size-3" /> High Reply Rate
-                          </Badge>
-                        ) : c.status === "running" ? (
-                          <span className="text-[11px] text-muted-foreground">Active delivery</span>
-                        ) : c.status === "draft" ? (
-                          <span className="text-[11px] text-muted-foreground">Draft setup</span>
-                        ) : (
-                          <span className="text-[11px] text-muted-foreground">—</span>
+                        <p className="text-[10px] text-zinc-500 mt-0.5">
+                          {total.toLocaleString()} System-Selected Leads
+                        </p>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-none px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest border",
+                          c.status === "running"
+                            ? "bg-zinc-900 text-white border-zinc-700"
+                            : "bg-black text-zinc-500 border-zinc-800"
                         )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
-
-      {/* Email Accounts Table */}
-      {activeTab === "senders" && (
-        <div className="overflow-x-auto min-h-[140px]">
-          {senders.length === 0 ? (
-            <div className="py-12 px-6 text-center text-xs text-muted-foreground flex flex-col items-center justify-center gap-2.5">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Mail className="size-5" />
-              </div>
-              <div className="space-y-0.5">
-                <p className="font-semibold text-foreground text-sm">No email accounts connected</p>
-                <p className="text-muted-foreground text-xs">Connect your first mailbox to start sending campaigns and tracking deliverability.</p>
-              </div>
-              <Button size="sm" asChild className="h-8 text-xs font-semibold gap-1.5 mt-1 shadow-xs">
-                <Link href="/senders/new">
-                  <Mail className="size-3.5" /> Connect Mailbox
-                </Link>
-              </Button>
-            </div>
-          ) : (
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-border/50 bg-muted/10 text-muted-foreground font-medium">
-                  <th className="px-5 py-3">Sender Inbox</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Health Score</th>
-                  <th className="px-4 py-3 text-right">Sent Today / Limit</th>
-                  <th className="px-4 py-3 text-right">Replies</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/40">
-                {senders.map((s) => {
-                  const sent = Number(s.usedToday || 0);
-                  const limit = Number(s.dailyLimit || 50);
-                  const replied = Number(s.repliedCount || 0);
-                  const pct = Math.min(100, Math.round((sent / limit) * 100));
-
-                  return (
-                    <tr key={s.id} className="hover:bg-muted/20 transition-colors">
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-2">
-                          <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
-                            <Mail className="size-3.5" />
-                          </div>
-                          <div>
-                            <p className="font-semibold text-foreground">{s.email}</p>
-                            <p className="text-[11px] text-muted-foreground">{s.senderName || "Default Sender"}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5">
+                      >
                         <span
                           className={cn(
-                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
-                            s.status === "active"
-                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                              : "bg-amber-500/10 text-amber-400 border border-amber-500/20",
+                            "size-1 rounded-none",
+                            c.status === "running" ? "bg-white animate-pulse" : "bg-zinc-600"
                           )}
-                        >
-                          <span
-                            className={cn(
-                              "size-1.5 rounded-full",
-                              s.status === "active" ? "bg-emerald-400 animate-pulse" : "bg-amber-400",
-                            )}
-                          />
-                          {s.status}
+                        />
+                        {c.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="w-28 space-y-1">
+                        <Progress value={pct} className="h-1 rounded-none bg-zinc-900 [&>div]:bg-white" />
+                        <div className="flex justify-between text-[9px] text-zinc-500 tabular-nums">
+                          <span>{pct}% Paced</span>
+                          <span>30/day</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-white font-bold">
+                      {sent.toLocaleString()} / {total.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      <span className="font-bold text-white">{replied}</span>
+                      {sent > 0 && (
+                        <span className="text-[10px] text-zinc-500 ml-1.5">
+                          ({((replied / sent) * 100).toFixed(1)}%)
                         </span>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
-                          <ShieldCheck className="size-3.5" />
-                          <span>{s.health || 100}% Clean</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5 text-right tabular-nums">
-                        <div className="inline-flex flex-col items-end">
-                          <span className="font-medium text-foreground">
-                            {sent} / {limit}
-                          </span>
-                          <div className="w-20 mt-1">
-                            <Progress value={pct} className="h-1" />
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5 text-right font-medium text-foreground tabular-nums">
-                        {replied}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }

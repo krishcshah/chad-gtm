@@ -33,15 +33,11 @@ import { useSidebar } from "./layout/sidebar-context";
 import type { WorkspaceItem } from "@/lib/workspaces";
 
 const nav = [
-  { href: "/dashboard", label: "Executive Hub", icon: LayoutDashboard },
-  { href: "/chad-gtm", label: "Autonomous GTM", icon: Sparkles, badge: "Core" },
-  { href: "/b2b-database", label: "Apollo Directory", icon: Database, badge: "329k" },
-  { href: "/campaigns", label: "Outbound Runs", icon: Rocket },
-  { href: "/unibox", label: "Live Replies", icon: Inbox, badge: "AI Sync" },
-  { href: "/senders", label: "Mailbox Pool", icon: Mail, badge: "3¢ Pool" },
-  { href: "/leads", label: "Prospects", icon: Users },
-  { href: "/templates", label: "Email Angles", icon: Layers },
-  { href: "/settings", label: "Intelligence & Settings", icon: Settings },
+  { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+  { href: "/campaigns", label: "Campaigns & Leads", icon: Rocket },
+  { href: "/unibox", label: "Unibox", icon: Inbox, badge: "Live" },
+  { href: "/chad-gtm", label: "Autonomous GTM", icon: Sparkles, badge: "AI" },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function AppSidebar({

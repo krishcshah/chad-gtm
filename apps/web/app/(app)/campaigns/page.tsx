@@ -1,97 +1,165 @@
 import Link from "next/link";
-import { Plus, Rocket } from "lucide-react";
+import { ArrowRight, Plus, Rocket, Sparkles, Target } from "lucide-react";
 import { requireWorkspace } from "@/lib/session";
 import { listCampaigns } from "@/lib/queries";
-import { Badge, Button, EmptyState, PageHeader, Progress, statusVariant } from "@smartreach/ui";
+import { Badge, Button, Progress, cn } from "@smartreach/ui";
 import { formatDate } from "@smartreach/shared";
 import { CampaignActions } from "./campaign-actions";
 
 export const dynamic = "force-dynamic";
+
+export const metadata = { title: "Campaigns & Target Leads · ChadGTM" };
 
 export default async function CampaignsPage() {
   const { user, workspace } = await requireWorkspace();
   const campaigns = await listCampaigns(user.id, workspace.id, workspace.isDefault);
 
   return (
-    <div className="page-stack">
-      <PageHeader
-        title="Campaigns"
-        description={`Outreach campaigns for ${workspace.name}. Senders rotate automatically.`}
-        actions={
-          <Button size="sm" asChild>
-            <Link href="/campaigns/new">
-              <Plus className="h-4 w-4" /> New campaign
-            </Link>
-          </Button>
-        }
-      />
+    <div className="page-stack space-y-6 max-w-7xl mx-auto font-mono">
+      {/* Top Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="rounded-none border border-zinc-800 bg-black px-2 py-0.5 text-[9px] uppercase tracking-widest text-zinc-400">
+              Autonomous Outbound
+            </span>
+            <span className="rounded-none border border-zinc-800 bg-black px-2 py-0.5 text-[9px] uppercase tracking-widest text-zinc-400">
+              System-Matched Leads
+            </span>
+          </div>
+          <h1 className="text-xl sm:text-2xl font-bold uppercase tracking-wider text-white">
+            Campaigns & Target Leads
+          </h1>
+          <p className="text-xs text-zinc-500 font-sans mt-0.5">
+            Active outbound campaigns and their system-selected verified B2B lead lists.
+          </p>
+        </div>
+
+        <Button
+          asChild
+          className="rounded-none bg-white hover:bg-zinc-200 text-black font-semibold text-xs font-mono uppercase tracking-wider border border-white gap-2 h-10 px-4 shrink-0"
+        >
+          <Link href="/chad-gtm">
+            <Sparkles className="size-3.5" /> Launch Autonomous GTM
+          </Link>
+        </Button>
+      </div>
 
       {campaigns.length === 0 ? (
-        <EmptyState
-          icon={Rocket}
-          title="No campaigns yet"
-          description="Pick a lead list, some senders, and a template — then hit Start."
-          action={
-            <Button size="sm" asChild>
-              <Link href="/campaigns/new">
-                <Plus className="h-4 w-4" /> Create campaign
-              </Link>
-            </Button>
-          }
-        />
+        <div className="rounded-none border border-dashed border-zinc-800 bg-black p-12 text-center space-y-4">
+          <div className="mx-auto flex size-12 items-center justify-center rounded-none border border-zinc-800 bg-zinc-950 text-white">
+            <Rocket className="size-6" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-white">
+              No Outbound Campaigns Yet
+            </h3>
+            <p className="text-xs text-zinc-500 font-sans max-w-md mx-auto leading-relaxed">
+              Enter your company website to let Gemini 3.8 Flash extract your ICP, match 500+ verified Apollo leads,
+              and start autonomous outreach in under 60 seconds.
+            </p>
+          </div>
+          <Button
+            asChild
+            size="lg"
+            className="rounded-none bg-white text-black font-semibold text-xs font-mono uppercase tracking-wider hover:bg-zinc-200 border border-white gap-2"
+          >
+            <Link href="/chad-gtm">
+              <Sparkles className="size-3.5" /> Launch First Autonomous Run
+            </Link>
+          </Button>
+        </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border">
-          <table className="w-full min-w-[640px] text-sm">
+        <div className="rounded-none border border-zinc-800 bg-zinc-950 overflow-x-auto shadow-none">
+          <table className="w-full min-w-[700px] text-left text-xs font-mono">
             <thead>
-              <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
-                <th className="px-4 py-3 font-medium">Campaign</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Progress</th>
-                <th className="px-4 py-3 font-medium text-right">Replies</th>
-                <th className="px-4 py-3 font-medium text-right">Failed</th>
-                <th className="px-4 py-3 font-medium text-right">Bounced</th>
-                <th className="px-4 py-3 font-medium">Created</th>
-                <th className="px-4 py-3" />
+              <tr className="border-b border-zinc-800 bg-black/60 text-zinc-400 uppercase tracking-widest text-[10px]">
+                <th className="px-4 py-3 font-bold">Campaign & Leads</th>
+                <th className="px-4 py-3 font-bold">Status</th>
+                <th className="px-4 py-3 font-bold">Delivery Progress</th>
+                <th className="px-4 py-3 text-right font-bold">Replies</th>
+                <th className="px-4 py-3 text-right font-bold">Failed</th>
+                <th className="px-4 py-3 font-bold">Created</th>
+                <th className="px-4 py-3 text-right font-bold">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-zinc-900">
               {campaigns.map((c) => {
-                const pct = c.total > 0 ? Math.round((c.sent / c.total) * 100) : 0;
+                const total = Number(c.total || 0);
+                const sent = Number(c.sent || 0);
+                const replied = Number(c.replied || 0);
+                const pct = total > 0 ? Math.min(100, Math.round((sent / total) * 100)) : 0;
+
                 return (
-                  <tr key={c.id} className="border-b last:border-0 hover:bg-accent/30 transition-colors">
-                    <td className="px-4 py-3">
+                  <tr key={c.id} className="hover:bg-zinc-900/40 transition-colors">
+                    <td className="px-4 py-3.5">
                       <Link
-                        href={c.status === "draft" ? `/campaigns/new?draft=${c.id}` : `/campaigns/${c.id}`}
-                        className="font-medium hover:underline"
+                        href={`/campaigns/${c.id}`}
+                        className="font-bold text-white uppercase tracking-wider hover:underline text-xs"
                       >
                         {c.name}
                       </Link>
-                      <p className="text-xs text-muted-foreground">
-                        {c.sent}/{c.total} sent
+                      <p className="text-[10px] text-zinc-500 mt-0.5">
+                        {total.toLocaleString()} System-Selected Leads
                       </p>
                     </td>
-                    <td className="px-4 py-3">
-                      <Badge variant={statusVariant(c.status)} dot={c.status === "running"}>
-                        {c.status === "draft" ? "Draft" : c.status}
-                      </Badge>
+
+                    <td className="px-4 py-3.5">
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-none px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest border",
+                          c.status === "running"
+                            ? "bg-zinc-900 text-white border-zinc-700"
+                            : "bg-black text-zinc-500 border-zinc-800"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "size-1 rounded-none",
+                            c.status === "running" ? "bg-white animate-pulse" : "bg-zinc-600"
+                          )}
+                        />
+                        {c.status}
+                      </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex w-32 items-center gap-2">
-                        <Progress value={pct} className="h-1.5" />
-                        <span className="text-xs text-muted-foreground tabular-nums">{pct}%</span>
+
+                    <td className="px-4 py-3.5">
+                      <div className="w-36 space-y-1">
+                        <Progress value={pct} className="h-1 rounded-none bg-zinc-900 [&>div]:bg-white" />
+                        <div className="flex justify-between text-[9px] text-zinc-500 tabular-nums">
+                          <span>{sent}/{total} sent</span>
+                          <span>{pct}%</span>
+                        </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums">{c.replied}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{c.failed}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{c.bounced}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{formatDate(c.createdAt)}</td>
-                    <td className="px-4 py-3 text-right">
+
+                    <td className="px-4 py-3.5 text-right tabular-nums">
+                      <span className="font-bold text-white">{replied}</span>
+                      {sent > 0 && (
+                        <span className="text-[10px] text-zinc-500 ml-1">
+                          ({((replied / sent) * 100).toFixed(1)}%)
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3.5 text-right tabular-nums text-zinc-500">
+                      {c.failed}
+                    </td>
+
+                    <td className="px-4 py-3.5 text-zinc-500 text-[11px]">
+                      {formatDate(c.createdAt)}
+                    </td>
+
+                    <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {c.status === "draft" ? (
-                          <Button variant="outline" size="sm" asChild>
-                            <Link href={`/campaigns/new?draft=${c.id}`}>Resume</Link>
-                          </Button>
-                        ) : null}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          asChild
+                          className="rounded-none border-zinc-800 bg-black text-white hover:bg-zinc-900 text-xs font-mono uppercase tracking-wider h-7 px-2"
+                        >
+                          <Link href={`/campaigns/${c.id}`}>View Leads</Link>
+                        </Button>
                         <CampaignActions id={c.id} status={c.status} />
                       </div>
                     </td>

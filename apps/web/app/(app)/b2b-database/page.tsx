@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Eye, ShieldCheck } from "lucide-react";
 import { requireWorkspace } from "@/lib/session";
 import { listLeadLists } from "@/lib/queries";
@@ -27,9 +28,11 @@ export default async function B2bDatabasePage({
   }>;
 }) {
   const { user, workspace } = await requireWorkspace();
-  const sp = searchParams ? await searchParams : {};
+  if (!isAdmin(user)) {
+    redirect("/chad-gtm");
+  }
 
-  const userIsAdmin = isAdmin(user);
+  const userIsAdmin = true;
 
   // In ChadGTM, all authenticated users have full access to the 329,563 Apollo Leads Directory
   const hasAccess = true;
