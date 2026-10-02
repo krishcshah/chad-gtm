@@ -1,9 +1,14 @@
 export const DEFAULT_ADMIN_EMAIL = "de.krish.shah@gmail.com";
 export const ADMIN_EMAIL = DEFAULT_ADMIN_EMAIL;
 
+export const DEFAULT_ADMIN_EMAILS = [
+  "de.krish.shah@gmail.com",
+  "krish@leadskingdom.co",
+];
+
 export function getAdminEmails(): string[] {
   const configured = [
-    DEFAULT_ADMIN_EMAIL,
+    ...DEFAULT_ADMIN_EMAILS,
     process.env.ADMIN_EMAIL,
     ...(process.env.ADMIN_EMAILS ? process.env.ADMIN_EMAILS.split(",") : []),
   ];
