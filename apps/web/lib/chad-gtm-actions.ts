@@ -593,28 +593,91 @@ export async function launchChadGtmCampaignAction(
       startedAt: nowIso(),
     });
 
-    // 4b. Create sequence step with dynamic AI generation matching calibrated voice preferences
-    const stepId = crypto.randomUUID();
+    const offers = (run.offers as any[]) || [];
+    const activeOffer = offers[selectedOfferIndex] || offers[0] || {
+      title: "Direct Value Offer",
+      angle: "Direct ROI",
+      valueProp: "Accelerate your team's workflow and output.",
+      cta: "Open to a brief 4-minute demo this Thursday?",
+    };
+
+    // 4b. Create 3-touch sequence: Step 1 (Opener), Step 2 (Follow-Up 1, +3d), Step 3 (Follow-Up 2, +4d)
+    // Step 1: Main Opener (Day 0)
+    const step1Id = crypto.randomUUID();
     await db.insert(schema.sequenceSteps).values({
-      id: stepId,
+      id: step1Id,
       campaignId,
       position: 1,
       delayDays: 0,
     });
 
-    const aiPrompt =
+    const aiPromptStep1 =
       calibratedProfile.customAiInstruction ||
       `Product/Company: ${companyName}. Value Offer: ${primarySample.bodyText}. Voice: Direct, technical peer-to-peer. Keep under 65 words. Zero fluff greetings.`;
 
     await db.insert(schema.sequenceStepVariants).values({
       id: crypto.randomUUID(),
-      stepId,
+      stepId: step1Id,
       label: "A",
       subject: finalSubject,
       bodyText: finalBodyText,
       bodyHtml: finalBodyHtml,
       aiGenerateOnTheFly: true,
-      aiPrompt,
+      aiPrompt: aiPromptStep1,
+    });
+
+    // Step 2: Follow-Up #1 (Day 3, +3 days delay) - Value & Social Proof Bump
+    const step2Id = crypto.randomUUID();
+    await db.insert(schema.sequenceSteps).values({
+      id: step2Id,
+      campaignId,
+      position: 2,
+      delayDays: 3,
+    });
+
+    const step2Subject = finalSubject.toLowerCase().startsWith("re:")
+      ? finalSubject
+      : `Re: ${finalSubject}`;
+    const step2BodyText = `Hi {{first_name}},\n\nWanted to quickly follow up on my previous note. Most {{industry}} leaders we speak with are looking to scale outbound pipeline without adding $400/mo in fragmented SaaS tools.\n\nDid you have 4 minutes this week to compare notes?\n\nBest,\n${user.name || "Alex"}`;
+    const step2BodyHtml = `<p>Hi {{first_name}},</p><p>Wanted to quickly follow up on my previous note. Most {{industry}} leaders we speak with are looking to scale outbound pipeline without adding $400/mo in fragmented SaaS tools.</p><p>Did you have 4 minutes this week to compare notes?</p><p>Best,<br/>${user.name || "Alex"}</p>`;
+    const aiPromptStep2 = `Write follow-up #1 (sent 3 days after initial message) for ${companyName}. Recipient is {{job_title}} at {{company}}. Reference previous note regarding ${activeOffer.valueProp}. Keep under 45 words. Soft, professional bump.`;
+
+    await db.insert(schema.sequenceStepVariants).values({
+      id: crypto.randomUUID(),
+      stepId: step2Id,
+      label: "A",
+      subject: step2Subject,
+      bodyText: step2BodyText,
+      bodyHtml: step2BodyHtml,
+      aiGenerateOnTheFly: true,
+      aiPrompt: aiPromptStep2,
+    });
+
+    // Step 3: Follow-Up #2 (Day 7, +4 days delay) - Clean Permission Breakup Hook
+    const step3Id = crypto.randomUUID();
+    await db.insert(schema.sequenceSteps).values({
+      id: step3Id,
+      campaignId,
+      position: 3,
+      delayDays: 4,
+    });
+
+    const step3Subject = finalSubject.toLowerCase().startsWith("re:")
+      ? finalSubject
+      : `Re: ${finalSubject}`;
+    const step3BodyText = `Hi {{first_name}},\n\nAssuming you're heads-down scaling {{company}} right now and outbound automation isn't top of mind.\n\nShould I close your file for now, or check back with you next quarter?\n\nBest,\n${user.name || "Alex"}`;
+    const step3BodyHtml = `<p>Hi {{first_name}},</p><p>Assuming you're heads-down scaling {{company}} right now and outbound automation isn't top of mind.</p><p>Should I close your file for now, or check back with you next quarter?</p><p>Best,<br/>${user.name || "Alex"}</p>`;
+    const aiPromptStep3 = `Write follow-up #2 (final breakup email, sent 7 days after initial outreach) for ${companyName}. Recipient is {{job_title}} at {{company}}. Polite, zero-pressure permission to close file or check back next quarter. Under 35 words.`;
+
+    await db.insert(schema.sequenceStepVariants).values({
+      id: crypto.randomUUID(),
+      stepId: step3Id,
+      label: "A",
+      subject: step3Subject,
+      bodyText: step3BodyText,
+      bodyHtml: step3BodyHtml,
+      aiGenerateOnTheFly: true,
+      aiPrompt: aiPromptStep3,
     });
 
     // 5. Bind Active System Pool Mailboxes to campaign_senders

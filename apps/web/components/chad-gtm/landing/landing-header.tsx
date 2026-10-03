@@ -19,22 +19,22 @@ export function LandingHeader({ isLoggedIn }: { isLoggedIn: boolean }) {
         {/* Desktop Navigation Links */}
         <nav className="hidden lg:flex items-center gap-6 text-xs font-mono uppercase tracking-wider text-zinc-400">
           <a href="#scanner" className="transition-colors hover:text-white">
-            Scanner
+            Sandbox
           </a>
-          <a href="#architecture" className="transition-colors hover:text-white">
-            Architecture
+          <a href="#sequence" className="transition-colors hover:text-white flex items-center gap-1.5">
+            3-Touch Cadence <span className="border border-emerald-500/40 bg-emerald-950/20 text-emerald-400 px-1 py-0.2 text-[9px] font-bold">New</span>
           </a>
           <a href="#leads" className="transition-colors hover:text-white">
             329k Leads
           </a>
-          <a href="#comparison" className="transition-colors hover:text-white">
-            Matrix
-          </a>
           <a href="#roi-calculator" className="transition-colors hover:text-white">
-            ROI Audit
+            ROI Calculator
+          </a>
+          <a href="#comparison" className="transition-colors hover:text-white">
+            Why ChadGTM
           </a>
           <a href="#pricing" className="transition-colors hover:text-white flex items-center gap-1.5">
-            Pricing <span className="text-white font-bold border border-zinc-700 bg-zinc-900 px-1 py-0.2 rounded-none text-[10px]">$0/mo</span>
+            Pricing <span className="text-white font-bold border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-[10px]">$0/mo + 3¢</span>
           </a>
           <a href="#faq" className="transition-colors hover:text-white">
             FAQ
