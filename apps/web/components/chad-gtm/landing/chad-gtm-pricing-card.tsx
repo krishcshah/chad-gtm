@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -8,19 +7,10 @@ import {
   Rocket,
   ShieldCheck,
   Sparkles,
-  TrendingUp,
 } from "lucide-react";
-import { Badge, Button, cn } from "@smartreach/ui";
+import { Button } from "@smartreach/ui";
 
 export function ChadGtmPricingCard({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
-  const [emailVolume, setEmailVolume] = useState<number>(2000);
-
-  // Dynamic cost calculation
-  const chadGtmManagedCost = Math.round(emailVolume * 0.03); // 3 cents per email
-  const traditionalCost = Math.round(99 + 97 + 36); // Apollo ($99) + Instantly ($97) + 5 inboxes ($36) = $232 base
-  const monthlySavings = Math.max(0, traditionalCost - chadGtmManagedCost);
-  const annualSavings = monthlySavings * 12;
-
   return (
     <section id="pricing" className="relative py-20 sm:py-28 overflow-hidden border-t border-zinc-800 bg-black">
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -187,103 +177,6 @@ export function ChadGtmPricingCard({ isLoggedIn = false }: { isLoggedIn?: boolea
                 Deploy Free GTM Engine <Rocket className="size-4 ml-1.5" />
               </Link>
             </Button>
-          </div>
-        </div>
-
-        {/* Interactive Volume & Cost Savings Calculator */}
-        <div className="mt-12 max-w-4xl mx-auto rounded-none border border-zinc-800 bg-zinc-950 p-5 sm:p-8 font-mono">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-5 mb-6">
-            <div>
-              <div className="inline-flex items-center gap-2 text-[10px] uppercase tracking-widest text-zinc-400 mb-1">
-                <TrendingUp className="size-3.5 text-white" />
-                Cost Savings Calculator
-              </div>
-              <h3 className="text-lg sm:text-xl font-bold text-white uppercase tracking-wider">
-                Volume Pacing & Unit Economics
-              </h3>
-            </div>
-            <div className="rounded-none border border-zinc-800 bg-black px-3.5 py-1.5 text-right">
-              <span className="text-[9px] uppercase tracking-widest text-zinc-500 block">
-                Estimated Annual Savings
-              </span>
-              <div className="text-lg sm:text-xl font-bold text-white">
-                ${annualSavings.toLocaleString()} / YEAR
-              </div>
-            </div>
-          </div>
-
-          {/* Volume Slider */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-zinc-400 uppercase tracking-wider">
-                Monthly Target Volume:
-              </span>
-              <span className="text-xs font-bold text-white border border-zinc-800 bg-black px-2.5 py-1">
-                {emailVolume.toLocaleString()} EMAILS / MONTH
-              </span>
-            </div>
-
-            <input
-              type="range"
-              min={500}
-              max={15000}
-              step={500}
-              value={emailVolume}
-              onChange={(e) => setEmailVolume(Number(e.target.value))}
-              className="w-full h-1.5 bg-zinc-800 rounded-none appearance-none cursor-pointer accent-white"
-            />
-
-            <div className="flex justify-between text-[10px] text-zinc-500">
-              <span>500/MO</span>
-              <span>5,000/MO</span>
-              <span>10,000/MO</span>
-              <span>15,000/MO</span>
-            </div>
-          </div>
-
-          {/* Side by Side Cost Breakdown */}
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-3">
-            {/* ChadGTM Cost */}
-            <div className="rounded-none border border-zinc-700 bg-black p-4 space-y-1.5">
-              <div className="flex items-center justify-between text-[10px] uppercase tracking-wider">
-                <span className="text-white font-semibold">
-                  ChadGTM Pool
-                </span>
-                <span className="text-zinc-400 border border-zinc-800 bg-zinc-950 px-1.5 py-0.5">
-                  3¢ / email
-                </span>
-              </div>
-              <div className="flex items-baseline gap-1.5 pt-1">
-                <span className="text-3xl font-bold text-white">
-                  ${chadGtmManagedCost}
-                </span>
-                <span className="text-[10px] text-zinc-500 uppercase">/ month</span>
-              </div>
-              <p className="text-[11px] text-zinc-400 font-sans leading-relaxed">
-                Includes software ($0), 100M+ lead directory ($0), and {emailVolume.toLocaleString()} emails dispatched via admin-supplied pool.
-              </p>
-            </div>
-
-            {/* Traditional Stack Cost */}
-            <div className="rounded-none border border-zinc-800 bg-black p-4 space-y-1.5">
-              <div className="flex items-center justify-between text-[10px] uppercase tracking-wider">
-                <span className="text-zinc-500">
-                  Legacy Software Stack
-                </span>
-                <span className="text-zinc-500">
-                  Multiple Tools
-                </span>
-              </div>
-              <div className="flex items-baseline gap-1.5 pt-1">
-                <span className="text-3xl font-bold text-zinc-600 line-through">
-                  ${traditionalCost}
-                </span>
-                <span className="text-[10px] text-zinc-600 uppercase">/ month</span>
-              </div>
-              <p className="text-[11px] text-zinc-500 font-sans leading-relaxed">
-                Apollo leads ($99/mo) + Instantly subscription ($97/mo) + 5 Google inboxes ($36/mo) + separate warmup tools.
-              </p>
-            </div>
           </div>
         </div>
       </div>
