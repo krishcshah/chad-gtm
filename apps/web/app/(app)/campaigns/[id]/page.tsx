@@ -73,7 +73,7 @@ export default async function CampaignDetailPage({
               status: s.status,
             }))}
           />
-          <CampaignActions id={c.id} status={c.status} />
+          <CampaignActions id={c.id} status={c.status} showDeleteDirect />
         </div>
       </div>
 

@@ -18,6 +18,14 @@ export const metadata: Metadata = {
   title: { default: "ChadGTM · Autonomous Go-To-Market", template: "%s · ChadGTM" },
   description:
     "Autonomous Go-To-Market & Cold Outreach Engine. Turn any website URL into booked pipeline in 60 seconds with Gemini 3.8 Flash, 329k Apollo leads, and managed pre-warmed mailboxes.",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.png", type: "image/png" },
+      { url: "/favicon.ico" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

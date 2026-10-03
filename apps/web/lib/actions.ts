@@ -54,6 +54,7 @@ import {
 } from "./sequences";
 import { getDb } from "./db";
 import { requireUser } from "./session";
+import { isAdmin } from "./admin";
 import type { LeadProfile } from "./ai";
 import { ACTIVE_WORKSPACE_COOKIE, getActiveWorkspace, type WorkspaceItem } from "./workspaces";
 import { formatZodActionError } from "./zod-action-error";
@@ -82,6 +83,7 @@ const {
   campaigns,
   campaignSenders,
   campaignLeads,
+  emailJobs,
 } = schema;
 
 export type ActionResult<T = undefined> =
@@ -964,10 +966,15 @@ export async function campaignAction(
   const user = await requireUser();
   const db = getDb();
   try {
+    const userIsAdmin = isAdmin(user);
     const [c] = await db
       .select()
       .from(campaigns)
-      .where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, user.id)));
+      .where(
+        userIsAdmin
+          ? eq(campaigns.id, campaignId)
+          : and(eq(campaigns.id, campaignId), eq(campaigns.userId, user.id))
+      );
     if (!c) return { ok: false, error: "Campaign not found" };
 
     switch (action) {
@@ -995,7 +1002,19 @@ export async function campaignAction(
           .where(eq(campaigns.id, campaignId));
         break;
       case "delete":
-        await db.update(campaigns).set({ deletedAt: nowIso() }).where(eq(campaigns.id, campaignId));
+        await db
+          .update(campaigns)
+          .set({ deletedAt: nowIso(), status: "archived", updatedAt: nowIso() })
+          .where(eq(campaigns.id, campaignId));
+        await db
+          .update(emailJobs)
+          .set({ status: "cancelled" })
+          .where(
+            and(
+              eq(emailJobs.campaignId, campaignId),
+              inArray(emailJobs.status, ["pending", "retry", "processing"])
+            )
+          );
         break;
       case "duplicate": {
         const [copy] = await db

@@ -173,18 +173,22 @@ export async function getWorkspaceAiOptions(userId: string): Promise<AiEngineOpt
     const setting = rows[0];
     let apiKey: string | null = null;
     if (setting?.aiApiKeyEnc) {
-      apiKey = decryptSecret(setting.aiApiKeyEnc);
+      try {
+        apiKey = decryptSecret(setting.aiApiKeyEnc);
+      } catch {}
     }
 
+    const systemKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || null;
+
     return {
-      apiKey,
-      provider: setting?.aiProvider || "google",
-      model: setting?.aiModel || "gemini-3.8-flash",
+      apiKey: apiKey || systemKey,
+      provider: "google" as const,
+      model: "gemini-3.8-flash",
     };
   } catch {
     return {
-      apiKey: null,
-      provider: "google",
+      apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || null,
+      provider: "google" as const,
       model: "gemini-3.8-flash",
     };
   }

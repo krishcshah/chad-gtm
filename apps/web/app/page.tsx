@@ -47,7 +47,7 @@ export default async function LandingPage() {
             {/* Top Engineering Badges */}
             <div className="inline-flex flex-wrap items-center justify-center gap-2 mb-6 font-mono">
               <div className="inline-flex items-center gap-2 rounded-none border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-white uppercase tracking-wider">
-                <span className="flex size-1.5 rounded-none bg-white animate-pulse" />
+                <img src="/chad-white-border.png" alt="Chad" className="size-4 object-contain" />
                 <span>ChadGTM 2.0 // Powered by Gemini 3.8 Flash</span>
               </div>
               <div className="inline-flex items-center gap-1.5 rounded-none border border-zinc-800 bg-zinc-950 px-3 py-1 text-xs text-zinc-400 uppercase tracking-wider">
