@@ -1,0 +1,3 @@
+sender name,email,smtp host,smtp port,smtp username,smtp password,smtp security,imap host,imap port,imap username,imap password,daily limit,hourly limit,timezone,signature
+Elena Rostova,elena@outboundscale.io,smtp.gmail.com,465,elena@outboundscale.io,app_password_here,ssl,imap.gmail.com,993,elena@outboundscale.io,app_password_here,30,10,UTC,"--\nElena Rostova\nHead of Outbound Growth"
+Marcus Vance,marcus@outboundscale.io,smtp.office365.com,587,marcus@outboundscale.io,app_password_here,starttls,outlook.office365.com,993,marcus@outboundscale.io,app_password_here,30,10,UTC,"--\nMarcus Vance\nEnterprise Outbound"

@@ -121,60 +121,60 @@ export function AdminDirectoryView({
       {/* Live Directory Telemetry */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Directory Leads */}
-        <div className="rounded-2xl border border-border/70 bg-card p-4 space-y-1 shadow-sm">
-          <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <Database className="size-3.5 text-primary" /> Apollo B2B Directory
+        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 space-y-1">
+          <span className="text-[10px] font-mono uppercase font-bold tracking-wider text-zinc-400 flex items-center gap-1.5">
+            <Database className="size-3.5 text-zinc-400" /> Apollo B2B Directory
           </span>
-          <div className="text-2xl font-bold text-foreground">
+          <div className="text-2xl font-mono font-bold text-white">
             {stats.totalLeads.toLocaleString()}
           </div>
-          <p className="text-[11px] text-muted-foreground">Indexed B2B prospect records</p>
+          <p className="text-[11px] font-mono text-zinc-500">Indexed B2B prospect records</p>
         </div>
 
         {/* Distinct Industries */}
-        <div className="rounded-2xl border border-border/70 bg-card p-4 space-y-1 shadow-sm">
-          <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <Building className="size-3.5 text-emerald-400" /> Distinct Industries
+        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 space-y-1">
+          <span className="text-[10px] font-mono uppercase font-bold tracking-wider text-zinc-400 flex items-center gap-1.5">
+            <Building className="size-3.5 text-zinc-400" /> Distinct Industries
           </span>
-          <div className="text-2xl font-bold text-foreground">
+          <div className="text-2xl font-mono font-bold text-white">
             {stats.distinctIndustries.toLocaleString()}
           </div>
-          <p className="text-[11px] text-muted-foreground">Available for ChadGTM ICP matching</p>
+          <p className="text-[11px] font-mono text-zinc-500">Available for ChadGTM ICP matching</p>
         </div>
 
         {/* Verified Email Pct */}
-        <div className="rounded-2xl border border-border/70 bg-card p-4 space-y-1 shadow-sm">
-          <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <Mail className="size-3.5 text-primary" /> Verified Deliverability
+        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 space-y-1">
+          <span className="text-[10px] font-mono uppercase font-bold tracking-wider text-zinc-400 flex items-center gap-1.5">
+            <Mail className="size-3.5 text-zinc-400" /> Verified Deliverability
           </span>
-          <div className="text-2xl font-bold text-foreground">
+          <div className="text-2xl font-mono font-bold text-white">
             {stats.verifiedEmailPct}%
           </div>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-[11px] font-mono text-zinc-500">
             {stats.verifiedEmailCount.toLocaleString()} direct corporate emails
           </p>
         </div>
 
         {/* Storage Size */}
-        <div className="rounded-2xl border border-border/70 bg-card p-4 space-y-1 shadow-sm">
-          <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <HardDrive className="size-3.5 text-amber-400" /> Database File Size
+        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 space-y-1">
+          <span className="text-[10px] font-mono uppercase font-bold tracking-wider text-zinc-400 flex items-center gap-1.5">
+            <HardDrive className="size-3.5 text-zinc-400" /> Database File Size
           </span>
-          <div className="text-2xl font-bold text-foreground">
+          <div className="text-2xl font-mono font-bold text-white">
             {formatFileSize(stats.fileSizeBytes)}
           </div>
-          <p className="text-[11px] text-muted-foreground">SQLite WAL high-speed store</p>
+          <p className="text-[11px] font-mono text-zinc-500">SQLite WAL high-speed store</p>
         </div>
       </div>
 
       {/* Drag & Drop Bulk CSV Upload Zone */}
-      <div className="rounded-2xl border border-border/70 bg-card p-6 shadow-sm space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border/40 pb-4">
+      <div className="rounded-none border border-zinc-800 bg-zinc-950 p-6 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-4">
           <div>
-            <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-              <Upload className="size-4 text-primary" /> Ingest B2B Leads in Bulk (10k–100k+ Records)
+            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-white flex items-center gap-2">
+              <Upload className="size-4 text-zinc-400" /> Bulk Prospect Ingestion (10k–100k+ Records)
             </h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-zinc-400 mt-0.5">
               Supports exports from Apollo, ZoomInfo, Clay, or standard CSV format. Automatically deduplicates by email.
             </p>
           </div>
@@ -184,7 +184,7 @@ export function AdminDirectoryView({
             variant="outline"
             size="sm"
             onClick={handleDownloadTemplate}
-            className="text-xs font-semibold"
+            className="text-xs font-mono uppercase tracking-wider rounded-none border-zinc-800 bg-black text-zinc-300 hover:text-white hover:bg-zinc-900"
           >
             <Download className="size-3.5 mr-1.5" /> Download Standard Template
           </Button>
@@ -198,10 +198,10 @@ export function AdminDirectoryView({
           }}
           onDragLeave={() => setDragOver(false)}
           onDrop={onDrop}
-          className={`rounded-2xl border-2 border-dashed p-8 text-center transition-all ${
+          className={`rounded-none border-2 border-dashed p-8 text-center transition-all ${
             dragOver
-              ? "border-primary bg-primary/10 scale-[1.01]"
-              : "border-border/80 hover:border-primary/50 bg-muted/20"
+              ? "border-white bg-zinc-900"
+              : "border-zinc-800 hover:border-zinc-700 bg-black"
           }`}
         >
           <input
@@ -215,18 +215,18 @@ export function AdminDirectoryView({
             className="hidden"
           />
 
-          <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-3">
+          <div className="mx-auto flex size-12 items-center justify-center rounded-none border border-zinc-800 bg-zinc-900 text-zinc-300 mb-3">
             {isUploading ? (
-              <Loader2 className="size-6 animate-spin" />
+              <Loader2 className="size-6 animate-spin text-white" />
             ) : (
               <FileSpreadsheet className="size-6" />
             )}
           </div>
 
-          <h4 className="text-sm font-bold text-foreground">
+          <h4 className="text-sm font-mono font-bold text-white uppercase tracking-wider">
             {isUploading ? "Ingesting records into SQLite..." : "Drag & drop leads CSV here, or browse"}
           </h4>
-          <p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
+          <p className="text-xs text-zinc-400 font-mono max-w-sm mx-auto mt-1 mb-4">
             Fast batch insertion with zero UI lockup. Automatically cleans headers and refreshes facet cache.
           </p>
 
@@ -234,7 +234,7 @@ export function AdminDirectoryView({
             type="button"
             disabled={isUploading}
             onClick={() => fileInputRef.current?.click()}
-            className="text-xs font-semibold bg-primary text-primary-foreground"
+            className="text-xs font-mono uppercase tracking-wider font-bold rounded-none bg-white text-black hover:bg-zinc-200"
           >
             {isUploading ? (
               <>
@@ -251,31 +251,31 @@ export function AdminDirectoryView({
 
       {/* Ingestion Summary Modal / Box */}
       {ingestionSummary && (
-        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5 shadow-lg space-y-3">
+        <div className="rounded-none border border-emerald-500/30 bg-emerald-950/20 p-5 space-y-3 font-mono">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+            <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-wider">
               <CheckCircle2 className="size-4" /> Ingestion Completed Successfully
             </div>
             <button
               type="button"
               onClick={() => setIngestionSummary(null)}
-              className="text-muted-foreground hover:text-foreground"
+              className="text-zinc-500 hover:text-white"
             >
               <X className="size-4" />
             </button>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-            <div className="rounded-xl bg-card/60 p-3 border border-border/40">
-              <span className="text-[10px] text-muted-foreground uppercase font-bold block">
+            <div className="rounded-none bg-black p-3 border border-zinc-800">
+              <span className="text-[10px] text-zinc-500 uppercase font-bold block">
                 Total Parsed
               </span>
-              <span className="text-base font-bold text-foreground">
+              <span className="text-base font-bold text-white">
                 {ingestionSummary.totalParsed.toLocaleString()}
               </span>
             </div>
 
-            <div className="rounded-xl bg-card/60 p-3 border border-border/40">
+            <div className="rounded-none bg-black p-3 border border-zinc-800">
               <span className="text-[10px] text-emerald-400 uppercase font-bold block">
                 Inserted
               </span>
@@ -284,7 +284,7 @@ export function AdminDirectoryView({
               </span>
             </div>
 
-            <div className="rounded-xl bg-card/60 p-3 border border-border/40">
+            <div className="rounded-none bg-black p-3 border border-zinc-800">
               <span className="text-[10px] text-amber-400 uppercase font-bold block">
                 Duplicates Skipped
               </span>
@@ -293,7 +293,7 @@ export function AdminDirectoryView({
               </span>
             </div>
 
-            <div className="rounded-xl bg-card/60 p-3 border border-border/40">
+            <div className="rounded-none bg-black p-3 border border-zinc-800">
               <span className="text-[10px] text-rose-400 uppercase font-bold block">
                 Invalid (No Email)
               </span>

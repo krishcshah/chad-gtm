@@ -4,11 +4,11 @@ import { useState, useEffect } from "react";
 import {
   Ban,
   BarChart3,
-  Bug,
   Database,
   Inbox,
   Layers,
   LayoutDashboard,
+  LifeBuoy,
   LogOut,
   Mail,
   Menu,
@@ -64,9 +64,8 @@ export function AppSidebar({
 
   const navItems = [
     ...nav,
-    userIsAdmin
-      ? { href: "/admin", label: "Admin", icon: ShieldCheck, badge: "Root" }
-      : { href: "/bug-report", label: "Bug Report", icon: Bug },
+    { href: "/support", label: "Support", icon: LifeBuoy },
+    ...(userIsAdmin ? [{ href: "/admin", label: "Admin", icon: ShieldCheck, badge: "Root" }] : []),
   ];
 
   return (

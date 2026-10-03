@@ -658,10 +658,10 @@ export const emailTrackingEvents = pgTable(
   ],
 );
 
-/* ─── Bug Reports ──────────────────────────────────────────────────────── */
+/* ─── Support Tickets & Threads ────────────────────────────────────────── */
 
-export const bugReports = pgTable(
-  "bug_reports",
+export const supportTickets = pgTable(
+  "support_tickets",
   {
     id: id(),
     userId: text("user_id")
@@ -670,21 +670,54 @@ export const bugReports = pgTable(
     userEmail: text("user_email").notNull(),
     userName: text("user_name"),
     workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
+    category: text("category", {
+      enum: ["bug_report", "feature_request", "suggestion", "contact", "miscellaneous"],
+    })
+      .notNull()
+      .default("bug_report"),
     heading: text("heading").notNull(),
     description: text("description").notNull(),
     url: text("url"),
-    status: text("status", { enum: ["open", "investigating", "resolved", "closed"] })
+    status: text("status", { enum: ["open", "in_progress", "resolved", "closed"] })
       .notNull()
       .default("open"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
-    index("bug_reports_user_idx").on(t.userId),
-    index("bug_reports_created_idx").on(t.createdAt),
-    index("bug_reports_status_idx").on(t.status),
+    index("support_tickets_user_idx").on(t.userId),
+    index("support_tickets_created_idx").on(t.createdAt),
+    index("support_tickets_status_idx").on(t.status),
+    index("support_tickets_category_idx").on(t.category),
   ],
 );
+
+export const supportTicketMessages = pgTable(
+  "support_ticket_messages",
+  {
+    id: id(),
+    ticketId: text("ticket_id")
+      .notNull()
+      .references(() => supportTickets.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    userName: text("user_name"),
+    userEmail: text("user_email").notNull(),
+    senderRole: text("sender_role", { enum: ["user", "admin"] })
+      .notNull()
+      .default("user"),
+    message: text("message").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("support_messages_ticket_idx").on(t.ticketId),
+    index("support_messages_created_idx").on(t.createdAt),
+  ],
+);
+
+/* Backward compatibility alias */
+export const bugReports = supportTickets;
 
 /* ─── Data Removal Requests (GDPR Right to Erasure / Remove My Info) ──── */
 

@@ -49,7 +49,7 @@ export function AdminBugReportsView({ initialReports }: { initialReports: BugRep
   // KPI stats
   const totalCount = reports.length;
   const openCount = reports.filter((r) => r.status === "open").length;
-  const investigatingCount = reports.filter((r) => r.status === "investigating").length;
+  const investigatingCount = reports.filter((r) => r.status === "in_progress").length;
   const resolvedCount = reports.filter((r) => r.status === "resolved").length;
 
   // Handle status update
@@ -169,7 +169,7 @@ export function AdminBugReportsView({ initialReports }: { initialReports: BugRep
             <SelectContent align="end">
               <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="open">Open</SelectItem>
-              <SelectItem value="investigating">Investigating</SelectItem>
+              <SelectItem value="in_progress">Ongoing</SelectItem>
               <SelectItem value="resolved">Resolved</SelectItem>
               <SelectItem value="closed">Closed</SelectItem>
             </SelectContent>
@@ -255,7 +255,7 @@ export function AdminBugReportsView({ initialReports }: { initialReports: BugRep
                         className={`h-7 w-[125px] text-xs font-semibold rounded-lg px-2.5 border transition-all ${
                           report.status === "open"
                             ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
-                            : report.status === "investigating"
+                            : report.status === "in_progress"
                             ? "bg-sky-500/15 text-sky-400 border-sky-500/30"
                             : report.status === "resolved"
                             ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
@@ -266,7 +266,7 @@ export function AdminBugReportsView({ initialReports }: { initialReports: BugRep
                       </SelectTrigger>
                       <SelectContent align="end">
                         <SelectItem value="open">Open</SelectItem>
-                        <SelectItem value="investigating">Investigating</SelectItem>
+                        <SelectItem value="in_progress">Ongoing</SelectItem>
                         <SelectItem value="resolved">Resolved</SelectItem>
                         <SelectItem value="closed">Closed</SelectItem>
                       </SelectContent>

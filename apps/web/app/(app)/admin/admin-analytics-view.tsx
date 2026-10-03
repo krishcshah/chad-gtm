@@ -180,71 +180,70 @@ export function AdminAnalyticsView({
       {/* 1. Summary KPI Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Users */}
-        <div className="rounded-2xl border border-border/70 bg-card p-5 space-y-2 shadow-sm">
-          <div className="flex items-center justify-between text-muted-foreground text-xs">
-            <span className="font-semibold uppercase tracking-wider">Registered Users</span>
-            <div className="p-2 rounded-xl bg-primary/10 text-primary">
-              <Users className="size-4" />
+        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 space-y-2">
+          <div className="flex items-center justify-between text-zinc-400 text-xs">
+            <span className="font-mono uppercase tracking-wider text-[11px]">Registered Users</span>
+            <div className="p-1.5 rounded-none border border-zinc-800 bg-zinc-900 text-zinc-300">
+              <Users className="size-3.5" />
             </div>
           </div>
-          <div className="text-3xl font-extrabold tracking-tight text-foreground">
+          <div className="text-2xl font-mono font-bold tracking-tight text-white">
             {kpis.totalUsers}
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <TrendingUp className="size-3 text-emerald-400" />
+          <div className="flex items-center gap-1.5 text-xs text-zinc-400 font-mono">
             <span className="text-emerald-400 font-semibold">+{kpis.newUsers7d} new</span>
-            <span>in last 7 days</span>
+            <span className="text-zinc-500">last 7 days</span>
           </div>
         </div>
 
         {/* Total Page Views */}
-        <div className="rounded-2xl border border-border/70 bg-card p-5 space-y-2 shadow-sm">
-          <div className="flex items-center justify-between text-muted-foreground text-xs">
-            <span className="font-semibold uppercase tracking-wider">Total Page Views</span>
-            <div className="p-2 rounded-xl bg-sky-500/10 text-sky-400">
-              <Eye className="size-4" />
+        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 space-y-2">
+          <div className="flex items-center justify-between text-zinc-400 text-xs">
+            <span className="font-mono uppercase tracking-wider text-[11px]">Total Page Views</span>
+            <div className="p-1.5 rounded-none border border-zinc-800 bg-zinc-900 text-zinc-300">
+              <Eye className="size-3.5" />
             </div>
           </div>
-          <div className="text-3xl font-extrabold tracking-tight text-foreground">
+          <div className="text-2xl font-mono font-bold tracking-tight text-white">
             {kpis.totalPagesVisited.toLocaleString()}
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="text-sky-400 font-semibold">{kpis.pageViews24h} views</span>
-            <span>last 24h · avg {kpis.avgPagesPerUser} / user</span>
+          <div className="flex items-center gap-1.5 text-xs text-zinc-400 font-mono">
+            <span className="text-zinc-200">{kpis.pageViews24h} views 24h</span>
+            <span className="text-zinc-500">· avg {kpis.avgPagesPerUser}/user</span>
           </div>
         </div>
 
         {/* Mailbox Infrastructure */}
-        <div className="rounded-2xl border border-border/70 bg-card p-5 space-y-2 shadow-sm">
-          <div className="flex items-center justify-between text-muted-foreground text-xs">
-            <span className="font-semibold uppercase tracking-wider">Mailbox Accounts</span>
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
-              <Mail className="size-4" />
+        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 space-y-2">
+          <div className="flex items-center justify-between text-zinc-400 text-xs">
+            <span className="font-mono uppercase tracking-wider text-[11px]">Mailbox Infrastructure</span>
+            <div className="p-1.5 rounded-none border border-zinc-800 bg-zinc-900 text-zinc-300">
+              <Mail className="size-3.5" />
             </div>
           </div>
-          <div className="text-3xl font-extrabold tracking-tight text-foreground">
+          <div className="text-2xl font-mono font-bold tracking-tight text-white">
             {kpis.totalMailboxes}
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-xs text-zinc-400 font-mono">
             <span className="text-emerald-400 font-semibold">{kpis.activeMailboxes} active</span>
-            <span>· {kpis.failingMailboxes} degraded</span>
+            <span className="text-zinc-500">· {kpis.failingMailboxes} degraded</span>
           </div>
         </div>
 
         {/* 7-Day Active Users */}
-        <div className="rounded-2xl border border-border/70 bg-card p-5 space-y-2 shadow-sm">
-          <div className="flex items-center justify-between text-muted-foreground text-xs">
-            <span className="font-semibold uppercase tracking-wider">Active Engagement</span>
-            <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400">
-              <Activity className="size-4" />
+        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 space-y-2">
+          <div className="flex items-center justify-between text-zinc-400 text-xs">
+            <span className="font-mono uppercase tracking-wider text-[11px]">Active Engagement</span>
+            <div className="p-1.5 rounded-none border border-zinc-800 bg-zinc-900 text-zinc-300">
+              <Activity className="size-3.5" />
             </div>
           </div>
-          <div className="text-3xl font-extrabold tracking-tight text-foreground">
+          <div className="text-2xl font-mono font-bold tracking-tight text-white">
             {kpis.activeUsers7d}
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="text-purple-400 font-semibold">{kpis.activeUsersPercentage}%</span>
-            <span>of userbase active this week</span>
+          <div className="flex items-center gap-1.5 text-xs text-zinc-400 font-mono">
+            <span className="text-zinc-200 font-semibold">{kpis.activeUsersPercentage}%</span>
+            <span className="text-zinc-500">active this week</span>
           </div>
         </div>
       </div>
@@ -252,16 +251,16 @@ export function AdminAnalyticsView({
       {/* 2. Platform Traffic Distribution & Live Activity Stream */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top Visited Routes */}
-        <div className="rounded-2xl border border-border/70 bg-card p-5 space-y-4 shadow-sm">
-          <div className="flex items-center justify-between border-b border-border/50 pb-3">
+        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
             <div className="space-y-0.5">
-              <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
-                <Layers className="size-4 text-primary" /> Most Visited Platform Routes
+              <h3 className="font-mono font-bold text-xs uppercase tracking-wider text-white flex items-center gap-2">
+                <Layers className="size-3.5 text-zinc-400" /> Platform Traffic Surfaces
               </h3>
-              <p className="text-xs text-muted-foreground">Traffic share across key product sections</p>
+              <p className="text-xs text-zinc-400">Traffic share across key product routes</p>
             </div>
-            <span className="text-[11px] font-mono text-muted-foreground bg-muted/60 px-2 py-0.5 rounded">
-              {topRoutes.length} key surfaces
+            <span className="text-[10px] font-mono text-zinc-400 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded-none">
+              {topRoutes.length} surfaces
             </span>
           </div>
 
@@ -269,20 +268,20 @@ export function AdminAnalyticsView({
             {topRoutes.map((route) => (
               <div key={route.path} className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2 font-mono font-medium text-foreground">
-                    <span className="text-primary">{route.path}</span>
-                    <span className="text-[11px] text-muted-foreground font-sans truncate max-w-[180px]">
+                  <div className="flex items-center gap-2 font-mono text-zinc-200">
+                    <span className="text-white font-medium">{route.path}</span>
+                    <span className="text-[11px] text-zinc-500 truncate max-w-[180px]">
                       {route.title}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="font-semibold text-foreground">{route.count}</span>
-                    <span className="text-muted-foreground text-[11px]">({route.percentage}%)</span>
+                  <div className="flex items-center gap-2 shrink-0 font-mono text-xs">
+                    <span className="font-semibold text-white">{route.count}</span>
+                    <span className="text-zinc-500 text-[10px]">({route.percentage}%)</span>
                   </div>
                 </div>
-                <div className="h-1.5 w-full bg-muted/60 rounded-full overflow-hidden">
+                <div className="h-1.5 w-full bg-zinc-900 rounded-none overflow-hidden border border-zinc-800/80">
                   <div
-                    className="h-full rounded-full bg-primary/80 transition-all duration-500"
+                    className="h-full rounded-none bg-white transition-all duration-500"
                     style={{ width: `${Math.max(4, route.percentage)}%` }}
                   />
                 </div>
@@ -292,16 +291,16 @@ export function AdminAnalyticsView({
         </div>
 
         {/* Live Activity Stream */}
-        <div className="rounded-2xl border border-border/70 bg-card p-5 space-y-4 shadow-sm">
-          <div className="flex items-center justify-between border-b border-border/50 pb-3">
+        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
             <div className="space-y-0.5">
-              <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
-                <Clock className="size-4 text-emerald-400" /> Live User Activity Stream
+              <h3 className="font-mono font-bold text-xs uppercase tracking-wider text-white flex items-center gap-2">
+                <Clock className="size-3.5 text-zinc-400" /> Telemetry Activity Stream
               </h3>
-              <p className="text-xs text-muted-foreground">Chronological log of recent page visits</p>
+              <p className="text-xs text-zinc-400">Chronological stream of user navigation</p>
             </div>
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
-              <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Telemetry
+            <span className="inline-flex items-center gap-1.5 rounded-none bg-zinc-900 border border-zinc-800 px-2 py-0.5 text-[10px] font-mono uppercase text-zinc-300">
+              <span className="size-1.5 rounded-none bg-emerald-400 animate-pulse" /> Live
             </span>
           </div>
 
@@ -309,18 +308,18 @@ export function AdminAnalyticsView({
             {recentActivity.map((act) => (
               <div
                 key={act.id}
-                className="flex items-center justify-between gap-3 p-2 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors text-xs border border-border/40"
+                className="flex items-center justify-between gap-3 p-2 rounded-none bg-zinc-900/50 hover:bg-zinc-900 transition-colors text-xs border border-zinc-800"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="size-6 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-[10px] shrink-0">
+                  <div className="size-6 rounded-none bg-zinc-800 border border-zinc-700 text-white flex items-center justify-center font-mono font-bold text-[10px] shrink-0">
                     {act.userName ? act.userName[0].toUpperCase() : act.userEmail[0].toUpperCase()}
                   </div>
                   <div className="min-w-0">
-                    <div className="font-medium text-foreground truncate">{act.userEmail}</div>
-                    <div className="text-[11px] text-primary font-mono truncate">{act.path}</div>
+                    <div className="font-mono text-xs text-zinc-200 truncate">{act.userEmail}</div>
+                    <div className="text-[10px] text-zinc-400 font-mono truncate">{act.path}</div>
                   </div>
                 </div>
-                <div className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap">
+                <div className="text-[10px] font-mono text-zinc-500 shrink-0 whitespace-nowrap">
                   {formatRelativeTime(act.createdAt)}
                 </div>
               </div>
@@ -330,14 +329,14 @@ export function AdminAnalyticsView({
       </div>
 
       {/* 3. User Behavior & Mailbox Analytics Directory (Main Table) */}
-      <div className="rounded-2xl border border-border/70 bg-card p-5 space-y-4 shadow-sm">
+      <div className="rounded-none border border-zinc-800 bg-zinc-950 p-5 space-y-4">
         {/* Directory Header & Controls */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/50 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-4">
           <div className="space-y-0.5">
-            <h3 className="font-bold text-base text-foreground flex items-center gap-2">
-              <Users className="size-4 text-primary" /> User Tracking & Behavior Directory
+            <h3 className="font-mono font-bold text-sm uppercase tracking-wider text-white flex items-center gap-2">
+              <Users className="size-4 text-zinc-400" /> User Telemetry Directory
             </h3>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-zinc-400">
               Examine navigation frequency, mailbox adoption, and individual user sessions
             </p>
           </div>
@@ -347,7 +346,7 @@ export function AdminAnalyticsView({
               variant="outline"
               size="sm"
               onClick={downloadCsv}
-              className="text-xs h-8 gap-1.5"
+              className="text-xs font-mono uppercase tracking-wider h-8 gap-1.5 rounded-none border-zinc-800 bg-black text-zinc-200 hover:bg-zinc-900 hover:text-white"
             >
               <Download className="size-3.5" />
               <span>Export CSV</span>
@@ -358,7 +357,7 @@ export function AdminAnalyticsView({
         {/* Filters and Search Bar */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="relative flex-1 min-w-[240px] max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
             <input
               type="text"
               placeholder="Search user by name, email, or user ID..."
@@ -367,21 +366,21 @@ export function AdminAnalyticsView({
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="w-full rounded-xl border border-border/70 bg-background/80 pl-9 pr-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full rounded-none border border-zinc-800 bg-black pl-9 pr-3 py-1.5 text-xs font-mono text-white placeholder:text-zinc-500 focus:outline-none focus:border-white"
             />
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             {/* Filter Pill Buttons */}
-            <div className="flex items-center rounded-lg border border-border/70 bg-muted/40 p-0.5 text-xs">
+            <div className="flex items-center rounded-none border border-zinc-800 bg-black p-0.5 text-xs font-mono">
               <button
                 type="button"
                 onClick={() => {
                   setFilterType("all");
                   setPage(1);
                 }}
-                className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-all ${
-                  filterType === "all" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                className={`rounded-none px-2.5 py-1 text-[10px] uppercase tracking-wider transition-all ${
+                  filterType === "all" ? "bg-zinc-800 text-white font-bold" : "text-zinc-400 hover:text-zinc-200"
                 }`}
               >
                 All ({usersList.length})
@@ -392,8 +391,8 @@ export function AdminAnalyticsView({
                   setFilterType("has_mailboxes");
                   setPage(1);
                 }}
-                className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-all ${
-                  filterType === "has_mailboxes" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                className={`rounded-none px-2.5 py-1 text-[10px] uppercase tracking-wider transition-all ${
+                  filterType === "has_mailboxes" ? "bg-zinc-800 text-white font-bold" : "text-zinc-400 hover:text-zinc-200"
                 }`}
               >
                 With Mailboxes ({usersList.filter((u) => u.mailboxCount > 0).length})
@@ -404,8 +403,8 @@ export function AdminAnalyticsView({
                   setFilterType("no_mailboxes");
                   setPage(1);
                 }}
-                className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-all ${
-                  filterType === "no_mailboxes" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                className={`rounded-none px-2.5 py-1 text-[10px] uppercase tracking-wider transition-all ${
+                  filterType === "no_mailboxes" ? "bg-zinc-800 text-white font-bold" : "text-zinc-400 hover:text-zinc-200"
                 }`}
               >
                 0 Mailboxes
@@ -416,8 +415,8 @@ export function AdminAnalyticsView({
                   setFilterType("active");
                   setPage(1);
                 }}
-                className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-all ${
-                  filterType === "active" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                className={`rounded-none px-2.5 py-1 text-[10px] uppercase tracking-wider transition-all ${
+                  filterType === "active" ? "bg-zinc-800 text-white font-bold" : "text-zinc-400 hover:text-zinc-200"
                 }`}
               >
                 Active 7d
@@ -425,13 +424,13 @@ export function AdminAnalyticsView({
             </div>
 
             {/* Sorter Dropdown */}
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <ArrowUpDown className="size-3" />
+            <div className="flex items-center gap-1.5 text-xs font-mono text-zinc-400">
+              <ArrowUpDown className="size-3 text-zinc-500" />
               <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
-                <SelectTrigger className="h-7 w-[165px] rounded-lg border-border/70 bg-background px-2.5 text-xs text-foreground focus:ring-1 focus:ring-primary">
+                <SelectTrigger className="h-7 w-[165px] rounded-none border-zinc-800 bg-black px-2.5 text-xs font-mono text-zinc-300 focus:ring-0 focus:border-zinc-600">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent align="end">
+                <SelectContent align="end" className="rounded-none border-zinc-800 bg-zinc-950 font-mono text-xs">
                   <SelectItem value="views">Most Pages Visited</SelectItem>
                   <SelectItem value="mailboxes">Most Mailboxes</SelectItem>
                   <SelectItem value="newest">Newest Signups</SelectItem>
@@ -443,10 +442,10 @@ export function AdminAnalyticsView({
         </div>
 
         {/* Directory Table */}
-        <div className="rounded-xl border border-border/70 overflow-hidden">
+        <div className="rounded-none border border-zinc-800 overflow-hidden bg-black">
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left">
-              <thead className="bg-muted/40 border-b border-border/60 text-muted-foreground font-semibold">
+              <thead className="bg-zinc-950 border-b border-zinc-800 text-zinc-400 font-mono text-[10px] uppercase tracking-wider">
                 <tr>
                   <th className="py-3 px-3.5">User Identity</th>
                   <th className="py-3 px-3.5">Signed Up</th>
@@ -458,10 +457,10 @@ export function AdminAnalyticsView({
                   <th className="py-3 px-3.5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/40">
+              <tbody className="divide-y divide-zinc-800/60">
                 {currentPageUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                    <td colSpan={8} className="py-12 text-center text-zinc-500 font-mono">
                       No users match the search and filter criteria.
                     </td>
                   </tr>
@@ -469,23 +468,23 @@ export function AdminAnalyticsView({
                   currentPageUsers.map((u) => {
                     const isAdmin = u.email === "de.krish.shah@gmail.com";
                     return (
-                      <tr key={u.userId} className="hover:bg-muted/30 transition-colors">
+                      <tr key={u.userId} className="hover:bg-zinc-900/40 transition-colors">
                         {/* User Identity */}
                         <td className="py-3 px-3.5">
                           <div className="flex items-center gap-2.5">
-                            <div className="size-7 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                            <div className="size-7 rounded-none border border-zinc-700 bg-zinc-900 text-white flex items-center justify-center font-mono font-bold text-xs shrink-0">
                               {u.name ? u.name[0].toUpperCase() : u.email[0].toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              <div className="font-semibold text-foreground flex items-center gap-1.5">
+                              <div className="font-semibold text-white flex items-center gap-1.5 font-mono text-xs">
                                 <span className="truncate">{u.name || "Nameless"}</span>
                                 {isAdmin && (
-                                  <span className="rounded bg-amber-500/15 border border-amber-500/30 px-1 py-0.2 text-[9px] font-extrabold uppercase tracking-wider text-amber-400">
+                                  <span className="rounded-none bg-white text-black px-1 py-0.2 text-[9px] font-mono font-extrabold uppercase tracking-wider">
                                     Admin
                                   </span>
                                 )}
                               </div>
-                              <div className="text-[11px] text-muted-foreground font-mono truncate">
+                              <div className="text-[11px] text-zinc-500 font-mono truncate">
                                 {u.email}
                               </div>
                             </div>
@@ -493,21 +492,21 @@ export function AdminAnalyticsView({
                         </td>
 
                         {/* Signed Up */}
-                        <td className="py-3 px-3.5 text-muted-foreground whitespace-nowrap">
+                        <td className="py-3 px-3.5 text-zinc-400 whitespace-nowrap font-mono text-xs">
                           <div>{new Date(u.createdAt).toLocaleDateString()}</div>
-                          <div className="text-[10px] text-muted-foreground/80">{formatRelativeTime(u.createdAt)}</div>
+                          <div className="text-[10px] text-zinc-500">{formatRelativeTime(u.createdAt)}</div>
                         </td>
 
                         {/* B2B Database Access */}
                         <td className="py-3 px-3.5 whitespace-nowrap">
                           {isAdmin ? (
-                            <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[11px] font-semibold text-amber-400">
-                              <ShieldCheck className="size-3" />
+                            <span className="inline-flex items-center gap-1 rounded-none bg-zinc-900 border border-zinc-800 px-2 py-0.5 text-[10px] font-mono font-semibold text-zinc-300">
+                              <ShieldCheck className="size-3 text-zinc-400" />
                               <span>Admin Lifetime</span>
                             </span>
                           ) : u.hasB2bAccess ? (
                             <div className="flex items-center gap-1.5">
-                              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-semibold text-emerald-400">
+                              <span className="inline-flex items-center gap-1 rounded-none bg-emerald-950/20 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-mono font-semibold text-emerald-400">
                                 <Check className="size-3" />
                                 <span>Unlocked</span>
                               </span>
@@ -516,7 +515,7 @@ export function AdminAnalyticsView({
                                 size="sm"
                                 disabled={togglingB2bId === u.userId}
                                 onClick={() => handleToggleB2bAccess(u.userId, false)}
-                                className="h-6 px-1.5 text-[10px] text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10"
+                                className="h-6 px-1.5 text-[10px] font-mono text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-none"
                                 title="Revoke B2B Database access"
                               >
                                 {togglingB2bId === u.userId ? "..." : "Revoke"}
@@ -524,8 +523,8 @@ export function AdminAnalyticsView({
                             </div>
                           ) : (
                             <div className="flex items-center gap-1.5">
-                              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                                <Lock className="size-3 text-muted-foreground/70" />
+                              <span className="inline-flex items-center gap-1 rounded-none border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-[10px] font-mono text-zinc-400">
+                                <Lock className="size-2.5 text-zinc-500" />
                                 <span>Paywalled</span>
                               </span>
                               <Button
@@ -533,7 +532,7 @@ export function AdminAnalyticsView({
                                 size="sm"
                                 disabled={togglingB2bId === u.userId}
                                 onClick={() => handleToggleB2bAccess(u.userId, true)}
-                                className="h-6 px-1.5 text-[10px] text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 font-semibold"
+                                className="h-6 px-1.5 text-[10px] font-mono text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 font-semibold rounded-none"
                                 title="Grant lifetime B2B Database access"
                               >
                                 {togglingB2bId === u.userId ? "..." : "Grant"}
@@ -545,23 +544,23 @@ export function AdminAnalyticsView({
                         {/* Mailboxes */}
                         <td className="py-3 px-3.5">
                           {u.mailboxCount === 0 ? (
-                            <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                            <span className="inline-flex items-center rounded-none border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-[10px] font-mono text-zinc-500">
                               0 mailboxes
                             </span>
                           ) : (
                             <div className="space-y-0.5">
                               <span
-                                className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold ${
+                                className={`inline-flex items-center gap-1 rounded-none px-2 py-0.5 text-[10px] font-mono font-semibold ${
                                   u.failingMailboxes > 0
-                                    ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
-                                    : "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                                    ? "bg-amber-950/20 text-amber-300 border border-amber-500/30"
+                                    : "bg-zinc-900 text-zinc-200 border border-zinc-800"
                                 }`}
                               >
-                                <Mail className="size-3" />
+                                <Mail className="size-2.5" />
                                 <span>{u.mailboxCount} mailboxes</span>
                               </span>
                               {u.failingMailboxes > 0 && (
-                                <div className="text-[10px] text-amber-400">
+                                <div className="text-[10px] font-mono text-amber-400">
                                   {u.failingMailboxes} degraded
                                 </div>
                               )}
@@ -571,8 +570,8 @@ export function AdminAnalyticsView({
 
                         {/* Pages Visited */}
                         <td className="py-3 px-3.5">
-                          <span className="inline-flex items-center gap-1 rounded-md bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 text-xs font-bold text-sky-400">
-                            <Eye className="size-3" />
+                          <span className="inline-flex items-center gap-1 rounded-none border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-[10px] font-mono font-bold text-zinc-300">
+                            <Eye className="size-2.5" />
                             <span>{u.totalPageViews} views</span>
                           </span>
                         </td>
@@ -581,14 +580,14 @@ export function AdminAnalyticsView({
                         <td className="py-3 px-3.5">
                           <div className="flex flex-wrap gap-1 max-w-xs">
                             {u.topPages.length === 0 ? (
-                              <span className="text-[11px] text-muted-foreground">—</span>
+                              <span className="text-[11px] font-mono text-zinc-500">—</span>
                             ) : (
                               u.topPages.map((tp) => (
                                 <span
                                   key={tp.path}
-                                  className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-mono bg-muted/60 text-foreground border border-border/60"
+                                  className="inline-flex items-center rounded-none px-1.5 py-0.5 text-[10px] font-mono bg-zinc-900 text-zinc-300 border border-zinc-800"
                                 >
-                                  {tp.path}: <strong className="ml-1 text-primary">{tp.count}</strong>
+                                  {tp.path}: <strong className="ml-1 text-white">{tp.count}</strong>
                                 </span>
                               ))
                             )}
@@ -596,17 +595,17 @@ export function AdminAnalyticsView({
                         </td>
 
                         {/* Last Seen */}
-                        <td className="py-3 px-3.5 text-muted-foreground whitespace-nowrap text-[11px]">
+                        <td className="py-3 px-3.5 text-zinc-400 whitespace-nowrap text-[11px] font-mono">
                           {formatRelativeTime(u.lastActiveAt)}
                         </td>
 
                         {/* Actions */}
                         <td className="py-3 px-3.5 text-right">
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
                             onClick={() => setSelectedUserId(u.userId)}
-                            className="h-7 text-xs text-primary hover:text-primary hover:bg-primary/10 gap-1"
+                            className="h-7 text-xs font-mono rounded-none border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white hover:bg-zinc-800 gap-1.5"
                           >
                             <span>Inspect</span>
                             <ExternalLink className="size-3" />
@@ -621,7 +620,7 @@ export function AdminAnalyticsView({
           </div>
 
           {/* Pagination Footer */}
-          <div className="flex items-center justify-between px-4 py-3 bg-muted/20 border-t border-border/60 text-xs text-muted-foreground">
+          <div className="flex items-center justify-between px-4 py-3 bg-zinc-950 border-t border-zinc-800 text-xs font-mono text-zinc-400">
             <div>
               Showing {sortedUsers.length === 0 ? 0 : (page - 1) * pageSize + 1} to{" "}
               {Math.min(page * pageSize, sortedUsers.length)} of {sortedUsers.length} users
@@ -633,11 +632,11 @@ export function AdminAnalyticsView({
                 size="sm"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="h-7 px-2 text-xs"
+                className="h-7 px-2 text-xs font-mono rounded-none border-zinc-800 bg-black text-zinc-300 hover:text-white disabled:opacity-40"
               >
                 <ChevronLeft className="size-3.5" />
               </Button>
-              <span className="text-[11px] font-semibold text-foreground">
+              <span className="text-[11px] font-mono text-zinc-300">
                 Page {page} of {totalPages}
               </span>
               <Button
@@ -645,7 +644,7 @@ export function AdminAnalyticsView({
                 size="sm"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                className="h-7 px-2 text-xs"
+                className="h-7 px-2 text-xs font-mono rounded-none border-zinc-800 bg-black text-zinc-300 hover:text-white disabled:opacity-40"
               >
                 <ChevronRight className="size-3.5" />
               </Button>

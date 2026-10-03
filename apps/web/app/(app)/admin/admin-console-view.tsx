@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart3, Bug, UserX, Mail, Database } from "lucide-react";
-import { AdminBugReportsView } from "./admin-bug-reports-view";
+import { BarChart3, Mail, Database, LifeBuoy, ShieldAlert } from "lucide-react";
+import { AdminSupportView } from "./admin-support-view";
 import { AdminDataRemovalView } from "./admin-data-removal-view";
 import { AdminAnalyticsView } from "./admin-analytics-view";
 import { AdminMailboxPoolView } from "@/components/chad-gtm/admin-pool-view";
 import { AdminDirectoryView } from "./admin-directory-view";
-import type { BugReportDTO } from "@/lib/bug-reports";
+import type { SupportTicketDTO } from "@/lib/support-types";
 import type { DataRemovalRequestDTO } from "@/lib/data-removal";
 import type { AdminAnalyticsPayload } from "@/lib/admin-analytics";
 import type { SystemMailboxPoolStats } from "@/lib/admin-gtm-actions";
@@ -15,129 +15,134 @@ import type { DirectoryStatsDTO } from "./admin-directory-view";
 
 export function AdminConsoleView({
   initialAnalytics,
-  initialBugReports,
+  initialSupportTickets,
   initialDataRemovals,
   initialPoolStats,
   initialDirectoryStats,
 }: {
   initialAnalytics: AdminAnalyticsPayload;
-  initialBugReports: BugReportDTO[];
+  initialSupportTickets: SupportTicketDTO[];
   initialDataRemovals: DataRemovalRequestDTO[];
   initialPoolStats: SystemMailboxPoolStats;
   initialDirectoryStats: DirectoryStatsDTO;
 }) {
   const [activeTab, setActiveTab] = useState<
-    "system-pool" | "directory" | "analytics" | "bugs" | "removals"
-  >("system-pool");
+    "mailboxes" | "directory" | "analytics" | "support" | "compliance"
+  >("mailboxes");
 
   return (
-    <div className="space-y-6">
-      {/* Navigation Tabs */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-border/60 pb-3">
+    <div className="space-y-6 font-mono">
+      {/* Simplified, Boxy Monochromatic Tabs */}
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-zinc-800 pb-3">
+        {/* Tab 1: Mailboxes */}
         <button
           type="button"
-          onClick={() => setActiveTab("system-pool")}
-          className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition-all ${
-            activeTab === "system-pool"
-              ? "bg-primary text-primary-foreground shadow-sm"
-              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          onClick={() => setActiveTab("mailboxes")}
+          className={`inline-flex items-center gap-2 rounded-none border px-3.5 py-2 text-xs font-mono uppercase tracking-wider transition-all ${
+            activeTab === "mailboxes"
+              ? "border-white bg-zinc-900 text-white font-bold"
+              : "border-zinc-800 bg-black text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
           }`}
         >
           <Mail className="size-3.5" />
-          <span>System Mailbox Infrastructure</span>
+          <span>Mailboxes</span>
           <span
-            className={`rounded-full px-2 py-0.2 text-[10px] font-bold ${
-              activeTab === "system-pool"
-                ? "bg-primary-foreground/20 text-primary-foreground"
-                : "bg-muted text-muted-foreground"
+            className={`rounded-none border px-1.5 py-0.2 text-[9px] font-bold ${
+              activeTab === "mailboxes"
+                ? "border-zinc-600 bg-black text-zinc-300"
+                : "border-zinc-800 bg-zinc-950 text-zinc-500"
             }`}
           >
             {initialPoolStats.activeMailboxes} active
           </span>
         </button>
 
+        {/* Tab 2: Directory */}
         <button
           type="button"
           onClick={() => setActiveTab("directory")}
-          className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition-all ${
+          className={`inline-flex items-center gap-2 rounded-none border px-3.5 py-2 text-xs font-mono uppercase tracking-wider transition-all ${
             activeTab === "directory"
-              ? "bg-primary text-primary-foreground shadow-sm"
-              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+              ? "border-white bg-zinc-900 text-white font-bold"
+              : "border-zinc-800 bg-black text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
           }`}
         >
           <Database className="size-3.5" />
-          <span>B2B Lead Directory</span>
+          <span>Directory</span>
           <span
-            className={`rounded-full px-2 py-0.2 text-[10px] font-bold ${
+            className={`rounded-none border px-1.5 py-0.2 text-[9px] font-bold ${
               activeTab === "directory"
-                ? "bg-primary-foreground/20 text-primary-foreground"
-                : "bg-muted text-muted-foreground"
+                ? "border-zinc-600 bg-black text-zinc-300"
+                : "border-zinc-800 bg-zinc-950 text-zinc-500"
             }`}
           >
             {initialDirectoryStats.totalLeads.toLocaleString()} leads
           </span>
         </button>
 
+        {/* Tab 3: Analytics */}
         <button
           type="button"
           onClick={() => setActiveTab("analytics")}
-          className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition-all ${
+          className={`inline-flex items-center gap-2 rounded-none border px-3.5 py-2 text-xs font-mono uppercase tracking-wider transition-all ${
             activeTab === "analytics"
-              ? "bg-primary text-primary-foreground shadow-sm"
-              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+              ? "border-white bg-zinc-900 text-white font-bold"
+              : "border-zinc-800 bg-black text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
           }`}
         >
           <BarChart3 className="size-3.5" />
-          <span>User Analytics & Tracking</span>
+          <span>Analytics</span>
           <span
-            className={`rounded-full px-2 py-0.2 text-[10px] font-bold ${
+            className={`rounded-none border px-1.5 py-0.2 text-[9px] font-bold ${
               activeTab === "analytics"
-                ? "bg-primary-foreground/20 text-primary-foreground"
-                : "bg-muted text-muted-foreground"
+                ? "border-zinc-600 bg-black text-zinc-300"
+                : "border-zinc-800 bg-zinc-950 text-zinc-500"
             }`}
           >
             {initialAnalytics.kpis.totalUsers} users
           </span>
         </button>
 
+        {/* Tab 4: Support */}
         <button
           type="button"
-          onClick={() => setActiveTab("bugs")}
-          className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition-all ${
-            activeTab === "bugs"
-              ? "bg-primary text-primary-foreground shadow-sm"
-              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          onClick={() => setActiveTab("support")}
+          className={`inline-flex items-center gap-2 rounded-none border px-3.5 py-2 text-xs font-mono uppercase tracking-wider transition-all ${
+            activeTab === "support"
+              ? "border-white bg-zinc-900 text-white font-bold"
+              : "border-zinc-800 bg-black text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
           }`}
         >
-          <Bug className="size-3.5" />
-          <span>Bug Reports</span>
+          <LifeBuoy className="size-3.5" />
+          <span>Support</span>
           <span
-            className={`rounded-full px-2 py-0.2 text-[10px] font-bold ${
-              activeTab === "bugs"
-                ? "bg-primary-foreground/20 text-primary-foreground"
-                : "bg-muted text-muted-foreground"
+            className={`rounded-none border px-1.5 py-0.2 text-[9px] font-bold ${
+              activeTab === "support"
+                ? "border-zinc-600 bg-black text-zinc-300"
+                : "border-zinc-800 bg-zinc-950 text-zinc-500"
             }`}
           >
-            {initialBugReports.length}
+            {initialSupportTickets.length}
           </span>
         </button>
 
+        {/* Tab 5: Compliance */}
         <button
           type="button"
-          onClick={() => setActiveTab("removals")}
-          className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition-all ${
-            activeTab === "removals"
-              ? "bg-primary text-primary-foreground shadow-sm"
-              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          onClick={() => setActiveTab("compliance")}
+          className={`inline-flex items-center gap-2 rounded-none border px-3.5 py-2 text-xs font-mono uppercase tracking-wider transition-all ${
+            activeTab === "compliance"
+              ? "border-white bg-zinc-900 text-white font-bold"
+              : "border-zinc-800 bg-black text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
           }`}
         >
-          <UserX className="size-3.5" />
-          <span>Data Removal Requests</span>
+          <ShieldAlert className="size-3.5" />
+          <span>Compliance</span>
           <span
-            className={`rounded-full px-2 py-0.2 text-[10px] font-bold ${
-              activeTab === "removals"
-                ? "bg-primary-foreground/20 text-primary-foreground"
-                : "bg-muted text-muted-foreground"
+            className={`rounded-none border px-1.5 py-0.2 text-[9px] font-bold ${
+              activeTab === "compliance"
+                ? "border-zinc-600 bg-black text-zinc-300"
+                : "border-zinc-800 bg-zinc-950 text-zinc-500"
             }`}
           >
             {initialDataRemovals.length}
@@ -145,14 +150,15 @@ export function AdminConsoleView({
         </button>
       </div>
 
-      {activeTab === "system-pool" ? (
+      {/* Tab Panels */}
+      {activeTab === "mailboxes" ? (
         <AdminMailboxPoolView initialStats={initialPoolStats} />
       ) : activeTab === "directory" ? (
         <AdminDirectoryView initialStats={initialDirectoryStats} />
       ) : activeTab === "analytics" ? (
         <AdminAnalyticsView initialAnalytics={initialAnalytics} />
-      ) : activeTab === "bugs" ? (
-        <AdminBugReportsView initialReports={initialBugReports} />
+      ) : activeTab === "support" ? (
+        <AdminSupportView initialTickets={initialSupportTickets} />
       ) : (
         <AdminDataRemovalView initialRequests={initialDataRemovals} />
       )}

@@ -96,10 +96,67 @@ export async function ensureChadGtmTables(db: Db) {
   }
 }
 
+let supportMigrated = false;
+export async function ensureSupportTables(db: Db) {
+  if (supportMigrated) return;
+  try {
+    await db.execute(
+      sql`CREATE TABLE IF NOT EXISTS "support_tickets" (
+        "id" text PRIMARY KEY,
+        "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "user_email" text NOT NULL,
+        "user_name" text,
+        "workspace_id" text REFERENCES "workspaces"("id") ON DELETE SET NULL,
+        "category" text NOT NULL DEFAULT 'bug_report',
+        "heading" text NOT NULL,
+        "description" text NOT NULL,
+        "url" text,
+        "status" text NOT NULL DEFAULT 'open',
+        "created_at" text NOT NULL DEFAULT to_char((now() AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS.MSZ'),
+        "updated_at" text NOT NULL DEFAULT to_char((now() AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS.MSZ')
+      )`
+    );
+    await db.execute(
+      sql`CREATE INDEX IF NOT EXISTS "support_tickets_user_idx" ON "support_tickets" ("user_id")`
+    );
+    await db.execute(
+      sql`CREATE INDEX IF NOT EXISTS "support_tickets_status_idx" ON "support_tickets" ("status")`
+    );
+    await db.execute(
+      sql`CREATE INDEX IF NOT EXISTS "support_tickets_category_idx" ON "support_tickets" ("category")`
+    );
+    await db.execute(
+      sql`CREATE INDEX IF NOT EXISTS "support_tickets_created_idx" ON "support_tickets" ("created_at")`
+    );
+    await db.execute(
+      sql`CREATE TABLE IF NOT EXISTS "support_ticket_messages" (
+        "id" text PRIMARY KEY,
+        "ticket_id" text NOT NULL REFERENCES "support_tickets"("id") ON DELETE CASCADE,
+        "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "user_name" text,
+        "user_email" text NOT NULL,
+        "sender_role" text NOT NULL DEFAULT 'user',
+        "message" text NOT NULL,
+        "created_at" text NOT NULL DEFAULT to_char((now() AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS.MSZ')
+      )`
+    );
+    await db.execute(
+      sql`CREATE INDEX IF NOT EXISTS "support_messages_ticket_idx" ON "support_ticket_messages" ("ticket_id")`
+    );
+    await db.execute(
+      sql`CREATE INDEX IF NOT EXISTS "support_messages_created_idx" ON "support_ticket_messages" ("created_at")`
+    );
+    supportMigrated = true;
+  } catch (err) {
+    console.error("[db] ensureSupportTables error:", err);
+  }
+}
+
 export function getDb(): Db {
   if (!cached) {
     if (!isDbConfigured) throw new Error("DATABASE_URL is not configured");
     cached = createDb(env.DATABASE_URL).db as Db;
+    ensureSupportTables(cached).catch(() => {});
   }
   return cached;
 }

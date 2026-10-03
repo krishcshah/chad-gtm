@@ -4,7 +4,7 @@ import { getDb } from "./db";
 import { requireUser } from "./session";
 import { isAdmin, requireAdmin } from "./admin";
 
-export type BugReportStatus = "open" | "investigating" | "resolved" | "closed";
+export type BugReportStatus = "open" | "in_progress" | "resolved" | "closed";
 
 export interface BugReportDTO {
   id: string;

@@ -11,6 +11,7 @@ import {
   FileSpreadsheet,
   Layers,
   HeartPulse,
+  Download,
 } from "lucide-react";
 import { Button } from "@smartreach/ui";
 import { toast } from "sonner";
@@ -183,6 +184,13 @@ export function AdminMailboxPoolView({
                 </>
               )}
             </Button>
+            <a
+              href="/example_senders.csv"
+              download="example_senders.csv"
+              className="inline-flex items-center gap-1.5 rounded-none border border-zinc-700 bg-black px-3 py-2 text-xs font-mono uppercase tracking-wider text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors"
+            >
+              <Download className="size-3.5" /> Download Example CSV
+            </a>
             <Button
               type="button"
               variant="outline"
