@@ -78,8 +78,7 @@ export function SwipeCardDeck({
   };
 
   const handleFinish = () => {
-    const approved = deck.filter((c) => c.approved);
-    onComplete(approved.length > 0 ? approved : deck.slice(0, 3));
+    onComplete(deck);
   };
 
   return (
@@ -226,10 +225,10 @@ export function SwipeCardDeck({
             <Check className="size-5" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-white uppercase tracking-wider">Calibration Complete</h3>
+            <h3 className="text-base font-bold text-white uppercase tracking-wider">Calibration Deck Completed</h3>
             <p className="text-xs text-zinc-400 font-sans max-w-md mx-auto mt-1">
-              Reviewed {deck.length} variations · Approved {approvedCount} personalized angles.
-              Outreach tone is calibrated.
+              Reviewed {deck.length} variations · {approvedCount} approved · {deck.length - approvedCount} rejected.
+              Ready to analyze your feedback and refine the outbound model.
             </p>
           </div>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
@@ -243,14 +242,14 @@ export function SwipeCardDeck({
               }}
               className="rounded-none text-xs font-mono uppercase tracking-wider border-zinc-800 hover:border-zinc-700 w-full sm:w-auto h-9"
             >
-              <RotateCcw className="size-3 mr-1.5" /> Re-calibrate
+              <RotateCcw className="size-3 mr-1.5" /> Re-swipe
             </Button>
             <Button
               type="button"
               onClick={handleFinish}
               className="rounded-none text-xs font-mono uppercase tracking-wider font-semibold bg-white hover:bg-zinc-200 text-black border border-white w-full sm:w-auto h-9"
             >
-              Set Daily Velocity <ChevronRight className="size-3.5 ml-1" />
+              Adjust Copy to My Preferences ({approvedCount} approved) <ChevronRight className="size-3.5 ml-1" />
             </Button>
           </div>
         </div>

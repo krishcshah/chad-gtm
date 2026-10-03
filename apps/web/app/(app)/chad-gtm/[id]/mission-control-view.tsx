@@ -16,6 +16,8 @@ import {
   ChevronLeft,
   Gauge,
   Loader2,
+  Sliders,
+  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@smartreach/ui";
 import { toast } from "sonner";
@@ -274,15 +276,50 @@ export function MissionControlView({
             </div>
           </div>
 
+          {/* Calibrated Voice Profile Card */}
+          <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 sm:p-5 space-y-3 font-mono">
+            <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                <Sliders className="size-3 text-white" /> Calibrated Voice
+              </span>
+              <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 border border-emerald-500/30 bg-emerald-950/20 text-emerald-400 font-bold">
+                LOCKED
+              </span>
+            </div>
+
+            <div className="space-y-1">
+              <span className="text-[9px] text-zinc-500 uppercase tracking-widest block">
+                Target Tone
+              </span>
+              <p className="text-xs font-bold text-white uppercase tracking-wider">
+                {(run?.calibrationProfile as any)?.voiceTone || "Direct, Technical Peer-to-Peer"}
+              </p>
+            </div>
+
+            {(run?.calibrationProfile as any)?.analysisSummary && (
+              <p className="text-[11px] text-zinc-400 font-sans leading-relaxed border-t border-zinc-900 pt-2">
+                "{(run?.calibrationProfile as any)?.analysisSummary}"
+              </p>
+            )}
+
+            <div className="rounded-none bg-black border border-zinc-800 p-2.5 text-[11px] space-y-1">
+              <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest block">
+                Subject Pattern
+              </span>
+              <p className="text-zinc-300 font-mono text-[11px]">
+                {(run?.calibrationProfile as any)?.calibratedSubjectTemplate ||
+                  (run?.offers as any[])?.[0]?.angle ||
+                  "Quick question re: {{company}}"}
+              </p>
+            </div>
+          </div>
+
           {/* Active Campaign Angle Card */}
           <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 sm:p-5 space-y-2">
             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
-              <span>Calibrated Angle</span>
+              <span>Primary Outreach Hook</span>
             </div>
             <div className="rounded-none bg-black border border-zinc-800 p-3 text-xs space-y-1.5">
-              <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest block">
-                Primary Outreach Hook
-              </span>
               <p className="text-zinc-300 font-sans leading-relaxed text-xs">
                 {(run?.offers as any[])?.[0]?.valueProp ||
                   "Intelligent B2B outreach tailored to operational decision-makers."}

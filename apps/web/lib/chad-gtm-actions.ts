@@ -209,6 +209,272 @@ Pitch this value offer directly to ${dl.jobTitle} at ${dl.companyName}.`;
   }
 }
 
+export interface CalibrationProfile {
+  voiceTone: string;
+  analysisSummary: string;
+  keyAdjustments: string[];
+  dos: string[];
+  donts: string[];
+  customAiInstruction: string;
+  calibratedSubjectTemplate: string;
+  calibratedBodyTemplate: string;
+  approvedCount: number;
+  rejectedCount: number;
+}
+
+export async function refineGtmCalibrationAction(
+  runId: string,
+  calibrationDeck: Array<{
+    id?: string;
+    leadId?: string;
+    recipientName?: string;
+    recipientCompany?: string;
+    recipientTitle?: string;
+    recipientIndustry?: string;
+    subject: string;
+    bodyText: string;
+    bodyHtml?: string;
+    approved: boolean;
+  }>,
+  selectedOfferIndex = 0
+): Promise<{
+  ok: boolean;
+  profile?: CalibrationProfile;
+  refinedSamples?: any[];
+  error?: string;
+}> {
+  try {
+    const user = await requireUser();
+    const db = getDb();
+    await ensureChadGtmTables(db);
+
+    const [run] = await db
+      .select()
+      .from(schema.chadGtmRuns)
+      .where(
+        and(
+          eq(schema.chadGtmRuns.id, runId),
+          eq(schema.chadGtmRuns.userId, user.id)
+        )
+      )
+      .limit(1);
+
+    if (!run) throw new Error("ChadGTM session not found.");
+
+    const offers = (run.offers as any[]) || [];
+    const activeOffer = offers[selectedOfferIndex] || offers[0] || {
+      title: "Direct Value Offer",
+      angle: "Direct ROI",
+      valueProp: "Accelerate your team's workflow and output.",
+      cta: "Open to a brief 4-minute demo this Thursday?",
+    };
+
+    const overview = (run.businessOverview as any) || {};
+    const icp = (run.icpProfile as any) || {};
+
+    const approved = calibrationDeck.filter((c) => c.approved);
+    const rejected = calibrationDeck.filter((c) => !c.approved);
+
+    const aiOpts = await getWorkspaceAiOptions(user.id);
+    const apiKey =
+      aiOpts.apiKey ||
+      process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_API_KEY;
+
+    let profile: CalibrationProfile | null = null;
+    let refinedSamples: any[] = [];
+
+    if (apiKey) {
+      const prompt = `You are an elite B2B cold outreach strategist and voice calibration engine.
+The user just completed a swipe/approval deck reviewing sample cold emails for their company.
+Analyze the exact stylistic contrast between the emails the user APPROVED and the emails they REJECTED to adjust future outbound copy to their preferences.
+
+TARGET COMPANY & OFFER CONTEXT:
+- Company: ${run.companyName}
+- Summary: ${overview.summary || "B2B platform"}
+- Key Value Offer: ${activeOffer.valueProp}
+- Angle: ${activeOffer.angle}
+- Call to Action: ${activeOffer.cta}
+- Target Titles: ${JSON.stringify(icp.targetTitles || [])}
+
+USER'S APPROVED COPIES (${approved.length} approved):
+${JSON.stringify(
+  approved.map((a) => ({
+    subject: a.subject,
+    body: a.bodyText,
+    toTitle: a.recipientTitle,
+    toCompany: a.recipientCompany,
+  }))
+)}
+
+USER'S REJECTED COPIES (${rejected.length} rejected):
+${JSON.stringify(
+  rejected.map((r) => ({
+    subject: r.subject,
+    body: r.bodyText,
+    toTitle: r.recipientTitle,
+    toCompany: r.recipientCompany,
+  }))
+)}
+
+TASK:
+1. In "voiceTone", synthesize the user's desired tone in 4-8 words (e.g. "Direct, low-friction, peer-to-peer technical").
+2. In "analysisSummary", write 2 punchy sentences summarizing what they liked about the approved emails and what specific traits they rejected.
+3. In "keyAdjustments", list exactly 3 concrete adjustments made to all future copies (e.g. "Eliminated introductory fluff greetings", "Kept body strictly under 60 words", "Replaced calendar links with 4-minute curiosity questions").
+4. In "dos", list 3 strict writing rules to follow for this campaign.
+5. In "donts", list 3 strict rules of what to NEVER do.
+6. In "calibratedSubjectTemplate", formulate an optimal subject line template with variables like {{company}} or {{first_name}}.
+7. In "calibratedBodyTemplate", formulate the calibrated email body template with variables {{first_name}}, {{company}}, {{job_title}}, {{industry}}, and {{sender_name}}.
+8. In "customAiInstruction", create a comprehensive instruction prompt for the dynamic AI sending engine so that every future lead receives a personalized email adhering strictly to these calibrated preferences.
+9. In "refinedSamples", provide 2-3 freshly refined sample emails demonstrating the adjusted copy for sample decision makers.
+
+Respond STRICTLY with a valid JSON object matching this structure:
+{
+  "voiceTone": "...",
+  "analysisSummary": "...",
+  "keyAdjustments": ["...", "...", "..."],
+  "dos": ["...", "...", "..."],
+  "donts": ["...", "...", "..."],
+  "calibratedSubjectTemplate": "...",
+  "calibratedBodyTemplate": "...",
+  "customAiInstruction": "...",
+  "refinedSamples": [
+    {
+      "recipientName": "...",
+      "recipientTitle": "...",
+      "recipientCompany": "...",
+      "recipientIndustry": "...",
+      "subject": "...",
+      "bodyText": "..."
+    }
+  ]
+}`;
+
+      try {
+        const model = aiOpts.model || "gemini-3.8-flash";
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              responseMimeType: "application/json",
+              temperature: 0.3,
+            },
+          }),
+        });
+
+        if (res.ok) {
+          const resData = await res.json();
+          const rawText = resData.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (rawText) {
+            const parsed = JSON.parse(rawText);
+            profile = {
+              voiceTone: parsed.voiceTone || "Direct, peer-to-peer technical",
+              analysisSummary: parsed.analysisSummary || "Adjusted copy to favor direct, low-friction value propositions.",
+              keyAdjustments: Array.isArray(parsed.keyAdjustments) ? parsed.keyAdjustments : [
+                "Eliminated introductory pleasantries in favor of immediate value hooks",
+                "Trimmed copy length for rapid mobile scanning",
+                "Shifted to low-friction curiosity CTAs"
+              ],
+              dos: Array.isArray(parsed.dos) ? parsed.dos : [
+                "Lead with specific operational bottleneck in line 1",
+                "Reference recipient industry and role context",
+                "Keep body under 65 words"
+              ],
+              donts: Array.isArray(parsed.donts) ? parsed.donts : [
+                "Never use 'Hope this email finds you well'",
+                "Avoid aggressive calendar booking links",
+                "No generic corporate fluff"
+              ],
+              customAiInstruction: parsed.customAiInstruction || `Write cold outreach for ${run.companyName}. Voice: Direct, technical peer-to-peer. Keep under 65 words. Highlight: ${activeOffer.valueProp}. CTA: ${activeOffer.cta}.`,
+              calibratedSubjectTemplate: parsed.calibratedSubjectTemplate || `Quick question re: {{company}} workflow`,
+              calibratedBodyTemplate: parsed.calibratedBodyTemplate || `Hi {{first_name}},\n\nSaw your team at {{company}} scaling operations.\n\n${activeOffer.valueProp}\n\n${activeOffer.cta}\n\nBest,\n{{sender_name}}`,
+              approvedCount: approved.length,
+              rejectedCount: rejected.length,
+            };
+            if (Array.isArray(parsed.refinedSamples) && parsed.refinedSamples.length > 0) {
+              refinedSamples = parsed.refinedSamples.map((s: any, idx: number) => ({
+                id: `refined-${idx + 1}`,
+                recipientName: s.recipientName || "Alex Rivera",
+                recipientTitle: s.recipientTitle || "VP of Engineering",
+                recipientCompany: s.recipientCompany || "TechScale IO",
+                recipientIndustry: s.recipientIndustry || "Enterprise Software",
+                subject: s.subject || profile!.calibratedSubjectTemplate,
+                bodyText: s.bodyText || profile!.calibratedBodyTemplate,
+                approved: true,
+              }));
+            }
+          }
+        }
+      } catch (geminiErr) {
+        console.error("[chad-gtm-actions] Gemini refinement call error:", geminiErr);
+      }
+    }
+
+    // Algorithmic Fallback if offline or API error
+    if (!profile) {
+      const primarySample = approved[0] || calibrationDeck[0] || {
+        subject: `Quick question for {{company}}`,
+        bodyText: `Hi {{first_name}},\n\nBetween scaling operations and driving growth, ${activeOffer.valueProp}\n\n${activeOffer.cta}\n\nBest,\n{{sender_name}}`,
+      };
+
+      const wordCount = Math.round(
+        (primarySample.bodyText || "").split(/\s+/).filter(Boolean).length || 55
+      );
+
+      profile = {
+        voiceTone: approved.length > 0 ? "Direct, calibrated peer-to-peer" : "Concise, value-first B2B",
+        analysisSummary: approved.length > 0
+          ? `Calibrated copy to match ${approved.length} approved angle(s) focusing on ${activeOffer.angle}. Rejected conversational fluff and aggressive sales pitches.`
+          : `Calibrated outreach model to default high-converting ${activeOffer.angle} cadence.`,
+        keyAdjustments: [
+          "Eliminated conversational filler and pleasantries in favor of immediate value hooks",
+          `Calibrated email length to ~${wordCount} words for optimal mobile scanning`,
+          `Anchored call to action around ${activeOffer.cta || "a low-friction 4-minute demo question"}`
+        ],
+        dos: [
+          "State the core operational bottleneck in line 1",
+          "Reference recipient's specific company and industry context",
+          "Ask a single low-friction permission question"
+        ],
+        donts: [
+          "Never start with 'I hope this email finds you well'",
+          "Do not include aggressive calendar links or ask for 30 minutes",
+          "Avoid multi-paragraph corporate background explanations"
+        ],
+        customAiInstruction: `Write cold outreach for ${run.companyName}. Voice: Direct, technical peer-to-peer. Length: Under 65 words. Zero generic pleasantries. Focus on: ${activeOffer.valueProp}. Call to action: ${activeOffer.cta}.`,
+        calibratedSubjectTemplate: primarySample.subject,
+        calibratedBodyTemplate: primarySample.bodyText,
+        approvedCount: approved.length,
+        rejectedCount: rejected.length,
+      };
+
+      refinedSamples = approved.length > 0 ? approved.slice(0, 3) : calibrationDeck.slice(0, 3);
+    }
+
+    // Persist into database
+    await db
+      .update(schema.chadGtmRuns)
+      .set({
+        calibrationProfile: profile,
+        approvedEmailSamples: approved.length > 0 ? approved : calibrationDeck.slice(0, 3),
+        updatedAt: nowIso(),
+      })
+      .where(eq(schema.chadGtmRuns.id, runId));
+
+    return {
+      ok: true,
+      profile,
+      refinedSamples: refinedSamples.length > 0 ? refinedSamples : (approved.length > 0 ? approved : calibrationDeck.slice(0, 3)),
+    };
+  } catch (err: any) {
+    console.error("[chad-gtm-actions] refineGtmCalibrationAction error:", err);
+    return { ok: false, error: err?.message || "Failed to refine calibration." };
+  }
+}
+
 export async function launchChadGtmCampaignAction(
   runId: string,
   dailyLimit: number,
@@ -237,6 +503,7 @@ export async function launchChadGtmCampaignAction(
     const industries = (run.selectedIndustries as string[]) || [];
     const dateStr = new Date().toISOString().slice(0, 10);
     const companyName = run.companyName || "Autonomous GTM";
+    const calibratedProfile = (run.calibrationProfile as any) || {};
 
     // 1. Create a dedicated lead list in PostgreSQL
     const listId = crypto.randomUUID();
@@ -286,19 +553,23 @@ export async function launchChadGtmCampaignAction(
 
     // 3. Create calibrated Email Template in PostgreSQL
     const primarySample = approvedSamples[0] || {
-      subject: `Accelerating growth for {{company}}`,
-      bodyText: `Hi {{first_name}},\n\nWould love to share how our team helps companies in your space scale operations.\n\nBest,\n${user.name || "Alex"}`,
+      subject: calibratedProfile.calibratedSubjectTemplate || `Accelerating growth for {{company}}`,
+      bodyText: calibratedProfile.calibratedBodyTemplate || `Hi {{first_name}},\n\nWould love to share how our team helps companies in your space scale operations.\n\nBest,\n${user.name || "Alex"}`,
       bodyHtml: `<p>Hi {{first_name}},</p><p>Would love to share how our team helps companies in your space scale operations.</p>`,
     };
+
+    const finalSubject = calibratedProfile.calibratedSubjectTemplate || primarySample.subject;
+    const finalBodyText = calibratedProfile.calibratedBodyTemplate || primarySample.bodyText;
+    const finalBodyHtml = primarySample.bodyHtml || `<p>${finalBodyText.replace(/\n/g, "<br/>")}</p>`;
 
     const templateId = crypto.randomUUID();
     await db.insert(schema.emailTemplates).values({
       id: templateId,
       userId: user.id,
       name: `${companyName} Calibrated Template`,
-      subject: primarySample.subject,
-      bodyText: primarySample.bodyText,
-      bodyHtml: primarySample.bodyHtml || primarySample.bodyText,
+      subject: finalSubject,
+      bodyText: finalBodyText,
+      bodyHtml: finalBodyHtml,
       format: "text",
     });
 
@@ -320,6 +591,30 @@ export async function launchChadGtmCampaignAction(
       retryFailed: true,
       trackOpens: true,
       startedAt: nowIso(),
+    });
+
+    // 4b. Create sequence step with dynamic AI generation matching calibrated voice preferences
+    const stepId = crypto.randomUUID();
+    await db.insert(schema.sequenceSteps).values({
+      id: stepId,
+      campaignId,
+      position: 1,
+      delayDays: 0,
+    });
+
+    const aiPrompt =
+      calibratedProfile.customAiInstruction ||
+      `Product/Company: ${companyName}. Value Offer: ${primarySample.bodyText}. Voice: Direct, technical peer-to-peer. Keep under 65 words. Zero fluff greetings.`;
+
+    await db.insert(schema.sequenceStepVariants).values({
+      id: crypto.randomUUID(),
+      stepId,
+      label: "A",
+      subject: finalSubject,
+      bodyText: finalBodyText,
+      bodyHtml: finalBodyHtml,
+      aiGenerateOnTheFly: true,
+      aiPrompt,
     });
 
     // 5. Bind Active System Pool Mailboxes to campaign_senders

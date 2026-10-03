@@ -90,6 +90,9 @@ export async function ensureChadGtmTables(db: Db) {
     await db.execute(
       sql`CREATE INDEX IF NOT EXISTS "chad_gtm_runs_campaign_idx" ON "chad_gtm_runs" ("campaign_id")`
     );
+    await db.execute(
+      sql`ALTER TABLE "chad_gtm_runs" ADD COLUMN IF NOT EXISTS "calibration_profile" jsonb DEFAULT '{}'::jsonb`
+    );
     chadGtmMigrated = true;
   } catch (err) {
     console.error("[db] ensureChadGtmTables error:", err);

@@ -831,6 +831,22 @@ export const chadGtmRuns = pgTable(
       }>>()
       .notNull()
       .default([]),
+    calibrationProfile: jsonb("calibration_profile")
+      .$type<{
+        voiceTone?: string;
+        analysisSummary?: string;
+        keyAdjustments?: string[];
+        dos?: string[];
+        donts?: string[];
+        customAiInstruction?: string;
+        calibratedSubjectTemplate?: string;
+        calibratedBodyTemplate?: string;
+        approvedCount?: number;
+        rejectedCount?: number;
+        [key: string]: any;
+      }>()
+      .notNull()
+      .default({}),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

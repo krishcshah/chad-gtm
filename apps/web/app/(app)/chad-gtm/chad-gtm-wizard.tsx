@@ -21,11 +21,14 @@ import {
   analyzeWebsiteAction,
   updateGtmStrategyAction,
   generateCalibrationEmailsAction,
+  refineGtmCalibrationAction,
   launchChadGtmCampaignAction,
+  type CalibrationProfile,
 } from "@/lib/chad-gtm-actions";
 import { StrategyReviewBoard } from "@/components/chad-gtm/strategy-review";
 import { LeadMatcher } from "@/components/chad-gtm/lead-matcher";
 import { SwipeCardDeck, type EmailCalibrationSample } from "@/components/chad-gtm/swipe-card";
+import { CalibrationRefinementView } from "@/components/chad-gtm/calibration-refinement-view";
 import { VelocitySlider } from "@/components/chad-gtm/velocity-slider";
 import type { SynthesizedGtmStrategy } from "@/lib/chad-gtm-research";
 
@@ -69,6 +72,10 @@ export function ChadGtmWizard({
   const [selectedIndustries, setSelectedIndustries] = useState<string[]>([]);
   const [calibrationDeck, setCalibrationDeck] = useState<EmailCalibrationSample[]>([]);
   const [isCalibrating, setIsCalibrating] = useState(false);
+  const [isRefiningCopy, setIsRefiningCopy] = useState(false);
+  const [isCalibrationReviewed, setIsCalibrationReviewed] = useState(false);
+  const [calibrationProfile, setCalibrationProfile] = useState<CalibrationProfile | null>(null);
+  const [refinedSamples, setRefinedSamples] = useState<EmailCalibrationSample[]>([]);
   const [isLaunching, setIsLaunching] = useState(false);
 
   // Step 1: Submit URL & Launch Deep Analysis
@@ -147,22 +154,48 @@ export function ChadGtmWizard({
     }
   };
 
-  // Step 4: Complete Calibration Deck
-  const handleCompleteCalibration = (approved: EmailCalibrationSample[]) => {
-    setCalibrationDeck(approved);
-    setStep(5);
+  // Step 4: Complete Calibration Deck & Refine Outbound Copy
+  const handleCompleteCalibration = async (deck: EmailCalibrationSample[]) => {
+    setCalibrationDeck(deck);
+    setIsRefiningCopy(true);
+    setIsCalibrationReviewed(false);
+
+    try {
+      const res = await refineGtmCalibrationAction(runId, deck, selectedOfferIndex);
+      if (res.ok && res.profile) {
+        setCalibrationProfile(res.profile);
+        if (res.refinedSamples && res.refinedSamples.length > 0) {
+          setRefinedSamples(res.refinedSamples);
+        }
+        toast.success("Outreach copy calibrated to your preferences!");
+        setIsCalibrationReviewed(true);
+      } else {
+        toast.error(res.error || "Failed to adjust copy. Using calibrated defaults.");
+        setIsCalibrationReviewed(true);
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "An unexpected error occurred while refining copy.");
+      setIsCalibrationReviewed(true);
+    } finally {
+      setIsRefiningCopy(false);
+    }
   };
 
   // Step 5: Launch Campaign
   const handleLaunchCampaign = async (dailyLimit: number) => {
     setIsLaunching(true);
     try {
+      const samplesToUse =
+        refinedSamples.length > 0
+          ? refinedSamples
+          : calibrationDeck.filter((c) => c.approved).length > 0
+          ? calibrationDeck.filter((c) => c.approved)
+          : calibrationDeck.slice(0, 3);
+
       const res = await launchChadGtmCampaignAction(
         runId,
         dailyLimit,
-        calibrationDeck.filter((c) => c.approved).length > 0
-          ? calibrationDeck.filter((c) => c.approved)
-          : calibrationDeck.slice(0, 3),
+        samplesToUse,
         selectedOfferIndex
       );
 
@@ -381,7 +414,7 @@ export function ChadGtmWizard({
         />
       )}
 
-      {/* STEP 4: Tinder-Style Email Calibration Swipe Deck */}
+      {/* STEP 4: Tinder-Style Email Calibration Swipe Deck & Refinement */}
       {step === 4 && (
         <>
           {isCalibrating ? (
@@ -396,6 +429,23 @@ export function ChadGtmWizard({
                 </p>
               </div>
             </div>
+          ) : isRefiningCopy || isCalibrationReviewed ? (
+            <CalibrationRefinementView
+              isRefining={isRefiningCopy}
+              profile={calibrationProfile}
+              refinedSamples={
+                refinedSamples.length > 0
+                  ? refinedSamples
+                  : calibrationDeck.filter((c) => c.approved)
+              }
+              approvedCount={calibrationDeck.filter((c) => c.approved).length}
+              rejectedCount={calibrationDeck.filter((c) => !c.approved).length}
+              onProceedToLaunch={() => setStep(5)}
+              onRecalibrate={() => {
+                setIsCalibrationReviewed(false);
+                setIsRefiningCopy(false);
+              }}
+            />
           ) : (
             <SwipeCardDeck
               samples={calibrationDeck}

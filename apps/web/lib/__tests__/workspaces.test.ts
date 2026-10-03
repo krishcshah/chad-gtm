@@ -3,7 +3,7 @@ import { ACTIVE_WORKSPACE_COOKIE } from "../workspaces";
 
 describe("Workspaces Core Logic", () => {
   it("defines active workspace cookie constant", () => {
-    expect(ACTIVE_WORKSPACE_COOKIE).toBe("sr_active_workspace_id");
+    expect(ACTIVE_WORKSPACE_COOKIE).toBe("chadgtm_active_workspace_id");
   });
 
   describe("Workspace data isolation model", () => {
