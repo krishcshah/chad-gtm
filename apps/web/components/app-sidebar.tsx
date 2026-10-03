@@ -241,7 +241,7 @@ export function AppSidebar({
         >
           <div className="flex items-center gap-2 text-zinc-400">
             <span className="size-1.5 rounded-none bg-white animate-pulse" />
-            {!collapsed && <span className="uppercase tracking-wider text-[9px]">Gemini 3.8</span>}
+            {!collapsed && <span className="uppercase tracking-wider text-[9px]">Chad Core Active</span>}
           </div>
 
           {!collapsed && (
@@ -417,7 +417,7 @@ export function AppSidebar({
         <div className="border-t border-zinc-800 py-2 px-3 flex items-center justify-between text-[9px] select-none bg-zinc-950 font-mono text-zinc-400 uppercase tracking-widest">
           <div className="flex items-center gap-1.5">
             <span className="size-1.5 rounded-none bg-white animate-pulse" />
-            <span>Gemini 3.8</span>
+            <span>Chad Core Active</span>
           </div>
           <span className="px-1.5 py-0.5 rounded-none bg-zinc-900 text-zinc-300 border border-zinc-800">
             3¢ Pool Active

@@ -50,7 +50,7 @@ const NODES: NodeStatus[] = [
 ];
 
 const LIVE_EVENTS = [
-  { time: "14:32:01", tag: "CRAWL", msg: "Gemini 3.8 parsed domain DOM in 380ms" },
+  { time: "14:32:01", tag: "CRAWL", msg: "Chad Neural Core parsed domain DOM in 380ms" },
   { time: "14:32:04", tag: "ICP", msg: "Query 'VP Engineering' -> 14,820 leads indexed" },
   { time: "14:32:08", tag: "DNS", msg: "SPF/DKIM/DMARC verified for shared pool" },
   { time: "14:32:12", tag: "DISPATCH", msg: "Packet sent via mbx-us-04 (delay: 68s)" },

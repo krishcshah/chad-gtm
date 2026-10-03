@@ -55,8 +55,7 @@ export default async function CampaignsPage() {
               No Outbound Campaigns Yet
             </h3>
             <p className="text-xs text-zinc-500 font-sans max-w-md mx-auto leading-relaxed">
-              Enter your company website to let Gemini 3.8 Flash extract your ICP, match 500+ verified Apollo leads,
-              and start autonomous outreach in under 60 seconds.
+              Enter your company website to let our proprietary Chad Neural Core extract your ICP, match verified decision-makers from our 100M+ global directory, and start autonomous outreach in under 60 seconds.
             </p>
           </div>
           <Button

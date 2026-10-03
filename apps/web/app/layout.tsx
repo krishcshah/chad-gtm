@@ -17,7 +17,7 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: { default: "ChadGTM · Autonomous Go-To-Market", template: "%s · ChadGTM" },
   description:
-    "Autonomous Go-To-Market & Cold Outreach Engine. Turn any website URL into booked pipeline in 60 seconds with Gemini 3.8 Flash, 100M+ global B2B leads, and turnkey admin-managed mailboxes.",
+    "Autonomous Go-To-Market & Cold Outreach Engine. Turn any website URL into booked pipeline in 60 seconds with our proprietary Chad Neural Core™, 100M+ global B2B leads, and turnkey admin-managed mailboxes.",
   icons: {
     icon: [
       { url: "/icon.svg", type: "image/svg+xml" },

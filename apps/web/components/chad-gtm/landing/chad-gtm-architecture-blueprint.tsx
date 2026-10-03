@@ -30,9 +30,9 @@ const LAYERS: ArchLayer[] = [
   {
     id: "layer-1",
     tag: "TIER_01 // INFERENCE",
-    name: "Gemini 3.8 Flash Neural DOM Scraper",
+    name: "Chad Neural Core™ Autonomous ICP Engine",
     summary:
-      "Instantaneous crawling of landing page DOM, meta tags, pricing tiers, and customer testimonials. Synthesizes core UVPs and ideal customer personas in under 400 milliseconds.",
+      "Instantaneous crawling of landing page DOM, meta tags, pricing tiers, and customer testimonials. Synthesizes core UVPs and ideal customer personas in under 400 milliseconds using our proprietary outbound intelligence model.",
     latency: "<400ms",
     metric: "100% UNSTRUCTURED TO ICP",
     details: [
@@ -41,12 +41,12 @@ const LAYERS: ArchLayer[] = [
       "Generates 3 distinctive cold outreach angles per target ICP",
       "Identifies decision-maker titles (VP Eng, Head of Growth, CTO)",
     ],
-    specCode: `// STAGE 01: NEURAL DOM EXTRACTION
+    specCode: `// STAGE 01: CHAD NEURAL CORE EXTRACTION
 const prompt = "Analyze domain DOM, identify UVP, map 3 ICP personas";
-const model = gemini("gemini-3.8-flash");
-const extraction = await model.generateContent({
+const engine = chadNeuralCore({ mode: "autonomous_icp" });
+const extraction = await engine.synthesize({
   contents: [urlDOM, prompt],
-  temperature: 0.2, // deterministic precision
+  temperature: 0.2, // deterministic conversion focus
   responseSchema: ChadGtmIcpSchema,
 });
 // Result: 3 calibrated outreach angles synthesized in 380ms`,

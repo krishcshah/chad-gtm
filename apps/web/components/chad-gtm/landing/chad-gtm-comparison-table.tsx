@@ -14,7 +14,7 @@ export function ChadGtmComparisonTable() {
     },
     {
       feature: "Autonomous URL-to-Campaign",
-      chadGtm: "Instant (60s Gemini 3.8)",
+      chadGtm: "Instant (60s Chad Neural Core™)",
       instantly: "Manual campaign setup",
       apollo: "Manual list building",
       agency: "2-3 weeks onboarding",

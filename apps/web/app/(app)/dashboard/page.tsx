@@ -106,7 +106,7 @@ export default async function DashboardPage() {
                 </span>
                 <span className="inline-flex items-center gap-1.5 rounded-none border border-zinc-800 bg-black px-2 py-0.5 text-[9px] uppercase tracking-widest text-zinc-400">
                   <span className="size-1 rounded-none bg-white animate-pulse" />
-                  Gemini 3.8 Active
+                  Chad Neural Engine Active
                 </span>
                 <span className="rounded-none border border-zinc-800 bg-black px-2 py-0.5 text-[9px] uppercase tracking-widest text-zinc-400">
                   Managed 3¢ Pool
@@ -117,7 +117,7 @@ export default async function DashboardPage() {
               </h1>
               <p className="text-xs text-zinc-400 font-sans max-w-2xl leading-relaxed">
                 Autonomous Go-To-Market pipeline. Outreach is paced through a managed platform pool of
-                pre-warmed mailboxes with Apollo-verified B2B leads.
+                pre-warmed mailboxes with verified leads from our 100M+ global directory.
               </p>
             </div>
 
@@ -361,7 +361,7 @@ export default async function DashboardPage() {
                 No GTM Strategy Configured Yet
               </h3>
               <p className="text-xs text-zinc-500 font-sans max-w-sm mx-auto mt-0.5 leading-relaxed">
-                Enter your company website to let Gemini 3.8 Flash synthesize your ICP, calibrate
+                Enter your company website to let our proprietary Chad Neural Core synthesize your ICP, calibrate
                 high-converting cold email angles, and launch verified B2B outreach in 60 seconds.
               </p>
             </div>

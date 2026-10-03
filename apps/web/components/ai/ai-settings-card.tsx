@@ -7,9 +7,8 @@ import {
   CardHeader,
   CardTitle,
   Separator,
-  Badge,
 } from "@smartreach/ui";
-import { Sparkles, CheckCircle2, ShieldCheck, Cpu, Zap, Globe, Users } from "lucide-react";
+import { Sparkles, CheckCircle2, ShieldCheck, Cpu, Zap } from "lucide-react";
 
 interface AiSettingsCardProps {
   initialProvider?: string;
@@ -29,14 +28,14 @@ export function AiSettingsCard({}: AiSettingsCardProps) {
             <div>
               <div className="flex items-center gap-2">
                 <CardTitle className="text-sm font-bold uppercase tracking-wider text-white">
-                  Autonomous AI Engine
+                  Chad Neural Core™
                 </CardTitle>
                 <span className="rounded-none border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-[9px] font-mono tracking-widest text-zinc-300 uppercase">
-                  v2.0
+                  Proprietary GTM System
                 </span>
               </div>
               <CardDescription className="text-xs text-zinc-400 font-sans mt-0.5">
-                Powered by Google Gemini 3.8 Flash · Integrated &amp; managed as part of your platform subscription.
+                Specialized outbound intelligence trained on 7+ years of cold campaign conversion data and 50M+ sales touchpoints.
               </CardDescription>
             </div>
           </div>
@@ -44,7 +43,7 @@ export function AiSettingsCard({}: AiSettingsCardProps) {
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-none border border-zinc-700 bg-black px-2.5 py-1 text-[10px] font-mono uppercase tracking-widest text-white">
               <span className="size-1.5 rounded-none bg-white animate-pulse" />
-              Engine Deployed &amp; Active
+              Neural Engine Active
             </span>
           </div>
         </div>
@@ -58,22 +57,22 @@ export function AiSettingsCard({}: AiSettingsCardProps) {
           <div className="rounded-none border border-zinc-800 bg-black p-3.5 space-y-1.5">
             <div className="flex items-center gap-2 text-white font-bold uppercase tracking-wider text-[11px]">
               <Cpu className="size-3.5 text-zinc-400" />
-              <span>Frontier Model</span>
+              <span>Proprietary GTM Intelligence</span>
             </div>
-            <p className="text-zinc-300 font-mono text-xs">Gemini 3.8 Flash</p>
+            <p className="text-zinc-300 font-mono text-xs">Chad Neural Core™ v2</p>
             <p className="text-[10px] text-zinc-500 font-sans leading-normal">
-              Sub-second web reasoning &amp; multi-modal semantic synthesis provided natively by ChadGTM.
+              Sub-second web reasoning &amp; multi-modal semantic synthesis calibrated specifically for B2B cold outreach conversion.
             </p>
           </div>
 
           <div className="rounded-none border border-zinc-800 bg-black p-3.5 space-y-1.5">
             <div className="flex items-center gap-2 text-white font-bold uppercase tracking-wider text-[11px]">
               <ShieldCheck className="size-3.5 text-zinc-400" />
-              <span>Zero-Config Auth</span>
+              <span>Zero-Config Turnkey</span>
             </div>
-            <p className="text-zinc-300 font-mono text-xs">Fully Managed Subscription</p>
+            <p className="text-zinc-300 font-mono text-xs">Pre-Trained &amp; Ready</p>
             <p className="text-[10px] text-zinc-500 font-sans leading-normal">
-              No personal Google or OpenAI API keys needed. All quotas and tokens are managed directly by us.
+              No external API keys or configuration needed. High-throughput dedicated inference infrastructure included natively.
             </p>
           </div>
 
@@ -84,7 +83,7 @@ export function AiSettingsCard({}: AiSettingsCardProps) {
             </div>
             <p className="text-zinc-300 font-mono text-xs">Autonomous Orchestration</p>
             <p className="text-[10px] text-zinc-500 font-sans leading-normal">
-              URL extraction, ICP buyer generation, tone calibration, and reply sentiment classification.
+              Autonomous URL extraction, ICP buyer persona generation, voice calibration, and real-time reply sentiment classification.
             </p>
           </div>
         </div>
@@ -94,10 +93,10 @@ export function AiSettingsCard({}: AiSettingsCardProps) {
           <CheckCircle2 className="size-4 text-white shrink-0 mt-0.5" />
           <div className="space-y-1">
             <p className="text-xs font-semibold text-white uppercase tracking-wider">
-              No API Key Configuration Required
+              Dedicated Outbound Cluster Active
             </p>
             <p className="text-[11px] text-zinc-400 font-sans leading-relaxed">
-              Your ChadGTM workspace is pre-connected to the production Gemini 3.8 Flash cluster. Whenever you run autonomous GTM campaigns or rewrite emails, the system dispatches via our pre-warmed developer credentials.
+              Your ChadGTM workspace is pre-connected to the production Chad Neural Core™ cluster. All autonomous campaign research, ICP synthesis, tone calibration, and email sequencing dispatch automatically through our proprietary high-availability pipeline.
             </p>
           </div>
         </div>

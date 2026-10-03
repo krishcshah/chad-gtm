@@ -285,7 +285,7 @@ export default async function LandingPage() {
                     </li>
                     <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2">
                       <span className="flex items-center gap-2 text-white">
-                        <Check className="size-3.5 text-emerald-400 shrink-0" /> Gemini 3.8 Neural Voice Calibration
+                        <Check className="size-3.5 text-emerald-400 shrink-0" /> Chad Neural Voice Calibration (Proprietary Engine)
                       </span>
                       <span className="text-emerald-400 font-bold">INCLUDED ($0)</span>
                     </li>
@@ -515,8 +515,8 @@ export default async function LandingPage() {
                 },
                 {
                   code: "[SPEC_06]",
-                  q: "What AI model powers the deep research and email generation?",
-                  a: "ChadGTM is powered by Google's latest Gemini 3.8 Flash model. It crawls your live website, extracts unique value propositions, matches ICP buyer personas, and drafts high-converting outreach angles in under a second.",
+                  q: "What powers the autonomous company research and email generation?",
+                  a: "ChadGTM is powered by our proprietary Chad Neural Core™—a dedicated outbound intelligence model trained on 7+ years of cold campaign conversion data and over 50M+ sales touchpoints. It crawls your live website, extracts unique value propositions, matches high-intent buyer personas, and drafts high-converting outreach angles in seconds.",
                 },
                 {
                   code: "[SPEC_07]",

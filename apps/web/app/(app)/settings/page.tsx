@@ -142,7 +142,7 @@ export default async function SettingsPage() {
           <span>ChadGTM Autonomous Outbound Engine</span>
         </div>
         <p className="text-xs text-zinc-400 leading-relaxed max-w-xl">
-          Powered by Gemini 3.8 Flash, 100M+ verified global decision-maker prospects, and autonomous managed mailboxes with safe 30/day delivery pacing.
+          Powered by our proprietary Chad Neural Core™ trained on 50M+ sales touchpoints, 100M+ verified global decision-maker prospects, and autonomous managed mailboxes with safe 30/day delivery pacing.
         </p>
         <div className="mt-3 flex items-center gap-4 text-[11px] font-mono text-zinc-500">
           <span className="flex items-center gap-1.5">

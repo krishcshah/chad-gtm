@@ -85,7 +85,7 @@ export function ChadGtmPricingCard({ isLoggedIn = false }: { isLoggedIn?: boolea
                 <div>
                   <div className="font-bold text-white uppercase tracking-wide text-[11px]">Autonomous ICP Extraction</div>
                   <div className="text-zinc-400 font-sans text-xs mt-0.5">
-                    Gemini 3.8 Flash crawls your domain to extract core value propositions, pain points, and buyer personas in 60s.
+                    Our proprietary Chad Neural Core™ crawls your domain to extract core value propositions, pain points, and buyer personas in 60s.
                   </div>
                 </div>
               </div>

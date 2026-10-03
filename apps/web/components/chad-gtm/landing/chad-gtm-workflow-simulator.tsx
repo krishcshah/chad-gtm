@@ -153,7 +153,7 @@ export function ChadGtmWorkflowSimulator() {
                   </div>
                   <div className="text-zinc-400 flex items-center gap-2">
                     <CheckCircle2 className="size-3.5 text-white" />
-                    [Gemini 3.8 Flash]: Synthesizing brand thesis, target buyers, and pain vectors...
+                    [Chad Neural Core™]: Synthesizing brand thesis, target buyers, and pain vectors...
                   </div>
                 </div>
               </div>
