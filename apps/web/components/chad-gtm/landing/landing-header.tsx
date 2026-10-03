@@ -17,8 +17,11 @@ export function LandingHeader({ isLoggedIn }: { isLoggedIn: boolean }) {
         <ChadGtmLogo />
 
         {/* Desktop Navigation Links */}
-        <nav className="hidden md:flex items-center gap-7 text-xs font-mono uppercase tracking-wider text-zinc-400">
-          <a href="#how-it-works" className="transition-colors hover:text-white">
+        <nav className="hidden lg:flex items-center gap-6 text-xs font-mono uppercase tracking-wider text-zinc-400">
+          <a href="#scanner" className="transition-colors hover:text-white">
+            Scanner
+          </a>
+          <a href="#architecture" className="transition-colors hover:text-white">
             Architecture
           </a>
           <a href="#leads" className="transition-colors hover:text-white">
@@ -26,6 +29,9 @@ export function LandingHeader({ isLoggedIn }: { isLoggedIn: boolean }) {
           </a>
           <a href="#comparison" className="transition-colors hover:text-white">
             Matrix
+          </a>
+          <a href="#roi-calculator" className="transition-colors hover:text-white">
+            ROI Audit
           </a>
           <a href="#pricing" className="transition-colors hover:text-white flex items-center gap-1.5">
             Pricing <span className="text-white font-bold border border-zinc-700 bg-zinc-900 px-1 py-0.2 rounded-none text-[10px]">$0/mo</span>
@@ -124,12 +130,20 @@ export function LandingHeader({ isLoggedIn }: { isLoggedIn: boolean }) {
       >
         <nav className="flex flex-col space-y-1 pb-4 border-b border-zinc-800">
           <a
-            href="#how-it-works"
+            href="#scanner"
             onClick={closeMenu}
             className="flex items-center gap-3 rounded-none px-3 py-2.5 text-xs font-mono uppercase tracking-wider text-zinc-300 hover:text-white hover:bg-zinc-900 transition-colors"
           >
             <Sparkles className="size-4 text-zinc-400" />
-            <span>Architecture & Flow</span>
+            <span>Live URL Scanner</span>
+          </a>
+          <a
+            href="#architecture"
+            onClick={closeMenu}
+            className="flex items-center gap-3 rounded-none px-3 py-2.5 text-xs font-mono uppercase tracking-wider text-zinc-300 hover:text-white hover:bg-zinc-900 transition-colors"
+          >
+            <Rocket className="size-4 text-zinc-400" />
+            <span>Architecture & Blueprint</span>
           </a>
           <a
             href="#leads"
@@ -145,7 +159,15 @@ export function LandingHeader({ isLoggedIn }: { isLoggedIn: boolean }) {
             className="flex items-center gap-3 rounded-none px-3 py-2.5 text-xs font-mono uppercase tracking-wider text-zinc-300 hover:text-white hover:bg-zinc-900 transition-colors"
           >
             <Scale className="size-4 text-zinc-400" />
-            <span>Matrix vs Clay/Instantly</span>
+            <span>Matrix vs Competitors</span>
+          </a>
+          <a
+            href="#roi-calculator"
+            onClick={closeMenu}
+            className="flex items-center gap-3 rounded-none px-3 py-2.5 text-xs font-mono uppercase tracking-wider text-zinc-300 hover:text-white hover:bg-zinc-900 transition-colors"
+          >
+            <DollarSign className="size-4 text-zinc-400" />
+            <span>ROI & Savings Matrix</span>
           </a>
           <a
             href="#pricing"
