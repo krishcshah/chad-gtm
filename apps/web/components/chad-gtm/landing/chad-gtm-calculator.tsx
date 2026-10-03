@@ -108,7 +108,7 @@ export function ChadGtmCalculator() {
                   </div>
                   <div className="text-[10px] text-zinc-400 space-y-0.5 pt-1">
                     <div>• Core Platform: $0</div>
-                    <div>• 329k Leads Directory: Included</div>
+                    <div>• 100M+ Leads Directory: Included ($0)</div>
                     <div>• 3¢ per delivered email</div>
                   </div>
                 </div>
@@ -117,7 +117,7 @@ export function ChadGtmCalculator() {
 
             {/* Note */}
             <p className="text-[10px] text-zinc-500 pt-2 border-t border-zinc-800/80">
-              * BYO SMTP Option: If you connect your own custom mailboxes, software cost is strictly $0/mo with unlimited sending.
+              * Turnkey Infrastructure: All mailboxes are pre-warmed, authenticated, and managed directly by our admin fleet. Zero DNS or domain setup required.
             </p>
           </div>
 

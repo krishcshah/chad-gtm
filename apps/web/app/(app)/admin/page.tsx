@@ -61,7 +61,7 @@ export default async function AdminPage() {
           Admin Command Center
         </h1>
         <p className="mt-1 text-xs text-zinc-500 font-sans max-w-2xl">
-          Universal management of shared mailbox fleets, 329k lead directory, user analytics, support tickets, and GDPR compliance requests.
+          Universal management of shared mailbox fleets, 100M+ lead directory, user analytics, support tickets, and GDPR compliance requests.
         </p>
       </div>
 

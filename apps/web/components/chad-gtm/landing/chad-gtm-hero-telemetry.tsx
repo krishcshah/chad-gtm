@@ -115,8 +115,8 @@ export function ChadGtmHeroTelemetry() {
               <span>Verified Leads</span>
               <Database className="size-2.5 text-zinc-400" />
             </div>
-            <div className="text-base font-bold text-white tracking-tight">329,563</div>
-            <div className="text-[9px] text-zinc-400">Apollo B2B cache</div>
+            <div className="text-base font-bold text-white tracking-tight">100M+</div>
+            <div className="text-[9px] text-zinc-400">Global B2B cache</div>
           </div>
 
           <div className="border border-zinc-800 bg-zinc-950/80 p-2.5 space-y-1">

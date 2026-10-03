@@ -59,7 +59,7 @@ export function LeadMatcher({
         <div>
           <div className="flex items-center gap-2">
             <span className="rounded-none border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[10px] uppercase tracking-wider text-white">
-              STAGE 03 // APOLLO MATCH
+              STAGE 03 // 100M+ DIRECTORY MATCH
             </span>
             <span className="text-[10px] uppercase tracking-widest text-zinc-500">Lead Extraction</span>
           </div>
@@ -67,7 +67,7 @@ export function LeadMatcher({
             Target Industry & Lead Matcher
           </h2>
           <p className="text-xs text-zinc-400 font-sans mt-0.5">
-            Cross-referencing your ICP against the built-in 329k+ Apollo-style B2B directory.
+            Cross-referencing your ICP against the built-in 100M+ global B2B directory.
           </p>
         </div>
 

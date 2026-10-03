@@ -82,13 +82,13 @@ export function ChadGtmLeadsPreview() {
         <div className="text-center max-w-3xl mx-auto mb-14">
           <div className="inline-flex items-center gap-2 rounded-none border border-zinc-800 bg-zinc-950 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-zinc-300 mb-4">
             <Database className="size-3 text-zinc-400" />
-            LOCAL DATABASE // ZERO SCRAPING FEES
+            GLOBAL DIRECTORY // ZERO SCRAPING TAX
           </div>
           <h2 className="text-3xl sm:text-5xl font-bold tracking-tight text-white uppercase">
-            329,563 Verified B2B Leads
+            100M+ Verified Global Leads
           </h2>
           <p className="mt-4 text-xs sm:text-sm text-zinc-400 font-mono">
-            Embedded Apollo-style SQLite directory. Directly queryable with zero per-lead export charges.
+            High-velocity enterprise directory. Actively ingesting and indexing our complete 100,000,000+ contact database across 190+ countries—with zero credit paywalls or export fees.
           </p>
         </div>
 
@@ -97,16 +97,16 @@ export function ChadGtmLeadsPreview() {
           {/* Stats Header Bar */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pb-5 border-b border-zinc-800 text-center font-mono">
             <div className="p-3 rounded-none bg-black border border-zinc-800">
-              <div className="text-xl sm:text-2xl font-bold text-white">329,563</div>
-              <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-0.5">Total Verified Leads</div>
+              <div className="text-xl sm:text-2xl font-bold text-white">100M+</div>
+              <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-0.5">Directory Ingestion Target</div>
             </div>
             <div className="p-3 rounded-none bg-black border border-zinc-800">
-              <div className="text-xl sm:text-2xl font-bold text-white">236,104</div>
+              <div className="text-xl sm:text-2xl font-bold text-white">72M+</div>
               <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-0.5">Direct Work Emails</div>
             </div>
             <div className="p-3 rounded-none bg-black border border-zinc-800">
-              <div className="text-xl sm:text-2xl font-bold text-white">114,482</div>
-              <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-0.5">Secondary Contacts</div>
+              <div className="text-xl sm:text-2xl font-bold text-white">190+</div>
+              <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-0.5">Countries Covered</div>
             </div>
             <div className="p-3 rounded-none bg-black border border-zinc-800">
               <div className="text-xl sm:text-2xl font-bold text-white">$0.00</div>
@@ -180,11 +180,11 @@ export function ChadGtmLeadsPreview() {
 
           <div className="mt-5 pt-4 border-t border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left font-mono">
             <span className="text-[11px] text-zinc-500 uppercase tracking-wider">
-              Sample records previewed · Complete database unlocked on signup
+              Sample records previewed · Complete 100M+ database unlocked on signup
             </span>
             <Button asChild size="sm" className="rounded-none bg-white hover:bg-zinc-200 text-black font-semibold text-xs font-mono uppercase tracking-wider gap-1.5 border border-white w-full sm:w-auto">
               <Link href="/signup">
-                Access 329k Leads <ArrowRight className="size-3.5" />
+                Access 100M+ Leads <ArrowRight className="size-3.5" />
               </Link>
             </Button>
           </div>

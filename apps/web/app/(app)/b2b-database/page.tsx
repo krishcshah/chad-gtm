@@ -12,9 +12,9 @@ import { B2bPaywall } from "@/components/leads/b2b-paywall";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Apollo Directory · 329k+ Verified Leads · ChadGTM",
+  title: "Global Directory · 100M+ Verified Leads · ChadGTM",
   description:
-    "Search 329,000+ verified B2B decision-makers, filter by company size, seniority, and industry, and export directly to autonomous campaigns.",
+    "Search 100M+ verified global B2B decision-makers, filter by company size, seniority, and industry, and export directly to autonomous campaigns.",
 };
 
 export default async function B2bDatabasePage({
@@ -34,7 +34,7 @@ export default async function B2bDatabasePage({
 
   const userIsAdmin = true;
 
-  // In ChadGTM, all authenticated users have full access to the 329,563 Apollo Leads Directory
+  // In ChadGTM, all authenticated users have full access to the 100M+ Global Leads Directory
   const hasAccess = true;
   const isPreviewingPaywall = false;
 
@@ -96,7 +96,7 @@ export default async function B2bDatabasePage({
           <span className="flex items-center gap-2">
             <ShieldCheck className="size-4 text-white" />
             <span>
-              <strong>ADMIN ACCESS:</strong> Unrestricted access to 329,563 B2B Leads Directory.
+              <strong>ADMIN ACCESS:</strong> Unrestricted access to 100M+ Global B2B Leads Directory (Full Ingestion).
             </span>
           </span>
           <Link

@@ -38,7 +38,7 @@ export function ChadGtmWorkflowSimulator() {
     },
     {
       id: "apollo",
-      title: "03. 329K EXTRACTION",
+      title: "03. 100M+ EXTRACTION",
       subtitle: "Verified prospect match",
       icon: Database,
     },
@@ -219,7 +219,7 @@ export function ChadGtmWorkflowSimulator() {
                   Back
                 </Button>
                 <Button onClick={() => setActiveStep(2)} size="sm" className="rounded-none bg-white hover:bg-zinc-200 text-black font-semibold text-xs font-mono uppercase tracking-wider gap-1.5 border border-white">
-                  Next: Apollo Leads Match <ArrowRight className="size-3.5" />
+                  Next: 100M+ Leads Match <ArrowRight className="size-3.5" />
                 </Button>
               </div>
             </div>
@@ -230,10 +230,10 @@ export function ChadGtmWorkflowSimulator() {
               <div className="flex items-center justify-between border-b border-zinc-800 pb-3 font-mono">
                 <div>
                   <h4 className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">
-                    Stage 03: Apollo B2B Lead Extraction
+                    Stage 03: 100M+ Global B2B Lead Extraction
                   </h4>
                   <p className="text-xs text-zinc-400 font-sans mt-0.5">
-                    Cross-referenced against our built-in 329,563 SQLite verified prospects. Zero scraping required.
+                    Cross-referenced against our 100M+ global verified prospect repository. Zero scraping fees.
                   </p>
                 </div>
                 <div className="rounded-none border border-zinc-800 bg-zinc-950 px-2.5 py-1 font-mono text-xs font-bold text-white">

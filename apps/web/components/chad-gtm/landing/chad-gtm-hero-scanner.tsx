@@ -108,7 +108,7 @@ export function ChadGtmHeroScanner() {
   const steps = [
     "CRAWLING ROOT DOM & SUBPAGES...",
     "EXTRACTING CORE VALUE PROPOSITIONS & DIFFERENTIATORS...",
-    "CROSS-REFERENCING 329,563 APOLLO VERIFIED LEADS...",
+    "CROSS-REFERENCING 100M+ GLOBAL VERIFIED B2B LEADS...",
     "SYNTHESIZING COLD EMAIL ANGLES & ICP...",
   ];
 
@@ -144,7 +144,7 @@ export function ChadGtmHeroScanner() {
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-none border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-[10px] uppercase tracking-widest text-zinc-300">
-              329K+ B2B LEADS SYNCED
+              100M+ GLOBAL LEADS SYNCED
             </span>
           </div>
         </div>

@@ -25,7 +25,7 @@ export function LandingHeader({ isLoggedIn }: { isLoggedIn: boolean }) {
             3-Touch Cadence <span className="border border-emerald-500/40 bg-emerald-950/20 text-emerald-400 px-1 py-0.2 text-[9px] font-bold">New</span>
           </a>
           <a href="#leads" className="transition-colors hover:text-white">
-            329k Leads
+            100M+ Leads
           </a>
           <a href="#roi-calculator" className="transition-colors hover:text-white">
             ROI Calculator
@@ -151,7 +151,7 @@ export function LandingHeader({ isLoggedIn }: { isLoggedIn: boolean }) {
             className="flex items-center gap-3 rounded-none px-3 py-2.5 text-xs font-mono uppercase tracking-wider text-zinc-300 hover:text-white hover:bg-zinc-900 transition-colors"
           >
             <Database className="size-4 text-zinc-400" />
-            <span>329k Leads Directory</span>
+            <span>100M+ Leads Directory</span>
           </a>
           <a
             href="#comparison"

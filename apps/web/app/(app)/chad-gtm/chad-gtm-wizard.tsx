@@ -53,7 +53,7 @@ export function ChadGtmWizard({
     "Connecting to company domain...",
     "Crawling homepage and subpages...",
     "Analyzing value propositions and differentiators...",
-    "Cross-referencing Apollo 329k+ B2B lead directory...",
+    "Cross-referencing 100M+ global B2B lead directory...",
     "Synthesizing high-converting cold email hooks...",
   ];
 
@@ -270,7 +270,7 @@ export function ChadGtmWizard({
               Launch Outbound Engine
             </h2>
             <p className="text-xs text-zinc-400 max-w-lg mx-auto font-sans leading-relaxed">
-              Enter your company website. Our autonomous engine analyzes your product, cross-references 329k+ Apollo B2B prospects, and dispatches calibrated outreach through our pre-warmed shared mailbox pool.
+              Enter your company website. Our autonomous engine analyzes your product, cross-references 100M+ verified global B2B prospects, and dispatches calibrated outreach through our pre-warmed shared mailbox pool.
             </p>
           </div>
 
@@ -379,7 +379,7 @@ export function ChadGtmWizard({
             <div className="flex items-start gap-2.5 p-3 rounded-none border border-zinc-800 bg-zinc-950">
               <Search className="size-4 text-white shrink-0 mt-0.5" />
               <div>
-                <span className="font-bold text-white block uppercase tracking-wider text-[11px]">329k Apollo Leads</span>
+                <span className="font-bold text-white block uppercase tracking-wider text-[11px]">100M+ Global Leads</span>
                 <span className="text-zinc-500 font-sans text-xs">Instant B2B matching.</span>
               </div>
             </div>

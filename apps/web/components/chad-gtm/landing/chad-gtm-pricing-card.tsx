@@ -38,7 +38,7 @@ export function ChadGtmPricingCard({ isLoggedIn = false }: { isLoggedIn?: boolea
             </span>
           </h2>
           <p className="mt-4 text-xs sm:text-sm text-zinc-400 font-mono leading-relaxed max-w-2xl mx-auto">
-            Zero recurring software subscription fees. Connect your own mailboxes for $0, or use our pre-warmed shared mailbox pool at 3¢ per email delivered.
+            Zero recurring software subscription fees. All sending infrastructure is pre-warmed, authenticated, and managed directly by our admin fleet at strictly 3¢ per email delivered.
           </p>
         </div>
 
@@ -51,12 +51,12 @@ export function ChadGtmPricingCard({ isLoggedIn = false }: { isLoggedIn?: boolea
                 <span className="border border-zinc-700 bg-black text-zinc-300 text-[10px] uppercase tracking-widest px-2 py-0.5">
                   Free Forever
                 </span>
-                <span className="text-[10px] uppercase tracking-wider text-zinc-500">Bring Your Own SMTP</span>
+                <span className="text-[10px] uppercase tracking-wider text-zinc-500">Zero Seat Taxes</span>
               </div>
 
-              <h3 className="text-xl font-bold text-white uppercase tracking-wider font-mono">Self-Managed Engine</h3>
+              <h3 className="text-xl font-bold text-white uppercase tracking-wider font-mono">Core GTM Platform</h3>
               <p className="text-xs text-zinc-400 mt-1 leading-relaxed font-sans">
-                Full platform access with zero restrictions. Connect unlimited custom SMTP/IMAP inboxes.
+                Full platform access with zero software subscription fees. Unlimited campaigns, AI synthesis, and leads.
               </p>
 
               <div className="mt-6 flex items-baseline gap-2 border-y border-zinc-800 py-4 font-mono">
@@ -67,11 +67,11 @@ export function ChadGtmPricingCard({ isLoggedIn = false }: { isLoggedIn?: boolea
               {/* Features List */}
               <div className="mt-6 space-y-2.5 font-mono text-xs">
                 {[
-                  "Unlimited campaigns & automated sequences",
-                  "Unlimited sender mailbox connections",
-                  "329,563 verified Apollo B2B leads directory access",
-                  "AI email personalization with Gemini 3.8 Flash",
-                  "Unified UniBox (two-way multi-account sync)",
+                  "Unlimited campaigns & autonomous 3-touch sequences",
+                  "100M+ verified global B2B leads directory access (rolling out)",
+                  "Gemini 3.8 Flash value proposition & angle synthesis",
+                  "Tinder-Style copy calibration deck & preference learning",
+                  "Unified UniBox (two-way multi-channel sync & CRM)",
                   "Smart rotation & rate pacing protection",
                   "Automated stop-on-reply tracking",
                   "Zero credit card required to start",
@@ -101,14 +101,14 @@ export function ChadGtmPricingCard({ isLoggedIn = false }: { isLoggedIn?: boolea
             <div>
               <div className="flex items-center justify-between gap-3 mb-4 font-mono">
                 <span className="border border-white bg-white text-black text-[10px] font-bold uppercase tracking-widest px-2 py-0.5">
-                  Autonomous Pool
+                  Turnkey Fleet
                 </span>
-                <span className="text-[10px] uppercase tracking-wider text-zinc-400">Zero DNS Setup</span>
+                <span className="text-[10px] uppercase tracking-wider text-zinc-400">Zero Setup · 100% Admin Supplied</span>
               </div>
 
               <h3 className="text-xl font-bold text-white uppercase tracking-wider font-mono">Managed Sender Pool</h3>
               <p className="text-xs text-zinc-400 mt-1 leading-relaxed font-sans">
-                No DNS configuration, warmup periods, or secondary domain expenses. Dispatched from our pre-warmed pool.
+                Zero domains to buy, zero DNS to configure. Admin supplies, warms, and maintains 100% of the sending fleet.
               </p>
 
               <div className="mt-6 flex items-baseline justify-between border-y border-zinc-800 py-4 font-mono">
@@ -126,11 +126,11 @@ export function ChadGtmPricingCard({ isLoggedIn = false }: { isLoggedIn?: boolea
                 {[
                   "Pay just 3 cents per email — strictly pay for volume sent",
                   "Zero domain purchase, DNS setup, or warmup hassle",
-                  "Sent from pre-warmed shared enterprise mailboxes",
+                  "100% provisioned, warmed, and managed by ChadGTM admin fleet",
                   "Strict 30 emails/day per mailbox pacing for 99%+ deliverability",
-                  "Full SPF, DKIM, DMARC, and MX verification on all routes",
+                  "Full SPF, DKIM, DMARC, and MX verification pre-configured",
                   "Tinder-Style Voice Calibration Deck before launch",
-                  "Autonomous lead matching against 329k+ Apollo directory",
+                  "Autonomous lead matching against 100M+ global directory",
                   "Stop anytime — zero recurring monthly commitment",
                 ].map((feat) => (
                   <div key={feat} className="flex items-center gap-2 text-zinc-200 text-[11px]">
@@ -224,7 +224,7 @@ export function ChadGtmPricingCard({ isLoggedIn = false }: { isLoggedIn?: boolea
                 <span className="text-[10px] text-zinc-500 uppercase">/ month</span>
               </div>
               <p className="text-[11px] text-zinc-400 font-sans leading-relaxed">
-                Includes software ($0), 329k lead directory ($0), and {emailVolume.toLocaleString()} emails dispatched via pre-warmed pool.
+                Includes software ($0), 100M+ lead directory ($0), and {emailVolume.toLocaleString()} emails dispatched via admin-supplied pool.
               </p>
             </div>
 

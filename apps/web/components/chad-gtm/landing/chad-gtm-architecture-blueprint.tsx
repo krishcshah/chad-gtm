@@ -54,11 +54,11 @@ const extraction = await model.generateContent({
   {
     id: "layer-2",
     tag: "TIER_02 // LEAD MATRIX",
-    name: "329,563 Apollo Verified Local Directory",
+    name: "100M+ Global Verified Directory Matrix",
     summary:
-      "Instant zero-latency querying against our pre-indexed central prospect database. Matches ICP filters (title, industry, company size, revenue) directly without paying Apollo $99/mo export fees.",
+      "Instant zero-latency querying against our massive 100M+ global prospect repository (actively rolling out). Matches ICP filters (title, industry, company size, revenue) directly without paying Apollo $99/mo export fees.",
     latency: "<15ms",
-    metric: "329,563 VERIFIED CONTACTS",
+    metric: "100M+ VERIFIED CONTACTS (ROLLING OUT)",
     details: [
       "Zero export credit paywalls or monthly seat licenses",
       "Validated corporate business emails with MX deliverability checks",

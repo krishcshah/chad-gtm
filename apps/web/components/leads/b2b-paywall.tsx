@@ -47,7 +47,7 @@ interface B2bPaywallProps {
 export function B2bPaywall({
   userEmail,
   userId,
-  totalLeadsCount = 329563,
+  totalLeadsCount = 100000000,
 }: B2bPaywallProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();

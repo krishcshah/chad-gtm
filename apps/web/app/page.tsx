@@ -66,7 +66,7 @@ export default async function LandingPage() {
                 <span className="text-zinc-400">PAY STRICTLY 3¢ PER EMAIL DELIVERED</span>
               </div>
               <div className="hidden md:flex items-center gap-4 text-zinc-500">
-                <span>329,563 VERIFIED BUYERS</span>
+                <span>100M+ GLOBAL VERIFIED BUYERS</span>
                 <span>·</span>
                 <span>AUTONOMOUS 3-TOUCH CADENCE</span>
                 <span>·</span>
@@ -94,7 +94,7 @@ export default async function LandingPage() {
 
                 {/* Direct-Response Subtitle */}
                 <p className="text-sm sm:text-base text-zinc-300 font-sans leading-relaxed max-w-2xl">
-                  Stop bleeding <strong className="text-white font-mono">$450/month</strong> on Apollo seat licenses, Instantly subscriptions, and burner domains. Enter your company URL—ChadGTM automatically extracts your value prop, discovers verified decision-makers across our 329k lead directory, and executes an autonomous 3-touch follow-up sequence that lands straight in primary inboxes.
+                  Stop bleeding <strong className="text-white font-mono">$450/month</strong> on Apollo seat licenses, Instantly subscriptions, and burner domains. Enter your company URL—ChadGTM automatically extracts your value prop, discovers verified decision-makers across our 100M+ global B2B directory (rolling out 100M+ contacts worldwide), and executes an autonomous 3-touch follow-up sequence that lands straight in primary inboxes.
                 </p>
 
                 {/* Primary Action Buttons */}
@@ -143,8 +143,8 @@ export default async function LandingPage() {
                   </div>
                   <div className="border border-zinc-800/80 bg-zinc-950/60 p-3">
                     <div className="text-[10px] text-zinc-500 uppercase tracking-widest">[LEAD DIRECTORY]</div>
-                    <div className="text-white font-bold text-lg mt-0.5">329,563</div>
-                    <div className="text-[10px] text-zinc-400">Verified Apollo Buyers</div>
+                    <div className="text-white font-bold text-lg mt-0.5">100M+</div>
+                    <div className="text-[10px] text-zinc-400">Global Verified Buyers</div>
                   </div>
                   <div className="border border-zinc-800/80 bg-zinc-950/60 p-3">
                     <div className="text-[10px] text-zinc-500 uppercase tracking-widest">[SEQUENCE CADENCE]</div>
@@ -267,7 +267,7 @@ export default async function LandingPage() {
                   <ul className="space-y-3 text-xs font-mono text-zinc-300">
                     <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2">
                       <span className="flex items-center gap-2 text-white">
-                        <Check className="size-3.5 text-emerald-400 shrink-0" /> 329,563 Verified Apollo Leads
+                        <Check className="size-3.5 text-emerald-400 shrink-0" /> 100M+ Global Lead Directory
                       </span>
                       <span className="text-emerald-400 font-bold">INCLUDED ($0)</span>
                     </li>
@@ -291,9 +291,9 @@ export default async function LandingPage() {
                     </li>
                     <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2">
                       <span className="flex items-center gap-2 text-white">
-                        <Check className="size-3.5 text-emerald-400 shrink-0" /> Connect Your Own Inboxes
+                        <Check className="size-3.5 text-emerald-400 shrink-0" /> Turnkey Admin-Supplied Mailbox Fleet
                       </span>
-                      <span className="text-emerald-400 font-bold">FREE ($0)</span>
+                      <span className="text-emerald-400 font-bold">ZERO SETUP</span>
                     </li>
                     <li className="flex items-start justify-between gap-2 pt-1 text-zinc-400 text-[11px]">
                       <span>Managed Mesh Delivery (Zero Setup)</span>
@@ -332,7 +332,7 @@ export default async function LandingPage() {
         <ChadGtmWorkflowSimulator />
 
         {/* ========================================================================= */}
-        {/* 329,563 APOLLO VERIFIED LEADS DIRECTORY PREVIEW */}
+        {/* 100M+ GLOBAL VERIFIED LEADS DIRECTORY PREVIEW */}
         {/* ========================================================================= */}
         <ChadGtmLeadsPreview />
 
@@ -378,7 +378,7 @@ export default async function LandingPage() {
                   Yet in outbound sales, legacy tools force early-stage founders and growth teams to pay <strong className="text-white">$400–$800 every single month</strong> in recurring seat licenses. If you take a week off to close deals, you still pay $400. If you are testing a new product angle, you still pay $400.
                 </p>
                 <p>
-                  We built ChadGTM to treat cold email infrastructure as a utility. Our entire core software—campaign builder, lead directory of 329k+ verified Apollo contacts, UniBox, and CRM—is <strong className="text-white">$0/month forever</strong>. When you use our pre-warmed shared mailbox pool, you pay strictly <strong className="text-white">$0.03 per email delivered</strong>. If you connect your own mailboxes, it's 100% free.
+                  We built ChadGTM to treat cold email infrastructure as a utility. Our entire core software—campaign builder, lead directory scaling to 100M+ verified global contacts, UniBox, and CRM—is <strong className="text-white">$0/month forever</strong>. All mailboxes are pre-warmed, authenticated, and supplied directly by our admin fleet, so you pay strictly <strong className="text-white">$0.03 per email delivered</strong> with zero domain or DNS setup.
                 </p>
                 <p className="text-zinc-400 font-mono text-xs pt-2">
                   Zero seat taxes. Zero monthly minimums. Pure pay-for-what-you-use growth.
@@ -505,8 +505,8 @@ export default async function LandingPage() {
                 },
                 {
                   code: "[SPEC_04]",
-                  q: "Can I bring my own email accounts for $0 sending?",
-                  a: "Yes! You can connect unlimited Google Workspace, Microsoft 365, or custom SMTP/IMAP inboxes completely free. If you use your own mailboxes, sending costs you $0.",
+                  q: "Do I need to buy secondary domains or configure DNS records?",
+                  a: "No. ChadGTM is 100% turnkey zero setup. Our admin fleet supplies, warms, and maintains all sender infrastructure with pre-configured SPF, DKIM, and DMARC authentication. You never have to buy domains or configure DNS.",
                 },
                 {
                   code: "[SPEC_05]",
