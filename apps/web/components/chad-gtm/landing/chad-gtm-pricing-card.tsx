@@ -38,119 +38,155 @@ export function ChadGtmPricingCard({ isLoggedIn = false }: { isLoggedIn?: boolea
             </span>
           </h2>
           <p className="mt-4 text-xs sm:text-sm text-zinc-400 font-mono leading-relaxed max-w-2xl mx-auto">
-            Zero recurring software subscription fees. All sending infrastructure is pre-warmed, authenticated, and managed directly by our admin fleet at strictly 3¢ per email delivered.
+            $0 software fee for the entire platform. 100M+ lead database access, autonomous ICP extraction, AI copywriting, built-in email verification, and unlimited admin-supplied mailboxes. Pay strictly 3¢ per email delivered.
           </p>
         </div>
 
-        {/* Pricing Cards Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 max-w-5xl mx-auto items-stretch">
-          {/* Card 1: Core Platform ($0/mo Forever) */}
-          <div className="relative rounded-none border border-zinc-800 bg-zinc-950 p-6 sm:p-8 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between gap-3 mb-4 font-mono">
-                <span className="border border-zinc-700 bg-black text-zinc-300 text-[10px] uppercase tracking-widest px-2 py-0.5">
-                  Free Forever
-                </span>
-                <span className="text-[10px] uppercase tracking-wider text-zinc-500">Zero Seat Taxes</span>
+        {/* Single Unified ChadGTM Engine Pricing Card */}
+        <div className="max-w-4xl mx-auto rounded-none border border-zinc-700 bg-zinc-950 p-6 sm:p-10 relative overflow-hidden font-mono shadow-2xl">
+          {/* Subtle Corner Badge */}
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-6">
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-2 border border-white bg-white text-black text-[10px] font-bold uppercase tracking-widest px-2.5 py-0.5">
+                <Sparkles className="size-3 text-black" />
+                THE ALL-IN-ONE AUTONOMOUS ENGINE
               </div>
-
-              <h3 className="text-xl font-bold text-white uppercase tracking-wider font-mono">Core GTM Platform</h3>
-              <p className="text-xs text-zinc-400 mt-1 leading-relaxed font-sans">
-                Full platform access with zero software subscription fees. Unlimited campaigns, AI synthesis, and leads.
+              <h3 className="text-2xl sm:text-4xl font-extrabold text-white uppercase tracking-wider">
+                ChadGTM Complete Suite
+              </h3>
+              <p className="text-xs sm:text-sm text-zinc-400 font-sans leading-relaxed max-w-xl">
+                One unified platform. Everything unlocked with $0 platform subscription fees. Unlimited leads, unlimited mailboxes, and automated 3-touch outreach.
               </p>
-
-              <div className="mt-6 flex items-baseline gap-2 border-y border-zinc-800 py-4 font-mono">
-                <span className="text-4xl sm:text-5xl font-bold text-white">$0</span>
-                <span className="text-xs text-zinc-500 uppercase tracking-widest">/ month forever</span>
-              </div>
-
-              {/* Features List */}
-              <div className="mt-6 space-y-2.5 font-mono text-xs">
-                {[
-                  "Unlimited campaigns & autonomous 3-touch sequences",
-                  "100M+ verified global B2B leads directory access (rolling out)",
-                  "Gemini 3.8 Flash value proposition & angle synthesis",
-                  "Tinder-Style copy calibration deck & preference learning",
-                  "Unified UniBox (two-way multi-channel sync & CRM)",
-                  "Smart rotation & rate pacing protection",
-                  "Automated stop-on-reply tracking",
-                  "Zero credit card required to start",
-                ].map((feat) => (
-                  <div key={feat} className="flex items-center gap-2 text-zinc-300 text-[11px]">
-                    <Check className="size-3 text-white shrink-0" />
-                    <span>{feat}</span>
-                  </div>
-                ))}
-              </div>
             </div>
 
-            <div className="mt-8 pt-6 border-t border-zinc-800">
-              <Button asChild size="lg" className="w-full rounded-none bg-black hover:bg-zinc-900 text-white font-mono uppercase tracking-wider text-xs border border-zinc-800">
-                <Link href="/signup">
-                  Get Started Free ($0/mo) <ArrowRight className="size-3.5 ml-1.5" />
-                </Link>
-              </Button>
-              <p className="mt-2 text-center text-[10px] font-mono uppercase tracking-widest text-zinc-600">
-                Open Access Architecture
-              </p>
+            <div className="text-left sm:text-right border sm:border-0 border-zinc-800 p-3 sm:p-0 bg-black sm:bg-transparent">
+              <div className="flex items-baseline gap-2">
+                <span className="text-4xl sm:text-6xl font-extrabold text-white tracking-tight">$0</span>
+                <span className="text-xs text-zinc-400 uppercase tracking-widest">/ mo software</span>
+              </div>
+              <div className="text-xs sm:text-sm text-emerald-400 font-bold mt-1 uppercase tracking-wider">
+                + 3¢ / email delivered
+              </div>
+              <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-0.5">
+                Zero Monthly Minimums · Utility Billing
+              </div>
             </div>
           </div>
 
-          {/* Card 2: Autonomous ChadGTM Managed Dispatch (Highlighted) */}
-          <div className="relative rounded-none border border-white bg-black p-6 sm:p-8 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between gap-3 mb-4 font-mono">
-                <span className="border border-white bg-white text-black text-[10px] font-bold uppercase tracking-widest px-2 py-0.5">
-                  Turnkey Fleet
-                </span>
-                <span className="text-[10px] uppercase tracking-wider text-zinc-400">Zero Setup · 100% Admin Supplied</span>
+          {/* Core Feature Matrix */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 py-8 border-b border-zinc-800 text-xs">
+            <div className="space-y-4">
+              <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold border-b border-zinc-900 pb-1">
+                [PLATFORM & INTELLIGENCE — $0/MO]
               </div>
 
-              <h3 className="text-xl font-bold text-white uppercase tracking-wider font-mono">Managed Sender Pool</h3>
-              <p className="text-xs text-zinc-400 mt-1 leading-relaxed font-sans">
-                Zero domains to buy, zero DNS to configure. Admin supplies, warms, and maintains 100% of the sending fleet.
-              </p>
-
-              <div className="mt-6 flex items-baseline justify-between border-y border-zinc-800 py-4 font-mono">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-4xl sm:text-5xl font-bold text-white">3¢</span>
-                  <span className="text-xs text-zinc-400 uppercase tracking-widest">per email delivered</span>
-                </div>
-                <span className="text-[10px] uppercase tracking-widest text-zinc-400 border border-zinc-800 bg-zinc-950 px-2 py-0.5">
-                  $0 Base Fee
-                </span>
-              </div>
-
-              {/* Features List */}
-              <div className="mt-6 space-y-2.5 font-mono text-xs">
-                {[
-                  "Pay just 3 cents per email — strictly pay for volume sent",
-                  "Zero domain purchase, DNS setup, or warmup hassle",
-                  "100% provisioned, warmed, and managed by ChadGTM admin fleet",
-                  "Strict 30 emails/day per mailbox pacing for 99%+ deliverability",
-                  "Full SPF, DKIM, DMARC, and MX verification pre-configured",
-                  "Tinder-Style Voice Calibration Deck before launch",
-                  "Autonomous lead matching against 100M+ global directory",
-                  "Stop anytime — zero recurring monthly commitment",
-                ].map((feat) => (
-                  <div key={feat} className="flex items-center gap-2 text-zinc-200 text-[11px]">
-                    <Check className="size-3 text-white shrink-0" />
-                    <span>{feat}</span>
+              <div className="flex items-start gap-3 text-zinc-200">
+                <Check className="size-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-white uppercase tracking-wide text-[11px]">100M+ Global Leads Database</div>
+                  <div className="text-zinc-400 font-sans text-xs mt-0.5">
+                    Unrestricted access to 100M+ verified global decision-makers across 190+ countries with $0 export fees.
                   </div>
-                ))}
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 text-zinc-200">
+                <Check className="size-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-white uppercase tracking-wide text-[11px]">Autonomous ICP Extraction</div>
+                  <div className="text-zinc-400 font-sans text-xs mt-0.5">
+                    Gemini 3.8 Flash crawls your domain to extract core value propositions, pain points, and buyer personas in 60s.
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 text-zinc-200">
+                <Check className="size-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-white uppercase tracking-wide text-[11px]">Calibrated AI Copywriting</div>
+                  <div className="text-zinc-400 font-sans text-xs mt-0.5">
+                    Tinder-style calibration swipe deck that fine-tunes tone, hook angles, and copy to your preferences.
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 text-zinc-200">
+                <Check className="size-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-white uppercase tracking-wide text-[11px]">Autonomous 3-Touch Cadence</div>
+                  <div className="text-zinc-400 font-sans text-xs mt-0.5">
+                    Every prospect receives an opener + Touch #2 value bump (+3d) + Touch #3 permission breakup (+4d).
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="mt-8 pt-6 border-t border-zinc-800">
-              <Button asChild size="lg" className="w-full rounded-none bg-white hover:bg-zinc-200 text-black font-semibold text-xs font-mono uppercase tracking-wider border border-white">
-                <Link href={isLoggedIn ? "/chad-gtm" : "/signup"}>
-                  Launch Autonomous Engine <Rocket className="size-3.5 ml-1.5" />
-                </Link>
-              </Button>
-              <p className="mt-2 text-center text-[10px] font-mono uppercase tracking-widest text-zinc-500">
-                Deploy in under 60 seconds
-              </p>
+            <div className="space-y-4">
+              <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold border-b border-zinc-900 pb-1">
+                [INFRASTRUCTURE & DELIVERY — 3¢ / EMAIL]
+              </div>
+
+              <div className="flex items-start gap-3 text-zinc-200">
+                <Check className="size-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-white uppercase tracking-wide text-[11px]">Unlimited Admin-Supplied Mailboxes</div>
+                  <div className="text-zinc-400 font-sans text-xs mt-0.5">
+                    Zero domain purchasing or DNS setup. Admin supplies, pre-warms, and maintains 100% of the sender fleet.
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 text-zinc-200">
+                <Check className="size-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-white uppercase tracking-wide text-[11px]">Built-In Email Verification</div>
+                  <div className="text-zinc-400 font-sans text-xs mt-0.5">
+                    Real-time MX and mailbox deliverability validation before dispatch to eliminate bounce rates.
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 text-zinc-200">
+                <Check className="size-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-white uppercase tracking-wide text-[11px]">Safe 30/Day Pacing & Human Jitter</div>
+                  <div className="text-zinc-400 font-sans text-xs mt-0.5">
+                    Enforces strict daily sending limits and randomized 45-120s delays for 99.8% primary inbox placement.
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 text-zinc-200">
+                <Check className="size-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-white uppercase tracking-wide text-[11px]">UniBox CRM & Stop-On-Reply</div>
+                  <div className="text-zinc-400 font-sans text-xs mt-0.5">
+                    Two-way multi-channel sync, instant reply notifications, sentiment analysis, and auto-pause on response.
+                  </div>
+                </div>
+              </div>
             </div>
+          </div>
+
+          {/* Bottom Action Bar */}
+          <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-400">
+              <span className="flex items-center gap-1.5 text-zinc-300">
+                <ShieldCheck className="size-3.5 text-emerald-400" /> $0/mo software fee forever
+              </span>
+              <span className="flex items-center gap-1.5 text-zinc-300">
+                <ShieldCheck className="size-3.5 text-emerald-400" /> No credit card required
+              </span>
+              <span className="flex items-center gap-1.5 text-zinc-300">
+                <ShieldCheck className="size-3.5 text-emerald-400" /> Pause or cancel anytime
+              </span>
+            </div>
+
+            <Button asChild size="lg" className="rounded-none bg-white hover:bg-zinc-200 text-black font-bold text-xs uppercase tracking-wider border border-white h-12 px-8 shadow-xl w-full sm:w-auto">
+              <Link href={isLoggedIn ? "/chad-gtm" : "/signup"}>
+                Deploy Free GTM Engine <Rocket className="size-4 ml-1.5" />
+              </Link>
+            </Button>
           </div>
         </div>
 
