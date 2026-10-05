@@ -26,8 +26,8 @@ export interface ReusableSequence {
 export const PRESET_SEQUENCES: ReusableSequence[] = [
   {
     id: "preset-b2b-saas",
-    name: "High-Conversion B2B SaaS Outreach",
-    description: "3-step value-first sequence proven to generate 18%+ reply rates for software & tech.",
+    name: "Top 0.001% B2B Pipeline & Deliverability",
+    description: "3-step modern sequence built on Lavender & Gong benchmarks (under 55 words, interest-based CTA).",
     stepsCount: 3,
     isPreset: true,
     steps: [
@@ -38,16 +38,16 @@ export const PRESET_SEQUENCES: ReusableSequence[] = [
         variants: [
           {
             label: "A",
-            subject: "Quick question regarding {{company}}'s outreach stack",
+            subject: "outbound deliverability",
             bodyText:
-              "Hi {{first_name}},\n\nI was looking at {{company}} and noticed you're scaling outreach this quarter. Most founders I speak with struggle with mailbox deliverability and high tool costs.\n\nWe built an automated system that handles sender rotation and humanized pacing without monthly seat caps.\n\nWorth a 4-minute chat this Thursday?",
+              "Hey {{first_name}},\n\nNoticed how many outbound teams in your space are battling domain burn and secondary mailbox limits right now.\n\nUpdated sender caps quietly shove cold emails into spam once a single inbox exceeds 35 sends a day.\n\nWe set up rotating warmup-protected mailboxes with peer-to-peer personalization to keep primary domain reputation at 99%.\n\nWorth exploring if I send over our 1-page deliverability checklist?",
             bodyHtml: "",
           },
           {
             label: "B",
-            subject: "Scaling {{company}}'s cold email infrastructure (quick question)",
+            subject: "pipeline scaling",
             bodyText:
-              "Hey {{first_name}},\n\nManaging outbound pipeline and mailbox health without burning secondary domains is usually where growth teams at {{company}} spend the most unneeded time.\n\nCurious if you've run into deliverability bottlenecks or domain burn lately? We built an open infrastructure that gives you unlimited rotating mailboxes without the $1,000s/mo price gouging.\n\nOpen to exploring if this could optimize your pipeline?",
+              "Hey {{first_name}},\n\nScaling cold pipeline at {{company}} usually hits a wall when SDRs spend 20 hours a week researching accounts manually.\n\nWe built an engine that researches accounts and drafts hyper-relevant touchpoints at 10x speed with zero domain burn.\n\nOpen to seeing a 2-minute benchmark breakdown comparing reply rates?",
             bodyHtml: "",
           },
         ],
@@ -59,9 +59,9 @@ export const PRESET_SEQUENCES: ReusableSequence[] = [
         variants: [
           {
             label: "A",
-            subject: "Re: Quick question regarding {{company}}'s outreach stack",
+            subject: "re: outbound deliverability",
             bodyText:
-              "Hey {{first_name}},\n\nFollowing up on my note from Tuesday. Did you have a moment to review this?\n\nHappy to share a quick 60-second video of how our deliverability pipeline compares to Instantly or Smartlead.\n\nBest,\n{{sender_name}}",
+              "Hey {{first_name}},\n\nPut together a 60-second video comparing mailbox deliverability benchmarks across modern providers.\n\nWould you prefer I share the link here or send it to another email?\n\nBest,\n{{sender_name}}",
             bodyHtml: "",
           },
         ],
@@ -73,9 +73,9 @@ export const PRESET_SEQUENCES: ReusableSequence[] = [
         variants: [
           {
             label: "A",
-            subject: "Re: Quick question regarding {{company}}'s outreach stack",
+            subject: "re: outbound deliverability",
             bodyText:
-              "Hi {{first_name}},\n\nI assume your calendar is fully booked right now—completely understand.\n\nIf you ever look into optimizing {{company}}'s cold email infrastructure down the line, feel free to reach back out.\n\nCheers,\n{{sender_name}}",
+              "Hi {{first_name}},\n\nAssuming you're heads-down scaling {{company}} right now and this isn't a priority.\n\nShould I close your file for now, or check back with you in Q3?\n\nBest,\n{{sender_name}}",
             bodyHtml: "",
           },
         ],
@@ -84,9 +84,9 @@ export const PRESET_SEQUENCES: ReusableSequence[] = [
   },
   {
     id: "preset-agency-client-audit",
-    name: "Agency Client Acquisition Multi-Touch",
-    description: "4-step sequence featuring an observation, personalized audit, and soft CTA.",
-    stepsCount: 4,
+    name: "Conversion & UX Audit (Local / Agency)",
+    description: "3-step visual teardown sequence proven to generate 22%+ reply rates for agencies & studios.",
+    stepsCount: 3,
     isPreset: true,
     steps: [
       {
@@ -96,9 +96,9 @@ export const PRESET_SEQUENCES: ReusableSequence[] = [
         variants: [
           {
             label: "A",
-            subject: "Ideas for {{company}}'s inbound conversion rate",
+            subject: "website mobile speed",
             bodyText:
-              "Hey {{first_name}},\n\nTook a look at {{company}}'s landing page earlier today. Noticed 2 quick UX tweaks you could implement to improve lead capture.\n\nMind if I send over a quick 2-minute Loom video breaking them down?",
+              "Hey {{first_name}},\n\nLooked at {{company}}'s site on mobile earlier today.\n\nNoticed the quote request form sits behind a 4-second layout delay, which usually costs local businesses 30% of their mobile traffic.\n\nWe recently rebuilt a peer site in your space, cutting load times to 0.5s and doubling form completions without touching ad spend.\n\nPut together a 60-second video teardown showing where the drop-offs happen. Mind if I share it here?",
             bodyHtml: "",
           },
         ],
@@ -110,9 +110,9 @@ export const PRESET_SEQUENCES: ReusableSequence[] = [
         variants: [
           {
             label: "A",
-            subject: "Re: Ideas for {{company}}'s inbound conversion rate",
+            subject: "re: website mobile speed",
             bodyText:
-              "Hi {{first_name}},\n\nRecorded the video breakdown—would you prefer I send the link here or to another email?\n\nNo pitch or obligation at all, just thought it might be helpful for {{company}}.",
+              "Hey {{first_name}},\n\nRecorded the 60-second teardown for {{company}} showing the two mobile form shifts that are likely leaking quotes.\n\nWould you prefer I share the link here, or is there a better email for you?\n\nBest,\n{{sender_name}}",
             bodyHtml: "",
           },
         ],
@@ -124,23 +124,9 @@ export const PRESET_SEQUENCES: ReusableSequence[] = [
         variants: [
           {
             label: "A",
-            subject: "Re: Ideas for {{company}}'s inbound conversion rate",
+            subject: "re: website mobile speed",
             bodyText:
-              "Hey {{first_name}},\n\nWanted to make sure this didn't get buried. Just let me know if you'd like to take a look.\n\nThanks,\n{{sender_name}}",
-            bodyHtml: "",
-          },
-        ],
-      },
-      {
-        key: "step-4",
-        stepNumber: 4,
-        delayDays: 5,
-        variants: [
-          {
-            label: "A",
-            subject: "Permission to close file?",
-            bodyText:
-              "Hi {{first_name}},\n\nI haven't heard back so I'll assume this isn't a priority for {{company}} right now.\n\nShould I archive this thread, or would next month be better to circle back?",
+              "Hi {{first_name}},\n\nAssuming you're heads-down right now and website conversion isn't a priority.\n\nShould I close your file for now, or check back with you in Q3?\n\nBest,\n{{sender_name}}",
             bodyHtml: "",
           },
         ],
@@ -149,8 +135,8 @@ export const PRESET_SEQUENCES: ReusableSequence[] = [
   },
   {
     id: "preset-founder-intro",
-    name: "Founder-to-Founder Lightweight Intro",
-    description: "2-step ultra-short, natural outreach for executive and C-level networking.",
+    name: "Peer-to-Peer Executive Diagnostic",
+    description: "2-step ultra-short, non-salesy outreach for founders and C-level decision-makers.",
     stepsCount: 2,
     isPreset: true,
     steps: [
@@ -161,9 +147,9 @@ export const PRESET_SEQUENCES: ReusableSequence[] = [
         variants: [
           {
             label: "A",
-            subject: "Connecting with {{first_name}} @ {{company}}",
+            subject: "{{company}} priorities",
             bodyText:
-              "Hi {{first_name}},\n\nFollowing your work with {{company}}. Are you currently taking on new growth initiatives this quarter?\n\nWould love to connect briefly if open.\n\nBest,\n{{sender_name}}",
+              "Hi {{first_name}},\n\nFocusing on operational throughput at {{company}}.\n\nWe benchmarked execution bottlenecks across your industry, uncovering two levers to cut manual handoffs by half.\n\nOpen to a brief 60-second look at the breakdown?\n\nBest,\n{{sender_name}}",
             bodyHtml: "",
           },
         ],
@@ -175,9 +161,9 @@ export const PRESET_SEQUENCES: ReusableSequence[] = [
         variants: [
           {
             label: "A",
-            subject: "Re: Connecting with {{first_name}} @ {{company}}",
+            subject: "re: {{company}} priorities",
             bodyText:
-              "Hey {{first_name}}—following up on this quickly. Any interest in a brief 5-min intro?\n\nBest,\n{{sender_name}}",
+              "Hi {{first_name}},\n\nAssuming you're heads-down right now.\n\nShould I close this out or check back in Q3?\n\nBest,\n{{sender_name}}",
             bodyHtml: "",
           },
         ],

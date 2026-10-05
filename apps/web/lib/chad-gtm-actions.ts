@@ -182,8 +182,8 @@ Pitch this value offer directly to ${dl.jobTitle} at ${dl.companyName}.`;
           lead: leadProfile,
           customInstruction: instruction,
           senderName: user.name || "Alex",
-          fallbackSubject: `${activeOffer.angle}: Quick question for ${dl.companyName || "your team"}`,
-          fallbackBody: `Hi ${dl.firstName || "there"},\n\nBetween scaling operations across ${dl.industry || "your industry"} and driving revenue, ${activeOffer.valueProp}\n\n${activeOffer.cta}\n\nBest,\n${user.name || "Alex"}`,
+          fallbackSubject: `${activeOffer.angle.toLowerCase()}`,
+          fallbackBody: `Hi ${dl.firstName || "there"},\n\nNoticed ${dl.companyName}'s current setup in ${dl.industry || "your space"}.\n\n${activeOffer.valueProp}\n\n${activeOffer.cta}\n\nBest,\n${user.name || "Alex"}`,
           index: idx,
         });
 
@@ -613,7 +613,7 @@ export async function launchChadGtmCampaignAction(
 
     const aiPromptStep1 =
       calibratedProfile.customAiInstruction ||
-      `Product/Company: ${companyName}. Value Offer: ${primarySample.bodyText}. Voice: Direct, technical peer-to-peer. Keep under 65 words. Zero fluff greetings.`;
+      `Product/Company: ${companyName}. Value Offer: ${activeOffer.valueProp}. Angle: ${activeOffer.angle}. Voice: Top 0.001% cold email. Strictly 35-55 words. 3rd-grade reading level. Zero pleasantries. Zero self-intros. Zero feature dumps. 1-3 word lowercase subject. Low-friction curiosity CTA.`;
 
     await db.insert(schema.sequenceStepVariants).values({
       id: crypto.randomUUID(),
@@ -626,7 +626,7 @@ export async function launchChadGtmCampaignAction(
       aiPrompt: aiPromptStep1,
     });
 
-    // Step 2: Follow-Up #1 (Day 3, +3 days delay) - Value & Social Proof Bump
+    // Step 2: Follow-Up #1 (Day 3, +3 days delay) - Value & Asset Drop (NO "just checking in")
     const step2Id = crypto.randomUUID();
     await db.insert(schema.sequenceSteps).values({
       id: step2Id,
@@ -637,10 +637,10 @@ export async function launchChadGtmCampaignAction(
 
     const step2Subject = finalSubject.toLowerCase().startsWith("re:")
       ? finalSubject
-      : `Re: ${finalSubject}`;
-    const step2BodyText = `Hi {{first_name}},\n\nWanted to quickly follow up on my previous note. Most {{industry}} leaders we speak with are looking to scale outbound pipeline without adding $400/mo in fragmented SaaS tools.\n\nDid you have 4 minutes this week to compare notes?\n\nBest,\n${user.name || "Alex"}`;
-    const step2BodyHtml = `<p>Hi {{first_name}},</p><p>Wanted to quickly follow up on my previous note. Most {{industry}} leaders we speak with are looking to scale outbound pipeline without adding $400/mo in fragmented SaaS tools.</p><p>Did you have 4 minutes this week to compare notes?</p><p>Best,<br/>${user.name || "Alex"}</p>`;
-    const aiPromptStep2 = `Write follow-up #1 (sent 3 days after initial message) for ${companyName}. Recipient is {{job_title}} at {{company}}. Reference previous note regarding ${activeOffer.valueProp}. Keep under 45 words. Soft, professional bump.`;
+      : `re: ${finalSubject}`;
+    const step2BodyText = `Hi {{first_name}},\n\nPut together a 60-second video breakdown showing how {{company}} can optimize this without adding tools or complexity.\n\nWould you prefer I share the link here or send it to another email?\n\nBest,\n${user.name || "Alex"}`;
+    const step2BodyHtml = `<p>Hi {{first_name}},</p><p>Put together a 60-second video breakdown showing how {{company}} can optimize this without adding tools or complexity.</p><p>Would you prefer I share the link here or send it to another email?</p><p>Best,<br/>${user.name || "Alex"}</p>`;
+    const aiPromptStep2 = `Write follow-up #1 (sent 3 days after initial message) for ${companyName}. Recipient is {{job_title}} at {{company}}. Never say "just checking in" or "following up". Offer a 60-second asset or micro-audit tailored to ${activeOffer.valueProp}. Strictly under 35 words. Low-friction permission CTA.`;
 
     await db.insert(schema.sequenceStepVariants).values({
       id: crypto.randomUUID(),
@@ -653,7 +653,7 @@ export async function launchChadGtmCampaignAction(
       aiPrompt: aiPromptStep2,
     });
 
-    // Step 3: Follow-Up #2 (Day 7, +4 days delay) - Clean Permission Breakup Hook
+    // Step 3: Follow-Up #2 (Day 7, +4 days delay) - 9-Word Permission Breakup
     const step3Id = crypto.randomUUID();
     await db.insert(schema.sequenceSteps).values({
       id: step3Id,
@@ -664,10 +664,10 @@ export async function launchChadGtmCampaignAction(
 
     const step3Subject = finalSubject.toLowerCase().startsWith("re:")
       ? finalSubject
-      : `Re: ${finalSubject}`;
-    const step3BodyText = `Hi {{first_name}},\n\nAssuming you're heads-down scaling {{company}} right now and outbound automation isn't top of mind.\n\nShould I close your file for now, or check back with you next quarter?\n\nBest,\n${user.name || "Alex"}`;
-    const step3BodyHtml = `<p>Hi {{first_name}},</p><p>Assuming you're heads-down scaling {{company}} right now and outbound automation isn't top of mind.</p><p>Should I close your file for now, or check back with you next quarter?</p><p>Best,<br/>${user.name || "Alex"}</p>`;
-    const aiPromptStep3 = `Write follow-up #2 (final breakup email, sent 7 days after initial outreach) for ${companyName}. Recipient is {{job_title}} at {{company}}. Polite, zero-pressure permission to close file or check back next quarter. Under 35 words.`;
+      : `re: ${finalSubject}`;
+    const step3BodyText = `Hi {{first_name}},\n\nAssuming you're heads-down scaling {{company}} right now and this isn't a priority.\n\nShould I close your file for now, or check back with you next quarter?\n\nBest,\n${user.name || "Alex"}`;
+    const step3BodyHtml = `<p>Hi {{first_name}},</p><p>Assuming you're heads-down scaling {{company}} right now and this isn't a priority.</p><p>Should I close your file for now, or check back with you next quarter?</p><p>Best,<br/>${user.name || "Alex"}</p>`;
+    const aiPromptStep3 = `Write follow-up #2 (final breakup email, sent 7 days after initial outreach) for ${companyName}. Recipient is {{job_title}} at {{company}}. Zero guilt, polite permission close. Under 25 words. Ask if we should close the file or check back next quarter.`;
 
     await db.insert(schema.sequenceStepVariants).values({
       id: crypto.randomUUID(),
