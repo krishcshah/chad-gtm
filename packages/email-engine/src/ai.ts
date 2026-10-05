@@ -95,6 +95,7 @@ function cleanPunctuation(str: string): string {
 
 export interface ParsedPromptContext {
   productName: string;
+  isWebDesignDomain: boolean;
   isHiringDomain: boolean;
   isSalesDomain: boolean;
   isTechDomain: boolean;
@@ -161,6 +162,7 @@ export function parseCampaignPrompt(rawInst: string): ParsedPromptContext {
 
   return {
     productName,
+    isWebDesignDomain,
     isHiringDomain,
     isSalesDomain,
     isTechDomain,
