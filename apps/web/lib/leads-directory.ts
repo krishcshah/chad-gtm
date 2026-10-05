@@ -29,6 +29,8 @@ export interface DirectoryLead {
   rawAttributes: Record<string, string>;
   workEmail?: string;
   personalEmail?: string;
+  seniority?: string;
+  department?: string;
 }
 
 export interface DirectoryFacetItem {
@@ -172,6 +174,12 @@ export function getDirectoryDb(): DatabaseSync {
   try {
     db.exec(`ALTER TABLE leads ADD COLUMN personal_email TEXT;`);
   } catch {}
+  try {
+    db.exec(`ALTER TABLE leads ADD COLUMN seniority TEXT;`);
+  } catch {}
+  try {
+    db.exec(`ALTER TABLE leads ADD COLUMN department TEXT;`);
+  } catch {}
 
   cachedDb = db;
   return db;
@@ -187,51 +195,90 @@ export function getDirectoryFacets(): DirectoryFacets {
   try {
     const db = getDirectoryDb();
 
+    // Check if precomputed facets cache table exists
+    let cachedRows: Array<{ facet_type: string; facet_value: string; facet_count: number }> = [];
+    try {
+      cachedRows = db.prepare(`SELECT facet_type, facet_value, facet_count FROM directory_facets_cache`).all() as any[];
+    } catch {}
+
     const totalRow = db.prepare("SELECT COUNT(*) as cnt FROM leads").get() as { cnt: number };
     const totalLeads = totalRow?.cnt || 0;
 
-    const indRows = db.prepare(`
-      SELECT industry, COUNT(*) as cnt 
-      FROM leads 
-      WHERE industry IS NOT NULL AND industry != '' 
-      GROUP BY industry 
-      ORDER BY cnt DESC 
-      LIMIT 30
-    `).all() as Array<{ industry: string; cnt: number }>;
+    let industries: DirectoryFacetItem[] = [];
+    let countries: DirectoryFacetItem[] = [];
+    let revenueRanges: DirectoryFacetItem[] = [];
+    let teamSizes: DirectoryFacetItem[] = [];
 
-    const countryRows = db.prepare(`
-      SELECT country, COUNT(*) as cnt 
-      FROM leads 
-      WHERE country IS NOT NULL AND country != '' 
-      GROUP BY country 
-      ORDER BY cnt DESC 
-      LIMIT 30
-    `).all() as Array<{ country: string; cnt: number }>;
+    if (cachedRows && cachedRows.length > 0) {
+      industries = cachedRows
+        .filter((r) => r.facet_type === "industry")
+        .map((r) => ({ value: r.facet_value, label: r.facet_value, count: r.facet_count }));
+      countries = cachedRows
+        .filter((r) => r.facet_type === "country")
+        .map((r) => ({ value: r.facet_value, label: r.facet_value, count: r.facet_count }));
 
-    const revRows = db.prepare(`
-      SELECT revenue_range, COUNT(*) as cnt 
-      FROM leads 
-      WHERE revenue_range IS NOT NULL AND revenue_range != '' 
-      GROUP BY revenue_range 
-      ORDER BY cnt DESC 
-      LIMIT 12
-    `).all() as Array<{ revenue_range: string; cnt: number }>;
+      const cachedRevs = cachedRows.filter((r) => r.facet_type === "revenue_range");
+      if (cachedRevs.length > 0) {
+        revenueRanges = cachedRevs.map((r) => ({ value: r.facet_value, label: r.facet_value, count: r.facet_count }));
+      }
 
-    const sizeRows = db.prepare(`
-      SELECT team_size, COUNT(*) as cnt 
-      FROM leads 
-      WHERE team_size IS NOT NULL AND team_size != '' 
-      GROUP BY team_size 
-      ORDER BY cnt DESC 
-      LIMIT 12
-    `).all() as Array<{ team_size: string; cnt: number }>;
+      const cachedSizes = cachedRows.filter((r) => r.facet_type === "team_size");
+      if (cachedSizes.length > 0) {
+        teamSizes = cachedSizes.map((r) => ({ value: r.facet_value, label: r.facet_value, count: r.facet_count }));
+      }
+    } else {
+      const indRows = db.prepare(`
+        SELECT industry, COUNT(*) as cnt 
+        FROM leads 
+        WHERE industry IS NOT NULL AND industry != '' 
+        GROUP BY industry 
+        ORDER BY cnt DESC 
+        LIMIT 30
+      `).all() as Array<{ industry: string; cnt: number }>;
+
+      const countryRows = db.prepare(`
+        SELECT country, COUNT(*) as cnt 
+        FROM leads 
+        WHERE country IS NOT NULL AND country != '' 
+        GROUP BY country 
+        ORDER BY cnt DESC 
+        LIMIT 30
+      `).all() as Array<{ country: string; cnt: number }>;
+
+      industries = indRows.map((r) => ({ value: r.industry, label: r.industry, count: r.cnt }));
+      countries = countryRows.map((r) => ({ value: r.country, label: r.country, count: r.cnt }));
+    }
+
+    if (revenueRanges.length === 0) {
+      const revRows = db.prepare(`
+        SELECT revenue_range, COUNT(*) as cnt 
+        FROM leads 
+        WHERE revenue_range IS NOT NULL AND revenue_range != '' 
+        GROUP BY revenue_range 
+        ORDER BY cnt DESC 
+        LIMIT 12
+      `).all() as Array<{ revenue_range: string; cnt: number }>;
+      revenueRanges = revRows.map((r) => ({ value: r.revenue_range, label: r.revenue_range, count: r.cnt }));
+    }
+
+    if (teamSizes.length === 0) {
+      const sizeRows = db.prepare(`
+        SELECT team_size, COUNT(*) as cnt 
+        FROM leads 
+        WHERE team_size IS NOT NULL AND team_size != '' 
+        GROUP BY team_size 
+        ORDER BY cnt DESC 
+        LIMIT 12
+      `).all() as Array<{ team_size: string; cnt: number }>;
+      teamSizes = sizeRows.map((r) => ({ value: r.team_size, label: r.team_size, count: r.cnt }));
+    }
 
     cachedFacets = {
       totalLeads,
-      industries: indRows.map((r) => ({ value: r.industry, label: r.industry, count: r.cnt })),
-      countries: countryRows.map((r) => ({ value: r.country, label: r.country, count: r.cnt })),
-      revenueRanges: revRows.map((r) => ({ value: r.revenue_range, label: r.revenue_range, count: r.cnt })),
-      teamSizes: sizeRows.map((r) => ({ value: r.team_size, label: r.team_size, count: r.cnt })),
+      industries,
+      countries,
+      revenueRanges,
+      teamSizes,
     };
 
     return cachedFacets;
@@ -400,6 +447,8 @@ export function searchLeadsDirectory(params: DirectorySearchParams): DirectorySe
         rawAttributes: rawAttrs,
         workEmail: r.work_email || "",
         personalEmail: r.personal_email || "",
+        seniority: r.seniority || rawAttrs.seniority || "",
+        department: r.department || rawAttrs.department || "",
       };
     });
 
