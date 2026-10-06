@@ -56,11 +56,8 @@ export function ChadGtmCalculator() {
 
   // 6. Mailbox Fleet Maintenance, Campaign Dispatch & Reply Management (Agency / Operator Retainer)
   // Ongoing daily warmup monitoring, burnt domain rotation, unibox reply triage & lead routing
-  // Small campaigns (<=3k): $485–$575/mo (starter agency retainer / freelance manager)
-  // Medium campaigns (6k–12k): $800–$1,250/mo (growth agency retainer / fractional SDR)
-  // Large campaigns (25k–50k): $2,240–$4,130/mo (dedicated SDR / scale outbound agency)
-  // Baseline $350/mo + $45/inbox/mo
-  const agencyManagementCost = Math.round(350 + inboxesNeeded * 45);
+  // Cut strictly in half: $175/mo base + $22.50/inbox/mo
+  const agencyManagementCost = Math.round((350 + inboxesNeeded * 45) / 2);
 
   let agencyPlanName = "Starter Agency / Operator Retainer";
   if (emailVolume <= 3000) {
@@ -309,7 +306,7 @@ export function ChadGtmCalculator() {
               </div>
 
               <div className="pt-1 text-[11px] text-zinc-500">
-                *(Note: Managing {inboxesNeeded} mailboxes, rotating burned domains & daily reply triage requires a cold email agency ($800–$3,500/mo) or internal SDR)*
+                *(Note: Managing {inboxesNeeded} mailboxes, rotating burned domains & daily reply triage typically costs $400–$1,800/mo for a freelance operator or agency)*
               </div>
             </div>
           </div>

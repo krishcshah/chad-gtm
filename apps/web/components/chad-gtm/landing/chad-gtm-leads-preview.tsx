@@ -11,7 +11,7 @@ import {
 import { Badge, Button } from "@smartreach/ui";
 
 const SAMPLE_PROSPECTS = [
-  // Computer Software (7 leads)
+  // Diverse Top 7 (Displayed by default on "All Leads" tab to match category height)
   {
     name: "Elena Rostova",
     title: "VP of Product Growth",
@@ -19,6 +19,33 @@ const SAMPLE_PROSPECTS = [
     industry: "Computer Software",
     email: "elena.rostova@datameshsystems.com",
     location: "San Francisco, CA",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Marcus Vance",
+    title: "Chief Technology Officer",
+    company: "PayNexus Payments",
+    industry: "Financial Services",
+    email: "marcus.vance@paynexus.com",
+    location: "New York, NY",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Dr. Sarah Chen",
+    title: "Head of AI Infrastructure",
+    company: "BioSyn Labs",
+    industry: "Biotechnology",
+    email: "sarah.chen@biosynlabs.org",
+    location: "Boston, MA",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Liam O'Connor",
+    title: "Director of Revenue Operations",
+    company: "HyperScale Cloud",
+    industry: "Information Technology",
+    email: "liam.oconnor@hyperscalecloud.com",
+    location: "Austin, TX",
     emailType: "Verified Work Email",
   },
   {
@@ -30,6 +57,26 @@ const SAMPLE_PROSPECTS = [
     location: "Seattle, WA",
     emailType: "Verified Work Email",
   },
+  {
+    name: "Charlotte Dupond",
+    title: "VP of Risk Management",
+    company: "Meridian Capital",
+    industry: "Financial Services",
+    email: "c.dupond@meridiancap.eu",
+    location: "London, UK",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Mateo Silva",
+    title: "VP of Cloud Infrastructure",
+    company: "Datasync Global",
+    industry: "Information Technology",
+    email: "mateo.silva@datasync.io",
+    location: "Toronto, Canada",
+    emailType: "Verified Work Email",
+  },
+
+  // Remaining Category Leads (7 per category total)
   {
     name: "David Kelling",
     title: "Head of Solutions Architecture",
@@ -76,25 +123,6 @@ const SAMPLE_PROSPECTS = [
     emailType: "Verified Work Email",
   },
 
-  // Financial Services (7 leads)
-  {
-    name: "Marcus Vance",
-    title: "Chief Technology Officer",
-    company: "PayNexus Payments",
-    industry: "Financial Services",
-    email: "marcus.vance@paynexus.com",
-    location: "New York, NY",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Charlotte Dupond",
-    title: "VP of Risk Management",
-    company: "Meridian Capital",
-    industry: "Financial Services",
-    email: "c.dupond@meridiancap.eu",
-    location: "London, UK",
-    emailType: "Verified Work Email",
-  },
   {
     name: "Tariq Mansoor",
     title: "Head of Treasury Tech",
@@ -141,25 +169,6 @@ const SAMPLE_PROSPECTS = [
     emailType: "Verified Work Email",
   },
 
-  // Information Technology (7 leads)
-  {
-    name: "Liam O'Connor",
-    title: "Director of Revenue Operations",
-    company: "HyperScale Cloud",
-    industry: "Information Technology",
-    email: "liam.oconnor@hyperscalecloud.com",
-    location: "Austin, TX",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Mateo Silva",
-    title: "VP of Cloud Infrastructure",
-    company: "Datasync Global",
-    industry: "Information Technology",
-    email: "mateo.silva@datasync.io",
-    location: "Toronto, Canada",
-    emailType: "Verified Work Email",
-  },
   {
     name: "Jennifer Wu",
     title: "Chief Info Security Officer",
@@ -206,16 +215,6 @@ const SAMPLE_PROSPECTS = [
     emailType: "Verified Work Email",
   },
 
-  // Biotechnology (7 leads)
-  {
-    name: "Dr. Sarah Chen",
-    title: "Head of AI Infrastructure",
-    company: "BioSyn Labs",
-    industry: "Biotechnology",
-    email: "sarah.chen@biosynlabs.org",
-    location: "Boston, MA",
-    emailType: "Verified Work Email",
-  },
   {
     name: "Dr. Benjamin Hayes",
     title: "VP of Computational Biology",
@@ -287,6 +286,8 @@ export function ChadGtmLeadsPreview() {
       p.email.toLowerCase().includes(searchTerm.toLowerCase());
     return matchCat && matchSearch;
   });
+
+  const displayedLeads = filtered.slice(0, 7);
 
   return (
     <section id="leads" className="relative py-20 sm:py-28 border-t border-zinc-800 bg-black overflow-hidden">
@@ -371,7 +372,7 @@ export function ChadGtmLeadsPreview() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800">
-                {filtered.map((p, i) => (
+                {displayedLeads.map((p, i) => (
                   <tr key={i} className="hover:bg-zinc-900/50 transition-colors">
                     <td className="p-3">
                       <div className="font-semibold text-white">{p.name}</div>
