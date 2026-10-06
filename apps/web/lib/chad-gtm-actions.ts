@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { nowIso } from "@smartreach/shared";
 import { getDb, ensureChadGtmTables } from "./db";
@@ -22,6 +22,7 @@ import {
   investigateLeadDossier,
   type LeadProfile,
 } from "./ai";
+import { extractSenderFirstName } from "@smartreach/email-engine";
 import { ensureCampaignLeadSnapshot } from "./campaign-drafts";
 
 export async function analyzeWebsiteAction(
@@ -158,6 +159,22 @@ export async function generateCalibrationEmailsAction(
     const aiOpts = await getWorkspaceAiOptions(user.id);
     const overview = run.businessOverview as any;
 
+    // Resolve sender first name from active sender account or system pool
+    const activeSender = (await db
+      .select()
+      .from(schema.senderAccounts)
+      .where(
+        and(
+          eq(schema.senderAccounts.status, "active"),
+          isNull(schema.senderAccounts.deletedAt)
+        )
+      )
+      .orderBy(desc(schema.senderAccounts.isSystemPool), asc(schema.senderAccounts.createdAt))
+      .limit(1)
+      .then((rows) => rows[0])) || null;
+
+    const resolvedSenderName = extractSenderFirstName(activeSender);
+
     const emailSamples = await Promise.all(
       matchingLeads.map(async (dl, idx) => {
         const leadProfile: LeadProfile = {
@@ -185,9 +202,9 @@ Pitch this value offer directly to ${dl.jobTitle} at ${dl.companyName}.`;
           lead: leadProfile,
           dossier,
           customInstruction: instruction,
-          senderName: user.name || "Alex",
+          senderName: resolvedSenderName,
           fallbackSubject: `${dossier.suggestedSubject || activeOffer.angle.toLowerCase()}`,
-          fallbackBody: `Hi ${dl.firstName || "there"},\n\n${dossier.humanObservation}\n\n${dossier.frictionPoke}\n\n${dossier.customAssetDeliverable}\n\n${dossier.lowFrictionCta}\n\nBest,\n${user.name || "Alex"}`,
+          fallbackBody: `Hi ${dl.firstName || "there"},\n\n${dossier.humanObservation}\n\n${dossier.frictionPoke}\n\n${dossier.customAssetDeliverable}\n\n${dossier.lowFrictionCta}\n\nBest,\n${resolvedSenderName}`,
           index: idx,
         });
 
@@ -561,8 +578,8 @@ export async function launchChadGtmCampaignAction(
     // 3. Create calibrated Email Template in PostgreSQL
     const primarySample = approvedSamples[0] || {
       subject: calibratedProfile.calibratedSubjectTemplate || `Accelerating growth for {{company}}`,
-      bodyText: calibratedProfile.calibratedBodyTemplate || `Hi {{first_name}},\n\nWould love to share how our team helps companies in your space scale operations.\n\nBest,\n${user.name || "Alex"}`,
-      bodyHtml: `<p>Hi {{first_name}},</p><p>Would love to share how our team helps companies in your space scale operations.</p>`,
+      bodyText: calibratedProfile.calibratedBodyTemplate || `Hi {{first_name}},\n\nWould love to share how our team helps companies in your space scale operations.\n\nBest,\n{{sender_name}}`,
+      bodyHtml: `<p>Hi {{first_name}},</p><p>Would love to share how our team helps companies in your space scale operations.</p><p>Best,<br/>{{sender_name}}</p>`,
     };
 
     const finalSubject = calibratedProfile.calibratedSubjectTemplate || primarySample.subject;
@@ -645,8 +662,8 @@ export async function launchChadGtmCampaignAction(
     const step2Subject = finalSubject.toLowerCase().startsWith("re:")
       ? finalSubject
       : `re: ${finalSubject}`;
-    const step2BodyText = `Hi {{first_name}},\n\nPut together a 60-second video breakdown showing how {{company}} can optimize this without adding tools or complexity.\n\nWould you prefer I share the link here or send it to another email?\n\nBest,\n${user.name || "Alex"}`;
-    const step2BodyHtml = `<p>Hi {{first_name}},</p><p>Put together a 60-second video breakdown showing how {{company}} can optimize this without adding tools or complexity.</p><p>Would you prefer I share the link here or send it to another email?</p><p>Best,<br/>${user.name || "Alex"}</p>`;
+    const step2BodyText = `Hi {{first_name}},\n\nPut together a 60-second video breakdown showing how {{company}} can optimize this without adding tools or complexity.\n\nWould you prefer I share the link here or send it to another email?\n\nBest,\n{{sender_name}}`;
+    const step2BodyHtml = `<p>Hi {{first_name}},</p><p>Put together a 60-second video breakdown showing how {{company}} can optimize this without adding tools or complexity.</p><p>Would you prefer I share the link here or send it to another email?</p><p>Best,<br/>{{sender_name}}</p>`;
     const aiPromptStep2 = `Write follow-up #1 (sent 3 days after initial message) for ${companyName}. Recipient is {{job_title}} at {{company}}. Never say "just checking in" or "following up". Offer a 60-second asset or micro-audit tailored to ${activeOffer.valueProp}. Strictly under 35 words. Low-friction permission CTA.`;
 
     await db.insert(schema.sequenceStepVariants).values({
@@ -672,8 +689,8 @@ export async function launchChadGtmCampaignAction(
     const step3Subject = finalSubject.toLowerCase().startsWith("re:")
       ? finalSubject
       : `re: ${finalSubject}`;
-    const step3BodyText = `Hi {{first_name}},\n\nAssuming you're heads-down scaling {{company}} right now and this isn't a priority.\n\nShould I close your file for now, or check back with you next quarter?\n\nBest,\n${user.name || "Alex"}`;
-    const step3BodyHtml = `<p>Hi {{first_name}},</p><p>Assuming you're heads-down scaling {{company}} right now and this isn't a priority.</p><p>Should I close your file for now, or check back with you next quarter?</p><p>Best,<br/>${user.name || "Alex"}</p>`;
+    const step3BodyText = `Hi {{first_name}},\n\nAssuming you're heads-down scaling {{company}} right now and this isn't a priority.\n\nShould I close your file for now, or check back with you next quarter?\n\nBest,\n{{sender_name}}`;
+    const step3BodyHtml = `<p>Hi {{first_name}},</p><p>Assuming you're heads-down scaling {{company}} right now and this isn't a priority.</p><p>Should I close your file for now, or check back with you next quarter?</p><p>Best,<br/>{{sender_name}}</p>`;
     const aiPromptStep3 = `Write follow-up #2 (final breakup email, sent 7 days after initial outreach) for ${companyName}. Recipient is {{job_title}} at {{company}}. Zero guilt, polite permission close. Under 25 words. Ask if we should close the file or check back next quarter.`;
 
     await db.insert(schema.sequenceStepVariants).values({

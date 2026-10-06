@@ -11,36 +11,14 @@ import {
 import { Badge, Button } from "@smartreach/ui";
 
 const SAMPLE_PROSPECTS = [
+  // Computer Software (7 leads)
   {
     name: "Elena Rostova",
     title: "VP of Product Growth",
     company: "DataMesh Systems",
     industry: "Computer Software",
+    email: "elena.rostova@datameshsystems.com",
     location: "San Francisco, CA",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Marcus Vance",
-    title: "Chief Technology Officer",
-    company: "PayNexus Payments",
-    industry: "Financial Services",
-    location: "New York, NY",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Dr. Sarah Chen",
-    title: "Head of AI Infrastructure",
-    company: "BioSyn Labs",
-    industry: "Biotechnology",
-    location: "Boston, MA",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Liam O'Connor",
-    title: "Director of Revenue Operations",
-    company: "HyperScale Cloud",
-    industry: "Information Technology",
-    location: "Austin, TX",
     emailType: "Verified Work Email",
   },
   {
@@ -48,15 +26,248 @@ const SAMPLE_PROSPECTS = [
     title: "Founding Engineer",
     company: "NeuraGrid AI",
     industry: "Computer Software",
+    email: "amara.diallo@neuragrid.ai",
     location: "Seattle, WA",
     emailType: "Verified Work Email",
   },
   {
-    name: "Julian Becker",
-    title: "Chief Marketing Officer",
-    company: "OmniReach Digital",
-    industry: "Marketing & Advertising",
-    location: "Berlin, Germany",
+    name: "David Kelling",
+    title: "Head of Solutions Architecture",
+    company: "CloudStack IO",
+    industry: "Computer Software",
+    email: "david.kelling@cloudstack.io",
+    location: "Austin, TX",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Priya Patel",
+    title: "VP of Engineering",
+    company: "AppForge Labs",
+    industry: "Computer Software",
+    email: "priya.patel@appforge.dev",
+    location: "New York, NY",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Henrik Lindqvist",
+    title: "Director of Product Ops",
+    company: "DevVelocity",
+    industry: "Computer Software",
+    email: "henrik.l@devvelocity.com",
+    location: "Stockholm, Sweden",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Rachel Torres",
+    title: "Chief Technology Officer",
+    company: "VectorScale AI",
+    industry: "Computer Software",
+    email: "rachel.torres@vectorscale.ai",
+    location: "Denver, CO",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Alex Mercer",
+    title: "VP of Enterprise Systems",
+    company: "HyperFlow Suite",
+    industry: "Computer Software",
+    email: "alex.mercer@hyperflow.io",
+    location: "Chicago, IL",
+    emailType: "Verified Work Email",
+  },
+
+  // Financial Services (7 leads)
+  {
+    name: "Marcus Vance",
+    title: "Chief Technology Officer",
+    company: "PayNexus Payments",
+    industry: "Financial Services",
+    email: "marcus.vance@paynexus.com",
+    location: "New York, NY",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Charlotte Dupond",
+    title: "VP of Risk Management",
+    company: "Meridian Capital",
+    industry: "Financial Services",
+    email: "c.dupond@meridiancap.eu",
+    location: "London, UK",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Tariq Mansoor",
+    title: "Head of Treasury Tech",
+    company: "ApexFin Global",
+    industry: "Financial Services",
+    email: "tariq.mansoor@apexfin.com",
+    location: "Dubai, UAE",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Sarah Jenkins",
+    title: "Director of Compliance Ops",
+    company: "FinLuminate",
+    industry: "Financial Services",
+    email: "sarah.j@finluminate.com",
+    location: "Boston, MA",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Kenneth Zhao",
+    title: "VP of Strategic Growth",
+    company: "Altus Wealth Partners",
+    industry: "Financial Services",
+    email: "ken.zhao@altuswealth.com",
+    location: "San Francisco, CA",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Evelyn Walsh",
+    title: "Chief Operating Officer",
+    company: "Crestline Asset Mgmt",
+    industry: "Financial Services",
+    email: "e.walsh@crestlineam.com",
+    location: "Chicago, IL",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Robert Fischer",
+    title: "Head of Institutional Sales",
+    company: "Zurich Ledger AG",
+    industry: "Financial Services",
+    email: "rfischer@zurichledger.ch",
+    location: "Zurich, Switzerland",
+    emailType: "Verified Work Email",
+  },
+
+  // Information Technology (7 leads)
+  {
+    name: "Liam O'Connor",
+    title: "Director of Revenue Operations",
+    company: "HyperScale Cloud",
+    industry: "Information Technology",
+    email: "liam.oconnor@hyperscalecloud.com",
+    location: "Austin, TX",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Mateo Silva",
+    title: "VP of Cloud Infrastructure",
+    company: "Datasync Global",
+    industry: "Information Technology",
+    email: "mateo.silva@datasync.io",
+    location: "Toronto, Canada",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Jennifer Wu",
+    title: "Chief Info Security Officer",
+    company: "IronWall Security",
+    industry: "Information Technology",
+    email: "jennifer.wu@ironwallsec.com",
+    location: "Washington, DC",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Nathan Brooks",
+    title: "Director of Enterprise Arch",
+    company: "Nexus Networks",
+    industry: "Information Technology",
+    email: "nathan.brooks@nexusnetworks.com",
+    location: "Dallas, TX",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Ananya Sharma",
+    title: "Head of IT Operations",
+    company: "OmniCloud Systems",
+    industry: "Information Technology",
+    email: "ananya.s@omnicloud.in",
+    location: "Bengaluru, India",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Carlos Mendez",
+    title: "VP of Systems Engineering",
+    company: "CoreInfrastructure",
+    industry: "Information Technology",
+    email: "cmendez@coreinfra.com",
+    location: "Miami, FL",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Samuel Thorne",
+    title: "Director of Datacenter Ops",
+    company: "TierZero Systems",
+    industry: "Information Technology",
+    email: "sthorne@tierzeroops.com",
+    location: "Salt Lake City, UT",
+    emailType: "Verified Work Email",
+  },
+
+  // Biotechnology (7 leads)
+  {
+    name: "Dr. Sarah Chen",
+    title: "Head of AI Infrastructure",
+    company: "BioSyn Labs",
+    industry: "Biotechnology",
+    email: "sarah.chen@biosynlabs.org",
+    location: "Boston, MA",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Dr. Benjamin Hayes",
+    title: "VP of Computational Biology",
+    company: "GenoMetrics",
+    industry: "Biotechnology",
+    email: "b.hayes@genometrics.bio",
+    location: "Cambridge, MA",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Miriam Al-Sabah",
+    title: "Director of Clinical Informatics",
+    company: "ThermaGen Therapeutics",
+    industry: "Biotechnology",
+    email: "m.alsabah@thermagen.com",
+    location: "San Diego, CA",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Dr. Klaus Werner",
+    title: "Chief Scientific Officer",
+    company: "NeuroVector Biotech",
+    industry: "Biotechnology",
+    email: "k.werner@neurovector.de",
+    location: "Munich, Germany",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Olivia Sterling",
+    title: "VP of Regulatory Operations",
+    company: "CytoPulse Pharma",
+    industry: "Biotechnology",
+    email: "o.sterling@cytopulse.com",
+    location: "Raleigh, NC",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Dr. Jonathan Rey",
+    title: "Head of Translational Med",
+    company: "HelixNova Biosciences",
+    industry: "Biotechnology",
+    email: "j.rey@helixnova.com",
+    location: "Basel, Switzerland",
+    emailType: "Verified Work Email",
+  },
+  {
+    name: "Maya Lin",
+    title: "Director of Lab Automation",
+    company: "Veloce Biosystems",
+    industry: "Biotechnology",
+    email: "maya.lin@velocebio.com",
+    location: "San Francisco, CA",
     emailType: "Verified Work Email",
   },
 ];
@@ -72,7 +283,8 @@ export function ChadGtmLeadsPreview() {
     const matchSearch =
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.company.toLowerCase().includes(searchTerm.toLowerCase());
+      p.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.email.toLowerCase().includes(searchTerm.toLowerCase());
     return matchCat && matchSearch;
   });
 
@@ -147,12 +359,13 @@ export function ChadGtmLeadsPreview() {
 
           {/* Prospects Table */}
           <div className="mt-5 overflow-x-auto rounded-none border border-zinc-800 bg-black [-webkit-overflow-scrolling:touch]">
-            <table className="w-full text-left border-collapse text-xs min-w-[560px] font-mono">
+            <table className="w-full text-left border-collapse text-xs min-w-[660px] font-mono">
               <thead>
                 <tr className="border-b border-zinc-800 text-zinc-400 bg-zinc-950 text-[10px] uppercase tracking-wider">
                   <th className="p-3 font-semibold">Decision Maker</th>
                   <th className="p-3 font-semibold">Company</th>
                   <th className="p-3 font-semibold">Industry</th>
+                  <th className="p-3 font-semibold">Email</th>
                   <th className="p-3 font-semibold">Location</th>
                   <th className="p-3 font-semibold text-right">Verification</th>
                 </tr>
@@ -166,6 +379,11 @@ export function ChadGtmLeadsPreview() {
                     </td>
                     <td className="p-3 text-zinc-300 font-medium">{p.company}</td>
                     <td className="p-3 text-zinc-400">{p.industry}</td>
+                    <td className="p-3">
+                      <span className="font-mono text-xs text-zinc-400 select-none filter blur-[4.5px] hover:blur-[3px] transition-all pointer-events-none">
+                        {p.email}
+                      </span>
+                    </td>
                     <td className="p-3 text-zinc-400">{p.location}</td>
                     <td className="p-3 text-right">
                       <span className="rounded-none border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-[9px] uppercase tracking-widest text-zinc-300">

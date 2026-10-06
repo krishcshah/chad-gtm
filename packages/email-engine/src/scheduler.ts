@@ -31,6 +31,7 @@ import { and, asc, desc, eq, exists, inArray, isNull, lte, or, sql } from "drizz
 import type { CampaignRow, EngineDb, SenderRow } from "./db-port";
 import {
   dueQueuedLeadFilter,
+  extractSenderFirstName,
   loadCampaignSequenceSteps,
   resolveStepContent,
 } from "./sequence";
@@ -309,7 +310,13 @@ export async function scheduleCampaign(
     // Resolve {{unsubscribe_url}} only when content references it — do not auto-inject.
     const unsubToken = createUnsubscribeToken(campaign.userId, lead.email);
     const unsubUrl = buildUnsubscribeUrl(unsubBase, unsubToken);
-    const vars = { ...leadVars(lead), unsubscribe_url: unsubUrl };
+    const senderFirstName = extractSenderFirstName(pick.sender);
+    const vars = {
+      ...leadVars(lead),
+      unsubscribe_url: unsubUrl,
+      sender_name: senderFirstName,
+      senderName: senderFirstName,
+    };
     const content = await resolveStepContent(db, {
       campaignId: campaign.id,
       stepPosition: cl.stepPosition ?? 1,
@@ -317,7 +324,7 @@ export async function scheduleCampaign(
       vars,
       steps: sequenceSteps,
       lead,
-      senderName: pick.sender.fromName ?? undefined,
+      senderName: senderFirstName,
     });
     if ("error" in content) {
       await db

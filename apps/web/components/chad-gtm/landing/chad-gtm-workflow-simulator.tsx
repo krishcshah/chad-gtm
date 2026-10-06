@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -22,6 +22,57 @@ import { Badge, Button, cn } from "@smartreach/ui";
 
 export function ChadGtmWorkflowSimulator() {
   const [activeStep, setActiveStep] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isClicked, setIsClicked] = useState(false);
+  const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const resetInactivityTimer = useCallback(() => {
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+    }
+    inactivityTimerRef.current = setTimeout(() => {
+      setIsClicked(false);
+      setIsHovered(false);
+    }, 30000);
+  }, []);
+
+  const handleTabClick = (idx: number) => {
+    setActiveStep(idx);
+    setIsClicked(true);
+    resetInactivityTimer();
+  };
+
+  const handleMouseEnter = () => {
+    setIsHovered(true);
+    resetInactivityTimer();
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovered(false);
+  };
+
+  const handleMouseMove = () => {
+    if (isHovered || isClicked) {
+      resetInactivityTimer();
+    }
+  };
+
+  useEffect(() => {
+    if (isHovered || isClicked) return;
+    const interval = setInterval(() => {
+      setActiveStep((prev) => (prev + 1) % 5);
+    }, 4500);
+
+    return () => clearInterval(interval);
+  }, [isHovered, isClicked]);
+
+  useEffect(() => {
+    return () => {
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+      }
+    };
+  }, []);
 
   const steps = [
     {
@@ -78,16 +129,23 @@ export function ChadGtmWorkflowSimulator() {
           </p>
         </div>
 
-        {/* Step Navigation Tabs - Boxy Grid */}
-        <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0 sm:grid sm:grid-cols-5 max-w-5xl mx-auto mb-8 snap-x">
-          {steps.map((s, idx) => {
-            const Icon = s.icon;
-            const isActive = activeStep === idx;
-            return (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setActiveStep(idx)}
+        {/* Interactive Simulator Wrapper */}
+        <div
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          onMouseMove={handleMouseMove}
+          className="relative max-w-5xl mx-auto"
+        >
+          {/* Step Navigation Tabs - Boxy Grid */}
+          <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0 sm:grid sm:grid-cols-5 mb-8 snap-x">
+            {steps.map((s, idx) => {
+              const Icon = s.icon;
+              const isActive = activeStep === idx;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => handleTabClick(idx)}
                 className={cn(
                   "shrink-0 w-44 sm:w-auto snap-start flex flex-col items-start p-3 sm:p-4 rounded-none border text-left transition-colors select-none font-mono",
                   isActive
@@ -119,7 +177,7 @@ export function ChadGtmWorkflowSimulator() {
         </div>
 
         {/* Interactive Visual Playground Screen */}
-        <div className="relative max-w-5xl mx-auto rounded-none border border-zinc-800 bg-black p-4 sm:p-8">
+        <div className="relative rounded-none border border-zinc-800 bg-black p-4 sm:p-8">
           {activeStep === 0 && (
             <div className="space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800 pb-3 font-mono">
@@ -404,6 +462,7 @@ export function ChadGtmWorkflowSimulator() {
               </div>
             </div>
           )}
+        </div>
         </div>
       </div>
     </section>

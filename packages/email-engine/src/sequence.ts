@@ -44,6 +44,32 @@ export type StepContent = {
   format: "text" | "html";
 };
 
+/**
+ * Cleanly extract the first name of a sender account to use in email signatures and greetings.
+ * Examples:
+ * - { fromName: "Alex Vance", email: "alex@company.com" } -> "Alex"
+ * - { fromName: null, email: "arthur.dent@company.com" } -> "Arthur"
+ * - { senderName: "Sarah Connor" } -> "Sarah"
+ * Never returns an email address or the account owner's full name.
+ */
+export function extractSenderFirstName(sender?: { senderName?: string | null; fromName?: string | null; email?: string | null } | null): string {
+  if (!sender) return "Alex";
+  const raw = (sender.fromName || sender.senderName || "").trim();
+  if (raw) {
+    const first = raw.split(" ")[0].trim();
+    if (first && !first.includes("@") && first.length > 1) {
+      return first.charAt(0).toUpperCase() + first.slice(1);
+    }
+  }
+  if (sender.email) {
+    const local = sender.email.split("@")[0].split(".")[0].split("_")[0].trim();
+    if (local && local.length > 1) {
+      return local.charAt(0).toUpperCase() + local.slice(1).toLowerCase();
+    }
+  }
+  return "Alex";
+}
+
 /** Load ordered steps for a campaign (empty ⇒ single-template mode). */
 export async function loadCampaignSequenceSteps(
   db: EngineDb,
