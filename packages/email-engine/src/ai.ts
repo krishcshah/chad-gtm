@@ -130,7 +130,7 @@ export function parseCampaignPrompt(rawInst: string): ParsedPromptContext {
     }
   }
 
-  const isWebDesignDomain = /(?:web design|website|redesign|landing page|ui\/ux|ux|conversion rate|cro|mobile responsiveness|page speed|seo|wordpress|webflow|shopify|creative agency|digital agency)/i.test(text);
+  const isWebDesignDomain = /(?:web design|website redesign|site redesign|landing page design|ui\/ux|conversion rate optimization|mobile responsiveness|page speed|wordpress site|webflow site)/i.test(text);
   const isHiringDomain = /(?:interview|interviews|interviewer|hiring|recruiting|recruit|recruiter|staffing|candidate|candidates|talent|applicant|applicants|headhunt|job seeker|requisition)/i.test(text);
   const isSalesDomain = /(?:sales|outbound|pipeline|sdr|bdr|prospecting|lead gen|cold email|meetings|booking)/i.test(text);
   const isTechDomain = /(?:developer|engineering|code|devops|cloud|infrastructure|api|software engineers)/i.test(text);
@@ -190,7 +190,8 @@ function simulatePersonalizedScript(options: GenerateOnTheFlyOptions): Generated
   const rawInst = (customInstruction || "").trim();
   const ctx = parseCampaignPrompt(rawInst);
 
-  const isWebDesign = ctx.isWebDesignDomain || /(?:web design|website|redesign|ux|conversion|digital marketing)/i.test(rawInst);
+  const isInboxInfra = /leadskingdom|inbox provider|mailbox|mailboxes|secondary domain|secondary domains|deliverability|inbox setup|dns configuration|ip pool|warmup|google workspace seat/i.test(rawInst);
+  const isWebDesign = !isInboxInfra && (ctx.isWebDesignDomain || /(?:web design|website redesign|site redesign|landing page design|mobile responsiveness|page speed)/i.test(rawInst));
   const isHiring = ctx.isHiringDomain || /recruiting|staffing|talent|hiring|hr|human resources|headhunt/i.test(`${industry} ${role} ${company}`);
   const isSales = ctx.isSalesDomain || /outbound|deliverability|cold email|lead gen|pipeline/i.test(rawInst);
 
@@ -205,7 +206,88 @@ function simulatePersonalizedScript(options: GenerateOnTheFlyOptions): Generated
 
   const specificFriction = (lead.customFields?.booking_friction || lead.customFields?.friction || lead.customFields?.bottleneck || "") as string;
 
-  if (isWebDesign) {
+  if (isInboxInfra || (isSales && (rawInst.toLowerCase().includes("inbox") || rawInst.toLowerCase().includes("mailbox") || rawInst.toLowerCase().includes("domain")))) {
+    const rawFriction = (
+      lead.customFields?.bottleneck ||
+      lead.customFields?.primary_domain_risk ||
+      lead.customFields?.client_friction ||
+      lead.customFields?.risk_event ||
+      lead.customFields?.account_status ||
+      (lead as any).specificInfrastructureFriction ||
+      (lead as any).frictionSignal ||
+      ""
+    ).toString().toLowerCase();
+
+    if (rawFriction.includes("seat") || rawFriction.includes("google workspace") || rawFriction.includes("margin") || rawFriction.includes("$7")) {
+      subject = "workspace seat costs";
+      beat1 = `Checked how many secondary inboxes ${company} runs across client accounts.`;
+      beat2 = `Paying Google Workspace $7 a user on hundreds of secondary accounts burns thousands each month that could stay in agency margin.`;
+      beat3 = `Put together a 1-page breakdown showing how peer agencies cut infrastructure seat costs by 80% with automated DNS.`;
+      beat4 = `Worth a quick look?`;
+    } else if (rawFriction.includes("proofpoint") || rawFriction.includes("quarantine") || rawFriction.includes("msp") || rawFriction.includes("clinic")) {
+      subject = "proofpoint quarantine";
+      beat1 = `Tested deliverability for ${company}'s outreach into regional healthcare accounts.`;
+      beat2 = `Clinic IT systems running Proofpoint automatically quarantine cold emails sent directly from corporate sender IPs.`;
+      beat3 = `Put together a 1-page breakdown showing how peer MSPs bypass gateway filters using isolated high-reputation pools.`;
+      beat4 = `Worth a quick look?`;
+    } else if (rawFriction.includes("spamhaus") || rawFriction.includes("blacklist") || rawFriction.includes("buyout") || rawFriction.includes("m&a") || rawFriction.includes("dealmaker")) {
+      subject = "corporate domain risk";
+      beat1 = `Quick note on founder acquisition outreach at ${company}.`;
+      beat2 = `Running cold deal sourcing directly from your corporate domain risks a Spamhaus listing that can shut down firm-wide internal emails.`;
+      beat3 = `Put together a 40-second screen capture showing how buyout firms completely isolate prospecting from deal closing.`;
+      beat4 = `Worth a quick look?`;
+    } else if (rawFriction.includes("microsoft 365") || rawFriction.includes("tenant") || rawFriction.includes("candidate") || rawFriction.includes("junk")) {
+      subject = "candidate email delivery";
+      beat1 = `Quick note on executive candidate outreach at ${company}.`;
+      beat2 = `When headhunters send high volume from internal Microsoft 365 accounts, tenant rate limits quietly route reach-outs to candidate junk folders.`;
+      beat3 = `Put together a 40-second screen capture showing how search firms rotate external mailboxes safely.`;
+      beat4 = `Worth a quick look?`;
+    } else if (rawFriction.includes("dkim") || rawFriction.includes("defender") || rawFriction.includes("misaligned") || rawFriction.includes("cfo")) {
+      subject = "dkim alignment";
+      beat1 = `Tested the email authentication records for ${company}'s outbound setup.`;
+      beat2 = `Misaligned DKIM signatures fail Microsoft Defender checks automatically, routing policy pitch emails straight to CFO junk folders.`;
+      beat3 = `Put together a 45-second teardown showing where the DNS record failure is happening.`;
+      beat4 = `Open to taking a look?`;
+    } else if (rawFriction.includes("burner") || rawFriction.includes("14-day") || rawFriction.includes("solar") || rawFriction.includes("churn")) {
+      subject = "burner domain churn";
+      beat1 = `Checked how frequently ${company} is replacing burned domains for regional campaigns.`;
+      beat2 = `Cycling through unmanaged registrar domains every two weeks creates constant pipeline dry spells while waiting for new warmups.`;
+      beat3 = `Recorded a 45-second video showing how high-volume teams use auto-replacing IP pools to keep sending steady.`;
+      beat4 = `Mind if I send the clip?`;
+    } else if (rawFriction.includes("suspension") || rawFriction.includes("suspended") || rawFriction.includes("cre") || rawFriction.includes("policy warnings")) {
+      subject = "workspace policy limits";
+      beat1 = `Saw how your acquisitions team sources off-market property deals for ${company}.`;
+      beat2 = `Google Workspace has been suspending standard user accounts without warning once outbound volume triggers spam flags.`;
+      beat3 = `Put together a 40-second video showing how acquisition teams insulate deal sourcing using dedicated secondary inboxes.`;
+      beat4 = `Worth a look?`;
+    } else if (rawFriction.includes("client it") || rawFriction.includes("dns access") || rawFriction.includes("onboarding") || rawFriction.includes("cloudflare")) {
+      subject = "client dns onboarding";
+      beat1 = `Quick note on client outbound onboarding at ${company}.`;
+      beat2 = `Waiting 3 to 4 weeks for client internal IT teams to grant Cloudflare access and configure DNS usually stalls campaign launches.`;
+      beat3 = `Recorded a 45-second video showing how agencies spin up pre-authenticated secondary domains in under 5 minutes.`;
+      beat4 = `Open to seeing it?`;
+    } else if (rawFriction.includes("conference") || rawFriction.includes("summit") || rawFriction.includes("delegate") || rawFriction.includes("burst")) {
+      subject = "delegate invitation delivery";
+      beat1 = `Looked into delegate outreach volume for ${company}'s upcoming summits.`;
+      beat2 = `Blasting conference invitations without multi-inbox rotation pushes executive invites into spam folders right before registration deadlines.`;
+      beat3 = `Recorded a 45-second video showing how event teams spread volume across 50 rotated mailboxes.`;
+      beat4 = `Mind if I send the clip?`;
+    } else if (rawFriction.includes("primary") || rawFriction.includes("subdomain") || rawFriction.includes("support ticket") || rawFriction.includes("risk")) {
+      const shortDomain = lead.website ? lead.website.replace(/^www\./, "").split("/")[0] : `${company.split(' ')[0].toLowerCase()}.com`;
+      subject = `${shortDomain} domain risk`;
+      beat1 = `Noticed your SDR team ramping cold outreach for ${company}.`;
+      beat2 = `Sending high-volume outbound from root domain subdomains puts company email reputation at risk when Google flags bounce spikes.`;
+      beat3 = `Recorded a 45-second video showing how peer SaaS teams isolate outreach on secondary domains.`;
+      beat4 = `Mind if I send the link?`;
+    } else {
+      subject = "inbox deliverability";
+      beat1 = `Noticed how many outbound teams in ${industry} are battling secondary domain burn right now.`;
+      beat2 = `Google and Yahoo's updated sender caps quietly push cold emails into spam once an inbox exceeds 35 sends a day.`;
+      beat3 = `Put together a 1-page breakdown showing how top teams distribute volume across warmed pools to keep inbox placement above 98%.`;
+      beat4 = `Worth a quick look?`;
+    }
+    reason = `Addressed specific cold email infrastructure friction for ${company} with a low-friction asset CTA.`;
+  } else if (isWebDesign) {
     const rawFriction = (
       lead.customFields?.booking_friction ||
       lead.customFields?.friction ||
