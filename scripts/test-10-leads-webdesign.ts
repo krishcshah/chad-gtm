@@ -254,4 +254,6 @@ Call to Action: Mind if I share a 60-second video teardown showing where the dro
   console.log(JSON.stringify(results, null, 2));
 }
 
-runDemo().catch(console.error);
+if (process.argv[1]?.includes("test-10-leads-webdesign")) {
+  runDemo().catch(console.error);
+}

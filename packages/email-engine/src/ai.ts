@@ -206,81 +206,149 @@ function simulatePersonalizedScript(options: GenerateOnTheFlyOptions): Generated
   const specificFriction = (lead.customFields?.booking_friction || lead.customFields?.friction || lead.customFields?.bottleneck || "") as string;
 
   if (isWebDesign) {
-    if (variantIndex === 0) {
-      subject = "website mobile speed";
-      beat1 = `Looked at ${company}'s site on mobile earlier today.`;
-      beat2 = specificFriction
-        ? `Noticed ${specificFriction.toLowerCase()}, which usually costs local businesses 30% of their mobile traffic.`
-        : `Noticed the quote request form sits behind a 4-second layout delay, which usually costs local service businesses 30% of their mobile traffic.`;
-      beat3 = `We recently rebuilt a peer site in ${industry}, cutting mobile load times to 0.5s and doubling form completions without touching their ad spend.`;
-      beat4 = `Put together a 60-second video teardown showing where the drop-offs happen. Mind if I share it here?`;
-    } else if (variantIndex === 1) {
-      subject = "conversion teardown";
-      beat1 = `Took a quick look at ${company}'s primary landing page.`;
-      beat2 = specificFriction
-        ? `Noticed ${specificFriction.toLowerCase()}, making it harder for high-intent visitors to request an estimate on phones.`
-        : `The hero call-to-action is currently pushed below the fold on phones, making it difficult for high-intent visitors to request an estimate quickly.`;
-      beat3 = `We just redesigned a high-volume site in your space, shifting mobile quote captures up by 42%.`;
-      beat4 = `Would it be crazy if I sent over a 2-minute visual audit breaking down the two quick fixes?`;
+    const rawFriction = (
+      lead.customFields?.booking_friction ||
+      lead.customFields?.friction ||
+      lead.customFields?.bottleneck ||
+      (lead as any).specificAssetTrigger ||
+      ""
+    ).toString().toLowerCase();
+
+    if (rawFriction.includes("pdf") || rawFriction.includes("download")) {
+      const surname = lead.lastName ? `${lead.lastName.toLowerCase()}` : "intake";
+      const leadPrefix = lead.jobTitle?.toLowerCase().includes("doctor") || lead.jobTitle?.toLowerCase().includes("surgeon") ? `dr. ${surname}` : surname;
+      subject = `${leadPrefix} / booking`;
+      beat1 = `Checked your site on an iPhone earlier today.`;
+      beat2 = `Noticed patients have to download a PDF just to request an implant consult. On mobile, most people leave before opening the file.`;
+      beat3 = `Put together a 45-second video showing how to make it a quick 2-tap booking.`;
+      beat4 = `Mind if I send the link over?`;
+    } else if (rawFriction.includes("tap-to-call") || rawFriction.includes("dispatch") || rawFriction.includes("clickable")) {
+      subject = `dispatch phone button`;
+      beat1 = `Pulled up ${company} on my phone earlier today.`;
+      beat2 = `Noticed your main dispatch phone number isn't clickable on iOS. If a homeowner has a furnace fail at night, they have to memorize the number to dial it.`;
+      beat3 = `Recorded a 40-second screen video showing how to make it a direct 1-tap dial.`;
+      beat4 = `Worth a quick look?`;
+    } else if (rawFriction.includes("12") || rawFriction.includes("mandatory") || rawFriction.includes("intake form")) {
+      subject = `${company.split(' ')[0].toLowerCase()} intake form`;
+      beat1 = `Looked through ${company}'s site on an iPhone.`;
+      beat2 = `Noticed your consultation form asks for 12 required fields on mobile. Most clients browsing on a phone bounce before typing out that much text.`;
+      beat3 = `Put together a 45-second video showing how peer firms cut intake to 3 fields without losing lead qualification.`;
+      beat4 = `Mind if I send the link?`;
+    } else if (rawFriction.includes("calculator") || rawFriction.includes("layout shift") || rawFriction.includes("5.2s")) {
+      subject = `calculator load speed`;
+      beat1 = `Tested ${company}'s quote calculator on mobile data earlier.`;
+      beat2 = `The widget takes over 5 seconds to load on a phone and shifts the whole screen while loading. Most people looking for a roof repair bounce when that happens.`;
+      beat3 = `Recorded a 45-second screen video showing the fix.`;
+      beat4 = `Open to taking a look?`;
+    } else if (rawFriction.includes("photo") || rawFriction.includes("gallery") || rawFriction.includes("crashing")) {
+      subject = `safari photo lag`;
+      beat1 = `Checked ${company}'s portfolio page on an iPhone earlier.`;
+      beat2 = `The high-resolution project photos take several seconds to render and cause mobile Safari to freeze up.`;
+      beat3 = `Recorded a 45-second video showing how to keep the crisp 4K quality while loading in under half a second on mobile.`;
+      beat4 = `Mind if I send the clip over?`;
+    } else if (rawFriction.includes("calendar") || rawFriction.includes("iframe") || rawFriction.includes("cut off")) {
+      subject = `calendar cutoff`;
+      beat1 = `Was checking ${company}'s discovery call page on my phone.`;
+      beat2 = `Noticed the scheduling calendar gets cut off on mobile screens, making it impossible to select a date without horizontal scrolling.`;
+      beat3 = `Put together a 40-second screen capture showing how to fix the embed.`;
+      beat4 = `Worth a quick look?`;
+    } else if (rawFriction.includes("rfp") || rawFriction.includes("upload") || rawFriction.includes("attachment")) {
+      subject = `mobile rfp upload`;
+      beat1 = `Looked at ${company}'s bid request page on an iPhone.`;
+      beat2 = `Noticed property managers can't attach RFP documents when submitting from a phone. When on-site managers can't upload specs, they usually wait or call another contractor.`;
+      beat3 = `Recorded a 45-second video showing how to add simple 1-tap mobile uploads.`;
+      beat4 = `Open to seeing it?`;
+    } else if (rawFriction.includes("treatment") || rawFriction.includes("aesthetic") || rawFriction.includes("menu")) {
+      subject = `treatment booking`;
+      beat1 = `Browsed through ${company}'s treatment menu on mobile.`;
+      beat2 = `Noticed there's no direct booking button next to the individual facial treatments. Visitors have to hunt through separate menu tabs just to find an open slot.`;
+      beat3 = `Put together a 45-second video showing how to link each treatment straight to mobile checkout.`;
+      beat4 = `Mind if I share it?`;
+    } else if (rawFriction.includes("load chart") || rawFriction.includes("crane") || rawFriction.includes("chrome")) {
+      subject = `mobile load charts`;
+      beat1 = `Pulled up ${company}'s fleet page on an Android phone earlier.`;
+      beat2 = `Noticed the crane load chart PDF links break when opened on mobile Chrome. Field superintendents on job sites usually need those specs on the spot.`;
+      beat3 = `Recorded a 40-second screen video showing how to make the load charts mobile-friendly.`;
+      beat4 = `Worth a look?`;
+    } else if (rawFriction.includes("cookie") || rawFriction.includes("overlay") || rawFriction.includes("hotline")) {
+      subject = `emergency number banner`;
+      beat1 = `Checked ${company}'s site on an iPhone earlier today.`;
+      beat2 = `Noticed a full-screen cookie banner completely covers the emergency surgery phone number on mobile. When a pet owner has an urgent crisis, that 3-second block costs calls.`;
+      beat3 = `Put together a 45-second screen recording showing where the overlap is happening.`;
+      beat4 = `Mind if I send the clip?`;
     } else {
-      subject = `${company.toLowerCase()} mobile ux`;
-      beat1 = `Was reviewing top providers in ${industry} and pulled up ${company}'s website.`;
-      beat2 = specificFriction
-        ? `Noticed ${specificFriction.toLowerCase()}, where visitors browsing on phones tend to bounce immediately.`
-        : `Most visitors browsing on mobile bounce if estimate forms require more than two screen taps or take over 3 seconds to render.`;
-      beat3 = `We specialize in sub-second mobile redesigns that turn existing traffic into qualified phone and form inquiries.`;
-      beat4 = `Worth a quick look if I send over a 45-second screen recording of what we spotted?`;
+      // Clean fallback for web design when no custom signal is provided
+      const shortCompany = company.split(' ')[0].toLowerCase();
+      if (variantIndex === 0) {
+        subject = `${shortCompany} mobile speed`;
+        beat1 = `Checked ${company}'s site on an iPhone earlier today.`;
+        beat2 = `Noticed the primary quote form takes over 4 seconds to render on cellular data. On mobile, most visitors leave before the button finishes loading.`;
+        beat3 = `Recorded a 45-second screen video showing two quick fixes to get load times under 0.5s.`;
+        beat4 = `Mind if I send the clip over?`;
+      } else if (variantIndex === 1) {
+        subject = `${shortCompany} mobile booking`;
+        beat1 = `Pulled up ${company}'s booking page on my phone earlier.`;
+        beat2 = `The main contact button is pushed several scrolls below the fold on mobile screens, making it tricky for high-intent visitors to call or book immediately.`;
+        beat3 = `Put together a 40-second video showing how to make it a direct 1-tap action.`;
+        beat4 = `Worth a quick look?`;
+      } else {
+        subject = `${shortCompany} intake form`;
+        beat1 = `Looked through ${company}'s contact flow on mobile.`;
+        beat2 = `The estimate request asks for multiple mandatory fields on a phone, where most people bounce before typing out that much text.`;
+        beat3 = `Recorded a 45-second teardown showing how peer teams cut intake friction without losing lead quality.`;
+        beat4 = `Open to taking a look?`;
+      }
     }
-    reason = `Targeted ${company}'s mobile layout and quote form conversion friction with a 60-second video audit CTA.`;
+    reason = `Targeted ${company}'s specific mobile friction point with a concise custom screen audit CTA.`;
   } else if (isHiring) {
     if (variantIndex === 0) {
-      subject = "candidate screens";
-      beat1 = `Between client intake and screening applicant flow, first-round phone screens usually drain 15+ hours a week for teams at ${company}.`;
-      beat2 = `Most automated filters just scan resume keywords, letting unqualified applicants slip through while good candidates wait days for a call.`;
-      beat3 = `We built a 24/7 live AI interviewer that conducts reactionary video screens and delivers scored finalist shortlists within hours.`;
-      beat4 = `Open to a 60-second interactive test call to see how natural the conversation feels?`;
-    } else if (variantIndex === 1) {
-      subject = "first-round interviews";
+      subject = "screening turnaround";
       beat1 = `Quick note on candidate turnaround speed at ${company}.`;
-      beat2 = `For search and staffing firms, losing top candidates to competing recruiters during the initial screening delay is a quiet pipeline killer.`;
-      beat3 = `Our live AI video interviewer interviews applicants the moment they apply, passing only the top 5% finalists to your recruiters.`;
-      beat4 = `Would it be crazy if I shared a 1-click test link so you can experience a 2-minute screen yourself?`;
+      beat2 = `When top applicants have to wait 3 to 4 days for an initial phone screen, competing search firms usually snatch them up first.`;
+      beat3 = `Put together a 60-second video showing how peer teams run instant 24/7 first-round screens without recruiter legwork.`;
+      beat4 = `Mind if I send the link?`;
+    } else if (variantIndex === 1) {
+      subject = "first-round screens";
+      beat1 = `Was looking into talent intake across ${industry}.`;
+      beat2 = `Most recruiters lose 15+ hours a week on introductory phone screens that could easily be vetted before human review.`;
+      beat3 = `Recorded a 45-second walkthrough showing how agencies score applicant videos automatically.`;
+      beat4 = `Worth a quick look?`;
     } else {
-      subject = `${company.toLowerCase()} applicant flow`;
-      beat1 = `Was looking into talent operations across ${industry}.`;
-      beat2 = `Most recruiters spend half their work week on introductory screens that could be vetted before human review.`;
-      beat3 = `We help agencies 4x candidate screening throughput without adding headcount.`;
-      beat4 = `Opposed to seeing a 90-second walkthrough of how the scorecards work?`;
+      subject = `${company.split(' ')[0].toLowerCase()} candidate flow`;
+      beat1 = `Between client intake and screening applicant volume, initial phone screens usually drain recruiter hours at ${company}.`;
+      beat2 = `Keyword filters let unqualified people slip through while strong candidates wait days for a callback.`;
+      beat3 = `Put together a 1-minute demo showing how to interview applicants the minute they submit.`;
+      beat4 = `Open to taking a look?`;
     }
-    reason = `Focused on eliminating recruiter phone screen bottlenecks for ${company} with a test link CTA.`;
+    reason = `Focused on eliminating recruiter phone screen bottlenecks for ${company} with a 1-minute demo CTA.`;
   } else if (isSales) {
     if (variantIndex === 0) {
-      subject = "outbound deliverability";
-      beat1 = `Noticed how many outbound teams in ${industry} are battling domain burn and secondary mailbox limits right now.`;
-      beat2 = `Google and Yahoo's updated sender caps quietly shove cold emails into spam once a single inbox exceeds 35 sends a day.`;
-      beat3 = `We set up rotating warmup-protected mailboxes with peer-to-peer personalization to keep primary domain reputation at 99%.`;
-      beat4 = `Worth exploring if I send over our 1-page deliverability checklist?`;
+      subject = "inbox deliverability";
+      beat1 = `Noticed how many outbound teams in ${industry} are battling secondary domain burn right now.`;
+      beat2 = `Google and Yahoo's updated sender caps quietly push cold emails into spam once an inbox exceeds 35 sends a day.`;
+      beat3 = `Put together a 1-page breakdown showing how top teams distribute volume across warmed pools to keep inbox placement above 98%.`;
+      beat4 = `Worth a quick look?`;
     } else if (variantIndex === 1) {
       subject = "pipeline scaling";
-      beat1 = `Scaling cold pipeline at ${company} usually hits a wall when SDRs spend 20 hours a week researching accounts manually.`;
-      beat2 = `Generic mass emails get flagged as spam, while hyper-manual research caps outreach volume.`;
-      beat3 = `We built an autonomous engine that researches target accounts and drafts hyper-relevant touchpoints at 10x speed.`;
-      beat4 = `Open to seeing a 2-minute benchmark breakdown comparing reply rates?`;
+      beat1 = `Scaling cold pipeline at ${company} usually hits a wall when reps spend 20 hours a week researching accounts manually.`;
+      beat2 = `Mass blast emails get flagged as spam, while manual research severely limits weekly volume.`;
+      beat3 = `Put together a 2-minute benchmark breakdown showing how peer teams automate the research step.`;
+      beat4 = `Open to seeing it?`;
     } else {
-      subject = "mailbox health";
-      beat1 = `Quick question regarding outbound mailbox setup at ${company}.`;
+      subject = "secondary domains";
+      beat1 = `Quick note on outbound mailbox setup at ${company}.`;
       beat2 = `Most sales teams don't realize their primary domain is taking sender reputation hits until reply rates drop below 1%.`;
-      beat3 = `We benchmarked 200+ outbound engines to show where spam leakage happens.`;
-      beat4 = `Mind if I send over a quick 60-second video on how to fix it?`;
+      beat3 = `Recorded a 45-second video showing how to isolate prospecting domains without risking Google Workspace flags.`;
+      beat4 = `Mind if I send the clip?`;
     }
-    reason = `Addressed mailbox deliverability and domain burn for ${company} with a 1-page checklist CTA.`;
+    reason = `Addressed mailbox deliverability and domain burn for ${company} with a low-friction asset CTA.`;
   } else {
     // General B2B operational efficiency
-    subject = `${company.toLowerCase()} workflow`;
-    beat1 = `Focusing on execution velocity at ${company}.`;
-    beat2 = `Most leadership teams in ${industry} lose hours each week to repetitive manual coordination between disconnected tools.`;
-    beat3 = `We built an intelligent engine that automates these handoffs with zero setup overhead.`;
-    beat4 = `Worth a quick 60-second look if I share how a peer team structured it?`;
+    subject = `${company.split(' ')[0].toLowerCase()} workflow`;
+    beat1 = `Quick note on operational execution at ${company}.`;
+    beat2 = `Most teams in ${industry} lose hours each week manually re-keying data between disconnected software tools.`;
+    beat3 = `Put together a 45-second screen capture showing how peer operators automated that handoff.`;
+    beat4 = `Worth a quick look?`;
     reason = `Addressed operational coordination friction at ${company} with a low-friction asset CTA.`;
   }
 
@@ -440,28 +508,29 @@ STRICT "ANTI-TO-DO" NEGATIVE CONSTRAINTS (VIOLATIONS WILL CAUSE COMPLETE FAILURE
 1. NO OPENING PLEASANTRIES: NEVER start with "Hope you're well", "Hope this finds you well", "Happy Monday", etc. Start directly with the observation.
 2. NO SELF-INTRODUCTIONS: NEVER write "My name is X and I work at Y" or "I'm the founder of...". The recipient sees your name in the From line.
 3. NO FAKE FLATTERY: NEVER use "Loved your profile", "Congrats on the growth", or "Saw what you're building at {{company}}". It sounds robotic.
-4. NO PITCH-SLAP OR BULLET POINTS: NEVER dump feature lists, bullet points, or product specs.
-5. NO CORPORATE JARGON: NEVER use buzzwords like "game-changer", "revolutionary", "cutting-edge", "synergy", "seamlessly streamline", "all-in-one", or "bespoke".
-6. NO TIME ASKS IN TOUCH 1: NEVER ask for "15 minutes next Tuesday", "a quick 20-minute call", or send a Calendly/booking link.
-7. NO EXTERNAL LINKS OR ATTACHMENTS: Keep Email 1 link-free to guarantee 99%+ primary inbox placement.
-8. NO WALLS OF TEXT: Keep each paragraph to 1-2 short sentences. Total body MUST be strictly under 65 words.
-9. NO HIGH "I/WE" RATIO: Keep focus 80%+ on the prospect, their current friction, and their world.
+4. NO PITCH-SLAP OR BOASTING: NEVER write "We specialize in...", "We recently rebuilt a peer site...", or quote arbitrary "+42%" metrics. Keep 85%+ focus on the prospect's world.
+5. NO BULLET POINTS OR FEATURE LISTS: Keep paragraphs short (1-2 sentences).
+6. NO CORPORATE JARGON: NEVER use buzzwords like "game-changer", "revolutionary", "cutting-edge", "synergy", "seamlessly streamline", "all-in-one", or "bespoke".
+7. NO TIME ASKS IN TOUCH 1: NEVER ask for "15 minutes next Tuesday", "a quick 20-minute call", or send a Calendly/booking link.
+8. NO DATED PSYCHOLOGY GIMMICKS: NEVER use "Would it be crazy if..." or similar scripted tropes.
+9. NO EXTERNAL LINKS OR ATTACHMENTS: Keep Email 1 link-free to guarantee 99%+ primary inbox placement.
+10. NO COMPLEX SENTENCE STRUCTURE: Use short, punchy 3rd-to-5th grade Anglo-Saxon words. Total body MUST be strictly under 55 words.
 
 THE 4-BEAT TOP 0.001% COPY ARCHITECTURE:
-- Beat 1: The Observation / Trigger (1 sentence). An objective observation or diagnostic about their specific business, role, or asset.
-- Beat 2: The Friction / Poke the Bear (1-2 short sentences). Illuminate an unnoticed cost of inaction, subtle inefficiency, or trade-off their peers commonly face.
-- Beat 3: The Proof / Transformation (1 sentence). A concrete result, benchmark, or tangible deliverable without naming buzzword features.
-- Beat 4: The Low-Friction Interest CTA (1 sentence). Ask for interest or permission to share an asset/breakdown (e.g., "Worth a 60-second look?", "Open to seeing the teardown?", "Would it be crazy to send over a 2-minute video?").
+- Beat 1: The Observation / Trigger (1 short sentence). An objective observation or diagnostic about their specific asset on mobile (e.g., "Checked your site on an iPhone earlier today.").
+- Beat 2: The Friction / Poke the Bear (1-2 short sentences). Illuminate an unnoticed cost of inaction or human friction (e.g., "Noticed patients have to download a PDF just to request an implant consult. On mobile, most people leave before opening the file.").
+- Beat 3: The Custom Value Asset (1 short sentence). A tangible, zero-friction diagnostic deliverable created specifically for them without naming agency features (e.g., "Put together a 45-second video showing how to make it a quick 2-tap booking.").
+- Beat 4: The Low-Friction Micro-Permission CTA (1 short sentence, under 7 words). Ask for gentle permission to share the link (e.g., "Mind if I send the link over?", "Worth a quick look?", "Open to taking a look?").
 
 LENGTH & FORMATTING STANDARDS:
-- Word Count: STRICTLY 35 to 65 words in the email body.
+- Word Count: STRICTLY 35 to 55 words in the email body.
 - Reading Level: 3rd to 5th grade (ultra-simple words, short sentences).
-- Subject Line: STRICTLY 1 to 3 words, lowercase, neutral (e.g., "website notes", "conversion rate", "{{first_name}} / quick question", "mobile speed"). Never salesy. Never capitalized like a blog title.
+- Subject Line: STRICTLY 1 to 3 words, lowercase, referencing the specific asset or friction point (e.g., "dispatch phone button", "calculator load speed", "safari photo lag", "calendar cutoff", "dr. thorne / booking"). Never generic like "website speed" or "quick question".
 
 Output strictly a JSON object:
 {
-  "subject": "1 to 3 words lowercase neutral subject",
-  "bodyText": "Plain-text formatted body under 65 words with single blank line between paragraphs",
+  "subject": "1 to 3 words lowercase asset-specific subject",
+  "bodyText": "Plain-text formatted body under 55 words with single blank line between paragraphs",
   "bodyHtml": "<p>HTML formatted body</p>",
   "personalizationReason": "One clear sentence explaining the specific friction and trigger used"
 }`;
