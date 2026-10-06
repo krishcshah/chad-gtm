@@ -155,6 +155,16 @@ export function ChadGtmPricingCard({ isLoggedIn = false }: { isLoggedIn?: boolea
                   </div>
                 </div>
               </div>
+
+              <div className="flex items-start gap-3 text-zinc-200">
+                <Check className="size-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-white uppercase tracking-wide text-[11px]">Autonomous Mailbox & Reply Ops ($0 Retainer)</div>
+                  <div className="text-zinc-400 font-sans text-xs mt-0.5">
+                    Replaces costly agency retainers ($1,500+/mo). The agent monitors mailbox deliverability, auto-rotates burned domains, and routes replies.
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 

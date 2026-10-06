@@ -50,13 +50,31 @@ export function ChadGtmCalculator() {
     instantlyPlanName = "Scale Bundle ($194/mo)";
   }
 
-  // 5. Technical Deliverability & Setup Labor
-  // DNS setup, warmup monitoring, and burned domain rotation (~15m/mailbox + 2h base @ $30/hr)
-  const laborHours = Math.round(2 + inboxesNeeded * 0.25);
-  const laborCost = laborHours * 30;
+  // 5. Technical DNS & Domain Provisioning
+  // Purchasing domains, DNS propagation, SPF/DKIM/DMARC records, custom tracking domains ($50 base + $7/inbox)
+  const techSetupCost = Math.round(50 + inboxesNeeded * 7);
 
-  // Combined DIY competitor stack
-  const traditionalCost = apolloCost + instantlyCost + mailboxCost + laborCost;
+  // 6. Mailbox Fleet Maintenance, Campaign Dispatch & Reply Management (Agency / Operator Retainer)
+  // Ongoing daily warmup monitoring, burnt domain rotation, unibox reply triage & lead routing
+  // Small campaigns (<=3k): $485–$575/mo (starter agency retainer / freelance manager)
+  // Medium campaigns (6k–12k): $800–$1,250/mo (growth agency retainer / fractional SDR)
+  // Large campaigns (25k–50k): $2,240–$4,130/mo (dedicated SDR / scale outbound agency)
+  // Baseline $350/mo + $45/inbox/mo
+  const agencyManagementCost = Math.round(350 + inboxesNeeded * 45);
+
+  let agencyPlanName = "Starter Agency / Operator Retainer";
+  if (emailVolume <= 3000) {
+    agencyPlanName = `Starter Operator (${inboxesNeeded} inboxes & reply triage)`;
+  } else if (emailVolume <= 12000) {
+    agencyPlanName = `Growth Agency Retainer (${inboxesNeeded} inboxes & unibox triage)`;
+  } else if (emailVolume <= 25000) {
+    agencyPlanName = `Scale Agency / Fractional SDR (${inboxesNeeded} inboxes)`;
+  } else {
+    agencyPlanName = `Dedicated SDR / Enterprise Agency (${inboxesNeeded} inboxes full ops)`;
+  }
+
+  // Combined DIY competitor stack (5 invoices: Leads + Sending Tool + Mailboxes + DNS + Agency Ops)
+  const traditionalCost = apolloCost + instantlyCost + mailboxCost + techSetupCost + agencyManagementCost;
 
   // ChadGTM Pricing: Strictly 5¢ per email delivered
   const chadGtmCost = Math.round(emailVolume * 0.05);
@@ -75,7 +93,7 @@ export function ChadGtmCalculator() {
         <div className="text-center max-w-3xl mx-auto mb-12">
           <div className="inline-flex items-center gap-2 border border-zinc-800 bg-zinc-950 px-3 py-1 text-[10px] uppercase tracking-widest text-zinc-400 mb-4">
             <TrendingUp className="size-3 text-emerald-400" />
-            TRANSPARENT ROI // 5¢ UTILITY VS. 4 SEPARATE SAAS INVOICES
+            TRANSPARENT ROI // 5¢ UTILITY VS. 5 VENDOR INVOICES & AGENCY RETAINERS
           </div>
           <h2 className="text-3xl sm:text-5xl font-extrabold text-white uppercase tracking-tight">
             How Much Will ChadGTM Cost You?
@@ -200,7 +218,6 @@ export function ChadGtmCalculator() {
                   <p className="text-[11px] text-zinc-400">All {inboxesNeeded} inboxes pre-warmed & supplied by admin.</p>
                 </div>
               </div>
-
               <div className="flex items-start gap-2.5">
                 <Check className="size-3.5 text-emerald-400 shrink-0 mt-0.5" />
                 <div>
@@ -216,6 +233,14 @@ export function ChadGtmCalculator() {
                   <p className="text-[11px] text-zinc-400">SPF, DKIM, DMARC, and deliverability managed automatically.</p>
                 </div>
               </div>
+
+              <div className="flex items-start gap-2.5">
+                <Check className="size-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-white font-mono">Autonomous Outreach Agent Included</span>
+                  <p className="text-[11px] text-zinc-400">Campaign sending, daily reply triage in UniBox, burned domain rotation & tone calibration ($0 retainer).</p>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -223,10 +248,10 @@ export function ChadGtmCalculator() {
           <div className="border border-zinc-800 bg-zinc-950/70 p-6 sm:p-7 space-y-5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                What You Pay With Apollo + Instantly DIY
+                What You Pay With Apollo + Instantly + Agency DIY
               </span>
               <span className="border border-zinc-800 bg-black text-zinc-500 text-[10px] uppercase tracking-widest px-2 py-0.5">
-                4 Separate Bills
+                5 Separate Invoices
               </span>
             </div>
 
@@ -238,7 +263,7 @@ export function ChadGtmCalculator() {
                 <span className="text-xs text-zinc-500 uppercase tracking-widest">/ month combined</span>
               </div>
               <div className="text-[11px] text-zinc-500 font-sans mt-1">
-                Sum of 4 recurring vendor invoices every month
+                Sum of 5 recurring vendor bills & agency retainers every month
               </div>
             </div>
 
@@ -269,14 +294,22 @@ export function ChadGtmCalculator() {
 
               <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
                 <div>
-                  <div className="text-zinc-200 font-mono font-bold">4. Technical Setup & Maintenance</div>
-                  <div className="text-[11px] text-zinc-500">~{laborHours}h/mo DNS & deliverability technician upkeep</div>
+                  <div className="text-zinc-200 font-mono font-bold">4. Technical DNS & Domain Provisioning</div>
+                  <div className="text-[11px] text-zinc-500">SPF, DKIM, DMARC, custom tracking & registrar records</div>
                 </div>
-                <span className="font-mono font-bold text-white">${laborCost.toLocaleString()}/mo</span>
+                <span className="font-mono font-bold text-white">${techSetupCost.toLocaleString()}/mo</span>
+              </div>
+
+              <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
+                <div>
+                  <div className="text-zinc-200 font-mono font-bold">5. Mailbox Maintenance & Campaign Ops</div>
+                  <div className="text-[11px] text-zinc-500">{agencyPlanName}</div>
+                </div>
+                <span className="font-mono font-bold text-white">${agencyManagementCost.toLocaleString()}/mo</span>
               </div>
 
               <div className="pt-1 text-[11px] text-zinc-500">
-                *(Note: Outsourced SDR agencies charge $3,500–$5,000/mo retainer for this output)*
+                *(Note: Managing {inboxesNeeded} mailboxes, rotating burned domains & daily reply triage requires a cold email agency ($800–$3,500/mo) or internal SDR)*
               </div>
             </div>
           </div>
@@ -300,7 +333,7 @@ export function ChadGtmCalculator() {
                 </span>
               </div>
               <p className="text-xs text-zinc-400 font-sans mt-1">
-                You retain <strong className="text-white font-mono">{savingsPct}%</strong> more pipeline capital compared to paying SaaS subscriptions and mailbox invoices.
+                You retain <strong className="text-white font-mono">{savingsPct}%</strong> more pipeline capital compared to paying fragmented SaaS subscriptions and agency management retainers.
               </p>
             </div>
           </div>

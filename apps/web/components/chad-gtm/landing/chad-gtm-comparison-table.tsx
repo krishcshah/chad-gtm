@@ -61,6 +61,13 @@ export function ChadGtmComparisonTable() {
       apollo: "Basic inbox",
       agency: "Slack forwarding",
     },
+    {
+      feature: "Mailbox Ops & Reply Management",
+      chadGtm: "Autonomous Agent Included ($0)",
+      instantly: "Manual DIY labor (20+ hrs/mo)",
+      apollo: "Manual DIY labor (20+ hrs/mo)",
+      agency: "$1,500 – $4,500 / mo retainer",
+    },
   ];
 
   return (

@@ -183,10 +183,10 @@ export default async function LandingPage() {
                 THE COLD OUTBOUND RECKONING // UNFAIR ADVANTAGE
               </div>
               <h2 className="text-3xl sm:text-5xl font-bold text-white uppercase tracking-wider">
-                The $450/Month SaaS Trap Is Dead.
+                The $1,200+/Month Outbound Trap Is Dead.
               </h2>
               <p className="mt-3 text-xs sm:text-sm text-zinc-400 font-sans max-w-2xl mx-auto leading-relaxed">
-                Why are you paying 5 different software companies $450+ every month before booking a single sales call? Here is the exact math traditional cold email vendors don't want you to see.
+                Why pay 5 separate software vendor invoices plus an agency retainer ($1,200+/mo) before booking a single sales call? Here is the exact math traditional cold email vendors don't want you to see.
               </p>
             </div>
 
@@ -196,10 +196,10 @@ export default async function LandingPage() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
                     <span className="text-xs uppercase tracking-widest font-bold text-red-400">
-                      The Fragmented SaaS Trap
+                      The Fragmented SaaS & Agency Trap
                     </span>
                     <span className="border border-red-900/60 bg-red-950/30 text-red-400 text-[10px] px-2 py-0.5 uppercase">
-                      ~$441/mo Base Tax
+                      ~$1,291/mo Total Tax
                     </span>
                   </div>
 
@@ -234,6 +234,12 @@ export default async function LandingPage() {
                       </span>
                       <span className="text-red-400 font-bold">$149/mo</span>
                     </li>
+                    <li className="flex items-start justify-between gap-2 border-b border-zinc-900 pb-2">
+                      <span className="flex items-center gap-2 text-zinc-300">
+                        <X className="size-3.5 text-red-500 shrink-0" /> Mailbox Ops & Reply Retainer
+                      </span>
+                      <span className="text-red-400 font-bold">$850/mo</span>
+                    </li>
                     <li className="flex items-start justify-between gap-2 pt-1 text-zinc-500 text-[11px]">
                       <span>3 Weeks Wasted Warming Inboxes</span>
                       <span className="text-zinc-400">21 Days Lost</span>
@@ -244,10 +250,10 @@ export default async function LandingPage() {
                 <div className="pt-4 border-t border-zinc-900">
                   <div className="flex items-baseline justify-between">
                     <span className="text-xs uppercase tracking-widest text-zinc-500 font-bold">Total Fixed Cost:</span>
-                    <span className="text-2xl font-bold text-red-400 font-mono">$5,292 / year</span>
+                    <span className="text-2xl font-bold text-red-400 font-mono">$15,492 / year</span>
                   </div>
                   <p className="text-[10px] text-zinc-500 mt-1 font-sans">
-                    You pay this recurring subscription whether you send 10 emails or zero.
+                    You pay this recurring burn whether you send 10 emails or zero.
                   </p>
                 </div>
               </div>
