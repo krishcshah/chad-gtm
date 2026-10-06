@@ -35,7 +35,7 @@ export function ChadGtmComparisonTable() {
     },
     {
       feature: "Autonomous Dispatch Cost",
-      chadGtm: "Strictly 3¢ per email delivered",
+      chadGtm: "Strictly 5¢ per email delivered",
       instantly: "Software + $6/inbox/mo",
       apollo: "User seat + export credits",
       agency: "High bundled retainers",

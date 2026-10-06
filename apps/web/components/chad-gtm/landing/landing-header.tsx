@@ -34,7 +34,7 @@ export function LandingHeader({ isLoggedIn }: { isLoggedIn: boolean }) {
             Why ChadGTM
           </a>
           <a href="#pricing" className="transition-colors hover:text-white flex items-center gap-1.5">
-            Pricing <span className="text-white font-bold border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-[10px]">$0/mo + 3¢</span>
+            Pricing <span className="text-white font-bold border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-[10px]">$0/mo + 5¢</span>
           </a>
           <a href="#faq" className="transition-colors hover:text-white">
             FAQ
@@ -179,7 +179,7 @@ export function LandingHeader({ isLoggedIn }: { isLoggedIn: boolean }) {
               <span>Pricing</span>
             </div>
             <span className="text-[10px] font-mono text-white bg-zinc-900 px-1.5 py-0.5 border border-zinc-700">
-              $0/mo + 3¢
+              $0/mo + 5¢
             </span>
           </a>
           <a
@@ -212,7 +212,7 @@ export function LandingHeader({ isLoggedIn }: { isLoggedIn: boolean }) {
               >
                 <Link href="/signup" onClick={closeMenu}>
                   <Sparkles className="size-4" />
-                  Launch Free ($0/mo + 3¢/email)
+                  Launch Free ($0/mo + 5¢/email)
                 </Link>
               </Button>
               <Link

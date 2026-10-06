@@ -12,3 +12,4 @@ export type { EngineDb, SenderRow, CampaignRow, JobRow } from "./db-port";
 export * from "./queue-mode";
 export * from "./sequence";
 export * from "./ai";
+export * from "./lead-investigation";

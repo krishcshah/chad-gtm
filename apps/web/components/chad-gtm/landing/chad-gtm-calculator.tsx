@@ -58,8 +58,8 @@ export function ChadGtmCalculator() {
   // Combined DIY competitor stack
   const traditionalCost = apolloCost + instantlyCost + mailboxCost + laborCost;
 
-  // ChadGTM Pricing: Strictly 3¢ per email delivered
-  const chadGtmCost = Math.round(emailVolume * 0.03);
+  // ChadGTM Pricing: Strictly 5¢ per email delivered
+  const chadGtmCost = Math.round(emailVolume * 0.05);
 
   // Net Savings
   const monthlySavings = Math.max(0, traditionalCost - chadGtmCost);
@@ -75,7 +75,7 @@ export function ChadGtmCalculator() {
         <div className="text-center max-w-3xl mx-auto mb-12">
           <div className="inline-flex items-center gap-2 border border-zinc-800 bg-zinc-950 px-3 py-1 text-[10px] uppercase tracking-widest text-zinc-400 mb-4">
             <TrendingUp className="size-3 text-emerald-400" />
-            TRANSPARENT ROI // 3¢ UTILITY VS. 4 SEPARATE SAAS INVOICES
+            TRANSPARENT ROI // 5¢ UTILITY VS. 4 SEPARATE SAAS INVOICES
           </div>
           <h2 className="text-3xl sm:text-5xl font-extrabold text-white uppercase tracking-tight">
             How Much Will ChadGTM Cost You?
@@ -172,7 +172,7 @@ export function ChadGtmCalculator() {
                 <span className="text-xs text-zinc-400 uppercase tracking-widest">/ month</span>
               </div>
               <div className="text-[11px] text-zinc-400 font-sans mt-1">
-                Exactly 3¢ per email delivered ({emailVolume.toLocaleString()} × $0.03). Nothing else.
+                Exactly 5¢ per email delivered ({emailVolume.toLocaleString()} × $0.05). Nothing else.
               </div>
             </div>
 
@@ -307,7 +307,7 @@ export function ChadGtmCalculator() {
 
           <Button asChild size="lg" className="rounded-none bg-white hover:bg-zinc-200 text-black font-bold uppercase tracking-wider text-xs border border-white h-11 px-8 w-full md:w-auto shadow-lg shrink-0">
             <Link href="/signup">
-              Start at 3¢ / Email <ArrowRight className="size-3.5 ml-1.5" />
+              Start at 5¢ / Email <ArrowRight className="size-3.5 ml-1.5" />
             </Link>
           </Button>
         </div>

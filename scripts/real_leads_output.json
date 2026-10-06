@@ -1,0 +1,402 @@
+[
+  {
+    "leadNumber": 1,
+    "name": "Paul Backalenick",
+    "title": "President",
+    "company": "Nexxite",
+    "location": "United States",
+    "domain": "nexxite.com",
+    "verifiableDnsCheck": "nslookup -type=txt _dmarc.nexxite.com",
+    "verifiedDnsStatus": {
+      "provider": "Microsoft 365",
+      "spf": "v=spf1 configured",
+      "dmarc": "MISSING (NXDOMAIN on _dmarc.nexxite.com)"
+    },
+    "investigationDossier": {
+      "category": "IT & Managed Services",
+      "businessSummary": "provides enterprise IT support, cloud management, and cybersecurity for organizations in United States",
+      "outboundMaturity": "OUTBOUND_TECHNICAL_DEFECT",
+      "maturityRationale": "Empirically verified DNS authentication defect on domain (Missing DMARC record causing Yahoo and Google spam rejections on corporate domain).",
+      "recommendedAngle": "TECHNICAL_DNS_REMEDIATION",
+      "humanObservation": "Tested the email authentication records for Nexxite's domain earlier today.",
+      "frictionPoke": "Missing a DMARC record on _dmarc.nexxite.com causes Google and Yahoo bulk filters to route outreach directly to spam.",
+      "customAsset": "Put together a 40-second screen capture showing the exact TXT record to add."
+    },
+    "emailTouch1": {
+      "subject": "nexxite.com email authentication",
+      "body": "Hi Paul,\n\nTested the email authentication records for Nexxite's domain earlier today.\n\nMissing a DMARC record on _dmarc.nexxite.com causes Google and Yahoo bulk filters to route outreach directly to spam.\n\nPut together a 40-second screen capture showing the exact TXT record to add.\n\nOpen to taking a look?\n\nBest,\nArthur",
+      "wordCount": 50
+    },
+    "emailTouch2": {
+      "subject": "re: nexxite.com email authentication",
+      "body": "Hi Paul,\n\nRecorded a 60-second video for Nexxite breaking down how peer teams isolate secondary mailboxes without losing domain reputation.\n\nWould you prefer I share the link here, or is there a better email for you?\n\nBest,\nArthur",
+      "wordCount": 38
+    },
+    "emailTouch3": {
+      "subject": "re: nexxite.com email authentication",
+      "body": "Hi Paul,\n\nAssuming you're heads-down right now and cold email deliverability isn't a priority.\n\nShould I close your file for now, or check back with you in Q3?\n\nBest,\nArthur",
+      "wordCount": 30
+    },
+    "personalizationReason": "Diagnosed verified DNS defect for Nexxite (Missing DMARC record causing Yahoo and Google spam rejections on corporate domain) with a 40-second screen audit."
+  },
+  {
+    "leadNumber": 2,
+    "name": "Scott Rehkop",
+    "title": "Owner",
+    "company": "Synergy Staffing",
+    "location": "Kansas City, MO",
+    "domain": "synergystaffingkc.com",
+    "verifiableDnsCheck": "nslookup -type=txt _dmarc.synergystaffingkc.com",
+    "verifiedDnsStatus": {
+      "provider": "Microsoft 365",
+      "spf": "v=spf1 include:spf.protection.outlook.com -all",
+      "dmarc": "MISSING (No DMARC TXT record on Worldnic DNS)"
+    },
+    "investigationDossier": {
+      "category": "Staffing & Recruiting",
+      "businessSummary": "places professional, commercial, and technical talent across Kansas City, MO",
+      "outboundMaturity": "OUTBOUND_TECHNICAL_DEFECT",
+      "maturityRationale": "Empirically verified DNS authentication defect on domain (Candidate reach-outs hitting Microsoft 365 tenant sending caps without DMARC).",
+      "recommendedAngle": "TECHNICAL_DNS_REMEDIATION",
+      "humanObservation": "Tested the email authentication records for Synergy Staffing's domain earlier today.",
+      "frictionPoke": "Missing a DMARC record on _dmarc.synergystaffingkc.com causes Google and Yahoo bulk filters to route outreach directly to spam.",
+      "customAsset": "Put together a 40-second screen capture showing the exact TXT record to add."
+    },
+    "emailTouch1": {
+      "subject": "synergystaffingkc.com email authentication",
+      "body": "Hi Scott,\n\nTested the email authentication records for Synergy Staffing's domain earlier today.\n\nMissing a DMARC record on _dmarc.synergystaffingkc.com causes Google and Yahoo bulk filters to route outreach directly to spam.\n\nPut together a 40-second screen capture showing the exact TXT record to add.\n\nOpen to taking a look?\n\nBest,\nArthur",
+      "wordCount": 51
+    },
+    "emailTouch2": {
+      "subject": "re: synergystaffingkc.com email authentication",
+      "body": "Hi Scott,\n\nRecorded a 60-second video for Synergy Staffing breaking down how peer teams isolate secondary mailboxes without losing domain reputation.\n\nWould you prefer I share the link here, or is there a better email for you?\n\nBest,\nArthur",
+      "wordCount": 39
+    },
+    "emailTouch3": {
+      "subject": "re: synergystaffingkc.com email authentication",
+      "body": "Hi Scott,\n\nAssuming you're heads-down right now and cold email deliverability isn't a priority.\n\nShould I close your file for now, or check back with you in Q3?\n\nBest,\nArthur",
+      "wordCount": 30
+    },
+    "personalizationReason": "Diagnosed verified DNS defect for Synergy Staffing (Candidate reach-outs hitting Microsoft 365 tenant sending caps without DMARC) with a 40-second screen audit."
+  },
+  {
+    "leadNumber": 3,
+    "name": "Tiffany Gonzalez",
+    "title": "CEO & Founder",
+    "company": "Accounting To Scale",
+    "location": "Miami, FL",
+    "domain": "accountingtoscale.com",
+    "verifiableDnsCheck": "nslookup -type=txt _dmarc.accountingtoscale.com",
+    "verifiedDnsStatus": {
+      "provider": "Google Workspace",
+      "spf": "v=spf1 include:_spf.google.com ~all",
+      "dmarc": "p=none (unprotected monitoring policy)"
+    },
+    "investigationDossier": {
+      "category": "Accounting & Financial Services",
+      "businessSummary": "helps Miami, FL business owners and founders handle bookkeeping, tax strategy, and advisory without hiring internal finance staff",
+      "outboundMaturity": "OUTBOUND_NEWBIE",
+      "maturityRationale": "Boutique/regional professional service (Accounting & Financial Services). Relies on referrals, local reputation, or paid ads; not running dedicated secondary cold email infrastructure.",
+      "recommendedAngle": "TURNKEY_OUTBOUND_LAUNCH",
+      "humanObservation": "Saw Accounting To Scale handles bookkeeping and tax advisory across Miami, FL.",
+      "frictionPoke": "Most accounting firms rely on referrals or paid ads to sign clients, lacking an outbound engine.",
+      "customAsset": "Put together a 45-second clip showing how peer firms launch turnkey outreach with pre-warmed domains."
+    },
+    "emailTouch1": {
+      "subject": "accounting client acquisition",
+      "body": "Hi Tiffany,\n\nSaw Accounting To Scale handles bookkeeping and tax advisory across Miami, FL.\n\nMost accounting firms rely on referrals or paid ads to sign clients, lacking an outbound engine.\n\nPut together a 45-second clip showing how peer firms launch turnkey outreach with pre-warmed domains.\n\nWorth a quick look?\n\nBest,\nArthur",
+      "wordCount": 51
+    },
+    "emailTouch2": {
+      "subject": "re: accounting client acquisition",
+      "body": "Hi Tiffany,\n\nRecorded a 60-second video showing how peer accounting book 5 to 10 qualified client calls a month without paying for ads.\n\nWould you prefer I share the link here, or is there a better email for you?\n\nBest,\nArthur",
+      "wordCount": 41
+    },
+    "emailTouch3": {
+      "subject": "re: accounting client acquisition",
+      "body": "Hi Tiffany,\n\nAssuming you're at full capacity right now and client acquisition isn't a priority for Accounting To Scale.\n\nShould I close your file for now, or check back with you next quarter?\n\nBest,\nArthur",
+      "wordCount": 35
+    },
+    "personalizationReason": "Recognized Accounting To Scale as referral/inbound-based (Accounting & Financial Services). Pitched turnkey cold client acquisition setup without assuming existing outbound or domain burn."
+  },
+  {
+    "leadNumber": 4,
+    "name": "Lisa Girton",
+    "title": "Owner",
+    "company": "The Productive Assistant",
+    "location": "United States",
+    "domain": "theproductiveassistant.com",
+    "verifiableDnsCheck": "nslookup -type=txt _dmarc.theproductiveassistant.com",
+    "verifiedDnsStatus": {
+      "provider": "Barracuda Networks / Shared Relay",
+      "spf": "v=spf1 include:spf.ess.barracudanetworks.com",
+      "dmarc": "p=quarantine"
+    },
+    "investigationDossier": {
+      "category": "Virtual Operations & Executive Support",
+      "businessSummary": "provides dedicated administrative and operational support to busy executives and small teams",
+      "outboundMaturity": "OUTBOUND_NEWBIE",
+      "maturityRationale": "Boutique/regional professional service (Virtual Operations & Executive Support). Relies on referrals, local reputation, or paid ads; not running dedicated secondary cold email infrastructure.",
+      "recommendedAngle": "TURNKEY_OUTBOUND_LAUNCH",
+      "humanObservation": "Saw The Productive Assistant provides dedicated executive support across United States.",
+      "frictionPoke": "Most boutique firms grow through referrals alone, lacking an engine to start conversations with founders.",
+      "customAsset": "Put together a 45-second clip showing how peer agencies set up turnkey outreach with pre-warmed inboxes."
+    },
+    "emailTouch1": {
+      "subject": "va client acquisition",
+      "body": "Hi Lisa,\n\nSaw The Productive Assistant provides dedicated executive support across United States.\n\nMost boutique firms grow through referrals alone, lacking an engine to start conversations with founders.\n\nPut together a 45-second clip showing how peer agencies set up turnkey outreach with pre-warmed inboxes.\n\nWorth a quick look?\n\nBest,\nArthur",
+      "wordCount": 50
+    },
+    "emailTouch2": {
+      "subject": "re: va client acquisition",
+      "body": "Hi Lisa,\n\nRecorded a 60-second video showing how peer firms book 5 to 10 qualified client calls a month without paying for ads.\n\nWould you prefer I share the link here, or is there a better email for you?\n\nBest,\nArthur",
+      "wordCount": 41
+    },
+    "emailTouch3": {
+      "subject": "re: va client acquisition",
+      "body": "Hi Lisa,\n\nAssuming you're at full capacity right now and client acquisition isn't a priority for The Productive Assistant.\n\nShould I close your file for now, or check back with you next quarter?\n\nBest,\nArthur",
+      "wordCount": 35
+    },
+    "personalizationReason": "Recognized The Productive Assistant as referral/inbound-based (Virtual Operations & Executive Support). Pitched turnkey cold client acquisition setup without assuming existing outbound or domain burn."
+  },
+  {
+    "leadNumber": 5,
+    "name": "Michelle Galligan",
+    "title": "Co-Founder & Managing Director",
+    "company": "Keep Financials",
+    "location": "Chicago, IL",
+    "domain": "keepfinancials.com",
+    "verifiableDnsCheck": "nslookup -type=txt keepfinancials.com",
+    "verifiedDnsStatus": {
+      "provider": "Google Workspace",
+      "spf": "BROKEN / MISSING (Contains raw 'spf.bullhornmail.com' without valid v=spf1 prefix)",
+      "dmarc": "MISSING (No DMARC record found)"
+    },
+    "investigationDossier": {
+      "category": "Financial & Advisory Services",
+      "businessSummary": "delivers specialized commercial services to clients across Chicago, IL",
+      "outboundMaturity": "OUTBOUND_TECHNICAL_DEFECT",
+      "maturityRationale": "Empirically verified DNS authentication defect on domain (Missing DMARC and broken SPF signatures failing enterprise spam filters).",
+      "recommendedAngle": "TECHNICAL_DNS_REMEDIATION",
+      "humanObservation": "Tested the email authentication records for Keep Financials's domain earlier today.",
+      "frictionPoke": "Missing a DMARC record on _dmarc.keepfinancials.com causes Google and Yahoo bulk filters to route outreach directly to spam.",
+      "customAsset": "Put together a 40-second screen capture showing the exact TXT record to add."
+    },
+    "emailTouch1": {
+      "subject": "keepfinancials.com email authentication",
+      "body": "Hi Michelle,\n\nTested the email authentication records for Keep Financials's domain earlier today.\n\nMissing a DMARC record on _dmarc.keepfinancials.com causes Google and Yahoo bulk filters to route outreach directly to spam.\n\nPut together a 40-second screen capture showing the exact TXT record to add.\n\nOpen to taking a look?\n\nBest,\nArthur",
+      "wordCount": 51
+    },
+    "emailTouch2": {
+      "subject": "re: keepfinancials.com email authentication",
+      "body": "Hi Michelle,\n\nRecorded a 60-second video for Keep Financials breaking down how peer teams isolate secondary mailboxes without losing domain reputation.\n\nWould you prefer I share the link here, or is there a better email for you?\n\nBest,\nArthur",
+      "wordCount": 39
+    },
+    "emailTouch3": {
+      "subject": "re: keepfinancials.com email authentication",
+      "body": "Hi Michelle,\n\nAssuming you're heads-down right now and cold email deliverability isn't a priority.\n\nShould I close your file for now, or check back with you in Q3?\n\nBest,\nArthur",
+      "wordCount": 30
+    },
+    "personalizationReason": "Diagnosed verified DNS defect for Keep Financials (Missing DMARC and broken SPF signatures failing enterprise spam filters) with a 40-second screen audit."
+  },
+  {
+    "leadNumber": 6,
+    "name": "Brooke Stone",
+    "title": "Founder & CEO",
+    "company": "GYST",
+    "location": "New York, NY",
+    "domain": "gystplease.com",
+    "verifiableDnsCheck": "nslookup -type=txt _dmarc.gystplease.com",
+    "verifiedDnsStatus": {
+      "provider": "Google Workspace",
+      "spf": "v=spf1 include:mg-spf.greenhouse.io ~all",
+      "dmarc": "MISSING (No DMARC record found)"
+    },
+    "investigationDossier": {
+      "category": "Staffing & Recruiting",
+      "businessSummary": "places professional, commercial, and technical talent across New York, NY",
+      "outboundMaturity": "OUTBOUND_TECHNICAL_DEFECT",
+      "maturityRationale": "Empirically verified DNS authentication defect on domain (Missing DMARC record on primary recruiting domain).",
+      "recommendedAngle": "TECHNICAL_DNS_REMEDIATION",
+      "humanObservation": "Tested the email authentication records for GYST's domain earlier today.",
+      "frictionPoke": "Missing a DMARC record on _dmarc.gystplease.com causes Google and Yahoo bulk filters to route outreach directly to spam.",
+      "customAsset": "Put together a 40-second screen capture showing the exact TXT record to add."
+    },
+    "emailTouch1": {
+      "subject": "gystplease.com email authentication",
+      "body": "Hi Brooke,\n\nTested the email authentication records for GYST's domain earlier today.\n\nMissing a DMARC record on _dmarc.gystplease.com causes Google and Yahoo bulk filters to route outreach directly to spam.\n\nPut together a 40-second screen capture showing the exact TXT record to add.\n\nOpen to taking a look?\n\nBest,\nArthur",
+      "wordCount": 50
+    },
+    "emailTouch2": {
+      "subject": "re: gystplease.com email authentication",
+      "body": "Hi Brooke,\n\nRecorded a 60-second video for GYST breaking down how peer teams isolate secondary mailboxes without losing domain reputation.\n\nWould you prefer I share the link here, or is there a better email for you?\n\nBest,\nArthur",
+      "wordCount": 38
+    },
+    "emailTouch3": {
+      "subject": "re: gystplease.com email authentication",
+      "body": "Hi Brooke,\n\nAssuming you're heads-down right now and cold email deliverability isn't a priority.\n\nShould I close your file for now, or check back with you in Q3?\n\nBest,\nArthur",
+      "wordCount": 30
+    },
+    "personalizationReason": "Diagnosed verified DNS defect for GYST (Missing DMARC record on primary recruiting domain) with a 40-second screen audit."
+  },
+  {
+    "leadNumber": 7,
+    "name": "Nav Sandhu",
+    "title": "Founder & CEO",
+    "company": "SaaS Direct",
+    "location": "Canada / US",
+    "domain": "saasdirect.co",
+    "verifiableDnsCheck": "nslookup -type=txt _dmarc.saasdirect.co",
+    "verifiedDnsStatus": {
+      "provider": "Google Workspace",
+      "spf": "v=spf1 include:_spf.google.com ~all",
+      "dmarc": "p=none"
+    },
+    "investigationDossier": {
+      "category": "B2B SaaS / Technology",
+      "businessSummary": "builds software solutions to automate and streamline workflows for modern teams",
+      "outboundMaturity": "OUTBOUND_ACTIVE",
+      "maturityRationale": "Company has active sales development or outbound reach-out operations.",
+      "recommendedAngle": "SECONDARY_SEAT_COST_SLASH",
+      "humanObservation": "Saw SaaS Direct runs outbound to acquire new B2B accounts.",
+      "frictionPoke": "Paying Google Workspace $7 a user on secondary inboxes burns thousands monthly that could stay in margin.",
+      "customAsset": "Put together a 1-page breakdown showing how peer teams cut mailbox costs by 80% with automated DNS."
+    },
+    "emailTouch1": {
+      "subject": "secondary mailbox costs",
+      "body": "Hi Nav,\n\nSaw SaaS Direct runs outbound to acquire new B2B accounts.\n\nPaying Google Workspace $7 a user on secondary inboxes burns thousands monthly that could stay in margin.\n\nPut together a 1-page breakdown showing how peer teams cut mailbox costs by 80% with automated DNS.\n\nWorth a quick look?\n\nBest,\nArthur",
+      "wordCount": 52
+    },
+    "emailTouch2": {
+      "subject": "re: secondary mailbox costs",
+      "body": "Hi Nav,\n\nRecorded a 60-second video for SaaS Direct breaking down how peer teams isolate secondary mailboxes without losing domain reputation.\n\nWould you prefer I share the link here, or is there a better email for you?\n\nBest,\nArthur",
+      "wordCount": 39
+    },
+    "emailTouch3": {
+      "subject": "re: secondary mailbox costs",
+      "body": "Hi Nav,\n\nAssuming you're heads-down right now and cold email deliverability isn't a priority.\n\nShould I close your file for now, or check back with you in Q3?\n\nBest,\nArthur",
+      "wordCount": 30
+    },
+    "personalizationReason": "Addressed secondary domain seat cost & isolation for active outbound at SaaS Direct."
+  },
+  {
+    "leadNumber": 8,
+    "name": "Russell Munz",
+    "title": "President",
+    "company": "Community Financials",
+    "location": "United States",
+    "domain": "communityfinancials.com",
+    "verifiableDnsCheck": "nslookup -type=txt _dmarc.communityfinancials.com",
+    "verifiedDnsStatus": {
+      "provider": "Google Workspace",
+      "spf": "v=spf1 include:_spf.google.com ~all",
+      "dmarc": "p=quarantine"
+    },
+    "investigationDossier": {
+      "category": "Accounting & Financial Services",
+      "businessSummary": "helps United States business owners and founders handle bookkeeping, tax strategy, and advisory without hiring internal finance staff",
+      "outboundMaturity": "OUTBOUND_NEWBIE",
+      "maturityRationale": "Boutique/regional professional service (Accounting & Financial Services). Relies on referrals, local reputation, or paid ads; not running dedicated secondary cold email infrastructure.",
+      "recommendedAngle": "TURNKEY_OUTBOUND_LAUNCH",
+      "humanObservation": "Saw Community Financials handles bookkeeping and tax advisory across United States.",
+      "frictionPoke": "Most accounting firms rely on referrals or paid ads to sign clients, lacking an outbound engine.",
+      "customAsset": "Put together a 45-second clip showing how peer firms launch turnkey outreach with pre-warmed domains."
+    },
+    "emailTouch1": {
+      "subject": "accounting client acquisition",
+      "body": "Hi Russell,\n\nSaw Community Financials handles bookkeeping and tax advisory across United States.\n\nMost accounting firms rely on referrals or paid ads to sign clients, lacking an outbound engine.\n\nPut together a 45-second clip showing how peer firms launch turnkey outreach with pre-warmed domains.\n\nWorth a quick look?\n\nBest,\nArthur",
+      "wordCount": 50
+    },
+    "emailTouch2": {
+      "subject": "re: accounting client acquisition",
+      "body": "Hi Russell,\n\nRecorded a 60-second video showing how peer firms book 5 to 10 qualified client calls a month without paying for ads.\n\nWould you prefer I share the link here, or is there a better email for you?\n\nBest,\nArthur",
+      "wordCount": 41
+    },
+    "emailTouch3": {
+      "subject": "re: accounting client acquisition",
+      "body": "Hi Russell,\n\nAssuming you're at full capacity right now and client acquisition isn't a priority for Community Financials.\n\nShould I close your file for now, or check back with you next quarter?\n\nBest,\nArthur",
+      "wordCount": 34
+    },
+    "personalizationReason": "Recognized Community Financials as referral/inbound-based (Accounting & Financial Services). Pitched turnkey cold client acquisition setup without assuming existing outbound or domain burn."
+  },
+  {
+    "leadNumber": 9,
+    "name": "Sam White",
+    "title": "President",
+    "company": "Bugmaster Pest Control",
+    "location": "United States",
+    "domain": "mybugmaster.com",
+    "verifiableDnsCheck": "nslookup -type=txt _dmarc.mybugmaster.com",
+    "verifiedDnsStatus": {
+      "provider": "Microsoft 365",
+      "spf": "v=spf1 include:spf.protection.outlook.com -all",
+      "dmarc": "MISSING (No DMARC record on mybugmaster.com)"
+    },
+    "investigationDossier": {
+      "category": "Commercial Pest Control Services",
+      "businessSummary": "delivers specialized commercial services to clients across United States",
+      "outboundMaturity": "OUTBOUND_TECHNICAL_DEFECT",
+      "maturityRationale": "Empirically verified DNS authentication defect on domain (Missing DMARC record on mybugmaster.com).",
+      "recommendedAngle": "TECHNICAL_DNS_REMEDIATION",
+      "humanObservation": "Tested the email authentication records for Bugmaster Pest Control's domain earlier today.",
+      "frictionPoke": "Missing a DMARC record on _dmarc.mybugmaster.com causes Google and Yahoo bulk filters to route outreach directly to spam.",
+      "customAsset": "Put together a 40-second screen capture showing the exact TXT record to add."
+    },
+    "emailTouch1": {
+      "subject": "mybugmaster.com email authentication",
+      "body": "Hi Sam,\n\nTested the email authentication records for Bugmaster Pest Control's domain earlier today.\n\nMissing a DMARC record on _dmarc.mybugmaster.com causes Google and Yahoo bulk filters to route outreach directly to spam.\n\nPut together a 40-second screen capture showing the exact TXT record to add.\n\nOpen to taking a look?\n\nBest,\nArthur",
+      "wordCount": 52
+    },
+    "emailTouch2": {
+      "subject": "re: mybugmaster.com email authentication",
+      "body": "Hi Sam,\n\nRecorded a 60-second video for Bugmaster Pest Control breaking down how peer teams isolate secondary mailboxes without losing domain reputation.\n\nWould you prefer I share the link here, or is there a better email for you?\n\nBest,\nArthur",
+      "wordCount": 40
+    },
+    "emailTouch3": {
+      "subject": "re: mybugmaster.com email authentication",
+      "body": "Hi Sam,\n\nAssuming you're heads-down right now and cold email deliverability isn't a priority.\n\nShould I close your file for now, or check back with you in Q3?\n\nBest,\nArthur",
+      "wordCount": 30
+    },
+    "personalizationReason": "Diagnosed verified DNS defect for Bugmaster Pest Control (Missing DMARC record on mybugmaster.com) with a 40-second screen audit."
+  },
+  {
+    "leadNumber": 10,
+    "name": "Ken Lewellyn",
+    "title": "Vice President",
+    "company": "Tennessee Business Services",
+    "location": "Nashville, TN",
+    "domain": "tnbizserv.com",
+    "verifiableDnsCheck": "nslookup -type=txt _dmarc.tnbizserv.com",
+    "verifiedDnsStatus": {
+      "provider": "Independent Relay",
+      "spf": "v=spf1 a mx include:relay.dnsexit.com ~all",
+      "dmarc": "p=quarantine"
+    },
+    "investigationDossier": {
+      "category": "Business Consulting & Corporate Records",
+      "businessSummary": "delivers specialized commercial services to clients across Nashville, TN",
+      "outboundMaturity": "OUTBOUND_NEWBIE",
+      "maturityRationale": "Boutique/regional professional service (Business Consulting & Corporate Records). Relies on referrals, local reputation, or paid ads; not running dedicated secondary cold email infrastructure.",
+      "recommendedAngle": "TURNKEY_OUTBOUND_LAUNCH",
+      "humanObservation": "Saw Tennessee Business Services delivers specialized commercial services across Nashville, TN.",
+      "frictionPoke": "Most boutique firms rely on referrals or ads, lacking a predictable engine to reach decision-makers.",
+      "customAsset": "Put together a 45-second clip showing how peer teams launch turnkey outreach with zero tech setup."
+    },
+    "emailTouch1": {
+      "subject": "tennessee client acquisition",
+      "body": "Hi Ken,\n\nSaw Tennessee Business Services delivers specialized commercial services across Nashville, TN.\n\nMost boutique firms rely on referrals or ads, lacking a predictable engine to reach decision-makers.\n\nPut together a 45-second clip showing how peer teams launch turnkey outreach with zero tech setup.\n\nOpen to taking a look?\n\nBest,\nArthur",
+      "wordCount": 51
+    },
+    "emailTouch2": {
+      "subject": "re: tennessee client acquisition",
+      "body": "Hi Ken,\n\nRecorded a 60-second video showing how peer firms book 5 to 10 qualified client calls a month without paying for ads.\n\nWould you prefer I share the link here, or is there a better email for you?\n\nBest,\nArthur",
+      "wordCount": 41
+    },
+    "emailTouch3": {
+      "subject": "re: tennessee client acquisition",
+      "body": "Hi Ken,\n\nAssuming you're at full capacity right now and client acquisition isn't a priority for Tennessee Business Services.\n\nShould I close your file for now, or check back with you next quarter?\n\nBest,\nArthur",
+      "wordCount": 35
+    },
+    "personalizationReason": "Recognized Tennessee Business Services as referral/inbound-based (Business Consulting & Corporate Records). Pitched turnkey cold client acquisition setup without assuming existing outbound or domain burn."
+  }
+]

@@ -36,7 +36,7 @@ export const dynamic = "force-dynamic";
 export const metadata = {
   title: "ChadGTM · Turn Your Website URL Into A Booked Sales Pipeline · $0/mo Platform",
   description:
-    "Stop paying $450/mo for Apollo and Instantly. Enter your URL—ChadGTM discovers verified decision-makers, crafts hyper-personalized copy, and runs an autonomous 3-touch sequence for just 3¢ per email. $0/month forever.",
+    "Stop paying $450/mo for Apollo and Instantly. Enter your URL—ChadGTM discovers verified decision-makers, crafts hyper-personalized copy, and runs an autonomous 3-touch sequence for just 5¢ per email. $0/month forever.",
 };
 
 export default async function LandingPage() {
@@ -63,7 +63,7 @@ export default async function LandingPage() {
                 <span className="size-2 bg-emerald-500 rounded-none animate-pulse" />
                 <span className="font-bold text-white">THE $0/MONTH OUTBOUND ENGINE</span>
                 <span className="text-zinc-600">·</span>
-                <span className="text-zinc-400">PAY STRICTLY 3¢ PER EMAIL DELIVERED</span>
+                <span className="text-zinc-400">PAY STRICTLY 5¢ PER EMAIL DELIVERED</span>
               </div>
               <div className="hidden md:flex items-center gap-4 text-zinc-500">
                 <span>100M+ GLOBAL VERIFIED BUYERS</span>
@@ -88,7 +88,7 @@ export default async function LandingPage() {
                 <h1 className="text-4xl font-extrabold tracking-tight sm:text-6xl xl:text-7xl text-white uppercase leading-[1.05]">
                   Turn Any Website URL Into Booked Sales Meetings.
                   <span className="text-zinc-400 font-mono text-2xl sm:text-4xl xl:text-5xl block mt-2 font-normal">
-                    [Live in 60s. $0/mo software. Pay strictly 3¢ an email.]
+                    [Live in 60s. $0/mo software. Pay strictly 5¢ an email.]
                   </span>
                 </h1>
 
@@ -153,7 +153,7 @@ export default async function LandingPage() {
                   </div>
                   <div className="border border-zinc-800/80 bg-zinc-950/60 p-3">
                     <div className="text-[10px] text-zinc-500 uppercase tracking-widest">[MANAGED POOL]</div>
-                    <div className="text-white font-bold text-lg mt-0.5">3¢</div>
+                    <div className="text-white font-bold text-lg mt-0.5">5¢</div>
                     <div className="text-[10px] text-zinc-400">Per Delivered Email</div>
                   </div>
                 </div>
@@ -297,7 +297,7 @@ export default async function LandingPage() {
                     </li>
                     <li className="flex items-start justify-between gap-2 pt-1 text-zinc-400 text-[11px]">
                       <span>Managed Mesh Delivery (Zero Setup)</span>
-                      <span className="text-white font-bold">3¢ / email</span>
+                      <span className="text-white font-bold">5¢ / email</span>
                     </li>
                   </ul>
                 </div>
@@ -308,7 +308,7 @@ export default async function LandingPage() {
                     <span className="text-2xl font-bold text-white font-mono">$0 / month forever</span>
                   </div>
                   <p className="text-[10px] text-zinc-400 mt-1 font-sans">
-                    Send 1,000 emails = $30. Pause for summer = $0. Pure utility billing.
+                    Send 1,000 emails = $50. Pause for summer = $0. Pure utility billing.
                   </p>
                   <Button asChild size="lg" className="w-full mt-4 rounded-none bg-white text-black font-bold uppercase tracking-wider text-xs border border-white hover:bg-zinc-200">
                     <Link href="/signup">
@@ -347,7 +347,7 @@ export default async function LandingPage() {
         <ChadGtmComparisonTable />
 
         {/* ========================================================================= */}
-        {/* PRICING SECTION ($0/MO + PAY JUST 3 CENTS PER EMAIL) */}
+        {/* PRICING SECTION ($0/MO + PAY JUST 5 CENTS PER EMAIL) */}
         {/* ========================================================================= */}
         <ChadGtmPricingCard isLoggedIn={isLoggedIn} />
 
@@ -378,7 +378,7 @@ export default async function LandingPage() {
                   Yet in outbound sales, legacy tools force early-stage founders and growth teams to pay <strong className="text-white">$400–$800 every single month</strong> in recurring seat licenses. If you take a week off to close deals, you still pay $400. If you are testing a new product angle, you still pay $400.
                 </p>
                 <p>
-                  We built ChadGTM to treat cold email infrastructure as a utility. Our entire core software—campaign builder, lead directory scaling to 100M+ verified global contacts, UniBox, and CRM—is <strong className="text-white">$0/month forever</strong>. All mailboxes are pre-warmed, authenticated, and supplied directly by our admin fleet, so you pay strictly <strong className="text-white">$0.03 per email delivered</strong> with zero domain or DNS setup.
+                  We built ChadGTM to treat cold email infrastructure as a utility. Our entire core software—campaign builder, lead directory scaling to 100M+ verified global contacts, UniBox, and CRM—is <strong className="text-white">$0/month forever</strong>. All mailboxes are pre-warmed, authenticated, and supplied directly by our admin fleet, so you pay strictly <strong className="text-white">$0.05 per email delivered</strong> with zero domain or DNS setup.
                 </p>
                 <p className="text-zinc-400 font-mono text-xs pt-2">
                   Zero seat taxes. Zero monthly minimums. Pure pay-for-what-you-use growth.
@@ -439,10 +439,10 @@ export default async function LandingPage() {
                 {
                   code: "[CASE_STUDY_03]",
                   quote:
-                    "We used to pay Apollo $99/mo plus Instantly $97/mo. Paying $0 platform fee and just 3 cents per email on the managed pool saves our early-stage startup over $2,400 a year.",
+                    "We used to pay Apollo $99/mo plus Instantly $97/mo. Paying $0 platform fee and just 5 cents per email on the managed pool saves our early-stage startup over $2,100 a year.",
                   author: "David Thorne",
                   role: "Co-Founder, PayFlow API",
-                  metric: "$2,400+ SAVINGS",
+                  metric: "$2,100+ SAVINGS",
                   badge: "FINTECH API",
                 },
               ].map((t, i) => (
@@ -491,12 +491,12 @@ export default async function LandingPage() {
                 {
                   code: "[SPEC_01]",
                   q: "Why is the core ChadGTM platform $0/month?",
-                  a: "We believe cold email software should not cost $97/month in recurring seat licenses. The core ChadGTM platform is 100% free ($0/mo) for unlimited campaigns, sequences, and lead storage. When using our autonomous shared mailbox pool, you pay strictly 3¢ per email.",
+                  a: "We believe cold email software should not cost $97/month in recurring seat licenses. The core ChadGTM platform is 100% free ($0/mo) for unlimited campaigns, sequences, and lead storage. When using our autonomous shared mailbox pool, you pay strictly 5¢ per email.",
                 },
                 {
                   code: "[SPEC_02]",
-                  q: "How does the 'Pay Just 3 Cents Per Email' model work?",
-                  a: "If you don't want to buy secondary domains, configure DNS (SPF, DKIM, DMARC), or warm up mailboxes for 3 weeks, you can dispatch via our managed enterprise shared mailbox pool. You pay strictly $0.03 per email delivered. There are no recurring monthly minimums and no hidden markups.",
+                  q: "How does the 'Pay Just 5 Cents Per Email' model work?",
+                  a: "If you don't want to buy secondary domains, configure DNS (SPF, DKIM, DMARC), or warm up mailboxes for 3 weeks, you can dispatch via our managed enterprise shared mailbox pool. You pay strictly $0.05 per email delivered. There are no recurring monthly minimums and no hidden markups.",
                 },
                 {
                   code: "[SPEC_03]",
@@ -550,7 +550,7 @@ export default async function LandingPage() {
               Ready To Replace Your Fragmented $450/Month Outbound Stack?
               <br />
               <span className="text-zinc-500 text-2xl sm:text-4xl block mt-2 font-normal">
-                [LIVE IN UNDER 60 SECONDS · 3¢ / EMAIL]
+                [LIVE IN UNDER 60 SECONDS · 5¢ / EMAIL]
               </span>
             </h2>
             <p className="mt-4 text-xs sm:text-sm text-zinc-400 font-sans max-w-xl mx-auto leading-relaxed">

@@ -24,11 +24,11 @@ export function ChadGtmPricingCard({ isLoggedIn = false }: { isLoggedIn?: boolea
             $0 / Month Platform.
             <br />
             <span className="text-zinc-500 font-mono text-2xl sm:text-4xl block mt-1">
-              [JUST 3 CENTS PER EMAIL]
+              [JUST 5 CENTS PER EMAIL]
             </span>
           </h2>
           <p className="mt-4 text-xs sm:text-sm text-zinc-400 font-mono leading-relaxed max-w-2xl mx-auto">
-            $0 software fee for the entire platform. 100M+ lead database access, autonomous ICP extraction, AI copywriting, built-in email verification, and unlimited admin-supplied mailboxes. Pay strictly 3¢ per email delivered.
+            $0 software fee for the entire platform. 100M+ lead database access, autonomous ICP extraction, AI copywriting, built-in email verification, and unlimited admin-supplied mailboxes. Pay strictly 5¢ per email delivered.
           </p>
         </div>
 
@@ -55,7 +55,7 @@ export function ChadGtmPricingCard({ isLoggedIn = false }: { isLoggedIn?: boolea
                 <span className="text-xs text-zinc-400 uppercase tracking-widest">/ mo software</span>
               </div>
               <div className="text-xs sm:text-sm text-emerald-400 font-bold mt-1 uppercase tracking-wider">
-                + 3¢ / email delivered
+                + 5¢ / email delivered
               </div>
               <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-0.5">
                 Zero Monthly Minimums · Utility Billing
@@ -113,7 +113,7 @@ export function ChadGtmPricingCard({ isLoggedIn = false }: { isLoggedIn?: boolea
 
             <div className="space-y-4">
               <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold border-b border-zinc-900 pb-1">
-                [INFRASTRUCTURE & DELIVERY — 3¢ / EMAIL]
+                [INFRASTRUCTURE & DELIVERY — 5¢ / EMAIL]
               </div>
 
               <div className="flex items-start gap-3 text-zinc-200">

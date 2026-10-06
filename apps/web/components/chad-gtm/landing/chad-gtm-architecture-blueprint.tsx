@@ -84,7 +84,7 @@ const matchedProspects = await sqliteDb
     summary:
       "Enterprise sending infrastructure enforcing strict 30 emails/mailbox/day limits. Operates with randomized 45-120 second jitter delays to guarantee pristine IP reputation and 99%+ deliverability.",
     latency: "45-120s jitter",
-    metric: "3¢ / EMAIL DELIVERED",
+    metric: "5¢ / EMAIL DELIVERED",
     details: [
       "Strict daily ceiling: max 30 emails per inbox to preserve sender score",
       "Full SPF, DKIM, and DMARC pre-authenticated domain fleet",

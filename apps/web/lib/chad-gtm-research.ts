@@ -40,8 +40,16 @@ export interface GtmOffer {
   cta: string;
 }
 
+export interface CategoryIntelligence {
+  serviceCategory: string;
+  provenOutboundMeta: string[];
+  competitorBenchmarks: Array<{ name: string; offer: string; angle: string }>;
+  founderSignals?: { name?: string; role?: string; bioSnippet?: string };
+}
+
 export interface SynthesizedGtmStrategy {
   companyName: string;
+  categoryIntelligence?: CategoryIntelligence;
   businessOverview: BusinessOverview;
   icpProfile: IcpProfile;
   offers: GtmOffer[];
@@ -207,6 +215,64 @@ export async function scrapeCompanyWebsite(rawUrl: string): Promise<ScrapedCompa
       );
     }
 
+    // If body snippets are empty (e.g. client-side rendered Single Page Application like React/Vite/Next),
+    // discover and inspect client-side JavaScript bundles to extract headings, features, and case studies
+    if (bodySnippets.length === 0) {
+      const scriptMatches = html.matchAll(/<script\s+(?:[^>]*?\s+)?src=["']([^"']+\.js)["']/gi);
+      for (const sm of scriptMatches) {
+        const src = sm[1];
+        if (src.includes("index") || src.includes("app") || src.includes("main") || src.includes("bundle") || src.includes("assets")) {
+          try {
+            const scriptUrl = new URL(src, url).toString();
+            const scCtrl = new AbortController();
+            const scTimer = setTimeout(() => scCtrl.abort(), 4500);
+            const scRes = await fetch(scriptUrl, { headers, signal: scCtrl.signal }).finally(() => clearTimeout(scTimer));
+            if (scRes.ok) {
+              const jsCode = await scRes.text();
+              const textMatches = jsCode.matchAll(/"([^"\\]{45,260})"/g);
+              for (const tm of textMatches) {
+                const s = tm[1].trim();
+                if (
+                  !s.includes("webpack") &&
+                  !s.includes("import") &&
+                  !s.includes("function") &&
+                  !s.includes("{") &&
+                  !s.includes("}") &&
+                  !s.includes("var ") &&
+                  !s.includes("const ") &&
+                  !bodySnippets.includes(s)
+                ) {
+                  bodySnippets.push(s);
+                  if (bodySnippets.length >= 8) break;
+                }
+              }
+
+              // Extract prominent headings from bundle
+              const headingCandidates = jsCode.matchAll(/"([A-Z][A-Za-z0-9\s,–—\-]{12,70})"/g);
+              for (const hc of headingCandidates) {
+                const h = hc[1].trim();
+                if (
+                  !headings.includes(h) &&
+                  (h.includes("Cold") ||
+                    h.includes("Email") ||
+                    h.includes("Outbound") ||
+                    h.includes("Infrastructure") ||
+                    h.includes("Domain") ||
+                    h.includes("Deliverability") ||
+                    h.includes("Platform") ||
+                    h.includes("Client") ||
+                    h.includes("Agency"))
+                ) {
+                  headings.push(h);
+                  if (headings.length >= 6) break;
+                }
+              }
+            }
+          } catch {}
+        }
+      }
+    }
+
     return {
       url,
       domain,
@@ -267,8 +333,130 @@ function simulateGtmStrategy(
     targetTitles = ["Head of Talent Acquisition", "VP of People", "Managing Director", "Staffing Partner"];
   }
 
+  // Heuristics for category & competitor intelligence
+  const isInboxInfra =
+    combinedText.includes("inbox") ||
+    combinedText.includes("mailbox") ||
+    combinedText.includes("leadskingdom") ||
+    combinedText.includes("deliverability") ||
+    combinedText.includes("infrastructure") ||
+    combinedText.includes("secondary domain");
+
+  const isWebDesign =
+    !isInboxInfra &&
+    (combinedText.includes("web design") ||
+      combinedText.includes("website redesign") ||
+      combinedText.includes("ui/ux") ||
+      combinedText.includes("landing page") ||
+      combinedText.includes("web development"));
+
+  let categoryIntelligence: CategoryIntelligence;
+  let offers: GtmOffer[];
+
+  if (isInboxInfra) {
+    categoryIntelligence = {
+      serviceCategory: "Cold Email Infrastructure & Managed Mailbox Fleet",
+      provenOutboundMeta: [
+        "2024-2026 Google and Yahoo sender guidelines mandate strict DMARC enforcement and max 30 sends/inbox/day",
+        "Isolating secondary domains from root domain prevents corporate domain blacklisting and Google Workspace bans",
+        "Turnkey outbound launch from scratch enables B2B client acquisition with predictable CAC vs paying $3k+/mo in ad networks",
+      ],
+      competitorBenchmarks: [
+        { name: "Mailforge", offer: "$3/inbox secondary infrastructure with automated DNS", angle: "Seat Cost Slash" },
+        { name: "Infraforge", offer: "Private cloud cold email mailboxes with automated IP rotation", angle: "Deliverability" },
+        { name: "Salesforge", offer: "Unified outbound execution with pre-warmed mailbox sync", angle: "Outbound Stack" },
+      ],
+    };
+
+    offers = [
+      {
+        title: "Turnkey Client Acquisition Launch",
+        angle: "Turnkey Outbound Setup (Zero Outbound Angle)",
+        valueProp: `Build and launch your outbound sending engine from scratch with pre-warmed secondary domains, zero tech setup, and predictable client pipeline without paying $3k+/mo in ad spend.`,
+        cta: `Would you be open to a 45-second video showing how peer firms launch turnkey client reach-outs?`,
+      },
+      {
+        title: "80% Seat Cost Slash & Domain Shield",
+        angle: "Secondary Domain Isolation (Active Outbound Angle)",
+        valueProp: `Cut Google Workspace $7/user seat costs by 80% on secondary prospecting inboxes and completely isolate outreach to protect corporate root domain reputation.`,
+        cta: `Could I send over a 1-page breakdown showing how peer teams cut secondary seat costs by 80%?`,
+      },
+      {
+        title: "Deliverability Remediation & Compliance Audit",
+        angle: "Technical DNS Alignment (Technical Defect Angle)",
+        valueProp: `Audit and align missing SPF/DKIM/DMARC records and migrate to high-reputation IP pools to eliminate spam folder drops under Yahoo & Google bulk caps.`,
+        cta: `Mind if I share a 40-second screen capture showing where the DNS record drop is happening?`,
+      },
+    ];
+  } else if (isWebDesign) {
+    categoryIntelligence = {
+      serviceCategory: "B2B Web Design & Conversion Rate Optimization",
+      provenOutboundMeta: [
+        "68% of local service quotes originate on mobile devices with high drop-off on slow forms",
+        "Replacing multi-field intake forms with 1-tap mobile booking doubles quote completions",
+      ],
+      competitorBenchmarks: [
+        { name: "Boutique Design Studios", offer: "$5k-$15k custom site redesigns on 6-week timelines", angle: "Long Timeline / High Fee" },
+        { name: "Webflow Agencies", offer: "Turnkey landing pages focused on conversion rate optimization", angle: "Speed & Conversion" },
+      ],
+    };
+
+    offers = [
+      {
+        title: "Mobile Speed & Layout Shift Audit",
+        angle: "Mobile Performance (Friction Angle)",
+        valueProp: `Eliminate 4-second mobile layout delays and cut load times under 0.5s to capture the 30% of visitors who bounce before forms render.`,
+        cta: `Mind if I send over a 45-second screen recording showing where the drop-off happens?`,
+      },
+      {
+        title: "Frictionless 1-Tap Mobile Intake",
+        angle: "Conversion Optimization (ROI Angle)",
+        valueProp: `Streamline consultation booking from 12 required fields down to 3 without losing lead qualification, doubling booked quotes.`,
+        cta: `Could I share a 40-second teardown showing how peer firms cut intake friction?`,
+      },
+      {
+        title: "Direct Tap-to-Call Emergency Dispatch",
+        angle: "High-Intent Dispatch (Conversion Angle)",
+        valueProp: `Make primary service dispatch phone numbers 1-tap clickable on mobile screens so urgent clients never have to memorize numbers.`,
+        cta: `Worth a quick look if I send the clip?`,
+      },
+    ];
+  } else {
+    categoryIntelligence = {
+      serviceCategory: `${brandName} B2B Operational Solutions`,
+      provenOutboundMeta: [
+        "Align outbound messaging with prospect maturity: turnkey launch for newbies vs infrastructure optimization for active outbounders",
+      ],
+      competitorBenchmarks: [
+        { name: "Legacy SaaS Suites", offer: "High monthly seat fees with complex onboarding", angle: "High Friction" },
+      ],
+    };
+
+    offers = [
+      {
+        title: "Turnkey Client Acquisition Launch",
+        angle: "New Client Pipeline (Zero Outbound Angle)",
+        valueProp: `Set up an automated direct outreach engine to acquire qualified B2B clients predictably without relying solely on referrals or paid advertising.`,
+        cta: `Would you be open to a 45-second video walk-through this week?`,
+      },
+      {
+        title: "Operational Cost & Workflow Optimization",
+        angle: "Efficiency & Margin (Active Teams Angle)",
+        valueProp: `Eliminate manual handoffs and cut recurring SaaS infrastructure expenses by 80% with automated execution workflows.`,
+        cta: `Could I send over a 1-page breakdown detailing the workflow benchmarks?`,
+      },
+      {
+        title: "Risk-Free Diagnostic Review",
+        angle: "Frictionless Audit (Diagnostic Angle)",
+        valueProp: `Benchmark operational bottlenecks and deliverability health with zero setup overhead or commitment.`,
+        cta: `Would you be against taking a 60-second interactive test drive this week?`,
+      },
+    ];
+  }
+
   return {
     companyName: brandName,
+    categoryIntelligence,
     businessOverview: {
       summary: `${brandName} empowers modern B2B organizations to accelerate growth and operational efficiency through intelligent automation and reliable workflows.${notesText}`,
       valuePropositions: [
@@ -293,26 +481,7 @@ function simulateGtmStrategy(
         "Difficulty scaling operations without increasing headcount and overhead.",
       ],
     },
-    offers: [
-      {
-        title: "Pain-Relief Angle",
-        angle: "Pain Relief",
-        valueProp: `Removes the operational bottlenecks holding your team back by automating heavy-lifting processes with guaranteed reliability.`,
-        cta: `Would you be open to a 4-minute benchmark walk-through this Thursday?`,
-      },
-      {
-        title: "Direct ROI Angle",
-        angle: "Direct ROI",
-        valueProp: `Engineered to deliver measurable pipeline acceleration and positive unit economics from month one.`,
-        cta: `Could I send over a 2-page case study detailing the 3x velocity improvement?`,
-      },
-      {
-        title: "Risk-Free Pilot Angle",
-        angle: "Risk-Free Pilot",
-        valueProp: `Test our platform with zero commitment and direct hands-on support to evaluate real workflow impact.`,
-        cta: `Would you be against taking a 60-second interactive test drive this week?`,
-      },
-    ],
+    offers,
     scrapedData: scraped,
   };
 }
@@ -353,18 +522,26 @@ TARGET COMPANY INFORMATION:
 MATCHING DIRECTORY B2B INDUSTRIES (MUST PICK 3-5 EXACT STRINGS FROM THIS LIST):
 ${JSON.stringify(topIndustries)}
 
-CRITICAL INSTRUCTIONS:
-1. Infer the clean, concise brand name.
-2. In businessOverview, provide a 2-3 sentence summary explaining what problem the product solves, 3 value propositions, and 3 key differentiators.
-3. In icp, list 3-5 high-signal decision maker job titles (e.g. "VP of Sales", "CTO", "Head of Talent"), 3 company size ranges, 3-5 matching industry strings from the list above, and 3 acute pain points.
-4. In offers, create exactly 3 distinct high-converting cold email angles:
-   - "Pain-Relief Angle" (alleviating immediate day-to-day operational pain)
-   - "Direct ROI Angle" (measurable economic return and pipeline growth)
-   - "Risk-Free Pilot Angle" (low-friction, no-risk preview or interactive trial)
+CRITICAL INSTRUCTIONS FOR OUTBOUND MATURITY ARCHITECTURE:
+1. Infer the clean, concise brand name and identify the generic service category (e.g. "Cold Email Infrastructure", "Accounting & Fractional CFO", "Staffing & Recruiting", "B2B SaaS").
+2. In categoryIntelligence, identify 2-3 direct or similar-size competitors, their offers/pricing models, and proven cold email meta angles for this exact niche.
+3. In businessOverview, provide a 2-3 sentence summary explaining what problem the product solves, 3 value propositions, and 3 key differentiators.
+4. In icp, list 3-5 high-signal decision maker job titles (e.g. "VP of Sales", "CTO", "Head of Talent"), 3 company size ranges, 3-5 matching industry strings from the list above, and 3 acute pain points.
+5. In offers, create exactly 3 distinct high-converting cold email angles addressing prospect OUTBOUND MATURITY:
+   - Offer 1: "Turnkey Client Acquisition Launch" (Targeting Outbound Newbies: companies relying on referrals or ads with 0 cold email active).
+   - Offer 2: "Cost Slash & Domain Isolation" (Targeting Active Outbounders: cutting $7/user seat fees and isolating secondary domains).
+   - Offer 3: "Technical Deliverability & Audit Fix" (Targeting Technical Defect / Deliverability Issues).
 
 Respond STRICTLY with a valid JSON object matching this structure:
 {
   "companyName": "Brand Name",
+  "categoryIntelligence": {
+    "serviceCategory": "Generic Category Name",
+    "provenOutboundMeta": ["Meta Tip 1", "Meta Tip 2"],
+    "competitorBenchmarks": [
+      { "name": "Competitor 1", "offer": "Their pricing/offer", "angle": "Their angle" }
+    ]
+  },
   "businessOverview": {
     "summary": "2-3 concise sentences...",
     "valuePropositions": ["Prop 1", "Prop 2", "Prop 3"],
@@ -379,21 +556,21 @@ Respond STRICTLY with a valid JSON object matching this structure:
   },
   "offers": [
     {
-      "title": "Pain-Relief Angle",
-      "angle": "Pain Relief",
-      "valueProp": "Value statement focused on eliminating the operational bottleneck...",
+      "title": "Turnkey Client Acquisition Launch",
+      "angle": "New Outbound Setup",
+      "valueProp": "Value statement focused on launching client acquisition from scratch without ad spend...",
       "cta": "Low-friction question CTA (under 15 words)"
     },
     {
-      "title": "Direct ROI Angle",
-      "angle": "Direct ROI",
-      "valueProp": "Value statement focused on tangible pipeline / revenue return...",
+      "title": "Cost Slash & Domain Isolation",
+      "angle": "Secondary Domain Isolation",
+      "valueProp": "Value statement focused on cutting $7/seat costs and protecting root domain...",
       "cta": "Low-friction question CTA (under 15 words)"
     },
     {
-      "title": "Risk-Free Pilot Angle",
-      "angle": "Risk-Free Pilot",
-      "valueProp": "Value statement focused on low-risk preview or interactive trial...",
+      "title": "Technical Deliverability & Audit Fix",
+      "angle": "Technical DNS Alignment",
+      "valueProp": "Value statement focused on fixing DNS records and spam drops...",
       "cta": "Low-friction question CTA (under 15 words)"
     }
   ]

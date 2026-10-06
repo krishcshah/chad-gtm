@@ -109,7 +109,7 @@ export default async function DashboardPage() {
                   Chad Neural Engine Active
                 </span>
                 <span className="rounded-none border border-zinc-800 bg-black px-2 py-0.5 text-[9px] uppercase tracking-widest text-zinc-400">
-                  Managed 3¢ Pool
+                  Managed 5¢ Pool
                 </span>
               </div>
               <h1 className="text-xl sm:text-2xl font-bold uppercase tracking-wider text-white">
@@ -149,7 +149,7 @@ export default async function DashboardPage() {
               </span>
             </div>
             <p className="text-[10px] text-zinc-500 uppercase tracking-wider">
-              Managed @ 3¢/email pool
+              Managed @ 5¢/email pool
             </p>
           </div>
 
@@ -519,7 +519,7 @@ export default async function DashboardPage() {
                       Mailbox Tier:
                     </span>
                     <span className="text-zinc-300">
-                      Managed Shared Pool (3¢/email)
+                      Managed Shared Pool (5¢/email)
                     </span>
                   </div>
                 </div>

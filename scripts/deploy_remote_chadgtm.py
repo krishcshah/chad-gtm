@@ -6,6 +6,9 @@ key = os.path.expanduser('~/.oci/smartreach_id_rsa')
 commands = r'''
 set -e
 cd /home/ubuntu/chad-gtm
+echo "📥 Pulling latest main..."
+git pull origin main
+
 echo "📦 Installing workspace dependencies in /home/ubuntu/chad-gtm..."
 npm install --no-audit
 

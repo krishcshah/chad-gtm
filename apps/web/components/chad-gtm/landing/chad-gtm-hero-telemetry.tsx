@@ -124,7 +124,7 @@ export function ChadGtmHeroTelemetry() {
               <span>Cost Per Mail</span>
               <Zap className="size-2.5 text-white" />
             </div>
-            <div className="text-base font-bold text-white tracking-tight">3¢ Fixed</div>
+            <div className="text-base font-bold text-white tracking-tight">5¢ Fixed</div>
             <div className="text-[9px] text-zinc-400">$0/mo platform</div>
           </div>
         </div>

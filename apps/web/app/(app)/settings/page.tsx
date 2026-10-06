@@ -150,7 +150,7 @@ export default async function SettingsPage() {
             Infrastructure Status: Optimal
           </span>
           <span>•</span>
-          <span>Shared Mailbox Pool: 3¢/email</span>
+          <span>Shared Mailbox Pool: 5¢/email</span>
         </div>
       </div>
 

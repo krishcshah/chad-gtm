@@ -28,6 +28,21 @@ export interface GeneratedScript {
 import { SUPPORTED_AI_MODELS, type AiModelDefinition } from "@smartreach/shared";
 export { SUPPORTED_AI_MODELS, type AiModelDefinition };
 
+import {
+  investigateLeadDossier,
+  type LeadResearchDossier,
+  type OutboundMaturity,
+  type RecommendedAngle,
+  auditDomainDns,
+} from "./lead-investigation";
+export {
+  investigateLeadDossier,
+  type LeadResearchDossier,
+  type OutboundMaturity,
+  type RecommendedAngle,
+  auditDomainDns,
+};
+
 export interface AiEngineOptions {
   apiKey?: string | null;
   provider?: "google" | "openai" | string;
@@ -43,6 +58,7 @@ export interface GenerateOnTheFlyOptions extends AiEngineOptions {
   fallbackBody?: string;
   vars?: Record<string, string | null | undefined>;
   index?: number;
+  dossier?: LeadResearchDossier;
 }
 
 export interface ImproveCopyOptions extends AiEngineOptions {
@@ -218,7 +234,21 @@ function simulatePersonalizedScript(options: GenerateOnTheFlyOptions): Generated
       ""
     ).toString().toLowerCase();
 
-    if (rawFriction.includes("seat") || rawFriction.includes("google workspace") || rawFriction.includes("margin") || rawFriction.includes("$7")) {
+    const d = options.dossier;
+    if (d) {
+      subject = d.suggestedSubject;
+      beat1 = d.humanObservation;
+      beat2 = d.frictionPoke;
+      beat3 = d.customAssetDeliverable;
+      beat4 = d.lowFrictionCta;
+      if (d.outboundMaturity === "OUTBOUND_NEWBIE") {
+        reason = `Recognized ${company} as referral/inbound-based (${d.industryCategory}). Pitched turnkey cold client acquisition setup without assuming existing outbound or domain burn.`;
+      } else if (d.outboundMaturity === "OUTBOUND_TECHNICAL_DEFECT") {
+        reason = `Diagnosed verified DNS defect for ${company} (${d.verifiedDnsIssue}) with a 40-second screen audit.`;
+      } else {
+        reason = `Addressed secondary domain seat cost & isolation for active outbound at ${company}.`;
+      }
+    } else if (rawFriction.includes("seat") || rawFriction.includes("google workspace") || rawFriction.includes("margin") || rawFriction.includes("$7")) {
       subject = "workspace seat costs";
       beat1 = `Checked how many secondary inboxes ${company} runs across client accounts.`;
       beat2 = `Paying Google Workspace $7 a user on hundreds of secondary accounts burns thousands each month that could stay in agency margin.`;
@@ -279,6 +309,27 @@ function simulatePersonalizedScript(options: GenerateOnTheFlyOptions): Generated
       beat2 = `Sending high-volume outbound from root domain subdomains puts company email reputation at risk when Google flags bounce spikes.`;
       beat3 = `Recorded a 45-second video showing how peer SaaS teams isolate outreach on secondary domains.`;
       beat4 = `Mind if I send the link?`;
+    } else if (industry.toLowerCase().includes("account") || company.toLowerCase().includes("account") || industry.toLowerCase().includes("tax")) {
+      subject = "accounting client acquisition";
+      beat1 = `Saw ${company} helps local business owners handle bookkeeping and tax strategy without hiring in-house staff.`;
+      beat2 = `Most boutique accounting firms rely entirely on client referrals or burn cash on Google Ads to sign new monthly accounts, without having time to build cold outreach from scratch.`;
+      beat3 = `Put together a 45-second video showing how peer firms launch turnkey client acquisition with pre-warmed secondary domains and zero tech setup.`;
+      beat4 = `Worth a quick look?`;
+      reason = `Pitched turnkey client acquisition setup without assuming existing outbound or domain burn.`;
+    } else if (industry.toLowerCase().includes("staff") || company.toLowerCase().includes("staff") || industry.toLowerCase().includes("recruit")) {
+      subject = "staffing client acquisition";
+      beat1 = `Saw ${company} places commercial and technical talent across your market.`;
+      beat2 = `Most regional staffing firms rely heavily on job boards or word-of-mouth to win new employer contracts, without an automated outbound engine to reach local operations heads.`;
+      beat3 = `Put together a 45-second video showing how peer agencies launch turnkey client reach-outs with pre-warmed inboxes and zero tech setup.`;
+      beat4 = `Mind if I send the clip over?`;
+      reason = `Pitched turnkey client acquisition setup without assuming existing outbound.`;
+    } else if (industry.toLowerCase().includes("it") || industry.toLowerCase().includes("tech") || company.toLowerCase().includes("it")) {
+      subject = "it client acquisition";
+      beat1 = `Saw ${company} delivers specialized IT systems and support across your market.`;
+      beat2 = `Most boutique IT practices rely on referrals or paid advertising to sign managed service retainers, without a predictable outbound engine to contact local business decision-makers directly.`;
+      beat3 = `Put together a 45-second video showing how peer IT providers launch turnkey cold acquisition with pre-warmed secondary domains.`;
+      beat4 = `Open to seeing it?`;
+      reason = `Pitched turnkey cold outreach client acquisition for IT services.`;
     } else {
       subject = "inbox deliverability";
       beat1 = `Noticed how many outbound teams in ${industry} are battling secondary domain burn right now.`;
@@ -286,7 +337,9 @@ function simulatePersonalizedScript(options: GenerateOnTheFlyOptions): Generated
       beat3 = `Put together a 1-page breakdown showing how top teams distribute volume across warmed pools to keep inbox placement above 98%.`;
       beat4 = `Worth a quick look?`;
     }
-    reason = `Addressed specific cold email infrastructure friction for ${company} with a low-friction asset CTA.`;
+    if (!reason) {
+      reason = `Addressed specific cold email infrastructure friction for ${company} with a low-friction asset CTA.`;
+    }
   } else if (isWebDesign) {
     const rawFriction = (
       lead.customFields?.booking_friction ||
@@ -550,12 +603,15 @@ async function callOpenAi(
 export async function generateEmailScriptOnTheFly(
   options: GenerateOnTheFlyOptions,
 ): Promise<GeneratedScript> {
+  const dossier = options.dossier || (await investigateLeadDossier(options.lead, options.customInstruction));
+  const optionsWithDossier: GenerateOnTheFlyOptions = { ...options, dossier };
+
   const provider = (options.provider || "google").toLowerCase();
   const apiKey = resolveApiKey(provider, options.apiKey);
 
   if (!apiKey) {
     // If no API key configured, use high-fidelity simulation engine
-    return simulatePersonalizedScript(options);
+    return simulatePersonalizedScript(optionsWithDossier);
   }
 
   const { lead, customInstruction, senderName, fallbackSubject, fallbackBody } = options;
@@ -580,11 +636,32 @@ RECIPIENT & ACCOUNT CONTEXT:
 - Custom CSV Signals & Columns:
 ${customFieldsFormatted}
 
+DEEP PRE-COMPUTED LEAD RESEARCH & OUTBOUND MATURITY DOSSIER:
+- Outbound Maturity Stage: ${dossier.outboundMaturity} (${dossier.maturityRationale})
+- Recommended Angle: ${dossier.recommendedAngle}
+- Grounded Human Observation: "${dossier.humanObservation}"
+- Operational Friction Poke: "${dossier.frictionPoke}"
+- Custom Deliverable Asset: "${dossier.customAssetDeliverable}"
+- Frictionless CTA: "${dossier.lowFrictionCta}"
+- Digital Footprint & Domain: ${dossier.domain || "None"}
+- Business Summary: ${dossier.companyName} (${dossier.businessSummary})
+
 SENDER & CAMPAIGN CONTEXT:
 - Sender Name: ${senderName || "Elena"}
-- Baseline Subject Reference: ${fallbackSubject || "quick note"}
+- Baseline Subject Reference: ${fallbackSubject || dossier.suggestedSubject || "quick note"}
 - Campaign Offering & Instructions:
 ${customInstruction || "Pitch our solution tailored to their specific operational reality."}
+
+CRITICAL OUTBOUND MATURITY COPYWRITING RULES:
+${dossier.outboundMaturity === "OUTBOUND_NEWBIE" 
+  ? `1. DO NOT assume or accuse ${lead.company || "this company"} of doing cold email or burning domains! They are an inbound/referral-based business.
+2. Pitch TURNKEY CLIENT ACQUISITION SETUP from scratch: landing high-value clients directly without ad spend or technical setup headaches.
+3. Ground the opening observation in their local market/services: "${dossier.humanObservation}".`
+  : dossier.outboundMaturity === "OUTBOUND_TECHNICAL_DEFECT"
+  ? `1. Present a calm, non-pushy heads-up regarding their verified DNS defect (${dossier.verifiedDnsIssue}).
+2. Offer a 40-second screen capture showing the exact DNS record fix.`
+  : `1. Address their active outbound operations: cut Google Workspace / M365 $7 seat costs by 80% and protect root domain reputation.`
+}
 
 STRICT "ANTI-TO-DO" NEGATIVE CONSTRAINTS (VIOLATIONS WILL CAUSE COMPLETE FAILURE):
 1. NO OPENING PLEASANTRIES: NEVER start with "Hope you're well", "Hope this finds you well", "Happy Monday", etc. Start directly with the observation.
@@ -599,15 +676,15 @@ STRICT "ANTI-TO-DO" NEGATIVE CONSTRAINTS (VIOLATIONS WILL CAUSE COMPLETE FAILURE
 10. NO COMPLEX SENTENCE STRUCTURE: Use short, punchy 3rd-to-5th grade Anglo-Saxon words. Total body MUST be strictly under 55 words.
 
 THE 4-BEAT TOP 0.001% COPY ARCHITECTURE:
-- Beat 1: The Observation / Trigger (1 short sentence). An objective observation or diagnostic about their specific asset on mobile (e.g., "Checked your site on an iPhone earlier today.").
-- Beat 2: The Friction / Poke the Bear (1-2 short sentences). Illuminate an unnoticed cost of inaction or human friction (e.g., "Noticed patients have to download a PDF just to request an implant consult. On mobile, most people leave before opening the file.").
-- Beat 3: The Custom Value Asset (1 short sentence). A tangible, zero-friction diagnostic deliverable created specifically for them without naming agency features (e.g., "Put together a 45-second video showing how to make it a quick 2-tap booking.").
-- Beat 4: The Low-Friction Micro-Permission CTA (1 short sentence, under 7 words). Ask for gentle permission to share the link (e.g., "Mind if I send the link over?", "Worth a quick look?", "Open to taking a look?").
+- Beat 1: The Observation / Trigger (1 short sentence). An objective observation or diagnostic about their specific asset on mobile (e.g., "${dossier.humanObservation}").
+- Beat 2: The Friction / Poke the Bear (1-2 short sentences). Illuminate an unnoticed cost of inaction or human friction (e.g., "${dossier.frictionPoke}").
+- Beat 3: The Custom Value Asset (1 short sentence). A tangible, zero-friction diagnostic deliverable created specifically for them without naming agency features (e.g., "${dossier.customAssetDeliverable}").
+- Beat 4: The Low-Friction Micro-Permission CTA (1 short sentence, under 7 words). Ask for gentle permission to share the link (e.g., "${dossier.lowFrictionCta}").
 
 LENGTH & FORMATTING STANDARDS:
 - Word Count: STRICTLY 35 to 55 words in the email body.
 - Reading Level: 3rd to 5th grade (ultra-simple words, short sentences).
-- Subject Line: STRICTLY 1 to 3 words, lowercase, referencing the specific asset or friction point (e.g., "dispatch phone button", "calculator load speed", "safari photo lag", "calendar cutoff", "dr. thorne / booking"). Never generic like "website speed" or "quick question".
+- Subject Line: STRICTLY 1 to 3 words, lowercase, referencing the specific asset or friction point (e.g., "${dossier.suggestedSubject}"). Never generic like "website speed" or "quick question".
 
 Output strictly a JSON object:
 {
@@ -627,14 +704,14 @@ Output strictly a JSON object:
 
     const parsed = parseJsonFromText(rawJson);
     const bodyText = String(parsed.bodyText || parsed.body || "").trim();
-    const subject = String(parsed.subject || fallbackSubject || "Quick question").trim();
+    const subject = String(parsed.subject || fallbackSubject || dossier.suggestedSubject || "Quick question").trim();
     const bodyHtml = String(parsed.bodyHtml || textToHtmlBlocks(bodyText)).trim();
-    const personalizationReason = String(parsed.personalizationReason || "Tailored using lead background").trim();
+    const personalizationReason = String(parsed.personalizationReason || `Tailored to ${dossier.outboundMaturity} using lead research`).trim();
 
     return { subject, bodyText, bodyHtml, personalizationReason };
   } catch (err) {
     console.warn("[ai-engine] Generation API failed, falling back to simulated script:", err);
-    return simulatePersonalizedScript(options);
+    return simulatePersonalizedScript(optionsWithDossier);
   }
 }
 
@@ -832,16 +909,18 @@ Output strictly a JSON object:
 export async function previewBatchLeadEmails(
   leads: LeadProfile[],
   options: Omit<GenerateOnTheFlyOptions, "lead"> & { maxCount?: number },
-): Promise<Array<{ lead: LeadProfile; email: GeneratedScript }>> {
+): Promise<Array<{ lead: LeadProfile; email: GeneratedScript; dossier?: LeadResearchDossier }>> {
   const targetLeads = leads.slice(0, options.maxCount || 10);
 
   const promises = targetLeads.map(async (lead, idx) => {
+    const dossier = await investigateLeadDossier(lead, options.customInstruction);
     const email = await generateEmailScriptOnTheFly({
       ...options,
       lead,
+      dossier,
       index: idx,
     });
-    return { lead, email };
+    return { lead, email, dossier };
   });
 
   const settled = await Promise.allSettled(promises);

@@ -246,7 +246,7 @@ export function AppSidebar({
 
           {!collapsed && (
             <span className="font-mono text-[9px] px-1.5 py-0.5 rounded-none bg-zinc-900 text-zinc-300 border border-zinc-800 uppercase tracking-widest">
-              3¢ Pool Active
+              5¢ Pool Active
             </span>
           )}
         </div>
@@ -420,7 +420,7 @@ export function AppSidebar({
             <span>Chad Core Active</span>
           </div>
           <span className="px-1.5 py-0.5 rounded-none bg-zinc-900 text-zinc-300 border border-zinc-800">
-            3¢ Pool Active
+            5¢ Pool Active
           </span>
         </div>
       </div>

@@ -43,3 +43,4 @@ _forge_evidence/*.txt
 qa-runs/**/fixtures/
 qa-runs/**/*.key
 qa-runs/**/secrets/
+scratch/

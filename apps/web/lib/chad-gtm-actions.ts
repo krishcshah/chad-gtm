@@ -19,6 +19,7 @@ import {
 import {
   generateEmailScriptOnTheFly,
   getWorkspaceAiOptions,
+  investigateLeadDossier,
   type LeadProfile,
 } from "./ai";
 import { ensureCampaignLeadSnapshot } from "./campaign-drafts";
@@ -177,13 +178,16 @@ Outreach Angle: ${activeOffer.angle}.
 Call to Action: ${activeOffer.cta}.
 Pitch this value offer directly to ${dl.jobTitle} at ${dl.companyName}.`;
 
+        const dossier = await investigateLeadDossier(leadProfile, instruction);
+
         const script = await generateEmailScriptOnTheFly({
           ...aiOpts,
           lead: leadProfile,
+          dossier,
           customInstruction: instruction,
           senderName: user.name || "Alex",
-          fallbackSubject: `${activeOffer.angle.toLowerCase()}`,
-          fallbackBody: `Hi ${dl.firstName || "there"},\n\nNoticed ${dl.companyName}'s current setup in ${dl.industry || "your space"}.\n\n${activeOffer.valueProp}\n\n${activeOffer.cta}\n\nBest,\n${user.name || "Alex"}`,
+          fallbackSubject: `${dossier.suggestedSubject || activeOffer.angle.toLowerCase()}`,
+          fallbackBody: `Hi ${dl.firstName || "there"},\n\n${dossier.humanObservation}\n\n${dossier.frictionPoke}\n\n${dossier.customAssetDeliverable}\n\n${dossier.lowFrictionCta}\n\nBest,\n${user.name || "Alex"}`,
           index: idx,
         });
 
@@ -197,6 +201,9 @@ Pitch this value offer directly to ${dl.jobTitle} at ${dl.companyName}.`;
           subject: script.subject,
           bodyText: script.bodyText,
           bodyHtml: script.bodyHtml,
+          personalizationReason: script.personalizationReason,
+          outboundMaturity: dossier.outboundMaturity,
+          dossier,
           approved: false,
         };
       })

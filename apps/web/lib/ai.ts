@@ -10,23 +10,29 @@ import {
   generateEmailScriptOnTheFly,
   improveEmailCopy,
   previewBatchLeadEmails,
+  investigateLeadDossier,
   type LeadProfile,
   type GeneratedScript,
   type GenerateOnTheFlyOptions,
   type ImproveCopyOptions,
   type AiEngineOptions,
+  type LeadResearchDossier,
+  type OutboundMaturity,
 } from "@smartreach/email-engine/ai";
 
 export {
   generateEmailScriptOnTheFly,
   improveEmailCopy,
   previewBatchLeadEmails,
+  investigateLeadDossier,
   type LeadProfile,
   type GeneratedScript,
   type GenerateOnTheFlyOptions,
   type ImproveCopyOptions,
   type AiEngineOptions,
   type AiModelDefinition,
+  type LeadResearchDossier,
+  type OutboundMaturity,
   SUPPORTED_AI_MODELS,
 };
 
