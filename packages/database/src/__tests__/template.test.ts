@@ -25,6 +25,10 @@ describe("renderTemplate", () => {
   it("collapses whitespace in values", () => {
     expect(renderTemplate("{{x}}", { x: "  a\n b  " })).toBe("a b");
   });
+  it("interoperates between camelCase and snake_case variables", () => {
+    expect(renderTemplate("Hi {{firstName}} at {{company}}!", { first_name: "Ada", company: "Acme" })).toBe("Hi Ada at Acme!");
+    expect(renderTemplate("Hi {{first_name}}!", { firstName: "Ada" })).toBe("Hi Ada!");
+  });
 });
 
 describe("extractVariables", () => {

@@ -73,17 +73,17 @@ export default async function LandingPage() {
             {/* Asymmetrical 12-Column Hero Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
               {/* Left Column: Core Marketing Pitch (7 cols) */}
-              <div className="lg:col-span-7 space-y-5">
+              <div className="lg:col-span-7 space-y-6">
                 {/* Visual Eyebrow Badge */}
-                <div className="inline-flex items-center gap-2 border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-[11px] text-zinc-300 uppercase tracking-wider font-mono">
+                <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800/80 bg-zinc-950/90 px-3 py-1 text-xs text-zinc-300 font-sans shadow-xs">
                   <img src="/chad-white-border.png" alt="Chad" className="size-3.5 object-contain" />
-                  <span className="font-bold text-white">CHADGTM 2.0</span>
+                  <span className="font-semibold text-white">ChadGTM 2.0</span>
                   <span className="text-zinc-600">·</span>
-                  <span className="text-zinc-400">AUTONOMOUS PIPELINE</span>
+                  <span className="text-zinc-400">Autonomous Pipeline</span>
                 </div>
 
                 {/* Main Killer Headline */}
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   <h1 className="text-3xl font-extrabold tracking-tight sm:text-5xl xl:text-6xl text-white uppercase leading-[1.08]">
                     Turn Any Website URL Into Booked Sales Meetings.
                   </h1>
@@ -98,11 +98,11 @@ export default async function LandingPage() {
                 </p>
 
                 {/* Primary Action Buttons */}
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1 font-mono">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
                   <Button
                     asChild
                     size="lg"
-                    className="rounded-none h-11 px-7 bg-white hover:bg-zinc-200 text-black font-bold text-xs uppercase tracking-wider border border-white gap-2 w-full sm:w-auto shadow-lg"
+                    className="rounded-lg h-11 px-7 bg-white hover:bg-zinc-200 text-black font-medium text-xs border border-white gap-2 w-full sm:w-auto shadow-lg"
                   >
                     <Link href={isLoggedIn ? "/chad-gtm" : "/signup"}>
                       <Sparkles className="size-4" />
@@ -113,7 +113,7 @@ export default async function LandingPage() {
                     asChild
                     variant="outline"
                     size="lg"
-                    className="rounded-none h-11 px-6 border-zinc-800 bg-black text-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-700 text-xs font-mono uppercase tracking-wider w-full sm:w-auto"
+                    className="rounded-lg h-11 px-6 border-zinc-800 bg-zinc-950/80 text-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-700 text-xs font-medium w-full sm:w-auto"
                   >
                     <a href="#roi-calculator">
                       See ROI Calculator
@@ -122,7 +122,7 @@ export default async function LandingPage() {
                 </div>
 
                 {/* Trust Guarantees */}
-                <div className="pt-1 flex flex-wrap items-center gap-4 text-xs font-mono text-zinc-400">
+                <div className="pt-1 flex flex-wrap items-center gap-4 text-xs font-sans text-zinc-400">
                   <span className="flex items-center gap-1.5 text-zinc-300">
                     <CheckCircle2 className="size-3.5 text-emerald-400" /> $0/mo Platform Fee
                   </span>
@@ -135,26 +135,26 @@ export default async function LandingPage() {
                 </div>
 
                 {/* High-Impact Proof Metric Strip */}
-                <div className="pt-5 border-t border-zinc-800/80 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs font-mono">
-                  <div className="border border-zinc-800/80 bg-zinc-950/60 p-2.5">
-                    <div className="text-[9px] text-zinc-500 uppercase tracking-widest truncate">[PLATFORM]</div>
-                    <div className="text-white font-bold text-base mt-0.5">$0/MO</div>
-                    <div className="text-[10px] text-zinc-400 truncate">Zero Seat Tax</div>
+                <div className="pt-5 border-t border-zinc-800/80 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs font-sans">
+                  <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-3 card-shine shadow-xs">
+                    <div className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider truncate">Platform</div>
+                    <div className="text-white font-bold text-lg mt-0.5">$0/mo</div>
+                    <div className="text-[11px] text-zinc-400 truncate">Zero Seat Tax</div>
                   </div>
-                  <div className="border border-zinc-800/80 bg-zinc-950/60 p-2.5">
-                    <div className="text-[9px] text-zinc-500 uppercase tracking-widest truncate">[DIRECTORY]</div>
-                    <div className="text-white font-bold text-base mt-0.5">100M+</div>
-                    <div className="text-[10px] text-zinc-400 truncate">Verified B2B</div>
+                  <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-3 card-shine shadow-xs">
+                    <div className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider truncate">Directory</div>
+                    <div className="text-white font-bold text-lg mt-0.5">100M+</div>
+                    <div className="text-[11px] text-zinc-400 truncate">Verified B2B</div>
                   </div>
-                  <div className="border border-zinc-800/80 bg-zinc-950/60 p-2.5">
-                    <div className="text-[9px] text-zinc-500 uppercase tracking-widest truncate">[CADENCE]</div>
-                    <div className="text-white font-bold text-base mt-0.5">3-TOUCH</div>
-                    <div className="text-[10px] text-zinc-400 truncate">Auto Cadence</div>
+                  <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-3 card-shine shadow-xs">
+                    <div className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider truncate">Cadence</div>
+                    <div className="text-white font-bold text-lg mt-0.5">3-Touch</div>
+                    <div className="text-[11px] text-zinc-400 truncate">Auto Cadence</div>
                   </div>
-                  <div className="border border-zinc-800/80 bg-zinc-950/60 p-2.5">
-                    <div className="text-[9px] text-zinc-500 uppercase tracking-widest truncate">[DELIVERY]</div>
-                    <div className="text-white font-bold text-base mt-0.5">5¢</div>
-                    <div className="text-[10px] text-zinc-400 truncate">Per Sent Email</div>
+                  <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-3 card-shine shadow-xs">
+                    <div className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider truncate">Delivery</div>
+                    <div className="text-white font-bold text-lg mt-0.5">5¢</div>
+                    <div className="text-[11px] text-zinc-400 truncate">Per Sent Email</div>
                   </div>
                 </div>
               </div>
@@ -190,133 +190,133 @@ export default async function LandingPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-5xl mx-auto items-stretch">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-5xl mx-auto items-stretch font-sans">
               {/* The Old Fragmented Way */}
-              <div className="border border-red-900/40 bg-black p-6 sm:p-8 space-y-6 flex flex-col justify-between">
+              <div className="rounded-xl border border-rose-950/60 bg-zinc-950/90 p-6 sm:p-8 space-y-6 flex flex-col justify-between card-shine shadow-xs">
                 <div className="space-y-4">
                   <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
-                    <span className="text-xs uppercase tracking-widest font-bold text-red-400">
-                      The Fragmented SaaS & Agency Trap
+                    <span className="text-xs uppercase tracking-wider font-semibold text-rose-400">
+                       The Fragmented SaaS &amp; Agency Trap
                     </span>
-                    <span className="border border-red-900/60 bg-red-950/30 text-red-400 text-[10px] px-2 py-0.5 uppercase">
+                    <span className="rounded-full border border-rose-900/60 bg-rose-950/30 text-rose-400 text-[10px] px-2.5 py-0.5 font-medium">
                       ~$1,291/mo Total Tax
                     </span>
                   </div>
 
-                  <ul className="space-y-3 text-xs font-mono text-zinc-400">
+                  <ul className="space-y-3 text-xs text-zinc-400">
                     <li className="flex items-start justify-between gap-2 border-b border-zinc-900 pb-2">
                       <span className="flex items-center gap-2 text-zinc-300">
-                        <X className="size-3.5 text-red-500 shrink-0" /> Apollo Lead Export Credits
+                        <X className="size-3.5 text-rose-500 shrink-0" /> Apollo Lead Export Credits
                       </span>
-                      <span className="text-red-400 font-bold">$99/mo</span>
+                      <span className="text-rose-400 font-semibold font-mono">$99/mo</span>
                     </li>
                     <li className="flex items-start justify-between gap-2 border-b border-zinc-900 pb-2">
                       <span className="flex items-center gap-2 text-zinc-300">
-                        <X className="size-3.5 text-red-500 shrink-0" /> Instantly / Smartlead Seat
+                        <X className="size-3.5 text-rose-500 shrink-0" /> Instantly / Smartlead Seat
                       </span>
-                      <span className="text-red-400 font-bold">$97/mo</span>
+                      <span className="text-rose-400 font-semibold font-mono">$97/mo</span>
                     </li>
                     <li className="flex items-start justify-between gap-2 border-b border-zinc-900 pb-2">
                       <span className="flex items-center gap-2 text-zinc-300">
-                        <X className="size-3.5 text-red-500 shrink-0" /> 5 Secondary Domains & DNS
+                        <X className="size-3.5 text-rose-500 shrink-0" /> 5 Secondary Domains &amp; DNS
                       </span>
-                      <span className="text-red-400 font-bold">$60/mo</span>
+                      <span className="text-rose-400 font-semibold font-mono">$60/mo</span>
                     </li>
                     <li className="flex items-start justify-between gap-2 border-b border-zinc-900 pb-2">
                       <span className="flex items-center gap-2 text-zinc-300">
-                        <X className="size-3.5 text-red-500 shrink-0" /> Google Workspace Inboxes
+                        <X className="size-3.5 text-rose-500 shrink-0" /> Google Workspace Inboxes
                       </span>
-                      <span className="text-red-400 font-bold">$36/mo</span>
+                      <span className="text-rose-400 font-semibold font-mono">$36/mo</span>
                     </li>
                     <li className="flex items-start justify-between gap-2 border-b border-zinc-900 pb-2">
                       <span className="flex items-center gap-2 text-zinc-300">
-                        <X className="size-3.5 text-red-500 shrink-0" /> Clay Enrichment Credits
+                        <X className="size-3.5 text-rose-500 shrink-0" /> Clay Enrichment Credits
                       </span>
-                      <span className="text-red-400 font-bold">$149/mo</span>
+                      <span className="text-rose-400 font-semibold font-mono">$149/mo</span>
                     </li>
                     <li className="flex items-start justify-between gap-2 border-b border-zinc-900 pb-2">
                       <span className="flex items-center gap-2 text-zinc-300">
-                        <X className="size-3.5 text-red-500 shrink-0" /> Mailbox Ops & Reply Retainer
+                        <X className="size-3.5 text-rose-500 shrink-0" /> Mailbox Ops &amp; Reply Retainer
                       </span>
-                      <span className="text-red-400 font-bold">$850/mo</span>
+                      <span className="text-rose-400 font-semibold font-mono">$850/mo</span>
                     </li>
                     <li className="flex items-start justify-between gap-2 pt-1 text-zinc-500 text-[11px]">
                       <span>3 Weeks Wasted Warming Inboxes</span>
-                      <span className="text-zinc-400">21 Days Lost</span>
+                      <span className="text-zinc-400 font-mono">21 Days Lost</span>
                     </li>
                   </ul>
                 </div>
 
                 <div className="pt-4 border-t border-zinc-900">
                   <div className="flex items-baseline justify-between">
-                    <span className="text-xs uppercase tracking-widest text-zinc-500 font-bold">Total Fixed Cost:</span>
-                    <span className="text-2xl font-bold text-red-400 font-mono">$15,492 / year</span>
+                    <span className="text-xs uppercase tracking-wider text-zinc-500 font-medium">Total Fixed Cost:</span>
+                    <span className="text-2xl font-bold text-rose-400 font-mono">$15,492 / year</span>
                   </div>
-                  <p className="text-[10px] text-zinc-500 mt-1 font-sans">
+                  <p className="text-[11px] text-zinc-500 mt-1">
                     You pay this recurring burn whether you send 10 emails or zero.
                   </p>
                 </div>
               </div>
 
               {/* The ChadGTM Model */}
-              <div className="border border-white bg-black p-6 sm:p-8 space-y-6 flex flex-col justify-between relative shadow-2xl">
+              <div className="rounded-xl border border-zinc-700/80 bg-zinc-950/90 p-6 sm:p-8 space-y-6 flex flex-col justify-between relative shadow-xl card-shine">
                 <div className="space-y-4">
                   <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-                    <span className="text-xs uppercase tracking-widest font-bold text-white flex items-center gap-1.5">
+                    <span className="text-xs uppercase tracking-wider font-semibold text-white flex items-center gap-1.5">
                       <Sparkles className="size-3.5 text-emerald-400" /> ChadGTM Autonomous Engine
                     </span>
-                    <span className="border border-emerald-500/40 bg-emerald-950/20 text-emerald-400 text-[10px] px-2 py-0.5 uppercase font-bold">
+                    <span className="rounded-full border border-emerald-500/40 bg-emerald-950/40 text-emerald-400 text-[10px] px-2.5 py-0.5 font-semibold">
                       $0/mo Platform Fee
                     </span>
                   </div>
 
-                  <ul className="space-y-3 text-xs font-mono text-zinc-300">
+                  <ul className="space-y-3 text-xs text-zinc-300">
                     <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2">
                       <span className="flex items-center gap-2 text-white">
                         <Check className="size-3.5 text-emerald-400 shrink-0" /> 100M+ Global Lead Directory
                       </span>
-                      <span className="text-emerald-400 font-bold">INCLUDED ($0)</span>
+                      <span className="text-emerald-400 font-semibold font-mono">INCLUDED ($0)</span>
                     </li>
                     <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2">
                       <span className="flex items-center gap-2 text-white">
                         <Check className="size-3.5 text-emerald-400 shrink-0" /> Pre-Warmed Shared Mailbox Pool
                       </span>
-                      <span className="text-emerald-400 font-bold">INCLUDED ($0)</span>
+                      <span className="text-emerald-400 font-semibold font-mono">INCLUDED ($0)</span>
                     </li>
                     <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2">
                       <span className="flex items-center gap-2 text-white">
                         <Check className="size-3.5 text-emerald-400 shrink-0" /> Autonomous 3-Touch Follow-Up Engine
                       </span>
-                      <span className="text-emerald-400 font-bold">INCLUDED ($0)</span>
+                      <span className="text-emerald-400 font-semibold font-mono">INCLUDED ($0)</span>
                     </li>
                     <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2">
                       <span className="flex items-center gap-2 text-white">
-                        <Check className="size-3.5 text-emerald-400 shrink-0" /> Chad Neural Voice Calibration (Proprietary Engine)
+                        <Check className="size-3.5 text-emerald-400 shrink-0" /> Chad Neural Voice Calibration
                       </span>
-                      <span className="text-emerald-400 font-bold">INCLUDED ($0)</span>
+                      <span className="text-emerald-400 font-semibold font-mono">INCLUDED ($0)</span>
                     </li>
                     <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2">
                       <span className="flex items-center gap-2 text-white">
                         <Check className="size-3.5 text-emerald-400 shrink-0" /> Turnkey Admin-Supplied Mailbox Fleet
                       </span>
-                      <span className="text-emerald-400 font-bold">ZERO SETUP</span>
+                      <span className="text-emerald-400 font-semibold font-mono">ZERO SETUP</span>
                     </li>
                     <li className="flex items-start justify-between gap-2 pt-1 text-zinc-400 text-[11px]">
                       <span>Managed Mesh Delivery (Zero Setup)</span>
-                      <span className="text-white font-bold">5¢ / email</span>
+                      <span className="text-white font-semibold font-mono">5¢ / email</span>
                     </li>
                   </ul>
                 </div>
 
                 <div className="pt-4 border-t border-zinc-800">
                   <div className="flex items-baseline justify-between">
-                    <span className="text-xs uppercase tracking-widest text-zinc-400 font-bold">Base Monthly Cost:</span>
+                    <span className="text-xs uppercase tracking-wider text-zinc-400 font-medium">Base Monthly Cost:</span>
                     <span className="text-2xl font-bold text-white font-mono">$0 / month forever</span>
                   </div>
-                  <p className="text-[10px] text-zinc-400 mt-1 font-sans">
+                  <p className="text-[11px] text-zinc-400 mt-1">
                     Send 1,000 emails = $50. Pause for summer = $0. Pure utility billing.
                   </p>
-                  <Button asChild size="lg" className="w-full mt-4 rounded-none bg-white text-black font-bold uppercase tracking-wider text-xs border border-white hover:bg-zinc-200">
+                  <Button asChild size="lg" className="w-full mt-4 rounded-lg bg-white text-black font-medium text-xs border border-white hover:bg-zinc-200 shadow-xs">
                     <Link href="/signup">
                       Deploy Your $0/Mo Pipeline <ArrowRight className="size-3.5 ml-1" />
                     </Link>
@@ -360,21 +360,23 @@ export default async function LandingPage() {
         {/* ========================================================================= */}
         {/* FOUNDER MANIFESTO: WHY WE CHARGE $0/MONTH */}
         {/* ========================================================================= */}
-        <section className="py-20 sm:py-24 border-t border-zinc-800 bg-zinc-950 font-mono">
+        <section className="py-20 sm:py-24 border-t border-zinc-800/80 bg-zinc-950/60 font-sans">
           <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-            <div className="border border-zinc-800 bg-black p-8 sm:p-10 space-y-6">
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+            <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-8 sm:p-10 space-y-6 card-shine shadow-xs">
+              <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
                 <div className="flex items-center gap-2">
-                  <Terminal className="size-4 text-white" />
-                  <span className="text-xs uppercase font-bold tracking-widest text-white">
-                    FOUNDER NOTE // WHY WE CHARGE $0/MONTH
+                  <Terminal className="size-4 text-zinc-400" />
+                  <span className="text-xs uppercase font-semibold tracking-wider text-white">
+                    Founder Note // Why We Charge $0/Month
                   </span>
                 </div>
-                <span className="text-[10px] text-zinc-500 uppercase tracking-widest">TRANSPARENCY MANIFESTO</span>
+                <span className="text-[10px] text-zinc-400 font-medium uppercase tracking-wider bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-full">
+                  Transparency Manifesto
+                </span>
               </div>
 
-              <div className="space-y-4 text-xs sm:text-sm text-zinc-300 font-sans leading-relaxed">
-                <p className="font-bold text-white font-mono text-sm sm:text-base">
+              <div className="space-y-4 text-xs sm:text-sm text-zinc-300 leading-relaxed">
+                <p className="font-semibold text-white text-sm sm:text-base">
                   "Why does every cold email platform charge you $97/month for a login screen?"
                 </p>
                 <p>
@@ -386,17 +388,17 @@ export default async function LandingPage() {
                 <p>
                   We built ChadGTM to treat cold email infrastructure as a utility. Our entire core software—campaign builder, lead directory scaling to 100M+ verified global contacts, UniBox, and CRM—is <strong className="text-white">$0/month forever</strong>. All mailboxes are pre-warmed, authenticated, and supplied directly by our admin fleet, so you pay strictly <strong className="text-white">$0.05 per email delivered</strong> with zero domain or DNS setup.
                 </p>
-                <p className="text-zinc-400 font-mono text-xs pt-2">
+                <p className="text-zinc-400 text-xs pt-2">
                   Zero seat taxes. Zero monthly minimums. Pure pay-for-what-you-use growth.
                 </p>
               </div>
 
-              <div className="pt-4 border-t border-zinc-800 flex items-center justify-between">
+              <div className="pt-4 border-t border-zinc-800/80 flex items-center justify-between">
                 <div>
-                  <div className="text-xs font-bold text-white font-mono">The ChadGTM Core Team</div>
-                  <div className="text-[10px] text-zinc-500 uppercase font-mono">Built for founders who hate paying SaaS seat taxes</div>
+                  <div className="text-xs font-semibold text-white">The ChadGTM Core Team</div>
+                  <div className="text-[11px] text-zinc-400">Built for founders who hate paying SaaS seat taxes</div>
                 </div>
-                <Button asChild size="sm" className="rounded-none bg-white text-black font-semibold uppercase tracking-wider text-xs border border-white hover:bg-zinc-200">
+                <Button asChild size="sm" className="rounded-lg bg-white text-black font-medium text-xs border border-white hover:bg-zinc-200 shadow-xs">
                   <Link href="/signup">Start Free ($0/mo)</Link>
                 </Button>
               </div>
@@ -407,17 +409,17 @@ export default async function LandingPage() {
         {/* ========================================================================= */}
         {/* PRODUCTION CASE STUDIES & OPERATOR TELEMETRY */}
         {/* ========================================================================= */}
-        <section className="relative py-20 sm:py-28 border-t border-zinc-800 bg-black overflow-hidden font-mono">
+        <section className="relative py-20 sm:py-28 border-t border-zinc-800/80 bg-black overflow-hidden font-sans">
           <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="text-center max-w-2xl mx-auto mb-14">
-              <div className="inline-flex items-center gap-2 border border-zinc-800 bg-zinc-950 px-3 py-1 text-[10px] uppercase tracking-widest text-zinc-400 mb-3">
-                <Star className="size-3 text-white" />
-                VERIFIED OUTCOMES // OPERATOR CASE STUDIES
+              <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800/80 bg-zinc-950/90 px-3 py-1 text-xs text-zinc-400 mb-3 shadow-xs">
+                <Star className="size-3 text-emerald-400" />
+                <span>Verified Outcomes · Operator Case Studies</span>
               </div>
-              <h2 className="text-2xl sm:text-4xl font-bold text-white uppercase tracking-wider">
+              <h2 className="text-2xl sm:text-4xl font-bold text-white uppercase tracking-tight">
                 Real Pipeline. Real Meetings.
               </h2>
-              <p className="mt-2 text-xs text-zinc-400 font-sans">
+              <p className="mt-2 text-xs sm:text-sm text-zinc-400">
                 Audited results from B2B founders and revenue leaders running autonomous outreach.
               </p>
             </div>
@@ -425,49 +427,49 @@ export default async function LandingPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-6xl mx-auto">
               {[
                 {
-                  code: "[CASE_STUDY_01]",
+                  code: "Case Study 01",
                   quote:
                     "ChadGTM completely replaced our $4,500/month SDR agency. We plugged in our URL, approved 3 email angles on the swipe deck, and booked 19 enterprise demos in our first 10 days.",
                   author: "Julian Richter",
                   role: "Founder & CEO, CloudScale IO",
-                  metric: "+280% PIPELINE",
-                  badge: "ENTERPRISE SAAS",
+                  metric: "+280% Pipeline",
+                  badge: "Enterprise SaaS",
                 },
                 {
-                  code: "[CASE_STUDY_02]",
+                  code: "Case Study 02",
                   quote:
                     "The 3-touch follow-up cadence is ruthless. Our 9.4% conversion rate came almost entirely from Touch 2 and Touch 3. We didn't have to touch a single DNS record or buy a burner domain.",
                   author: "Maya Lindqvist",
                   role: "Head of Growth, DevSync Labs",
-                  metric: "9.4% CONVERSION",
-                  badge: "DEVTOOLS",
+                  metric: "9.4% Conversion",
+                  badge: "DevTools",
                 },
                 {
-                  code: "[CASE_STUDY_03]",
+                  code: "Case Study 03",
                   quote:
                     "We used to pay Apollo $99/mo plus Instantly $97/mo. Paying $0 platform fee and just 5 cents per email on the managed pool saves our early-stage startup over $2,100 a year.",
                   author: "David Thorne",
                   role: "Co-Founder, PayFlow API",
-                  metric: "$2,100+ SAVINGS",
-                  badge: "FINTECH API",
+                  metric: "$2,100+ Savings",
+                  badge: "Fintech API",
                 },
               ].map((t, i) => (
-                <div key={i} className="border border-zinc-800 bg-zinc-950 p-6 flex flex-col justify-between relative group hover:border-zinc-700 transition-colors">
+                <div key={i} className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-6 flex flex-col justify-between relative group hover:border-zinc-700/80 transition-colors card-shine shadow-xs">
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between text-[10px] text-zinc-500 uppercase tracking-widest border-b border-zinc-900 pb-2">
-                      <span className="font-bold text-zinc-400">{t.code}</span>
-                      <span className="border border-zinc-800 bg-black px-1.5 py-0.5 text-zinc-400">{t.badge}</span>
+                    <div className="flex items-center justify-between text-xs text-zinc-400 border-b border-zinc-800/80 pb-2.5">
+                      <span className="font-medium text-zinc-300">{t.code}</span>
+                      <span className="rounded-full border border-zinc-800 bg-zinc-900/80 px-2 py-0.5 text-[10px] text-zinc-400">{t.badge}</span>
                     </div>
-                    <p className="text-xs text-zinc-300 font-sans leading-relaxed">
+                    <p className="text-xs text-zinc-300 leading-relaxed">
                       "{t.quote}"
                     </p>
                   </div>
-                  <div className="mt-6 pt-4 border-t border-zinc-900 flex items-center justify-between text-xs font-mono">
+                  <div className="mt-6 pt-4 border-t border-zinc-800/80 flex items-center justify-between text-xs">
                     <div>
-                      <div className="font-bold text-white">{t.author}</div>
-                      <div className="text-[10px] text-zinc-500 uppercase tracking-wider">{t.role}</div>
+                      <div className="font-semibold text-white">{t.author}</div>
+                      <div className="text-[11px] text-zinc-400">{t.role}</div>
                     </div>
-                    <span className="text-[10px] font-bold text-white border border-zinc-700 bg-black px-2 py-0.5">
+                    <span className="text-[11px] font-semibold text-emerald-400 rounded-full border border-emerald-500/30 bg-emerald-950/30 px-2.5 py-0.5">
                       {t.metric}
                     </span>
                   </div>
@@ -480,14 +482,14 @@ export default async function LandingPage() {
         {/* ========================================================================= */}
         {/* SYSTEM DOCUMENTATION & OBJECTION-HANDLING FAQ */}
         {/* ========================================================================= */}
-        <section id="faq" className="py-20 sm:py-28 border-t border-zinc-800 bg-black font-mono">
+        <section id="faq" className="py-20 sm:py-28 border-t border-zinc-800/80 bg-black font-sans">
           <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-12">
-              <div className="inline-flex items-center gap-2 border border-zinc-800 bg-zinc-950 px-3 py-1 text-[10px] uppercase tracking-widest text-zinc-400 mb-3">
-                <Terminal className="size-3 text-white" />
-                SYSTEM DOCUMENTATION // OBJECTIONS ANSWERED
+              <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800/80 bg-zinc-950/90 px-3 py-1 text-xs text-zinc-400 mb-3 shadow-xs">
+                <Terminal className="size-3 text-zinc-400" />
+                <span>System Documentation · Common Inquiries</span>
               </div>
-              <h2 className="text-2xl sm:text-4xl font-bold text-white uppercase tracking-wider">
+              <h2 className="text-2xl sm:text-4xl font-bold text-white uppercase tracking-tight">
                 Frequently Asked Questions
               </h2>
             </div>
@@ -495,46 +497,46 @@ export default async function LandingPage() {
             <div className="space-y-3">
               {[
                 {
-                  code: "[SPEC_01]",
+                  code: "SPEC_01",
                   q: "Why is the core ChadGTM platform $0/month?",
                   a: "We believe cold email software should not cost $97/month in recurring seat licenses. The core ChadGTM platform is 100% free ($0/mo) for unlimited campaigns, sequences, and lead storage. When using our autonomous shared mailbox pool, you pay strictly 5¢ per email.",
                 },
                 {
-                  code: "[SPEC_02]",
+                  code: "SPEC_02",
                   q: "How does the 'Pay Just 5 Cents Per Email' model work?",
                   a: "If you don't want to buy secondary domains, configure DNS (SPF, DKIM, DMARC), or warm up mailboxes for 3 weeks, you can dispatch via our managed enterprise shared mailbox pool. You pay strictly $0.05 per email delivered. There are no recurring monthly minimums and no hidden markups.",
                 },
                 {
-                  code: "[SPEC_03]",
+                  code: "SPEC_03",
                   q: "How does the 3-touch follow-up cadence work?",
                   a: "Every prospect automatically receives an initial personalized opener, followed by Touch #2 (Value & Proof Bump, 3 days later), and Touch #3 (Polite Permission Breakup, 4 days after that). The instant a prospect replies or books a meeting, all remaining follow-ups are cancelled automatically.",
                 },
                 {
-                  code: "[SPEC_04]",
+                  code: "SPEC_04",
                   q: "Do I need to buy secondary domains or configure DNS records?",
                   a: "No. ChadGTM is 100% turnkey zero setup. Our admin fleet supplies, warms, and maintains all sender infrastructure with pre-configured SPF, DKIM, and DMARC authentication. You never have to buy domains or configure DNS.",
                 },
                 {
-                  code: "[SPEC_05]",
+                  code: "SPEC_05",
                   q: "How does ChadGTM maintain 99%+ deliverability?",
                   a: "We enforce a strict ceiling of 30 emails per mailbox per day, distributed across our shared sender infrastructure with intelligent randomized delays (45–120 seconds). Each sender domain is pre-authenticated with verified SPF, DKIM, and DMARC records.",
                 },
                 {
-                  code: "[SPEC_06]",
+                  code: "SPEC_06",
                   q: "What powers the autonomous company research and email generation?",
                   a: "ChadGTM is powered by our proprietary Chad Neural Core™—a dedicated outbound intelligence model trained on 7+ years of cold campaign conversion data and over 50M+ sales touchpoints. It crawls your live website, extracts unique value propositions, matches high-intent buyer personas, and drafts high-converting outreach angles in seconds.",
                 },
                 {
-                  code: "[SPEC_07]",
+                  code: "SPEC_07",
                   q: "Is ChadGTM compliant with GDPR and CAN-SPAM regulations?",
                   a: "Yes. Every outgoing email automatically includes one-click unsubscribe links and physical compliance footers. Any reply or opt-out is instantly honored and synchronized across all active campaigns.",
                 },
               ].map((faq, i) => (
-                <div key={i} className="border border-zinc-800 bg-zinc-950 p-5 hover:border-zinc-700 transition-colors">
-                  <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                    <span className="text-zinc-500 font-mono">{faq.code}</span> {faq.q}
+                <div key={i} className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 hover:border-zinc-700/80 transition-colors card-shine shadow-xs">
+                  <h4 className="text-xs sm:text-sm font-semibold text-white flex items-center gap-2">
+                    <span className="text-zinc-500 font-mono text-xs">{faq.code}</span> {faq.q}
                   </h4>
-                  <p className="mt-2.5 text-xs text-zinc-400 font-sans leading-relaxed pl-6">
+                  <p className="mt-2 text-xs text-zinc-400 leading-relaxed pl-6">
                     {faq.a}
                   </p>
                 </div>
@@ -546,20 +548,20 @@ export default async function LandingPage() {
         {/* ========================================================================= */}
         {/* FINAL BOTTOM HIGH-CONVERTING CTA BANNER */}
         {/* ========================================================================= */}
-        <section className="relative py-20 sm:py-28 border-t border-zinc-800 bg-zinc-950 overflow-hidden font-mono">
+        <section className="relative py-20 sm:py-28 border-t border-zinc-800/80 bg-zinc-950/80 overflow-hidden font-sans">
           <div className="relative mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
-            <div className="inline-flex items-center gap-2 border border-zinc-800 bg-black px-3 py-1 text-[10px] uppercase tracking-widest text-zinc-400 mb-4">
-              <Rocket className="size-3 text-white" />
-              DEPLOY IN 60 SECONDS // $0 PLATFORM FEE
+            <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800/80 bg-zinc-900/90 px-3 py-1 text-xs text-zinc-400 mb-4 shadow-xs">
+              <Rocket className="size-3 text-emerald-400" />
+              <span>Deploy in 60 seconds · $0 platform fee</span>
             </div>
-            <h2 className="text-3xl sm:text-5xl font-bold text-white tracking-tight uppercase">
+            <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight uppercase">
               Ready To Replace Your Fragmented $450/Month Outbound Stack?
               <br />
-              <span className="text-zinc-500 text-2xl sm:text-4xl block mt-2 font-normal">
+              <span className="text-zinc-500 text-2xl sm:text-4xl block mt-2 font-normal font-mono">
                 [LIVE IN UNDER 60 SECONDS · 5¢ / EMAIL]
               </span>
             </h2>
-            <p className="mt-4 text-xs sm:text-sm text-zinc-400 font-sans max-w-xl mx-auto leading-relaxed">
+            <p className="mt-4 text-xs sm:text-sm text-zinc-400 max-w-xl mx-auto leading-relaxed">
               Join forward-thinking founders and revenue leaders generating qualified meetings autonomously. No secondary domains to buy. No seat licenses to manage.
             </p>
 
@@ -567,7 +569,7 @@ export default async function LandingPage() {
               <Button
                 asChild
                 size="lg"
-                className="rounded-none h-12 px-8 bg-white hover:bg-zinc-200 text-black font-bold text-xs uppercase tracking-wider border border-white gap-2 w-full sm:w-auto shadow-2xl"
+                className="rounded-lg h-12 px-8 bg-white hover:bg-zinc-200 text-black font-medium text-xs border border-white gap-2 w-full sm:w-auto shadow-2xl"
               >
                 <Link href={isLoggedIn ? "/chad-gtm" : "/signup"}>
                   Launch Free GTM Engine <ArrowRight className="size-4 ml-1" />
@@ -575,20 +577,20 @@ export default async function LandingPage() {
               </Button>
             </div>
 
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-3 sm:gap-6 text-[10px] text-zinc-500 uppercase tracking-widest">
-              <span className="flex items-center gap-1.5 text-zinc-400">
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3 sm:gap-6 text-xs text-zinc-400">
+              <span className="flex items-center gap-1.5 text-zinc-300">
                 <CheckCircle2 className="size-3 text-emerald-400" />
                 No credit card required
               </span>
-              <span className="flex items-center gap-1.5 text-zinc-400">
+              <span className="flex items-center gap-1.5 text-zinc-300">
                 <CheckCircle2 className="size-3 text-emerald-400" />
                 Live in 60 seconds
               </span>
-              <span className="flex items-center gap-1.5 text-zinc-400">
+              <span className="flex items-center gap-1.5 text-zinc-300">
                 <CheckCircle2 className="size-3 text-emerald-400" />
                 $0/mo platform fee forever
               </span>
-              <span className="flex items-center gap-1.5 text-zinc-400">
+              <span className="flex items-center gap-1.5 text-zinc-300">
                 <CheckCircle2 className="size-3 text-emerald-400" />
                 Cancel anytime
               </span>
@@ -598,18 +600,18 @@ export default async function LandingPage() {
       </main>
 
       {/* Global Architectural Footer */}
-      <footer className="border-t border-zinc-800 bg-black py-8 text-xs font-mono text-zinc-500">
+      <footer className="border-t border-zinc-800/80 bg-black py-8 text-xs text-zinc-500 font-sans">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
           <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
             <ChadGtmLogo compact />
             <span className="text-zinc-700">|</span>
-            <span className="text-[11px] uppercase tracking-wider">© 2026 ChadGTM Engine. All rights reserved.</span>
+            <span className="text-[11px]">© 2026 ChadGTM Engine. All rights reserved.</span>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-4 text-[11px] uppercase tracking-wider">
+          <div className="flex flex-wrap items-center justify-center gap-4 text-[11px]">
             <div className="flex items-center gap-2">
-              <span className="size-1.5 rounded-none bg-emerald-500 animate-pulse" />
-              <span className="text-zinc-400">System Operational</span>
+              <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-zinc-400 font-medium">System Operational</span>
             </div>
             <Link href="/privacy" className="hover:text-white transition-colors">
               Privacy

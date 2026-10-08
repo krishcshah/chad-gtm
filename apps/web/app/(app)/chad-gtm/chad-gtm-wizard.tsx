@@ -213,46 +213,51 @@ export function ChadGtmWizard({
   };
 
   return (
-    <div className="mx-auto max-w-5xl py-4 sm:py-8 space-y-6 sm:space-y-8 font-mono">
+    <div className="mx-auto max-w-5xl py-4 sm:py-8 space-y-6 sm:space-y-8 font-sans">
       {/* Step Indicator Header */}
-      <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/80 pb-5">
         <div className="flex items-center gap-3">
-          <div className="size-8 rounded-none border border-white bg-black flex items-center justify-center text-white font-mono font-bold text-sm">
-            ⚡
+          <div className="size-9 rounded-xl border border-zinc-700/80 bg-zinc-900 flex items-center justify-center text-white shadow-xs">
+            <Zap className="size-4 text-emerald-400" />
           </div>
           <div>
-            <h1 className="text-sm sm:text-base font-bold uppercase tracking-wider text-white flex items-center gap-2">
+            <h1 className="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-2">
               ChadGTM <span className="text-zinc-500 font-normal text-xs">// Autonomous Engine</span>
             </h1>
           </div>
         </div>
 
-        {/* Step Ticker Badges (Mobile + Desktop) */}
+        {/* Step Ticker Badges (Mobile) */}
         <div className="flex sm:hidden items-center text-xs">
-          <span className="rounded-none bg-zinc-900 border border-zinc-700 px-2 py-0.5 text-[10px] uppercase font-bold text-white">
-            STAGE {step}/5: {["URL Scan", "Strategy", "Apollo Leads", "Calibration", "Launch"][step - 1]}
+          <span className="rounded-full bg-zinc-900 border border-zinc-700/80 px-3 py-1 text-xs font-medium text-white">
+            Stage {step} of 5: {["URL Scan", "Strategy", "B2B Leads", "Calibration", "Launch"][step - 1]}
           </span>
         </div>
 
+        {/* Stepper Pills (Desktop) */}
         <div className="hidden sm:flex items-center gap-1.5 text-xs">
           {[
-            { s: 1, label: "01. URL Scan" },
-            { s: 2, label: "02. Strategy" },
-            { s: 3, label: "03. Apollo Leads" },
-            { s: 4, label: "04. Calibration" },
-            { s: 5, label: "05. Launch" },
+            { s: 1, label: "URL Scan" },
+            { s: 2, label: "Strategy" },
+            { s: 3, label: "B2B Leads" },
+            { s: 4, label: "Calibration" },
+            { s: 5, label: "Launch" },
           ].map((item) => (
             <div
               key={item.s}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-none text-[10px] uppercase tracking-wider border font-mono transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium tracking-tight transition-all ${
                 step === item.s
-                  ? "bg-white text-black border-white font-semibold"
+                  ? "bg-white text-black font-semibold shadow-xs"
                   : step > item.s
-                  ? "border-zinc-700 bg-zinc-900 text-zinc-300"
-                  : "border-zinc-800 bg-black text-zinc-600"
+                  ? "border border-zinc-700/80 bg-zinc-900/80 text-zinc-200"
+                  : "border border-zinc-800/80 bg-zinc-950/60 text-zinc-500"
               }`}
             >
-              <span>{item.s < step ? "✓" : item.s}</span>
+              <span className={`flex size-4 items-center justify-center rounded-full text-[10px] ${
+                step === item.s ? "bg-black text-white" : step > item.s ? "bg-emerald-500 text-black font-bold" : "bg-zinc-800 text-zinc-400"
+              }`}>
+                {step > item.s ? "✓" : item.s}
+              </span>
               <span>{item.label}</span>
             </div>
           ))}
@@ -262,23 +267,23 @@ export function ChadGtmWizard({
       {/* STEP 1: The Hero Command Bar */}
       {step === 1 && (
         <div className="mx-auto max-w-2xl py-4 sm:py-6 space-y-6">
-          <div className="text-center space-y-2">
-            <span className="inline-flex items-center gap-1.5 rounded-none border border-zinc-800 bg-zinc-950 px-2.5 py-0.5 text-[10px] uppercase tracking-widest text-zinc-400">
-              <Sparkles className="size-3" /> Autonomous Pipeline Synthesis
+          <div className="text-center space-y-2.5">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-800 bg-zinc-900/60 px-3 py-1 text-xs font-medium text-zinc-300">
+              <Sparkles className="size-3 text-emerald-400" /> Autonomous Pipeline Synthesis
             </span>
-            <h2 className="text-2xl sm:text-3xl font-bold uppercase tracking-wider text-white">
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
               Launch Outbound Engine
             </h2>
-            <p className="text-xs text-zinc-400 max-w-lg mx-auto font-sans leading-relaxed">
+            <p className="text-xs sm:text-sm text-zinc-400 max-w-lg mx-auto leading-relaxed">
               Enter your company website. Our autonomous engine analyzes your product, cross-references 100M+ verified global B2B prospects, and dispatches calibrated outreach through our pre-warmed shared mailbox pool.
             </p>
           </div>
 
           {/* Form */}
-          <form onSubmit={handleLaunchAnalysis} className="space-y-3 font-mono">
-            <div className="relative rounded-none border border-zinc-800 bg-zinc-950 p-2 transition-colors focus-within:border-white">
+          <form onSubmit={handleLaunchAnalysis} className="space-y-3">
+            <div className="relative rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-2 transition-all focus-within:border-zinc-500 card-shine shadow-lg">
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 px-1">
-                <div className="flex items-center gap-2 flex-1 min-w-0 bg-black sm:bg-transparent px-3 py-1 sm:p-0">
+                <div className="flex items-center gap-2.5 flex-1 min-w-0 bg-black/40 sm:bg-transparent px-3 py-1.5 sm:p-0 rounded-lg">
                   <Globe className="size-4 text-zinc-500 shrink-0" />
                   <input
                     type="text"
@@ -287,13 +292,13 @@ export function ChadGtmWizard({
                     value={url}
                     disabled={isAnalyzing}
                     onChange={(e) => setUrl(e.target.value)}
-                    className="w-full bg-transparent py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none font-mono"
+                    className="w-full bg-transparent py-2 text-xs sm:text-sm text-white placeholder:text-zinc-600 focus:outline-none"
                   />
                 </div>
                 <Button
                   type="submit"
                   disabled={isAnalyzing || !url.trim()}
-                  className="h-10 px-5 rounded-none text-xs font-mono uppercase tracking-wider font-semibold bg-white hover:bg-zinc-200 text-black border border-white shrink-0 w-full sm:w-auto"
+                  className="h-10 px-5 rounded-lg text-xs font-semibold tracking-tight bg-white hover:bg-zinc-200 text-black shadow-xs shrink-0 w-full sm:w-auto transition-all active:scale-[0.98]"
                 >
                   {isAnalyzing ? (
                     <>
@@ -309,11 +314,11 @@ export function ChadGtmWizard({
             </div>
 
             {/* Optional Context Drawer */}
-            <div className="rounded-none border border-zinc-800 bg-zinc-950 overflow-hidden font-mono">
+            <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/80 overflow-hidden shadow-xs">
               <button
                 type="button"
                 onClick={() => setShowNotesDrawer(!showNotesDrawer)}
-                className="w-full flex items-center justify-between p-3 text-xs uppercase tracking-wider text-zinc-400 hover:text-white transition-colors"
+                className="w-full flex items-center justify-between p-3.5 text-xs font-medium text-zinc-400 hover:text-white transition-colors"
               >
                 <span>Additional Context / Specific Angle (Optional)</span>
                 {showNotesDrawer ? (
@@ -324,13 +329,13 @@ export function ChadGtmWizard({
               </button>
 
               {showNotesDrawer && (
-                <div className="p-3 pt-0 border-t border-zinc-800">
+                <div className="p-3.5 pt-0 border-t border-zinc-800/60">
                   <textarea
                     rows={3}
                     placeholder="e.g. We are offering a free 14-day benchmark trial for Series B SaaS engineering teams..."
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    className="w-full rounded-none border border-zinc-800 bg-black p-2.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-white leading-relaxed font-mono"
+                    className="w-full rounded-lg border border-zinc-800 bg-black/60 p-3 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-white leading-relaxed"
                   />
                 </div>
               )}
@@ -339,25 +344,25 @@ export function ChadGtmWizard({
 
           {/* Interactive Scanning HUD */}
           {isAnalyzing && (
-            <div className="rounded-none border border-zinc-700 bg-zinc-950 p-5 space-y-3 font-mono">
+            <div className="rounded-xl border border-zinc-700/80 bg-zinc-950/90 p-5 space-y-3.5 card-shine shadow-xl">
               <div className="flex items-center gap-3">
-                <div className="size-8 rounded-none border border-white bg-black flex items-center justify-center text-white">
-                  <Loader2 className="size-4 animate-spin" />
+                <div className="size-9 rounded-xl border border-zinc-700 bg-zinc-900 flex items-center justify-center text-white shadow-xs">
+                  <Loader2 className="size-4 animate-spin text-emerald-400" />
                 </div>
                 <div>
-                  <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+                  <h4 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
                     Research Pipeline Active
                   </h4>
-                  <p className="text-xs font-bold text-white uppercase tracking-wider mt-0.5">
+                  <p className="text-xs sm:text-sm font-semibold text-white tracking-tight mt-0.5">
                     {TICKER_MESSAGES[tickerIndex]}
                   </p>
                 </div>
               </div>
 
               <div className="space-y-1">
-                <div className="h-1 w-full bg-zinc-900 border border-zinc-800">
+                <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
                   <div
-                    className="h-full bg-white transition-all duration-300"
+                    className="h-full bg-emerald-500 rounded-full transition-all duration-300"
                     style={{
                       width: `${((tickerIndex + 1) / TICKER_MESSAGES.length) * 100}%`,
                     }}
@@ -368,26 +373,32 @@ export function ChadGtmWizard({
           )}
 
           {/* Feature Highlights Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs font-mono">
-            <div className="flex items-start gap-2.5 p-3 rounded-none border border-zinc-800 bg-zinc-950">
-              <Cpu className="size-4 text-white shrink-0 mt-0.5" />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs">
+            <div className="flex items-start gap-3 p-3.5 rounded-xl border border-zinc-800/80 bg-zinc-950/80 card-shine shadow-xs">
+              <div className="size-7 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white shrink-0 mt-0.5">
+                <Cpu className="size-3.5 text-zinc-300" />
+              </div>
               <div>
-                <span className="font-bold text-white block uppercase tracking-wider text-[11px]">Zero SMTP Setup</span>
-                <span className="text-zinc-500 font-sans text-xs">Pre-warmed pool dispatch.</span>
+                <span className="font-semibold text-white block text-xs tracking-tight">Zero SMTP Setup</span>
+                <span className="text-zinc-400 text-xs">Pre-warmed pool dispatch.</span>
               </div>
             </div>
-            <div className="flex items-start gap-2.5 p-3 rounded-none border border-zinc-800 bg-zinc-950">
-              <Search className="size-4 text-white shrink-0 mt-0.5" />
+            <div className="flex items-start gap-3 p-3.5 rounded-xl border border-zinc-800/80 bg-zinc-950/80 card-shine shadow-xs">
+              <div className="size-7 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white shrink-0 mt-0.5">
+                <Search className="size-3.5 text-zinc-300" />
+              </div>
               <div>
-                <span className="font-bold text-white block uppercase tracking-wider text-[11px]">100M+ Global Leads</span>
-                <span className="text-zinc-500 font-sans text-xs">Instant B2B matching.</span>
+                <span className="font-semibold text-white block text-xs tracking-tight">100M+ Global Leads</span>
+                <span className="text-zinc-400 text-xs">Instant B2B matching.</span>
               </div>
             </div>
-            <div className="flex items-start gap-2.5 p-3 rounded-none border border-zinc-800 bg-zinc-950">
-              <ShieldCheck className="size-4 text-white shrink-0 mt-0.5" />
+            <div className="flex items-start gap-3 p-3.5 rounded-xl border border-zinc-800/80 bg-zinc-950/80 card-shine shadow-xs">
+              <div className="size-7 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white shrink-0 mt-0.5">
+                <ShieldCheck className="size-3.5 text-zinc-300" />
+              </div>
               <div>
-                <span className="font-bold text-white block uppercase tracking-wider text-[11px]">Voice Calibration</span>
-                <span className="text-zinc-500 font-sans text-xs">Tinder-style approval deck.</span>
+                <span className="font-semibold text-white block text-xs tracking-tight">Voice Calibration</span>
+                <span className="text-zinc-400 text-xs">Approval deck calibration.</span>
               </div>
             </div>
           </div>

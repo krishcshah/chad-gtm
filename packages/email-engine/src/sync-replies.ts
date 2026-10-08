@@ -506,6 +506,66 @@ export async function syncSenderReplies(db: EngineDb, sender: SenderRow): Promis
   }
 }
 
+export type InboundSentimentTag = "out_of_office" | "not_interested" | "interested" | null;
+
+export function classifyReplyTag(subject: string, bodyText: string): InboundSentimentTag {
+  const combined = `${subject || ""}\n${bodyText || ""}`.toLowerCase();
+
+  // 1. Out-of-office / auto-responder detection
+  if (
+    /out of (?:the )?office/i.test(combined) ||
+    /\bauto(?:-)?reply\b/i.test(combined) ||
+    /\bautomatic reply\b/i.test(combined) ||
+    /\baway from (?:my |the )?desk\b/i.test(combined) ||
+    /\bon vacation\b/i.test(combined) ||
+    /\bon leave\b/i.test(combined) ||
+    /\bwill return (?:on|by)\b/i.test(combined) ||
+    /\bback in (?:the )?office\b/i.test(combined) ||
+    /\blimited access to (?:my )?email\b/i.test(combined)
+  ) {
+    return "out_of_office";
+  }
+
+  // 2. Negative sentiment / unsubscribe / opt-out
+  if (
+    /\bunsubscribe\b/i.test(combined) ||
+    /\bremove me\b/i.test(combined) ||
+    /\bdo not contact\b/i.test(combined) ||
+    /\bdon't contact\b/i.test(combined) ||
+    /\bstop emailing\b/i.test(combined) ||
+    /\bstop contacting\b/i.test(combined) ||
+    /\bnot interested\b/i.test(combined) ||
+    /\btake me off\b/i.test(combined) ||
+    /\bno thanks\b/i.test(combined) ||
+    /\bno thank you\b/i.test(combined) ||
+    /\bplease remove\b/i.test(combined) ||
+    /\bspam\b/i.test(combined) ||
+    /\blose my (?:number|email)\b/i.test(combined) ||
+    /\bcease and desist\b/i.test(combined)
+  ) {
+    return "not_interested";
+  }
+
+  // 3. Positive sentiment / interested / meeting
+  if (
+    /\binterested\b/i.test(combined) ||
+    /\blet's talk\b/i.test(combined) ||
+    /\blet's chat\b/i.test(combined) ||
+    /\bschedule a call\b/i.test(combined) ||
+    /\bbook a call\b/i.test(combined) ||
+    /\bsounds good\b/i.test(combined) ||
+    /\bsend more info\b/i.test(combined) ||
+    /\bdemo\b/i.test(combined) ||
+    /\bpricing\b/i.test(combined) ||
+    /\bavailable (?:at|on|tomorrow|next week|monday|tuesday|wednesday|thursday|friday)\b/i.test(combined) ||
+    /\bcalendly\.com\b/i.test(combined)
+  ) {
+    return "interested";
+  }
+
+  return null;
+}
+
 async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any): Promise<boolean> {
   const env = msg.envelope ?? {};
   const fromRaw: string = env.from?.[0]?.address ?? "";
@@ -564,10 +624,12 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any): Prom
   const { bodyText, bodyHtml, snippet } = prepareReplyBodies(text, html);
   const receivedAt = (env.date ? new Date(env.date) : new Date()).toISOString();
   const nowS = new Date().toISOString();
+  const replyId = crypto.randomUUID();
+  const classifiedTag = classifyReplyTag(env.subject ?? "", bodyText);
 
   try {
     await db.insert(schema.replies).values({
-      id: crypto.randomUUID(),
+      id: replyId,
       userId: sender.userId,
       senderId: sender.id,
       leadId: lead.id,
@@ -580,9 +642,65 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any): Prom
       bodyHtml,
       messageId,
       receivedAt,
+      tag: classifiedTag,
     });
   } catch {
     return false; // unique constraint — already recorded concurrently
+  }
+
+  // Dual-write to unibox_messages for inbound record
+  try {
+    await db.insert(schema.uniboxMessages).values({
+      id: crypto.randomUUID(),
+      userId: sender.userId,
+      workspaceId: (sender as any).workspaceId || (lead as any)?.workspaceId || null,
+      replyId,
+      leadId: lead.id,
+      campaignId,
+      senderId: sender.id,
+      direction: "inbound",
+      fromRole: "lead",
+      fromName: from.name || env.from?.[0]?.name || "",
+      fromEmail,
+      subject: env.subject ?? "",
+      bodyText,
+      bodyHtml,
+      sentAt: receivedAt,
+    });
+  } catch {
+    // non-fatal
+  }
+
+  // If Out-Of-Office: do NOT stop the sequence or cancel pending jobs
+  if (classifiedTag === "out_of_office") {
+    await db.insert(schema.activityLogs).values({
+      id: crypto.randomUUID(),
+      userId: sender.userId,
+      type: "out_of_office_received",
+      message: `${fromEmail} sent out-of-office auto-reply (sequence kept active)`,
+      campaignId,
+    });
+    return true;
+  }
+
+  // If Negative / Unsubscribe / Opt-out: add to suppressions table
+  if (classifiedTag === "not_interested") {
+    try {
+      await db
+        .insert(schema.suppressions)
+        .values({
+          id: crypto.randomUUID(),
+          userId: sender.userId,
+          workspaceId: (sender as any).workspaceId || (lead as any)?.workspaceId || null,
+          value: fromEmail,
+          kind: "email",
+          reason: "Negative reply / opt-out",
+          source: "complaint",
+        })
+        .onConflictDoNothing();
+    } catch {
+      // non-fatal
+    }
   }
 
   // Stop future sends & mark statuses

@@ -112,31 +112,31 @@ export function AdminDataRemovalView({ initialRequests }: { initialRequests: Dat
     switch (status) {
       case "pending":
         return (
-          <span className="inline-flex items-center gap-1 rounded-none bg-amber-950/20 border border-amber-500/30 px-2 py-0.5 text-[10px] font-mono font-semibold text-amber-400">
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-950/40 border border-amber-500/30 px-2 py-0.5 text-[10px] font-medium text-amber-400">
             <Clock className="size-2.5" /> Pending Review
           </span>
         );
       case "in_progress":
         return (
-          <span className="inline-flex items-center gap-1 rounded-none bg-zinc-900 border border-zinc-700 px-2 py-0.5 text-[10px] font-mono font-semibold text-zinc-200">
+          <span className="inline-flex items-center gap-1 rounded-full bg-zinc-900 border border-zinc-700 px-2 py-0.5 text-[10px] font-medium text-zinc-200">
             <AlertCircle className="size-2.5" /> In Progress
           </span>
         );
       case "completed":
         return (
-          <span className="inline-flex items-center gap-1 rounded-none bg-emerald-950/20 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-mono font-semibold text-emerald-400">
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-950/40 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
             <CheckCircle2 className="size-2.5" /> Purged / Completed
           </span>
         );
       case "rejected":
         return (
-          <span className="inline-flex items-center gap-1 rounded-none bg-rose-950/20 border border-rose-500/30 px-2 py-0.5 text-[10px] font-mono font-semibold text-rose-400">
+          <span className="inline-flex items-center gap-1 rounded-full bg-rose-950/40 border border-rose-500/30 px-2 py-0.5 text-[10px] font-medium text-rose-400">
             <XCircle className="size-2.5" /> Rejected
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 rounded-none bg-zinc-900 border border-zinc-800 px-2 py-0.5 text-[10px] font-mono font-semibold text-zinc-400">
+          <span className="inline-flex items-center gap-1 rounded-full bg-zinc-900 border border-zinc-800 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
             {status}
           </span>
         );
@@ -144,35 +144,35 @@ export function AdminDataRemovalView({ initialRequests }: { initialRequests: Dat
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans">
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 space-y-1">
-          <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400">
+        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-4 space-y-1 card-shine shadow-xs">
+          <span className="text-xs text-zinc-400 font-medium">
             Total Requests
           </span>
-          <div className="text-2xl font-mono font-bold text-white">{totalCount}</div>
+          <div className="text-2xl font-bold tracking-tight text-white">{totalCount}</div>
         </div>
 
-        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 space-y-1">
-          <span className="text-[11px] font-mono uppercase tracking-wider text-amber-400 flex items-center gap-1">
+        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-4 space-y-1 card-shine shadow-xs">
+          <span className="text-xs text-amber-400 font-medium flex items-center gap-1">
             <Clock className="size-3" /> Pending Review
           </span>
-          <div className="text-2xl font-mono font-bold text-amber-400">{pendingCount}</div>
+          <div className="text-2xl font-bold tracking-tight text-amber-400">{pendingCount}</div>
         </div>
 
-        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 space-y-1">
-          <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 flex items-center gap-1">
+        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-4 space-y-1 card-shine shadow-xs">
+          <span className="text-xs text-sky-400 font-medium flex items-center gap-1">
             <AlertCircle className="size-3" /> In Progress
           </span>
-          <div className="text-2xl font-mono font-bold text-white">{inProgressCount}</div>
+          <div className="text-2xl font-bold tracking-tight text-zinc-200">{inProgressCount}</div>
         </div>
 
-        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 space-y-1">
-          <span className="text-[11px] font-mono uppercase tracking-wider text-emerald-400 flex items-center gap-1">
+        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-4 space-y-1 card-shine shadow-xs">
+          <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">
             <CheckCircle2 className="size-3" /> Purged / Done
           </span>
-          <div className="text-2xl font-mono font-bold text-emerald-400">{completedCount}</div>
+          <div className="text-2xl font-bold tracking-tight text-emerald-400">{completedCount}</div>
         </div>
       </div>
 
@@ -186,17 +186,17 @@ export function AdminDataRemovalView({ initialRequests }: { initialRequests: Dat
               placeholder="Search by contact email or description..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-9 w-full rounded-none border border-zinc-800 bg-black pl-9 pr-3 text-xs font-mono text-white placeholder:text-zinc-500 focus:outline-none focus:border-white"
+              className="h-9 w-full rounded-lg border border-zinc-800/80 bg-zinc-900/50 pl-9 pr-3 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-700 transition-colors"
             />
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
             <Filter className="size-3.5 text-zinc-500" />
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-9 w-[170px] rounded-none border-zinc-800 bg-black px-2.5 text-xs font-mono text-zinc-300 focus:ring-0 focus:border-zinc-600">
+              <SelectTrigger className="h-9 w-[170px] rounded-lg border-zinc-800/80 bg-zinc-900/50 px-2.5 text-xs text-zinc-300 focus:ring-0 focus:border-zinc-700">
                 <SelectValue placeholder={`All Statuses (${totalCount})`} />
               </SelectTrigger>
-              <SelectContent align="end" className="rounded-none border-zinc-800 bg-zinc-950 font-mono text-xs">
+              <SelectContent align="end" className="rounded-lg border-zinc-800 bg-zinc-950 text-xs">
                 <SelectItem value="all">All Statuses ({totalCount})</SelectItem>
                 <SelectItem value="pending">Pending ({pendingCount})</SelectItem>
                 <SelectItem value="in_progress">In Progress ({inProgressCount})</SelectItem>
@@ -211,7 +211,7 @@ export function AdminDataRemovalView({ initialRequests }: { initialRequests: Dat
           type="button"
           onClick={downloadCSV}
           disabled={filteredRequests.length === 0}
-          className="inline-flex items-center justify-center gap-2 rounded-none border border-zinc-800 bg-zinc-900 px-3.5 py-2 text-xs font-mono uppercase tracking-wider text-zinc-200 hover:bg-zinc-800 hover:text-white transition-all disabled:opacity-40 disabled:pointer-events-none"
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3.5 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-800 hover:text-white transition-all disabled:opacity-40 disabled:pointer-events-none"
         >
           <Download className="size-3.5" />
           Export CSV ({filteredRequests.length})
@@ -219,18 +219,18 @@ export function AdminDataRemovalView({ initialRequests }: { initialRequests: Dat
       </div>
 
       {/* Table */}
-      <div className="rounded-none border border-zinc-800 bg-black overflow-hidden">
+      <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/20 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono">
-            <thead className="border-b border-zinc-800 bg-zinc-950 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+          <table className="w-full text-left text-xs font-sans">
+            <thead className="border-b border-zinc-800/80 bg-zinc-900/60 text-xs font-medium text-zinc-400">
               <tr>
-                <th className="px-4 py-3">Contact Email</th>
-                <th className="px-4 py-3">Description (Requested Erasure)</th>
-                <th className="px-4 py-3">Status & Action</th>
-                <th className="px-4 py-3 text-right">Submitted</th>
+                <th className="px-4 py-3 font-medium">Contact Email</th>
+                <th className="px-4 py-3 font-medium">Description (Requested Erasure)</th>
+                <th className="px-4 py-3 font-medium">Status & Action</th>
+                <th className="px-4 py-3 text-right font-medium">Submitted</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-800/60">
+            <tbody className="divide-y divide-zinc-800/50">
               {filteredRequests.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-4 py-12 text-center text-zinc-500">
@@ -254,12 +254,12 @@ export function AdminDataRemovalView({ initialRequests }: { initialRequests: Dat
                         <div className="space-y-1">
                           <a
                             href={`mailto:${req.contactEmail}`}
-                            className="font-semibold text-white hover:text-zinc-300 transition-colors flex items-center gap-1.5"
+                            className="font-medium text-white hover:text-zinc-300 transition-colors flex items-center gap-1.5"
                           >
                             <Mail className="size-3 text-zinc-500" />
                             <span>{req.contactEmail}</span>
                           </a>
-                          <span className="text-[10px] text-zinc-500 font-mono">
+                          <span className="text-[11px] text-zinc-500">
                             {req.userId ? "Registered User" : "Public Web Request"}
                           </span>
                         </div>
@@ -267,10 +267,10 @@ export function AdminDataRemovalView({ initialRequests }: { initialRequests: Dat
 
                       {/* Description */}
                       <td className="px-4 py-3.5 align-top max-w-md">
-                        <p className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed font-sans">
+                        <p className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed">
                           {req.description}
                         </p>
-                        <span className="text-[10px] font-mono text-zinc-600 block mt-1">
+                        <span className="text-[10px] text-zinc-500 block mt-1 font-mono">
                           ID: {req.id}
                         </span>
                       </td>
@@ -290,10 +290,10 @@ export function AdminDataRemovalView({ initialRequests }: { initialRequests: Dat
                                 )
                               }
                             >
-                              <SelectTrigger className="h-7 w-[140px] rounded-none border-zinc-800 bg-zinc-900 px-2 text-[11px] font-mono text-zinc-300 focus:ring-0">
+                              <SelectTrigger className="h-7 w-[140px] rounded-lg border-zinc-800 bg-zinc-900/80 px-2 text-[11px] text-zinc-300 focus:ring-0">
                                 <SelectValue />
                               </SelectTrigger>
-                              <SelectContent align="start" className="rounded-none border-zinc-800 bg-zinc-950 font-mono text-xs">
+                              <SelectContent align="start" className="rounded-lg border-zinc-800 bg-zinc-950 text-xs">
                                 <SelectItem value="pending">Mark Pending</SelectItem>
                                 <SelectItem value="in_progress">Mark In Progress</SelectItem>
                                 <SelectItem value="completed">Mark Purged/Done</SelectItem>
@@ -308,7 +308,7 @@ export function AdminDataRemovalView({ initialRequests }: { initialRequests: Dat
                       </td>
 
                       {/* Submitted Date */}
-                      <td className="px-4 py-3.5 align-top text-right text-zinc-400 whitespace-nowrap font-mono text-xs">
+                      <td className="px-4 py-3.5 align-top text-right text-zinc-400 whitespace-nowrap text-xs">
                         <div className="space-y-0.5">
                           <span className="text-xs font-medium text-white">
                             {new Date(req.createdAt).toLocaleDateString("en-US", {

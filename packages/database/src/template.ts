@@ -17,9 +17,15 @@ const VAR_RE = /\{\{\s*([a-zA-Z0-9_.]+)\s*(?:\|\s*(?:"([^"]*)"|'([^']*)'|([^}]*?
 export function renderTemplate(template: string, vars: RenderVars): string {
   if (!template) return "";
   const lower: Record<string, string> = {};
-  for (const [k, v] of Object.entries(vars)) lower[k.toLowerCase()] = (v ?? "").trim();
+  for (const [k, v] of Object.entries(vars)) {
+    const val = (v ?? "").trim();
+    const lk = k.toLowerCase();
+    lower[lk] = val;
+    lower[lk.replace(/[_-]/g, "")] = val;
+  }
   return template.replace(VAR_RE, (_, key: string, dq, sq, bare) => {
-    const value = lower[key.toLowerCase()];
+    const kLower = key.toLowerCase();
+    const value = lower[kLower] ?? lower[kLower.replace(/[_-]/g, "")];
     if (value) return escapeForPlainText(value);
     const fallback = (dq ?? sq ?? bare ?? "").trim();
     return fallback;

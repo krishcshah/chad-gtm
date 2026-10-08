@@ -1698,16 +1698,25 @@ export async function processUnsubscribe(token: string): Promise<ActionResult<{ 
   if (!verified.ok) return { ok: false, error: verified.error };
   const db = getDb();
   try {
+    const matchingLeads = await db
+      .select({ id: schema.leads.id, workspaceId: schema.leads.workspaceId })
+      .from(schema.leads)
+      .where(and(eq(schema.leads.userId, verified.userId), eq(schema.leads.email, verified.email)));
+
+    const workspaceId = matchingLeads[0]?.workspaceId ?? null;
+
     await db
       .insert(schema.suppressions)
       .values({
         userId: verified.userId,
+        workspaceId,
         value: verified.email,
         kind: "email",
         reason: "One-click unsubscribe",
         source: "unsubscribe",
       })
       .onConflictDoNothing();
+
     await db
       .update(schema.leads)
       .set({ status: "unsubscribed", updatedAt: nowIso() })
@@ -1718,6 +1727,32 @@ export async function processUnsubscribe(token: string): Promise<ActionResult<{ 
           isNull(schema.leads.deletedAt),
         ),
       );
+
+    // Cancel all pending/processing/retry email jobs for this recipient
+    await db
+      .update(schema.emailJobs)
+      .set({ status: "cancelled", lastError: "unsubscribed", updatedAt: nowIso() })
+      .where(
+        and(
+          eq(schema.emailJobs.toEmail, verified.email),
+          inArray(schema.emailJobs.status, ["pending", "retry", "processing"]),
+        ),
+      );
+
+    // Cancel campaign_leads entries for leads with this email
+    if (matchingLeads.length > 0) {
+      const leadIds = matchingLeads.map((l) => l.id);
+      await db
+        .update(schema.campaignLeads)
+        .set({ status: "cancelled", lastError: "unsubscribed", updatedAt: nowIso() })
+        .where(
+          and(
+            inArray(schema.campaignLeads.leadId, leadIds),
+            inArray(schema.campaignLeads.status, ["queued", "scheduled"]),
+          ),
+        );
+    }
+
     await logActivity(
       verified.userId,
       "suppression.unsubscribe",

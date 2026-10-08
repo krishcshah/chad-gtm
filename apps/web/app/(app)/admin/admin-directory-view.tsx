@@ -117,61 +117,73 @@ export function AdminDirectoryView({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans">
       {/* Live Directory Telemetry */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Directory Leads */}
-        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 space-y-1">
-          <span className="text-[10px] font-mono uppercase font-bold tracking-wider text-zinc-400 flex items-center gap-1.5">
-            <Database className="size-3.5 text-zinc-400" /> Apollo B2B Directory
-          </span>
-          <div className="text-2xl font-mono font-bold text-white">
+        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-2 card-shine shadow-xs">
+          <div className="flex items-center justify-between text-zinc-400 text-xs">
+            <span className="font-medium text-xs text-zinc-400">Apollo B2B Directory</span>
+            <div className="p-2 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-300">
+              <Database className="size-3.5" />
+            </div>
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
             {stats.totalLeads.toLocaleString()}
           </div>
-          <p className="text-[11px] font-mono text-zinc-500">Indexed B2B prospect records</p>
+          <p className="text-xs text-zinc-500">Indexed B2B prospect records</p>
         </div>
 
         {/* Distinct Industries */}
-        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 space-y-1">
-          <span className="text-[10px] font-mono uppercase font-bold tracking-wider text-zinc-400 flex items-center gap-1.5">
-            <Building className="size-3.5 text-zinc-400" /> Distinct Industries
-          </span>
-          <div className="text-2xl font-mono font-bold text-white">
+        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-2 card-shine shadow-xs">
+          <div className="flex items-center justify-between text-zinc-400 text-xs">
+            <span className="font-medium text-xs text-zinc-400">Distinct Industries</span>
+            <div className="p-2 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-300">
+              <Building className="size-3.5" />
+            </div>
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
             {stats.distinctIndustries.toLocaleString()}
           </div>
-          <p className="text-[11px] font-mono text-zinc-500">Available for ChadGTM ICP matching</p>
+          <p className="text-xs text-zinc-500">Available for ChadGTM ICP matching</p>
         </div>
 
         {/* Verified Email Pct */}
-        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 space-y-1">
-          <span className="text-[10px] font-mono uppercase font-bold tracking-wider text-zinc-400 flex items-center gap-1.5">
-            <Mail className="size-3.5 text-zinc-400" /> Verified Deliverability
-          </span>
-          <div className="text-2xl font-mono font-bold text-white">
+        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-2 card-shine shadow-xs">
+          <div className="flex items-center justify-between text-zinc-400 text-xs">
+            <span className="font-medium text-xs text-zinc-400">Verified Deliverability</span>
+            <div className="p-2 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-300">
+              <Mail className="size-3.5" />
+            </div>
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
             {stats.verifiedEmailPct}%
           </div>
-          <p className="text-[11px] font-mono text-zinc-500">
+          <p className="text-xs text-zinc-500">
             {stats.verifiedEmailCount.toLocaleString()} direct corporate emails
           </p>
         </div>
 
         {/* Storage Size */}
-        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-4 space-y-1">
-          <span className="text-[10px] font-mono uppercase font-bold tracking-wider text-zinc-400 flex items-center gap-1.5">
-            <HardDrive className="size-3.5 text-zinc-400" /> Database File Size
-          </span>
-          <div className="text-2xl font-mono font-bold text-white">
+        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-2 card-shine shadow-xs">
+          <div className="flex items-center justify-between text-zinc-400 text-xs">
+            <span className="font-medium text-xs text-zinc-400">Database Storage</span>
+            <div className="p-2 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-300">
+              <HardDrive className="size-3.5" />
+            </div>
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
             {formatFileSize(stats.fileSizeBytes)}
           </div>
-          <p className="text-[11px] font-mono text-zinc-500">SQLite WAL high-speed store</p>
+          <p className="text-xs text-zinc-500">SQLite WAL high-speed store</p>
         </div>
       </div>
 
       {/* Drag & Drop Bulk CSV Upload Zone */}
-      <div className="rounded-none border border-zinc-800 bg-zinc-950 p-6 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+      <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-6 space-y-5 card-shine shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
           <div>
-            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-white flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
               <Upload className="size-4 text-zinc-400" /> Bulk Prospect Ingestion (10k–100k+ Records)
             </h3>
             <p className="text-xs text-zinc-400 mt-0.5">
@@ -184,7 +196,7 @@ export function AdminDirectoryView({
             variant="outline"
             size="sm"
             onClick={handleDownloadTemplate}
-            className="text-xs font-mono uppercase tracking-wider rounded-none border-zinc-800 bg-black text-zinc-300 hover:text-white hover:bg-zinc-900"
+            className="text-xs rounded-lg border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:text-white hover:bg-zinc-800"
           >
             <Download className="size-3.5 mr-1.5" /> Download Standard Template
           </Button>
@@ -198,10 +210,10 @@ export function AdminDirectoryView({
           }}
           onDragLeave={() => setDragOver(false)}
           onDrop={onDrop}
-          className={`rounded-none border-2 border-dashed p-8 text-center transition-all ${
+          className={`rounded-xl border-2 border-dashed p-8 text-center transition-all ${
             dragOver
-              ? "border-white bg-zinc-900"
-              : "border-zinc-800 hover:border-zinc-700 bg-black"
+              ? "border-zinc-500 bg-zinc-900/60"
+              : "border-zinc-800 hover:border-zinc-700 bg-zinc-900/20"
           }`}
         >
           <input
@@ -215,7 +227,7 @@ export function AdminDirectoryView({
             className="hidden"
           />
 
-          <div className="mx-auto flex size-12 items-center justify-center rounded-none border border-zinc-800 bg-zinc-900 text-zinc-300 mb-3">
+          <div className="mx-auto flex size-12 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/80 text-zinc-300 mb-3 shadow-xs">
             {isUploading ? (
               <Loader2 className="size-6 animate-spin text-white" />
             ) : (
@@ -223,10 +235,10 @@ export function AdminDirectoryView({
             )}
           </div>
 
-          <h4 className="text-sm font-mono font-bold text-white uppercase tracking-wider">
+          <h4 className="text-sm font-semibold text-white">
             {isUploading ? "Ingesting records into SQLite..." : "Drag & drop leads CSV here, or browse"}
           </h4>
-          <p className="text-xs text-zinc-400 font-mono max-w-sm mx-auto mt-1 mb-4">
+          <p className="text-xs text-zinc-400 max-w-sm mx-auto mt-1 mb-4">
             Fast batch insertion with zero UI lockup. Automatically cleans headers and refreshes facet cache.
           </p>
 
@@ -234,7 +246,7 @@ export function AdminDirectoryView({
             type="button"
             disabled={isUploading}
             onClick={() => fileInputRef.current?.click()}
-            className="text-xs font-mono uppercase tracking-wider font-bold rounded-none bg-white text-black hover:bg-zinc-200"
+            className="text-xs font-medium rounded-lg bg-white text-black hover:bg-zinc-200 shadow-xs"
           >
             {isUploading ? (
               <>
@@ -251,53 +263,53 @@ export function AdminDirectoryView({
 
       {/* Ingestion Summary Modal / Box */}
       {ingestionSummary && (
-        <div className="rounded-none border border-emerald-500/30 bg-emerald-950/20 p-5 space-y-3 font-mono">
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-5 space-y-4 shadow-xs">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-wider">
+            <div className="flex items-center gap-2 text-emerald-400 font-semibold text-xs">
               <CheckCircle2 className="size-4" /> Ingestion Completed Successfully
             </div>
             <button
               type="button"
               onClick={() => setIngestionSummary(null)}
-              className="text-zinc-500 hover:text-white"
+              className="text-zinc-500 hover:text-white transition-colors"
             >
               <X className="size-4" />
             </button>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-            <div className="rounded-none bg-black p-3 border border-zinc-800">
-              <span className="text-[10px] text-zinc-500 uppercase font-bold block">
+            <div className="rounded-lg bg-zinc-950/80 p-3.5 border border-zinc-800/80">
+              <span className="text-[10px] text-zinc-400 font-medium block">
                 Total Parsed
               </span>
-              <span className="text-base font-bold text-white">
+              <span className="text-lg font-bold tracking-tight text-white">
                 {ingestionSummary.totalParsed.toLocaleString()}
               </span>
             </div>
 
-            <div className="rounded-none bg-black p-3 border border-zinc-800">
-              <span className="text-[10px] text-emerald-400 uppercase font-bold block">
+            <div className="rounded-lg bg-zinc-950/80 p-3.5 border border-zinc-800/80">
+              <span className="text-[10px] text-emerald-400 font-medium block">
                 Inserted
               </span>
-              <span className="text-base font-bold text-emerald-400">
+              <span className="text-lg font-bold tracking-tight text-emerald-400">
                 {ingestionSummary.inserted.toLocaleString()}
               </span>
             </div>
 
-            <div className="rounded-none bg-black p-3 border border-zinc-800">
-              <span className="text-[10px] text-amber-400 uppercase font-bold block">
+            <div className="rounded-lg bg-zinc-950/80 p-3.5 border border-zinc-800/80">
+              <span className="text-[10px] text-amber-400 font-medium block">
                 Duplicates Skipped
               </span>
-              <span className="text-base font-bold text-amber-400">
+              <span className="text-lg font-bold tracking-tight text-amber-400">
                 {ingestionSummary.duplicatesSkipped.toLocaleString()}
               </span>
             </div>
 
-            <div className="rounded-none bg-black p-3 border border-zinc-800">
-              <span className="text-[10px] text-rose-400 uppercase font-bold block">
+            <div className="rounded-lg bg-zinc-950/80 p-3.5 border border-zinc-800/80">
+              <span className="text-[10px] text-rose-400 font-medium block">
                 Invalid (No Email)
               </span>
-              <span className="text-base font-bold text-rose-400">
+              <span className="text-lg font-bold tracking-tight text-rose-400">
                 {ingestionSummary.invalidRows.toLocaleString()}
               </span>
             </div>
