@@ -1,33 +1,59 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" fill="#07090e" rx="112" />
-  <rect x="24" y="24" width="464" height="464" rx="92" fill="none" stroke="#27272a" stroke-width="6" />
-  
-  <!-- Outer Compass Ring -->
-  <circle cx="256" cy="256" r="180" fill="#09090b" stroke="#3f3f46" stroke-width="8" />
-  <circle cx="256" cy="256" r="140" fill="none" stroke="#27272a" stroke-width="4" stroke-dasharray="8 12" />
-  
-  <!-- Cardinal Tick Markers -->
-  <line x1="256" y1="84" x2="256" y2="124" stroke="#ffffff" stroke-width="10" stroke-linecap="round" />
-  <line x1="256" y1="388" x2="256" y2="428" stroke="#52525b" stroke-width="8" stroke-linecap="round" />
-  <line x1="84" y1="256" x2="124" y2="256" stroke="#52525b" stroke-width="8" stroke-linecap="round" />
-  <line x1="388" y1="256" x2="428" y2="256" stroke="#52525b" stroke-width="8" stroke-linecap="round" />
-  
-  <!-- Sub-cardinal Ticks (NE, NW, SE, SW) -->
-  <line x1="148" y1="148" x2="174" y2="174" stroke="#3f3f46" stroke-width="6" stroke-linecap="round" />
-  <line x1="364" y1="148" x2="338" y2="174" stroke="#3f3f46" stroke-width="6" stroke-linecap="round" />
-  <line x1="148" y1="364" x2="174" y2="338" stroke="#3f3f46" stroke-width="6" stroke-linecap="round" />
-  <line x1="364" y1="364" x2="338" y2="338" stroke="#3f3f46" stroke-width="6" stroke-linecap="round" />
+  <defs>
+    <linearGradient id="icon-bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#1c1c20" />
+      <stop offset="50%" stopColor="#09090b" />
+      <stop offset="100%" stopColor="#050507" />
+    </linearGradient>
+    <linearGradient id="icon-border" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#a1a1aa" />
+      <stop offset="50%" stopColor="#52525b" />
+      <stop offset="100%" stopColor="#27272a" />
+    </linearGradient>
+    <linearGradient id="icon-needle-n-l" x1="256" y1="48" x2="174" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#ffffff" />
+      <stop offset="100%" stopColor="#f4f4f5" />
+    </linearGradient>
+    <linearGradient id="icon-needle-n-r" x1="256" y1="48" x2="338" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#e4e4e7" />
+      <stop offset="100%" stopColor="#a1a1aa" />
+    </linearGradient>
+    <linearGradient id="icon-needle-s-l" x1="256" y1="464" x2="174" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#71717a" />
+      <stop offset="100%" stopColor="#52525b" />
+    </linearGradient>
+    <linearGradient id="icon-needle-s-r" x1="256" y1="464" x2="338" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#3f3f46" />
+      <stop offset="100%" stopColor="#27272a" />
+    </linearGradient>
+  </defs>
 
-  <!-- Multi-faceted Precision Needle -->
-  <!-- North Needle Facets (Bright High-Contrast) -->
-  <polygon points="256,108 296,256 256,226" fill="#ffffff" />
-  <polygon points="256,108 216,256 256,226" fill="#a1a1aa" />
+  <!-- Housing (The box itself IS the logo) -->
+  <rect x="12" y="12" width="488" height="488" rx="116" fill="url(#icon-bg)" stroke="url(#icon-border)" stroke-width="16" />
 
-  <!-- South Needle Facets (Subtle Dark Zinc) -->
-  <polygon points="256,404 296,256 256,286" fill="#52525b" />
-  <polygon points="256,404 216,256 256,286" fill="#27272a" />
+  <!-- Outer Dial -->
+  <circle cx="256" cy="256" r="198" fill="none" stroke="#ffffff" stroke-opacity="0.25" stroke-width="12" />
+  <circle cx="256" cy="256" r="156" fill="none" stroke="#71717a" stroke-opacity="0.35" stroke-width="8" stroke-dasharray="20 20" />
 
-  <!-- Center Jewel / Hub -->
-  <circle cx="256" cy="256" r="32" fill="#09090b" stroke="#ffffff" stroke-width="8" />
-  <circle cx="256" cy="256" r="14" fill="#ffffff" />
+  <!-- Cardinal Indicators -->
+  <line x1="256" y1="52" x2="256" y2="98" stroke="#ffffff" stroke-width="26" stroke-linecap="round" />
+  <line x1="256" y1="414" x2="256" y2="460" stroke="#71717a" stroke-width="20" stroke-linecap="round" />
+  <line x1="52" y1="256" x2="98" y2="256" stroke="#71717a" stroke-width="20" stroke-linecap="round" />
+  <line x1="414" y1="256" x2="460" y2="256" stroke="#71717a" stroke-width="20" stroke-linecap="round" />
+
+  <!-- Corner Screws -->
+  <circle cx="70" cy="70" r="14" fill="#52525b" />
+  <circle cx="442" cy="70" r="14" fill="#52525b" />
+  <circle cx="70" cy="442" r="14" fill="#52525b" />
+  <circle cx="442" cy="442" r="14" fill="#52525b" />
+
+  <!-- Bold Compass Needle -->
+  <polygon points="256,52 256,256 174,256" fill="url(#icon-needle-n-l)" />
+  <polygon points="256,52 338,256 256,256" fill="url(#icon-needle-n-r)" />
+  <polygon points="256,460 256,256 174,256" fill="url(#icon-needle-s-l)" />
+  <polygon points="256,460 338,256 256,256" fill="url(#icon-needle-s-r)" />
+
+  <!-- Center Pivot Hub -->
+  <circle cx="256" cy="256" r="48" fill="#09090b" stroke="#ffffff" stroke-width="20" />
+  <circle cx="256" cy="256" r="20" fill="#ffffff" />
 </svg>
