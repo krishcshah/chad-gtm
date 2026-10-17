@@ -376,6 +376,7 @@ export async function scheduleCampaign(
       // advance rotation + randomized pace
       cursor = pick.index;
       daily.set(pick.sender.id, (daily.get(pick.sender.id) ?? 0) + 1);
+      hourly.set(pick.sender.id, (hourly.get(pick.sender.id) ?? 0) + 1);
       scheduleAt = addSeconds(
         scheduleAt,
         randomBetween(campaign.minDelaySec, campaign.maxDelaySec),

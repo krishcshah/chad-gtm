@@ -74,10 +74,14 @@ export function addSeconds(date: Date, seconds: number): Date {
   return new Date(date.getTime() + seconds * 1000);
 }
 
-/** Add N calendar days (UTC date arithmetic — F19 sequence waits). */
+/** Add N calendar days (UTC date arithmetic — F19 sequence waits; supports fractional days for rapid testing). */
 export function addCalendarDays(date: Date, days: number): Date {
   const d = new Date(date.getTime());
-  d.setUTCDate(d.getUTCDate() + days);
+  if (Number.isInteger(days)) {
+    d.setUTCDate(d.getUTCDate() + days);
+  } else {
+    d.setTime(d.getTime() + Math.round(days * 86400 * 1000));
+  }
   return d;
 }
 

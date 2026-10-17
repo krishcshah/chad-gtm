@@ -7,11 +7,14 @@
  * backoff, and recovers jobs stuck in "processing" after a crash.
  */
 import {
+  buildUnsubscribeApiUrl,
+  createUnsubscribeToken,
+  listUnsubscribeHeaders,
   matchesSuppression,
   schema,
 } from "@smartreach/database";
 import { addSeconds, nowIso, randomBetween } from "@smartreach/shared";
-import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import type { EngineDb, JobRow, SenderRow } from "./db-port";
 import { makeTransport } from "./mailer";
 import { noteHourlySend, recordSend } from "./rotation";
@@ -221,14 +224,45 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
     const from = sender.fromName ? `"${sender.fromName.replace(/"/g, "")}" <${sender.email}>` : sender.email;
     let info;
     try {
-      info = await transporter.sendMail({
+      const unsubToken = createUnsubscribeToken(campaign.userId, job.toEmail);
+      const unsubApiUrl = buildUnsubscribeApiUrl(trackingAppUrl, unsubToken);
+      const unsubHeaders = listUnsubscribeHeaders(unsubApiUrl);
+
+      let inReplyTo: string | undefined;
+      if (job.stepPosition && job.stepPosition > 1) {
+        const prior = await db
+          .select({ messageId: schema.emailJobs.messageId })
+          .from(schema.emailJobs)
+          .where(
+            and(
+              eq(schema.emailJobs.campaignLeadId, job.campaignLeadId),
+              eq(schema.emailJobs.status, "sent"),
+            )
+          )
+          .orderBy(desc(schema.emailJobs.sentAt))
+          .limit(1);
+        if (prior[0]?.messageId) {
+          inReplyTo = prior[0].messageId;
+        }
+      }
+
+      const mailOptions: any = {
         from,
         to: job.toEmail,
         replyTo: sender.replyTo || undefined,
         subject: job.subject,
         text: textBody || undefined,
         html: htmlBody || undefined,
-      });
+        headers: {
+          ...unsubHeaders,
+        },
+      };
+      if (inReplyTo) {
+        mailOptions.inReplyTo = inReplyTo;
+        mailOptions.references = inReplyTo;
+      }
+
+      info = await transporter.sendMail(mailOptions);
     } finally {
       transporter.close();
     }
