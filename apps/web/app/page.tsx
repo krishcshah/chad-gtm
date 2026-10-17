@@ -75,8 +75,8 @@ export default async function LandingPage() {
               {/* Left Column: Core Marketing Pitch (7 cols) */}
               <div className="lg:col-span-7 space-y-6">
                 {/* Visual Eyebrow Badge */}
-                <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800/80 bg-zinc-950/90 px-3 py-1 text-xs text-zinc-300 font-sans shadow-xs">
-                  <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+                <div className="inline-flex items-center gap-2 rounded-none border border-zinc-800 bg-zinc-950 px-3 py-1 text-xs text-zinc-300 font-mono shadow-none">
+                  <span className="size-2 rounded-none bg-emerald-400 animate-pulse" />
                   <span className="font-semibold text-white">AutoGTM 2.0</span>
                   <span className="text-zinc-600">·</span>
                   <span className="text-zinc-400">Autonomous Pipeline</span>
@@ -102,7 +102,7 @@ export default async function LandingPage() {
                   <Button
                     asChild
                     size="lg"
-                    className="rounded-lg h-11 px-7 bg-white hover:bg-zinc-200 text-black font-medium text-xs border border-white gap-2 w-full sm:w-auto shadow-lg"
+                    className="rounded-none h-11 px-7 bg-white hover:bg-zinc-200 text-black font-semibold text-xs border border-white gap-2 w-full sm:w-auto shadow-none active:translate-y-[1px]"
                   >
                     <Link href={isLoggedIn ? "/chad-gtm" : "/signup"}>
                       <Sparkles className="size-4" />
@@ -113,7 +113,7 @@ export default async function LandingPage() {
                     asChild
                     variant="outline"
                     size="lg"
-                    className="rounded-lg h-11 px-6 border-zinc-800 bg-zinc-950/80 text-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-700 text-xs font-medium w-full sm:w-auto"
+                    className="rounded-none h-11 px-6 border-zinc-800 bg-zinc-950 text-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-700 text-xs font-semibold w-full sm:w-auto shadow-none active:translate-y-[1px]"
                   >
                     <a href="#roi-calculator">
                       See ROI Calculator
@@ -136,22 +136,22 @@ export default async function LandingPage() {
 
                 {/* High-Impact Proof Metric Strip */}
                 <div className="pt-5 border-t border-zinc-800/80 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs font-sans">
-                  <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-3 card-shine shadow-xs">
+                  <div className="rounded-none border border-zinc-800 bg-zinc-950 p-3 card-shine">
                     <div className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider truncate">Platform</div>
                     <div className="text-white font-bold text-lg mt-0.5">$0/mo</div>
                     <div className="text-[11px] text-zinc-400 truncate">Zero Seat Tax</div>
                   </div>
-                  <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-3 card-shine shadow-xs">
+                  <div className="rounded-none border border-zinc-800 bg-zinc-950 p-3 card-shine">
                     <div className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider truncate">Directory</div>
                     <div className="text-white font-bold text-lg mt-0.5">100M+</div>
                     <div className="text-[11px] text-zinc-400 truncate">Verified B2B</div>
                   </div>
-                  <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-3 card-shine shadow-xs">
+                  <div className="rounded-none border border-zinc-800 bg-zinc-950 p-3 card-shine">
                     <div className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider truncate">Cadence</div>
                     <div className="text-white font-bold text-lg mt-0.5">3-Touch</div>
                     <div className="text-[11px] text-zinc-400 truncate">Auto Cadence</div>
                   </div>
-                  <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-3 card-shine shadow-xs">
+                  <div className="rounded-none border border-zinc-800 bg-zinc-950 p-3 card-shine">
                     <div className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider truncate">Delivery</div>
                     <div className="text-white font-bold text-lg mt-0.5">5¢</div>
                     <div className="text-[11px] text-zinc-400 truncate">Per Sent Email</div>
@@ -316,7 +316,7 @@ export default async function LandingPage() {
                   <p className="text-[11px] text-zinc-400 mt-1">
                     Send 1,000 emails = $50. Pause for summer = $0. Pure utility billing.
                   </p>
-                  <Button asChild size="lg" className="w-full mt-4 rounded-lg bg-white text-black font-medium text-xs border border-white hover:bg-zinc-200 shadow-xs">
+                  <Button asChild size="lg" className="w-full mt-4 rounded-none bg-white text-black font-semibold text-xs border border-white hover:bg-zinc-200 shadow-none active:translate-y-[1px]">
                     <Link href="/signup">
                       Deploy Your $0/Mo Pipeline <ArrowRight className="size-3.5 ml-1" />
                     </Link>
@@ -398,7 +398,7 @@ export default async function LandingPage() {
                   <div className="text-xs font-semibold text-white">The AutoGTM Core Team</div>
                   <div className="text-[11px] text-zinc-400">Built for founders who hate paying SaaS seat taxes</div>
                 </div>
-                <Button asChild size="sm" className="rounded-lg bg-white text-black font-medium text-xs border border-white hover:bg-zinc-200 shadow-xs">
+                <Button asChild size="sm" className="rounded-none bg-white text-black font-semibold text-xs border border-white hover:bg-zinc-200 shadow-none active:translate-y-[1px]">
                   <Link href="/signup">Start Free ($0/mo)</Link>
                 </Button>
               </div>
@@ -569,7 +569,7 @@ export default async function LandingPage() {
               <Button
                 asChild
                 size="lg"
-                className="rounded-lg h-12 px-8 bg-white hover:bg-zinc-200 text-black font-medium text-xs border border-white gap-2 w-full sm:w-auto shadow-2xl"
+                className="rounded-none h-12 px-8 bg-white hover:bg-zinc-200 text-black font-semibold text-xs border border-white gap-2 w-full sm:w-auto shadow-none active:translate-y-[1px]"
               >
                 <Link href={isLoggedIn ? "/chad-gtm" : "/signup"}>
                   Launch Free GTM Engine <ArrowRight className="size-4 ml-1" />

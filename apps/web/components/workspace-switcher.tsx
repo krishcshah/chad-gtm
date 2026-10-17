@@ -62,14 +62,14 @@ export function WorkspaceSwitcher({
           <button
             type="button"
             className={cn(
-              "group flex items-center justify-between rounded-xl border border-border/50 bg-card/50 hover:bg-accent/40 px-3 py-2 text-left transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring select-none",
+              "group flex items-center justify-between rounded-none border border-border/50 bg-card/50 hover:bg-accent/40 px-3 py-2 text-left transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring select-none",
               compact ? "w-10 h-10 justify-center p-0" : "w-full",
               className
             )}
             title={`Active Workspace: ${activeWorkspace.name}`}
           >
             <div className={cn("flex items-center min-w-0", compact ? "justify-center" : "gap-2.5")}>
-              <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:bg-primary/20 transition-colors">
+              <div className="flex size-7 shrink-0 items-center justify-center rounded-none bg-primary/10 text-primary group-hover:bg-primary/20 transition-colors">
                 <Briefcase className="size-3.5" />
               </div>
               {!compact && (
@@ -114,7 +114,7 @@ export function WorkspaceSwitcher({
                   key={w.id}
                   onClick={() => handleSwitch(w.id)}
                   className={cn(
-                    "flex items-center justify-between rounded-lg px-2.5 py-2 cursor-pointer transition-colors",
+                    "flex items-center justify-between rounded-none px-2.5 py-2 cursor-pointer transition-colors",
                     isActive
                       ? "bg-primary/10 text-primary font-medium"
                       : "hover:bg-accent/60 text-foreground"
@@ -123,7 +123,7 @@ export function WorkspaceSwitcher({
                   <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
                     <div
                       className={cn(
-                        "flex size-6 shrink-0 items-center justify-center rounded-md text-[11px] font-bold",
+                        "flex size-6 shrink-0 items-center justify-center rounded-none text-[11px] font-bold",
                         isActive
                           ? "bg-primary text-primary-foreground"
                           : "bg-muted text-muted-foreground"
@@ -157,7 +157,7 @@ export function WorkspaceSwitcher({
 
           <DropdownMenuItem
             onClick={() => setCreateOpen(true)}
-            className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-primary font-medium cursor-pointer hover:bg-primary/10 transition-colors"
+            className="flex items-center gap-2 rounded-none px-2.5 py-1.5 text-xs text-primary font-medium cursor-pointer hover:bg-primary/10 transition-colors"
           >
             <Plus className="size-3.5 text-primary" />
             <span>New Client Workspace</span>
@@ -165,7 +165,7 @@ export function WorkspaceSwitcher({
 
           <DropdownMenuItem
             onClick={() => router.push("/settings#workspaces")}
-            className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-muted-foreground cursor-pointer hover:bg-accent/60 transition-colors"
+            className="flex items-center gap-2 rounded-none px-2.5 py-1.5 text-xs text-muted-foreground cursor-pointer hover:bg-accent/60 transition-colors"
           >
             <Settings className="size-3.5" />
             <span>Manage All Workspaces</span>

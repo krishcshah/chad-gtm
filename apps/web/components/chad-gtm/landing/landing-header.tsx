@@ -17,7 +17,7 @@ export function LandingHeader({ isLoggedIn }: { isLoggedIn: boolean }) {
             <Button
               asChild
               size="sm"
-              className="rounded-lg bg-white text-black font-semibold hover:bg-zinc-200 border border-white text-xs gap-1.5 shadow-xs transition-all active:scale-[0.98] whitespace-nowrap"
+              className="rounded-none bg-white text-black font-semibold hover:bg-zinc-200 border border-white text-xs gap-1.5 shadow-none transition-all active:scale-[0.98] whitespace-nowrap"
             >
               <Link href="/chad-gtm">
                 Mission Control <ArrowRight className="size-3.5" />
@@ -27,14 +27,14 @@ export function LandingHeader({ isLoggedIn }: { isLoggedIn: boolean }) {
             <>
               <Link
                 href="/login"
-                className="rounded-lg px-2 sm:px-3 py-1.5 text-xs font-semibold text-zinc-400 transition-colors hover:text-white hover:bg-zinc-900/60 whitespace-nowrap"
+                className="rounded-none px-2 sm:px-3 py-1.5 text-xs font-semibold text-zinc-400 transition-colors hover:text-white hover:bg-zinc-900/60 whitespace-nowrap"
               >
                 Sign In
               </Link>
               <Button
                 asChild
                 size="sm"
-                className="rounded-lg bg-white text-black font-semibold hover:bg-zinc-200 border border-white text-xs gap-1.5 shadow-xs transition-all active:scale-[0.98] whitespace-nowrap px-3 sm:px-4"
+                className="rounded-none bg-white text-black font-semibold hover:bg-zinc-200 border border-white text-xs gap-1.5 shadow-none transition-all active:scale-[0.98] whitespace-nowrap px-3 sm:px-4"
               >
                 <Link href="/signup">
                   Launch Free <ArrowRight className="size-3.5" />

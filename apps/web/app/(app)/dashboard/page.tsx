@@ -125,7 +125,7 @@ export default async function DashboardPage() {
               <Button
                 asChild
                 size="lg"
-                className="rounded-md bg-white hover:bg-zinc-200 text-black font-semibold text-xs border border-white gap-2 w-full sm:w-auto h-10 px-5 shadow-sm"
+                className="rounded-none bg-white hover:bg-zinc-200 text-black font-semibold text-xs border border-white gap-2 w-full sm:w-auto h-10 px-5 shadow-sm"
               >
                 <Link href="/chad-gtm">
                   <Sparkles className="size-3.5" />
@@ -138,7 +138,7 @@ export default async function DashboardPage() {
 
         {/* 4 Core Modern KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-          <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/80 p-5 space-y-2 card-shine shadow-xs hover:border-zinc-700/80 transition-all">
+          <div className="rounded-none border border-zinc-800/80 bg-zinc-950/80 p-5 space-y-2 card-shine shadow-xs hover:border-zinc-700/80 transition-all">
             <div className="flex items-center justify-between text-xs text-zinc-400 font-medium">
               <span>Emails Dispatched</span>
               <div className="flex size-7 items-center justify-center rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200">
@@ -253,7 +253,7 @@ export default async function DashboardPage() {
         </div>
 
         {recentReplies.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/40 p-8 sm:p-10 text-center space-y-3 card-shine">
+          <div className="rounded-none border border-dashed border-zinc-800 bg-zinc-950/40 p-8 sm:p-10 text-center space-y-3 card-shine">
             <div className="mx-auto flex size-10 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-300 shadow-2xs">
               <MessageSquare className="size-5" />
             </div>
@@ -270,7 +270,7 @@ export default async function DashboardPage() {
               asChild
               size="sm"
               variant="outline"
-              className="rounded-md border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:bg-zinc-800 hover:text-white text-xs font-medium"
+              className="rounded-none border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:bg-zinc-800 hover:text-white text-xs font-medium"
             >
               <Link href="/campaigns">View Active Campaigns</Link>
             </Button>
@@ -284,7 +284,7 @@ export default async function DashboardPage() {
               return (
                 <div
                   key={reply.id}
-                  className="rounded-xl border border-zinc-800/80 bg-zinc-950/80 p-4.5 flex flex-col justify-between hover:border-zinc-700/80 transition-all card-shine shadow-xs"
+                  className="rounded-none border border-zinc-800/80 bg-zinc-950/80 p-4.5 flex flex-col justify-between hover:border-zinc-700/80 transition-all card-shine shadow-xs"
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
@@ -319,7 +319,7 @@ export default async function DashboardPage() {
                       asChild
                       size="sm"
                       variant="ghost"
-                      className="h-7 text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-900 gap-1 px-2.5 rounded-md"
+                      className="h-7 text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-900 gap-1 px-2.5 rounded-none"
                     >
                       <Link href={`/unibox`}>
                         View Thread <ArrowRight className="size-3" />
@@ -339,7 +339,7 @@ export default async function DashboardPage() {
       <div className="space-y-3.5">
         <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
           <div className="flex items-center gap-2.5">
-            <div className="flex size-6 items-center justify-center rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300">
+            <div className="flex size-6 items-center justify-center rounded-none bg-zinc-900 border border-zinc-800 text-zinc-300">
               <Sparkles className="size-3.5" />
             </div>
             <h2 className="text-sm font-semibold tracking-tight text-white">
@@ -364,7 +364,7 @@ export default async function DashboardPage() {
         </div>
 
         {!activeRun ? (
-          <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/40 p-8 sm:p-10 text-center space-y-3 card-shine">
+          <div className="rounded-none border border-dashed border-zinc-800 bg-zinc-950/40 p-8 sm:p-10 text-center space-y-3 card-shine">
             <div className="mx-auto flex size-10 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-300 shadow-2xs">
               <Rocket className="size-5" />
             </div>
@@ -380,7 +380,7 @@ export default async function DashboardPage() {
             <Button
               asChild
               size="sm"
-              className="rounded-md bg-white text-black font-semibold text-xs hover:bg-zinc-200 border border-white gap-1.5 shadow-sm"
+              className="rounded-none bg-white text-black font-semibold text-xs hover:bg-zinc-200 border border-white gap-1.5 shadow-sm"
             >
               <Link href="/chad-gtm">
                 <Sparkles className="size-3" /> Launch First GTM Run (60s)
@@ -390,7 +390,7 @@ export default async function DashboardPage() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Bento 1: Company Profile & Value Propositions */}
-            <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/80 p-5 space-y-3 card-shine shadow-xs">
+            <div className="rounded-none border border-zinc-800/80 bg-zinc-950/80 p-5 space-y-3 card-shine shadow-xs">
               <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2.5">
                 <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-semibold">
                   Company Identity
@@ -541,7 +541,7 @@ export default async function DashboardPage() {
                 <Button
                   asChild
                   size="sm"
-                  className="w-full rounded-md bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-700 text-xs font-medium justify-between shadow-xs"
+                  className="w-full rounded-none bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-700 text-xs font-medium justify-between shadow-xs"
                 >
                   <Link href={`/chad-gtm/${activeRun.id}`}>
                     <span>Launch Mission Control</span>

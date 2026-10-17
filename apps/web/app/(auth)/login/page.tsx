@@ -30,7 +30,7 @@ export default function LoginPage() {
   });
 
   return (
-    <div className="w-full max-w-md rounded-xl border border-zinc-800/80 bg-zinc-950/90 backdrop-blur-xl p-6 sm:p-8 font-sans shadow-2xl card-shine">
+    <div className="w-full max-w-md rounded-none border border-zinc-800 bg-zinc-950 p-6 sm:p-8 font-sans shadow-2xl card-shine">
       <div className="mb-6 space-y-1.5 text-center">
         <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">Sign In</h1>
         <p className="text-xs text-zinc-400 font-sans">
@@ -48,7 +48,7 @@ export default function LoginPage() {
             type="email"
             placeholder="you@company.com"
             autoComplete="email"
-            className="rounded-md border-zinc-800 bg-black/60 text-xs text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-white font-sans"
+            className="rounded-none border-zinc-800 bg-black/60 text-xs text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-white font-sans"
             {...register("email")}
           />
           {formState.errors.email && (
@@ -66,7 +66,7 @@ export default function LoginPage() {
             id="password"
             type="password"
             autoComplete="current-password"
-            className="rounded-md border-zinc-800 bg-black/60 text-xs text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-white font-sans"
+            className="rounded-none border-zinc-800 bg-black/60 text-xs text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-white font-sans"
             {...register("password")}
           />
           {formState.errors.password && (
@@ -75,14 +75,14 @@ export default function LoginPage() {
         </div>
 
         {error && (
-          <Alert variant="destructive" className="rounded-lg border-rose-500/30 bg-rose-500/10 text-rose-200">
+          <Alert variant="destructive" className="rounded-none border-rose-500/30 bg-rose-500/10 text-rose-200">
             <AlertDescription className="text-xs">{error}</AlertDescription>
           </Alert>
         )}
 
         <Button
           type="submit"
-          className="w-full rounded-md bg-white font-semibold text-black hover:bg-zinc-200 text-xs tracking-tight h-10 transition-all active:scale-[0.98] cursor-pointer"
+          className="w-full rounded-none bg-white font-semibold text-black hover:bg-zinc-200 text-xs tracking-tight h-10 transition-all active:scale-[0.98] cursor-pointer"
           disabled={formState.isSubmitting}
         >
           {formState.isSubmitting ? "Authenticating..." : "Sign In to Mission Control"}

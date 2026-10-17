@@ -65,14 +65,14 @@ export function LeadListCard({ id, name, leadCount, createdAt }: LeadListCardPro
     <>
       <Link
         href={`/leads/${id}`}
-        className="group relative rounded-2xl focus-visible:ring-2 focus-visible:ring-ring"
+        className="group relative rounded-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <Card className="h-full border-border/60 bg-card/50 transition-all hover:bg-accent/40 hover:border-border hover:shadow-md">
           <CardContent className="p-5 flex flex-col justify-between h-full">
             <div>
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-none bg-primary/10 text-primary border border-primary/20">
                     <FileSpreadsheet className="size-4" />
                   </div>
                   <h3 className="font-semibold text-sm truncate text-foreground group-hover:text-primary transition-colors">
@@ -89,7 +89,7 @@ export function LeadListCard({ id, name, leadCount, createdAt }: LeadListCardPro
                     variant="ghost"
                     size="sm"
                     asChild
-                    className="size-8 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                    className="size-8 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-none transition-colors"
                     title={`Import CSV to ${name}`}
                   >
                     <Link
@@ -107,7 +107,7 @@ export function LeadListCard({ id, name, leadCount, createdAt }: LeadListCardPro
                     size="sm"
                     onClick={handleDelete}
                     aria-label={`Delete list ${name}`}
-                    className="size-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                    className="size-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-none transition-colors"
                   >
                     <Trash2 className="size-3.5" />
                   </Button>

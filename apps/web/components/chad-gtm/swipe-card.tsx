@@ -114,7 +114,7 @@ export function SwipeCardDeck({
             variant="outline"
             size="sm"
             onClick={handleApproveAll}
-            className="rounded-lg text-xs font-medium border-zinc-700 hover:border-zinc-500 text-white"
+            className="rounded-none text-xs font-medium border-zinc-700 hover:border-zinc-500 text-white"
           >
             <ThumbsUp className="size-3 mr-1.5" /> Approve All
           </Button>
@@ -133,7 +133,7 @@ export function SwipeCardDeck({
       {!isFinished && currentCard ? (
         <div className="relative">
           {/* Active Card */}
-          <div className="relative rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 sm:p-7 shadow-xl card-shine">
+          <div className="relative rounded-none border border-zinc-800/80 bg-zinc-950/90 p-5 sm:p-7 shadow-xl card-shine">
             {/* Prospect Metadata Chip Bar */}
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-zinc-900/50 p-3.5 border border-zinc-800/60 mb-4">
               <div className="space-y-1">
@@ -164,7 +164,7 @@ export function SwipeCardDeck({
                 variant="ghost"
                 size="sm"
                 onClick={() => startEdit(currentCard)}
-                className="rounded-md text-xs font-medium text-zinc-400 hover:text-white hover:bg-zinc-800/60"
+                className="rounded-none text-xs font-medium text-zinc-400 hover:text-white hover:bg-zinc-800/60"
               >
                 <Edit3 className="size-3 mr-1" /> Edit Copy
               </Button>
@@ -220,7 +220,7 @@ export function SwipeCardDeck({
         </div>
       ) : (
         /* Finished Calibration Screen */
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-8 text-center space-y-4 shadow-xl card-shine">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-8 text-center space-y-4 shadow-xl card-shine">
           <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 shadow-sm">
             <Check className="size-6" />
           </div>
@@ -240,14 +240,14 @@ export function SwipeCardDeck({
                 setCurrentIndex(0);
                 setApprovedCount(0);
               }}
-              className="rounded-lg text-xs font-medium border-zinc-800 hover:border-zinc-700 w-full sm:w-auto h-9"
+              className="rounded-none text-xs font-medium border-zinc-800 hover:border-zinc-700 w-full sm:w-auto h-9"
             >
               <RotateCcw className="size-3 mr-1.5" /> Re-swipe
             </Button>
             <Button
               type="button"
               onClick={handleFinish}
-              className="rounded-lg text-xs font-semibold bg-white hover:bg-zinc-200 text-black w-full sm:w-auto h-9 shadow-xs transition-all active:scale-[0.98]"
+              className="rounded-none text-xs font-semibold bg-white hover:bg-zinc-200 text-black w-full sm:w-auto h-9 shadow-xs transition-all active:scale-[0.98]"
             >
               Adjust Copy to My Preferences ({approvedCount} approved) <ChevronRight className="size-3.5 ml-1" />
             </Button>
@@ -258,7 +258,7 @@ export function SwipeCardDeck({
       {/* Inline Quick-Edit Modal */}
       {editingSample && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-xl border border-zinc-800/80 bg-zinc-950/95 backdrop-blur-xl p-6 space-y-4 shadow-2xl card-shine font-sans">
+          <div className="w-full max-w-lg rounded-none border border-zinc-800/80 bg-zinc-950/95 backdrop-blur-xl p-6 space-y-4 shadow-2xl card-shine font-sans">
             <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
               <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                 <Edit3 className="size-4 text-emerald-400" /> Edit Cold Email Copy
@@ -266,7 +266,7 @@ export function SwipeCardDeck({
               <button
                 type="button"
                 onClick={() => setEditingSample(null)}
-                className="rounded-md p-1 text-zinc-400 hover:text-white hover:bg-zinc-800/60 transition-colors"
+                className="rounded-none p-1 text-zinc-400 hover:text-white hover:bg-zinc-800/60 transition-colors"
               >
                 <X className="size-4" />
               </button>
@@ -304,7 +304,7 @@ export function SwipeCardDeck({
                 variant="outline"
                 size="sm"
                 onClick={() => setEditingSample(null)}
-                className="rounded-md text-xs font-medium border-zinc-800 hover:border-zinc-700"
+                className="rounded-none text-xs font-medium border-zinc-800 hover:border-zinc-700"
               >
                 Cancel
               </Button>
@@ -312,7 +312,7 @@ export function SwipeCardDeck({
                 type="button"
                 size="sm"
                 onClick={saveEdit}
-                className="rounded-md text-xs font-semibold bg-white text-black hover:bg-zinc-200 transition-all active:scale-[0.98]"
+                className="rounded-none text-xs font-semibold bg-white text-black hover:bg-zinc-200 transition-all active:scale-[0.98]"
               >
                 Save & Approve
               </Button>

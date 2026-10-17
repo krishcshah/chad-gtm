@@ -147,28 +147,28 @@ export function AdminDataRemovalView({ initialRequests }: { initialRequests: Dat
     <div className="space-y-6 font-sans">
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-4 space-y-1 card-shine shadow-xs">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-4 space-y-1 card-shine shadow-xs">
           <span className="text-xs text-zinc-400 font-medium">
             Total Requests
           </span>
           <div className="text-2xl font-bold tracking-tight text-white">{totalCount}</div>
         </div>
 
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-4 space-y-1 card-shine shadow-xs">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-4 space-y-1 card-shine shadow-xs">
           <span className="text-xs text-amber-400 font-medium flex items-center gap-1">
             <Clock className="size-3" /> Pending Review
           </span>
           <div className="text-2xl font-bold tracking-tight text-amber-400">{pendingCount}</div>
         </div>
 
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-4 space-y-1 card-shine shadow-xs">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-4 space-y-1 card-shine shadow-xs">
           <span className="text-xs text-sky-400 font-medium flex items-center gap-1">
             <AlertCircle className="size-3" /> In Progress
           </span>
           <div className="text-2xl font-bold tracking-tight text-zinc-200">{inProgressCount}</div>
         </div>
 
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-4 space-y-1 card-shine shadow-xs">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-4 space-y-1 card-shine shadow-xs">
           <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">
             <CheckCircle2 className="size-3" /> Purged / Done
           </span>
@@ -186,17 +186,17 @@ export function AdminDataRemovalView({ initialRequests }: { initialRequests: Dat
               placeholder="Search by contact email or description..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-9 w-full rounded-lg border border-zinc-800/80 bg-zinc-900/50 pl-9 pr-3 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-700 transition-colors"
+              className="h-9 w-full rounded-none border border-zinc-800/80 bg-zinc-900/50 pl-9 pr-3 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-700 transition-colors"
             />
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
             <Filter className="size-3.5 text-zinc-500" />
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-9 w-[170px] rounded-lg border-zinc-800/80 bg-zinc-900/50 px-2.5 text-xs text-zinc-300 focus:ring-0 focus:border-zinc-700">
+              <SelectTrigger className="h-9 w-[170px] rounded-none border-zinc-800/80 bg-zinc-900/50 px-2.5 text-xs text-zinc-300 focus:ring-0 focus:border-zinc-700">
                 <SelectValue placeholder={`All Statuses (${totalCount})`} />
               </SelectTrigger>
-              <SelectContent align="end" className="rounded-lg border-zinc-800 bg-zinc-950 text-xs">
+              <SelectContent align="end" className="rounded-none border-zinc-800 bg-zinc-950 text-xs">
                 <SelectItem value="all">All Statuses ({totalCount})</SelectItem>
                 <SelectItem value="pending">Pending ({pendingCount})</SelectItem>
                 <SelectItem value="in_progress">In Progress ({inProgressCount})</SelectItem>
@@ -211,7 +211,7 @@ export function AdminDataRemovalView({ initialRequests }: { initialRequests: Dat
           type="button"
           onClick={downloadCSV}
           disabled={filteredRequests.length === 0}
-          className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3.5 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-800 hover:text-white transition-all disabled:opacity-40 disabled:pointer-events-none"
+          className="inline-flex items-center justify-center gap-2 rounded-none border border-zinc-800 bg-zinc-900/60 px-3.5 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-800 hover:text-white transition-all disabled:opacity-40 disabled:pointer-events-none"
         >
           <Download className="size-3.5" />
           Export CSV ({filteredRequests.length})
@@ -219,7 +219,7 @@ export function AdminDataRemovalView({ initialRequests }: { initialRequests: Dat
       </div>
 
       {/* Table */}
-      <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/20 overflow-hidden">
+      <div className="rounded-none border border-zinc-800/80 bg-zinc-900/20 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs font-sans">
             <thead className="border-b border-zinc-800/80 bg-zinc-900/60 text-xs font-medium text-zinc-400">
@@ -290,10 +290,10 @@ export function AdminDataRemovalView({ initialRequests }: { initialRequests: Dat
                                 )
                               }
                             >
-                              <SelectTrigger className="h-7 w-[140px] rounded-lg border-zinc-800 bg-zinc-900/80 px-2 text-[11px] text-zinc-300 focus:ring-0">
+                              <SelectTrigger className="h-7 w-[140px] rounded-none border-zinc-800 bg-zinc-900/80 px-2 text-[11px] text-zinc-300 focus:ring-0">
                                 <SelectValue />
                               </SelectTrigger>
-                              <SelectContent align="start" className="rounded-lg border-zinc-800 bg-zinc-950 text-xs">
+                              <SelectContent align="start" className="rounded-none border-zinc-800 bg-zinc-950 text-xs">
                                 <SelectItem value="pending">Mark Pending</SelectItem>
                                 <SelectItem value="in_progress">Mark In Progress</SelectItem>
                                 <SelectItem value="completed">Mark Purged/Done</SelectItem>

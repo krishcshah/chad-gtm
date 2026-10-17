@@ -161,14 +161,14 @@ export function CalibrationRefinementView({
             variant="outline"
             size="sm"
             onClick={onRecalibrate}
-            className="rounded-lg text-xs font-medium border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-white"
+            className="rounded-none text-xs font-medium border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-white"
           >
             <RotateCcw className="size-3 mr-1.5" /> Re-swipe
           </Button>
           <Button
             type="button"
             onClick={onProceedToLaunch}
-            className="rounded-lg text-xs font-semibold bg-white hover:bg-zinc-200 text-black shadow-xs transition-all active:scale-[0.98]"
+            className="rounded-none text-xs font-semibold bg-white hover:bg-zinc-200 text-black shadow-xs transition-all active:scale-[0.98]"
           >
             Set Velocity & Launch <ChevronRight className="size-3.5 ml-1" />
           </Button>
@@ -180,7 +180,7 @@ export function CalibrationRefinementView({
         {/* Left Column: What AI Learned & Adjusted (5 cols) */}
         <div className="lg:col-span-5 space-y-4">
           {/* Calibrated Tone Profile Card */}
-          <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-3.5 card-shine shadow-xs">
+          <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-3.5 card-shine shadow-xs">
             <div className="flex items-center justify-between border-b border-zinc-800/60 pb-2.5">
               <span className="text-xs font-semibold text-zinc-400 flex items-center gap-1.5">
                 <Sliders className="size-3.5 text-zinc-300" /> Calibrated Voice
@@ -307,7 +307,7 @@ export function CalibrationRefinementView({
 
           {/* If Sample Preview Tab Selected: Show Prospect Metadata */}
           {currentPreviewSample && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-3 text-xs text-zinc-300">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-none border border-zinc-800/80 bg-zinc-900/40 p-3 text-xs text-zinc-300">
               <div className="flex items-center gap-2">
                 <User className="size-3.5 text-zinc-400" />
                 <span className="font-semibold text-white">{currentPreviewSample.recipientName}</span>
@@ -367,7 +367,7 @@ export function CalibrationRefinementView({
           type="button"
           onClick={onProceedToLaunch}
           size="lg"
-          className="rounded-lg h-11 px-8 bg-white hover:bg-zinc-200 text-black font-semibold text-xs tracking-tight shadow-sm gap-2 w-full sm:w-auto transition-all active:scale-[0.98]"
+          className="rounded-none h-11 px-8 bg-white hover:bg-zinc-200 text-black font-semibold text-xs tracking-tight shadow-sm gap-2 w-full sm:w-auto transition-all active:scale-[0.98]"
         >
           Proceed to Daily Velocity & Launch <ArrowRight className="size-3.5 ml-1" />
         </Button>

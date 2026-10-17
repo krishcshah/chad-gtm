@@ -43,7 +43,7 @@ export default function PrivacyPage() {
         {/* 1. Verantwortlicher */}
         <section className="space-y-3">
           <h2 className="text-lg font-bold text-foreground">1. Data Controller</h2>
-          <div className="rounded-xl border border-border/60 bg-card/50 p-5 text-sm space-y-1 text-muted-foreground">
+          <div className="rounded-none border border-border/60 bg-card/50 p-5 text-sm space-y-1 text-muted-foreground">
             <p className="font-semibold text-foreground">AutoGTM Platform</p>
             <p className="pt-2">
               <strong className="text-foreground">Email for Privacy Requests:</strong>{" "}
@@ -57,7 +57,7 @@ export default function PrivacyPage() {
         {/* 2. Hosting & Server-Standort */}
         <section className="space-y-3">
           <h2 className="text-lg font-bold text-foreground">2. Server-Hosting in Deutschland (EU-Rechenzentrum)</h2>
-          <div className="rounded-xl border border-border/60 bg-card/50 p-5 text-xs sm:text-sm leading-relaxed text-muted-foreground space-y-2">
+          <div className="rounded-none border border-border/60 bg-card/50 p-5 text-xs sm:text-sm leading-relaxed text-muted-foreground space-y-2">
             <p>
               Die gesamte Anwendung, einschließlich der Benutzerdatenbanken, Kampagnenkonfigurationen und Postfach-Verbindungsdaten, wird ausschließlich in der Europäischen Union auf Enterprise-Cloud-Servern in <strong>Frankfurt am Main, Deutschland</strong> (Oracle Cloud Infrastructure, Region Frankfurt) betrieben.
             </p>
@@ -70,7 +70,7 @@ export default function PrivacyPage() {
         {/* 3. Benutzerkonto & Registrierung */}
         <section className="space-y-3">
           <h2 className="text-lg font-bold text-foreground">3. Registrierung & Benutzerkonten</h2>
-          <div className="rounded-xl border border-border/60 bg-card/50 p-5 text-xs sm:text-sm leading-relaxed text-muted-foreground space-y-2">
+          <div className="rounded-none border border-border/60 bg-card/50 p-5 text-xs sm:text-sm leading-relaxed text-muted-foreground space-y-2">
             <p>
               Bei der Erstellung eines Nutzerkontos erfassen wir Ihre E-Mail-Adresse und Ihren Namen. Passwörter werden vor der Speicherung kryptografisch mit modernen Hashing-Algorithmen gehasht und können von uns nicht im Klartext eingesehen werden.
             </p>
@@ -83,7 +83,7 @@ export default function PrivacyPage() {
         {/* 4. Kampagnen-Versand & Rollenverteilung */}
         <section className="space-y-3">
           <h2 className="text-lg font-bold text-foreground">4. E-Mail-Kampagnen & Verantwortung</h2>
-          <div className="rounded-xl border border-border/60 bg-card/50 p-5 text-xs sm:text-sm leading-relaxed text-muted-foreground space-y-2">
+          <div className="rounded-none border border-border/60 bg-card/50 p-5 text-xs sm:text-sm leading-relaxed text-muted-foreground space-y-2">
             <p>
               Wenn Nutzer über SmartReach E-Mail-Kampagnen an Geschäftskontakte (B2B) versenden, agiert der jeweilige <strong>Nutzer als verantwortliche Stelle (Data Controller)</strong> im Sinne des Art. 4 Nr. 7 DSGVO bezüglich der Empfängerdaten. SmartReach stellt hierbei als technischer Dienstleister die Software zur Verfügung.
             </p>
@@ -99,14 +99,14 @@ export default function PrivacyPage() {
             <UserX className="size-4 text-rose-400" />
             5. Datenentfernungs-Anfragen (Right to Erasure / Remove My Info)
           </h2>
-          <div className="rounded-xl border border-border/60 bg-card/50 p-5 text-xs sm:text-sm leading-relaxed text-muted-foreground space-y-3">
+          <div className="rounded-none border border-border/60 bg-card/50 p-5 text-xs sm:text-sm leading-relaxed text-muted-foreground space-y-3">
             <p>
               Wenn Sie möchten, dass Ihre Kontaktdaten aus unserem System bzw. unserer B2B-Datenbank entfernt werden, können Sie jederzeit einen formlosen Antrag über unser öffentliches Entfernungsformular einreichen:
             </p>
             <div>
               <Link
                 href="/remove-my-info"
-                className="inline-flex items-center gap-2 rounded-xl bg-primary/10 border border-primary/30 px-4 py-2 text-xs font-semibold text-primary hover:bg-primary/20 transition-all"
+                className="inline-flex items-center gap-2 rounded-none bg-primary/10 border border-primary/30 px-4 py-2 text-xs font-semibold text-primary hover:bg-primary/20 transition-all"
               >
                 Zum Formular "Remove My Info" →
               </Link>
@@ -120,7 +120,7 @@ export default function PrivacyPage() {
         {/* 6. Spenden via Stripe */}
         <section className="space-y-3">
           <h2 className="text-lg font-bold text-foreground">6. Freiwillige Spenden & Zahlungsabwicklung via Stripe</h2>
-          <div className="rounded-xl border border-border/60 bg-card/50 p-5 text-xs sm:text-sm leading-relaxed text-muted-foreground space-y-2">
+          <div className="rounded-none border border-border/60 bg-card/50 p-5 text-xs sm:text-sm leading-relaxed text-muted-foreground space-y-2">
             <p>
               Wenn Sie sich entscheiden, das SmartReach-Projekt freiwillig mit einer Spende zu unterstützen, erfolgt die Zahlungsabwicklung über den zertifizierten Zahlungsdienstleister Stripe Payments Europe, Ltd., 1 Grand Canal Street Lower, Grand Canal Dock, Dublin, D02 H210, Irland.
             </p>
@@ -133,7 +133,7 @@ export default function PrivacyPage() {
         {/* 7. Rechte der Betroffenen */}
         <section className="space-y-3">
           <h2 className="text-lg font-bold text-foreground">7. Ihre Rechte als betroffene Person</h2>
-          <div className="rounded-xl border border-border/60 bg-card/50 p-5 text-xs sm:text-sm leading-relaxed text-muted-foreground space-y-2">
+          <div className="rounded-none border border-border/60 bg-card/50 p-5 text-xs sm:text-sm leading-relaxed text-muted-foreground space-y-2">
             <p>Sie haben nach der DSGVO folgende Rechte:</p>
             <ul className="list-disc list-inside space-y-1 text-xs text-foreground/80 pl-2">
               <li><strong>Recht auf Auskunft (Art. 15 DSGVO):</strong> Sie können Auskunft über Ihre von uns verarbeiteten personenbezogenen Daten verlangen.</li>

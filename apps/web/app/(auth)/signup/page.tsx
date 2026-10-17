@@ -42,13 +42,13 @@ export default function SignupPage() {
   });
 
   return (
-    <div className="w-full max-w-md rounded-xl border border-zinc-800/80 bg-zinc-950/90 backdrop-blur-xl p-6 sm:p-8 font-sans shadow-2xl card-shine">
+    <div className="w-full max-w-md rounded-none border border-zinc-800 bg-zinc-950 p-6 sm:p-8 font-sans shadow-2xl card-shine">
       <div className="mb-6 space-y-2 text-center">
         <div className="flex items-center justify-center gap-2 mb-2">
-          <span className="rounded-full border border-zinc-700/80 bg-zinc-900/80 px-2.5 py-0.5 text-[10px] font-medium text-zinc-300">
+          <span className="rounded-none border border-zinc-700 bg-zinc-900 px-2.5 py-0.5 text-[10px] font-mono uppercase tracking-wider text-zinc-300">
             Autonomous Outbound
           </span>
-          <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+          <span className="rounded-none border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-mono font-semibold text-emerald-400">
             $0/mo Base
           </span>
         </div>
@@ -67,7 +67,7 @@ export default function SignupPage() {
             id="name"
             placeholder="Elena Rostova"
             autoComplete="name"
-            className="rounded-md border-zinc-800 bg-black/60 text-xs text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-white font-sans"
+            className="rounded-none border-zinc-800 bg-black/60 text-xs text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-white font-sans"
             {...register("name")}
           />
           {formState.errors.name && <p className="text-[11px] text-rose-400">{formState.errors.name.message}</p>}
@@ -82,7 +82,7 @@ export default function SignupPage() {
             type="email"
             placeholder="you@company.com"
             autoComplete="email"
-            className="rounded-md border-zinc-800 bg-black/60 text-xs text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-white font-sans"
+            className="rounded-none border-zinc-800 bg-black/60 text-xs text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-white font-sans"
             {...register("email")}
           />
           {formState.errors.email && <p className="text-[11px] text-rose-400">{formState.errors.email.message}</p>}
@@ -96,21 +96,21 @@ export default function SignupPage() {
             id="password"
             type="password"
             autoComplete="new-password"
-            className="rounded-md border-zinc-800 bg-black/60 text-xs text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-white font-sans"
+            className="rounded-none border-zinc-800 bg-black/60 text-xs text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-white font-sans"
             {...register("password")}
           />
           {formState.errors.password && <p className="text-[11px] text-rose-400">{formState.errors.password.message}</p>}
         </div>
 
         {error && (
-          <Alert variant="destructive" className="rounded-lg border-rose-500/30 bg-rose-500/10 text-rose-200">
+          <Alert variant="destructive" className="rounded-none border-rose-500/30 bg-rose-500/10 text-rose-200">
             <AlertDescription className="text-xs">{error}</AlertDescription>
           </Alert>
         )}
 
         <Button
           type="submit"
-          className="w-full rounded-md bg-white font-semibold text-black hover:bg-zinc-200 text-xs tracking-tight h-10 transition-all active:scale-[0.98] cursor-pointer"
+          className="w-full rounded-none bg-white font-semibold text-black hover:bg-zinc-200 text-xs tracking-tight h-10 transition-all active:scale-[0.98] cursor-pointer"
           disabled={formState.isSubmitting}
         >
           {formState.isSubmitting ? "Creating Engine..." : "Deploy Engine Free ($0/mo)"}

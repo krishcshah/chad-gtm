@@ -155,7 +155,7 @@ export function MissionControlView({
             variant="outline"
             size="sm"
             onClick={handleExportInterested}
-            className="rounded-lg text-xs font-medium border-zinc-800 hover:border-zinc-700 text-zinc-300 w-full sm:w-auto h-9"
+            className="rounded-none text-xs font-medium border-zinc-800 hover:border-zinc-700 text-zinc-300 w-full sm:w-auto h-9"
           >
             <Download className="size-3.5 mr-1.5" /> Export Interested
           </Button>
@@ -164,7 +164,7 @@ export function MissionControlView({
             type="button"
             onClick={handleToggleStatus}
             disabled={isPending}
-            className={`rounded-lg text-xs font-semibold h-9 w-full sm:w-auto shadow-xs transition-all active:scale-[0.98] ${
+            className={`rounded-none text-xs font-semibold h-9 w-full sm:w-auto shadow-xs transition-all active:scale-[0.98] ${
               status === "active"
                 ? "bg-zinc-900 text-zinc-200 border border-zinc-700 hover:bg-zinc-800 hover:text-white"
                 : "bg-white text-black hover:bg-zinc-200"
@@ -186,7 +186,7 @@ export function MissionControlView({
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* Prospects Queued */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-1.5 card-shine shadow-xs">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-1.5 card-shine shadow-xs">
           <span className="text-xs font-medium text-zinc-400 flex items-center gap-2">
             <Mail className="size-3.5 text-zinc-300" /> Target Prospects
           </span>

@@ -234,7 +234,7 @@ const VisualBody = memo(
   return (
     <div
       className={cn(
-        "relative rounded-lg border border-border bg-background/60 shadow-sm",
+        "relative rounded-none border border-border bg-background/60 shadow-sm",
         "focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/50",
       )}
     >
@@ -292,7 +292,7 @@ function VarChips({
         <button
           key={key}
           type="button"
-          className="rounded-md border border-border bg-muted/50 px-2 py-1 font-mono text-xs text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="rounded-none border border-border bg-muted/50 px-2 py-1 font-mono text-xs text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => onInsert(`{{${key}}}`)}
         >
           {`{{${key}}}`}
@@ -315,7 +315,7 @@ function VarChips({
               <button
                 key={field.key}
                 type="button"
-                className="rounded-md border border-border bg-muted/50 px-2 py-1 font-mono text-xs hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="rounded-none border border-border bg-muted/50 px-2 py-1 font-mono text-xs hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => onInsert(`{{${field.key}}}`)}
               >
                 {`{{${field.key}}}`}
@@ -684,7 +684,7 @@ export function SequenceEditor({
                         }
                       }}
                       className={cn(
-                        "flex w-full cursor-pointer flex-col gap-1.5 rounded-lg border p-3 text-left text-sm transition-colors",
+                        "flex w-full cursor-pointer flex-col gap-1.5 rounded-none border p-3 text-left text-sm transition-colors",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         current
                           ? "border-primary/40 bg-accent text-accent-foreground shadow-xs"
@@ -786,7 +786,7 @@ export function SequenceEditor({
           </div>
 
           {step && variant ? (
-            <div className="min-w-0 space-y-5 rounded-xl border border-border bg-card p-4 sm:p-5">
+            <div className="min-w-0 space-y-5 rounded-none border border-border bg-card p-4 sm:p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h3 className="font-medium">Step {selected + 1}</h3>
@@ -880,9 +880,9 @@ export function SequenceEditor({
               </div>
 
               {variant.aiGenerateOnTheFly ? (
-                <div className="rounded-xl border border-primary/25 bg-primary/[0.04] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="rounded-none border border-primary/25 bg-primary/[0.04] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-start sm:items-center gap-3">
-                    <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-none bg-primary/10 text-primary">
                       <Sparkles className="size-4" />
                     </div>
                     <div>
@@ -1064,7 +1064,7 @@ export function SequenceEditor({
                       )}
                     </div>
 
-                    <div className="rounded-xl border border-border bg-background shadow-xs focus-within:ring-2 focus-within:ring-ring">
+                    <div className="rounded-none border border-border bg-background shadow-xs focus-within:ring-2 focus-within:ring-ring">
                       {bodyMode === "formatted" ? (
                         <div className="p-1">
                           <VisualBody
@@ -1097,7 +1097,7 @@ export function SequenceEditor({
                       {/* Single compose footer with VarChips and bottom-right Formatted / Plain text toggle */}
                       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 bg-muted/20 px-3 py-2">
                         <VarChips idPrefix={`${bodyLabelId}-vars`} onInsert={insertBody} />
-                        <div className="flex items-center rounded-md border border-border bg-background p-0.5 text-xs">
+                        <div className="flex items-center rounded-none border border-border bg-background p-0.5 text-xs">
                           <button
                             type="button"
                             onClick={() => setBodyMode("formatted")}
@@ -1165,7 +1165,7 @@ export function SequenceEditor({
                 campaignId={campaignId}
               />
 
-              <details className="rounded-lg border border-border bg-background/40 px-3 py-2">
+              <details className="rounded-none border border-border bg-background/40 px-3 py-2">
                 <summary className="cursor-pointer text-sm font-medium">Sample lead for preview</summary>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   {STANDARD_LEAD_FIELDS.map((field) => (
@@ -1199,7 +1199,7 @@ export function SequenceEditor({
         </div>
       )}
 
-      <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-xl sm:border">
+      <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-none sm:border">
         <p className="text-sm text-muted-foreground" aria-live="polite">
           {dirty
             ? steps.length === 0

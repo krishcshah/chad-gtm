@@ -104,7 +104,7 @@ export function AppSidebar({
               onClick={toggleCollapsed}
               aria-label="Collapse sidebar (Ctrl+B)"
               title="Collapse sidebar (Ctrl+B)"
-              className="flex size-7 items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition-colors shrink-0"
+              className="flex size-7 items-center justify-center rounded-none text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition-colors shrink-0"
             >
               <PanelLeftClose className="size-4" />
             </button>
@@ -133,7 +133,7 @@ export function AppSidebar({
                 title={collapsed ? `${item.label}${item.badge ? ` (${item.badge})` : ""}` : undefined}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "group relative flex items-center rounded-lg py-2 text-xs font-medium tracking-tight transition-all duration-150 outline-none focus-visible:ring-1 focus-visible:ring-white",
+                  "group relative flex items-center rounded-none py-2 text-xs font-medium tracking-tight transition-all duration-150 outline-none focus-visible:ring-1 focus-visible:ring-white",
                   collapsed ? "justify-center px-0 h-10 w-full" : "gap-3 px-3",
                   active
                     ? "bg-zinc-800/90 text-white font-semibold shadow-xs"
@@ -225,7 +225,7 @@ export function AppSidebar({
                 await authClient.signOut();
                 router.push("/");
               }}
-              className="flex size-7 items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
+              className="flex size-7 items-center justify-center rounded-none text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white"
             >
               <LogOut className="size-3.5" />
             </button>
@@ -328,7 +328,7 @@ export function AppSidebar({
                 href={item.href}
                 onClick={() => setMobileOpen(false)}
                 className={cn(
-                  "group relative flex items-center justify-between rounded-lg px-3 py-2.5 text-xs font-medium tracking-tight transition-all duration-150",
+                  "group relative flex items-center justify-between rounded-none px-3 py-2.5 text-xs font-medium tracking-tight transition-all duration-150",
                   active
                     ? "bg-zinc-800 text-white font-semibold shadow-xs"
                     : "text-zinc-400 hover:bg-zinc-900/60 hover:text-white"
@@ -405,7 +405,7 @@ export function AppSidebar({
                 await authClient.signOut();
                 router.push("/");
               }}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-900 border border-zinc-800 transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-none text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-900 border border-zinc-800 transition-colors"
             >
               <LogOut className="size-3.5" />
               <span>Sign out</span>

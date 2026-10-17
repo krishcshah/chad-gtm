@@ -37,7 +37,7 @@ export default async function CampaignsPage() {
 
         <Button
           asChild
-          className="rounded-md bg-white hover:bg-zinc-200 text-black font-semibold text-xs border border-white gap-2 h-10 px-4 shrink-0 shadow-sm"
+          className="rounded-none bg-white hover:bg-zinc-200 text-black font-semibold text-xs border border-white gap-2 h-10 px-4 shrink-0 shadow-sm"
         >
           <Link href="/chad-gtm">
             <Sparkles className="size-3.5" /> Launch Autonomous GTM
@@ -46,7 +46,7 @@ export default async function CampaignsPage() {
       </div>
 
       {campaigns.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/40 p-12 text-center space-y-4 card-shine">
+        <div className="rounded-none border border-dashed border-zinc-800 bg-zinc-950/40 p-12 text-center space-y-4 card-shine">
           <div className="mx-auto flex size-12 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-200 shadow-2xs">
             <Rocket className="size-6" />
           </div>
@@ -61,7 +61,7 @@ export default async function CampaignsPage() {
           <Button
             asChild
             size="lg"
-            className="rounded-md bg-white text-black font-semibold text-xs hover:bg-zinc-200 border border-white gap-2 shadow-sm"
+            className="rounded-none bg-white text-black font-semibold text-xs hover:bg-zinc-200 border border-white gap-2 shadow-sm"
           >
             <Link href="/chad-gtm">
               <Sparkles className="size-3.5" /> Launch First Autonomous Run
@@ -69,7 +69,7 @@ export default async function CampaignsPage() {
           </Button>
         </div>
       ) : (
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/80 overflow-x-auto shadow-xs card-shine">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/80 overflow-x-auto shadow-xs card-shine">
           <table className="w-full min-w-[700px] text-left text-xs font-sans">
             <thead>
               <tr className="border-b border-zinc-800/80 bg-zinc-900/30 text-zinc-400 uppercase tracking-wider text-[10px] font-semibold">
@@ -155,7 +155,7 @@ export default async function CampaignsPage() {
                           variant="outline"
                           size="sm"
                           asChild
-                          className="rounded-md border-zinc-800 bg-zinc-900/80 text-zinc-200 hover:bg-zinc-800 hover:text-white text-xs font-medium h-7 px-2.5 shadow-2xs"
+                          className="rounded-none border-zinc-800 bg-zinc-900/80 text-zinc-200 hover:bg-zinc-800 hover:text-white text-xs font-medium h-7 px-2.5 shadow-2xs"
                         >
                           <Link href={`/campaigns/${c.id}`}>View Leads</Link>
                         </Button>

@@ -196,7 +196,7 @@ export function AdminDirectoryView({
             variant="outline"
             size="sm"
             onClick={handleDownloadTemplate}
-            className="text-xs rounded-lg border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:text-white hover:bg-zinc-800"
+            className="text-xs rounded-none border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:text-white hover:bg-zinc-800"
           >
             <Download className="size-3.5 mr-1.5" /> Download Standard Template
           </Button>
@@ -227,7 +227,7 @@ export function AdminDirectoryView({
             className="hidden"
           />
 
-          <div className="mx-auto flex size-12 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/80 text-zinc-300 mb-3 shadow-xs">
+          <div className="mx-auto flex size-12 items-center justify-center rounded-none border border-zinc-800 bg-zinc-900/80 text-zinc-300 mb-3 shadow-xs">
             {isUploading ? (
               <Loader2 className="size-6 animate-spin text-white" />
             ) : (
@@ -246,7 +246,7 @@ export function AdminDirectoryView({
             type="button"
             disabled={isUploading}
             onClick={() => fileInputRef.current?.click()}
-            className="text-xs font-medium rounded-lg bg-white text-black hover:bg-zinc-200 shadow-xs"
+            className="text-xs font-medium rounded-none bg-white text-black hover:bg-zinc-200 shadow-xs"
           >
             {isUploading ? (
               <>
@@ -278,7 +278,7 @@ export function AdminDirectoryView({
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-            <div className="rounded-lg bg-zinc-950/80 p-3.5 border border-zinc-800/80">
+            <div className="rounded-none bg-zinc-950/80 p-3.5 border border-zinc-800/80">
               <span className="text-[10px] text-zinc-400 font-medium block">
                 Total Parsed
               </span>

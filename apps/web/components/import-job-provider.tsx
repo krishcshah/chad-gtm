@@ -230,8 +230,8 @@ export function ImportJobProvider({ children }: { children: React.ReactNode }) {
 
       {/* Sleek Floating Background Import Progress Widget */}
       {showFloatingWidget && activeJob && (
-        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-2xl border border-primary/30 bg-card/95 p-3.5 shadow-2xl backdrop-blur-md transition-all animate-in slide-in-from-bottom-5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-none border border-primary/30 bg-card/95 p-3.5 shadow-2xl backdrop-blur-md transition-all animate-in slide-in-from-bottom-5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-none bg-primary/10 text-primary">
             <Loader2 className="size-4 animate-spin text-primary" />
           </div>
           <div className="min-w-0 pr-1 max-w-[220px] sm:max-w-xs">
@@ -257,7 +257,7 @@ export function ImportJobProvider({ children }: { children: React.ReactNode }) {
           </div>
           <Link
             href="/leads/import"
-            className="shrink-0 rounded-lg border border-border bg-muted/80 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+            className="shrink-0 rounded-none border border-border bg-muted/80 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted"
           >
             View
           </Link>

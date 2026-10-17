@@ -298,7 +298,7 @@ export function ChadGtmWizard({
                 <Button
                   type="submit"
                   disabled={isAnalyzing || !url.trim()}
-                  className="h-10 px-5 rounded-lg text-xs font-semibold tracking-tight bg-white hover:bg-zinc-200 text-black shadow-xs shrink-0 w-full sm:w-auto transition-all active:scale-[0.98]"
+                  className="h-10 px-5 rounded-none text-xs font-semibold tracking-tight bg-white hover:bg-zinc-200 text-black shadow-xs shrink-0 w-full sm:w-auto transition-all active:scale-[0.98]"
                 >
                   {isAnalyzing ? (
                     <>
@@ -314,7 +314,7 @@ export function ChadGtmWizard({
             </div>
 
             {/* Optional Context Drawer */}
-            <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/80 overflow-hidden shadow-xs">
+            <div className="rounded-none border border-zinc-800/80 bg-zinc-950/80 overflow-hidden shadow-xs">
               <button
                 type="button"
                 onClick={() => setShowNotesDrawer(!showNotesDrawer)}
@@ -335,7 +335,7 @@ export function ChadGtmWizard({
                     placeholder="e.g. We are offering a free 14-day benchmark trial for Series B SaaS engineering teams..."
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-800 bg-black/60 p-3 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-white leading-relaxed"
+                    className="w-full rounded-none border border-zinc-800 bg-black/60 p-3 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-white leading-relaxed"
                   />
                 </div>
               )}

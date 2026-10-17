@@ -180,10 +180,10 @@ export function AdminAnalyticsView({
       {/* 1. Summary KPI Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Users */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-2 card-shine shadow-xs">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-2 card-shine shadow-xs">
           <div className="flex items-center justify-between text-zinc-400 text-xs">
             <span className="font-medium text-xs text-zinc-400">Registered Users</span>
-            <div className="p-2 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-300">
+            <div className="p-2 rounded-none border border-zinc-800 bg-zinc-900 text-zinc-300">
               <Users className="size-3.5" />
             </div>
           </div>
@@ -197,10 +197,10 @@ export function AdminAnalyticsView({
         </div>
 
         {/* Total Page Views */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-2 card-shine shadow-xs">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-2 card-shine shadow-xs">
           <div className="flex items-center justify-between text-zinc-400 text-xs">
             <span className="font-medium text-xs text-zinc-400">Total Page Views</span>
-            <div className="p-2 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-300">
+            <div className="p-2 rounded-none border border-zinc-800 bg-zinc-900 text-zinc-300">
               <Eye className="size-3.5" />
             </div>
           </div>
@@ -214,10 +214,10 @@ export function AdminAnalyticsView({
         </div>
 
         {/* Mailbox Infrastructure */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-2 card-shine shadow-xs">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-2 card-shine shadow-xs">
           <div className="flex items-center justify-between text-zinc-400 text-xs">
             <span className="font-medium text-xs text-zinc-400">Mailbox Infrastructure</span>
-            <div className="p-2 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-300">
+            <div className="p-2 rounded-none border border-zinc-800 bg-zinc-900 text-zinc-300">
               <Mail className="size-3.5" />
             </div>
           </div>
@@ -231,10 +231,10 @@ export function AdminAnalyticsView({
         </div>
 
         {/* 7-Day Active Users */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-2 card-shine shadow-xs">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-2 card-shine shadow-xs">
           <div className="flex items-center justify-between text-zinc-400 text-xs">
             <span className="font-medium text-xs text-zinc-400">Active Engagement</span>
-            <div className="p-2 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-300">
+            <div className="p-2 rounded-none border border-zinc-800 bg-zinc-900 text-zinc-300">
               <Activity className="size-3.5" />
             </div>
           </div>
@@ -251,7 +251,7 @@ export function AdminAnalyticsView({
       {/* 2. Platform Traffic Distribution & Live Activity Stream */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top Visited Routes */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-4 card-shine shadow-xs">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-4 card-shine shadow-xs">
           <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
             <div className="space-y-0.5">
               <h3 className="font-semibold text-xs text-white flex items-center gap-2">
@@ -291,7 +291,7 @@ export function AdminAnalyticsView({
         </div>
 
         {/* Live Activity Stream */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-4 card-shine shadow-xs">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-4 card-shine shadow-xs">
           <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
             <div className="space-y-0.5">
               <h3 className="font-semibold text-xs text-white flex items-center gap-2">
@@ -308,7 +308,7 @@ export function AdminAnalyticsView({
             {recentActivity.map((act) => (
               <div
                 key={act.id}
-                className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-zinc-900/40 hover:bg-zinc-900/70 transition-colors text-xs border border-zinc-800/60"
+                className="flex items-center justify-between gap-3 p-2.5 rounded-none bg-zinc-900/40 hover:bg-zinc-900/70 transition-colors text-xs border border-zinc-800/60"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="size-7 rounded-full bg-zinc-800 border border-zinc-700 text-white flex items-center justify-center font-semibold text-xs shrink-0">
@@ -329,7 +329,7 @@ export function AdminAnalyticsView({
       </div>
 
       {/* 3. User Behavior & Mailbox Analytics Directory (Main Table) */}
-      <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-4 card-shine shadow-xs">
+      <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-4 card-shine shadow-xs">
         {/* Directory Header & Controls */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800/80 pb-4">
           <div className="space-y-0.5">
@@ -346,7 +346,7 @@ export function AdminAnalyticsView({
               variant="outline"
               size="sm"
               onClick={downloadCsv}
-              className="text-xs h-8 gap-1.5 rounded-lg border-zinc-800 bg-zinc-900/60 text-zinc-200 hover:bg-zinc-800 hover:text-white"
+              className="text-xs h-8 gap-1.5 rounded-none border-zinc-800 bg-zinc-900/60 text-zinc-200 hover:bg-zinc-800 hover:text-white"
             >
               <Download className="size-3.5" />
               <span>Export CSV</span>
@@ -366,20 +366,20 @@ export function AdminAnalyticsView({
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="w-full rounded-lg border border-zinc-800/80 bg-zinc-900/50 pl-9 pr-3 py-1.5 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-700 transition-colors"
+              className="w-full rounded-none border border-zinc-800/80 bg-zinc-900/50 pl-9 pr-3 py-1.5 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-700 transition-colors"
             />
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             {/* Filter Pill Buttons */}
-            <div className="flex items-center rounded-lg border border-zinc-800/80 bg-zinc-900/50 p-0.5 text-xs">
+            <div className="flex items-center rounded-none border border-zinc-800/80 bg-zinc-900/50 p-0.5 text-xs">
               <button
                 type="button"
                 onClick={() => {
                   setFilterType("all");
                   setPage(1);
                 }}
-                className={`rounded-md px-2.5 py-1 text-xs transition-all ${
+                className={`rounded-none px-2.5 py-1 text-xs transition-all ${
                   filterType === "all" ? "bg-zinc-800 text-white font-medium shadow-xs" : "text-zinc-400 hover:text-zinc-200"
                 }`}
               >
@@ -391,7 +391,7 @@ export function AdminAnalyticsView({
                   setFilterType("has_mailboxes");
                   setPage(1);
                 }}
-                className={`rounded-md px-2.5 py-1 text-xs transition-all ${
+                className={`rounded-none px-2.5 py-1 text-xs transition-all ${
                   filterType === "has_mailboxes" ? "bg-zinc-800 text-white font-medium shadow-xs" : "text-zinc-400 hover:text-zinc-200"
                 }`}
               >
@@ -403,7 +403,7 @@ export function AdminAnalyticsView({
                   setFilterType("no_mailboxes");
                   setPage(1);
                 }}
-                className={`rounded-md px-2.5 py-1 text-xs transition-all ${
+                className={`rounded-none px-2.5 py-1 text-xs transition-all ${
                   filterType === "no_mailboxes" ? "bg-zinc-800 text-white font-medium shadow-xs" : "text-zinc-400 hover:text-zinc-200"
                 }`}
               >
@@ -415,7 +415,7 @@ export function AdminAnalyticsView({
                   setFilterType("active");
                   setPage(1);
                 }}
-                className={`rounded-md px-2.5 py-1 text-xs transition-all ${
+                className={`rounded-none px-2.5 py-1 text-xs transition-all ${
                   filterType === "active" ? "bg-zinc-800 text-white font-medium shadow-xs" : "text-zinc-400 hover:text-zinc-200"
                 }`}
               >
@@ -427,10 +427,10 @@ export function AdminAnalyticsView({
             <div className="flex items-center gap-1.5 text-xs text-zinc-400">
               <ArrowUpDown className="size-3 text-zinc-500" />
               <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
-                <SelectTrigger className="h-8 w-[170px] rounded-lg border-zinc-800/80 bg-zinc-900/50 px-2.5 text-xs text-zinc-300 focus:ring-0 focus:border-zinc-700">
+                <SelectTrigger className="h-8 w-[170px] rounded-none border-zinc-800/80 bg-zinc-900/50 px-2.5 text-xs text-zinc-300 focus:ring-0 focus:border-zinc-700">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent align="end" className="rounded-lg border-zinc-800 bg-zinc-950 text-xs">
+                <SelectContent align="end" className="rounded-none border-zinc-800 bg-zinc-950 text-xs">
                   <SelectItem value="views">Most Pages Visited</SelectItem>
                   <SelectItem value="mailboxes">Most Mailboxes</SelectItem>
                   <SelectItem value="newest">Newest Signups</SelectItem>
@@ -442,7 +442,7 @@ export function AdminAnalyticsView({
         </div>
 
         {/* Directory Table */}
-        <div className="rounded-xl border border-zinc-800/80 overflow-hidden bg-zinc-900/20">
+        <div className="rounded-none border border-zinc-800/80 overflow-hidden bg-zinc-900/20">
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left">
               <thead className="bg-zinc-900/60 border-b border-zinc-800/80 text-zinc-400 text-xs">
@@ -515,7 +515,7 @@ export function AdminAnalyticsView({
                                 size="sm"
                                 disabled={togglingB2bId === u.userId}
                                 onClick={() => handleToggleB2bAccess(u.userId, false)}
-                                className="h-6 px-1.5 text-[10px] text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-md"
+                                className="h-6 px-1.5 text-[10px] text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-none"
                                 title="Revoke B2B Database access"
                               >
                                 {togglingB2bId === u.userId ? "..." : "Revoke"}
@@ -532,7 +532,7 @@ export function AdminAnalyticsView({
                                 size="sm"
                                 disabled={togglingB2bId === u.userId}
                                 onClick={() => handleToggleB2bAccess(u.userId, true)}
-                                className="h-6 px-1.5 text-[10px] text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 font-medium rounded-md"
+                                className="h-6 px-1.5 text-[10px] text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 font-medium rounded-none"
                                 title="Grant lifetime B2B Database access"
                               >
                                 {togglingB2bId === u.userId ? "..." : "Grant"}
@@ -585,7 +585,7 @@ export function AdminAnalyticsView({
                               u.topPages.map((tp) => (
                                 <span
                                   key={tp.path}
-                                  className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] bg-zinc-900/80 text-zinc-300 border border-zinc-800"
+                                  className="inline-flex items-center rounded-none px-1.5 py-0.5 text-[10px] bg-zinc-900/80 text-zinc-300 border border-zinc-800"
                                 >
                                   {tp.path}: <strong className="ml-1 text-white">{tp.count}</strong>
                                 </span>
@@ -605,7 +605,7 @@ export function AdminAnalyticsView({
                             variant="outline"
                             size="sm"
                             onClick={() => setSelectedUserId(u.userId)}
-                            className="h-7 text-xs rounded-lg border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:text-white hover:bg-zinc-800 gap-1.5"
+                            className="h-7 text-xs rounded-none border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:text-white hover:bg-zinc-800 gap-1.5"
                           >
                             <span>Inspect</span>
                             <ExternalLink className="size-3" />
@@ -632,7 +632,7 @@ export function AdminAnalyticsView({
                 size="sm"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="h-7 px-2 text-xs rounded-lg border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:text-white disabled:opacity-40"
+                className="h-7 px-2 text-xs rounded-none border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:text-white disabled:opacity-40"
               >
                 <ChevronLeft className="size-3.5" />
               </Button>
@@ -644,7 +644,7 @@ export function AdminAnalyticsView({
                 size="sm"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                className="h-7 px-2 text-xs rounded-lg border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:text-white disabled:opacity-40"
+                className="h-7 px-2 text-xs rounded-none border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:text-white disabled:opacity-40"
               >
                 <ChevronRight className="size-3.5" />
               </Button>

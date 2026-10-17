@@ -394,7 +394,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-xl border border-border/70 bg-card shadow-xs">
+      <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-none border border-border/70 bg-card shadow-xs">
         <div className={`w-full md:w-[300px] lg:w-[330px] shrink-0 min-h-0 flex flex-col border-r border-border/60 ${activeId ? "hidden md:flex" : "flex"}`}>
           {/* List Sub-header with Filter & Count */}
           <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/30 px-3.5 py-2.5 shrink-0">
@@ -514,7 +514,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
                         {name} {"<"}{r.fromEmail}{">"}
                         {r.senderEmail ? ` → ${r.senderEmail}` : ""}
                       </p>
-                      {r.campaignName && <span className="mt-1.5 inline-block rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">{r.campaignName}</span>}
+                      {r.campaignName && <span className="mt-1.5 inline-block rounded-none bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">{r.campaignName}</span>}
                     </div>
                     <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
                       <Select
@@ -534,7 +534,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
                           ))}
                         </SelectContent>
                       </Select>
-                      <button type="button" aria-label="Back to conversations" onClick={() => setActiveId(null)} className="hidden md:flex rounded-lg p-1.5 text-muted-foreground hover:bg-accent"><X className="size-4" /></button>
+                      <button type="button" aria-label="Back to conversations" onClick={() => setActiveId(null)} className="hidden md:flex rounded-none p-1.5 text-muted-foreground hover:bg-accent"><X className="size-4" /></button>
                     </div>
                   </div>
                   <div ref={scrollerRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 pt-3 pb-12 sm:px-4 sm:pb-16">
@@ -593,7 +593,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
                         </button>
                       </div>
                     ) : (
-                      <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 shadow-sm card-shine overflow-hidden">
+                      <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 shadow-sm card-shine overflow-hidden">
                         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border/50 bg-muted/20 px-3.5 py-2 text-[11px] text-muted-foreground">
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
                             <span className="flex items-center gap-1 truncate">
@@ -647,7 +647,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
                           </button>
 
                           {showQuotedPreview ? (
-                            <div className="mt-2 rounded-md border-l-2 border-primary/40 bg-muted/40 p-2.5 text-xs text-muted-foreground">
+                            <div className="mt-2 rounded-none border-l-2 border-primary/40 bg-muted/40 p-2.5 text-xs text-muted-foreground">
                               <p className="font-medium text-foreground/80">
                                 On {r.receivedAt ? format(new Date(r.receivedAt), "EEE, MMM d, yyyy 'at' h:mm a") : "earlier"} {r.fromName || r.fromEmail} &lt;{r.fromEmail}&gt; wrote:
                               </p>

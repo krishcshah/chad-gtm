@@ -170,7 +170,7 @@ export function AdminUserDetailModal({
             {activeTab === "mailboxes" && (
               <div className="space-y-3">
                 {data.mailboxes.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-zinc-800 p-8 text-center text-xs text-zinc-500 space-y-1">
+                  <div className="rounded-none border border-dashed border-zinc-800 p-8 text-center text-xs text-zinc-500 space-y-1">
                     <Mail className="mx-auto size-6 text-zinc-600 mb-2" />
                     <p className="font-medium text-zinc-300">No mailboxes connected yet</p>
                     <p>This user has not configured any SMTP/IMAP sender accounts.</p>
@@ -315,7 +315,7 @@ export function AdminUserDetailModal({
                 variant="outline"
                 size="sm"
                 onClick={onClose}
-                className="text-xs rounded-lg border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:text-white hover:bg-zinc-800"
+                className="text-xs rounded-none border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:text-white hover:bg-zinc-800"
               >
                 Close Profile
               </Button>

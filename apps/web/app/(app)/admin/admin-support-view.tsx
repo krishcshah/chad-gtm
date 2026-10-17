@@ -159,7 +159,7 @@ export function AdminSupportView({
               variant="outline"
               size="sm"
               onClick={downloadCsv}
-              className="rounded-lg border-zinc-800 bg-zinc-900/60 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white h-9 px-3 gap-1.5"
+              className="rounded-none border-zinc-800 bg-zinc-900/60 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white h-9 px-3 gap-1.5"
             >
               <Download className="size-3.5" /> Export CSV
             </Button>
@@ -219,7 +219,7 @@ export function AdminSupportView({
 
       {/* 3. Universal Tickets Table */}
       {filteredTickets.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/20 p-10 text-center space-y-2">
+        <div className="rounded-none border border-dashed border-zinc-800 bg-zinc-900/20 p-10 text-center space-y-2">
           <LifeBuoy className="mx-auto size-7 text-zinc-600" />
           <p className="text-xs text-zinc-400 font-medium">No tickets matching selected filters.</p>
         </div>
@@ -284,7 +284,7 @@ export function AdminSupportView({
                               variant="outline"
                               size="sm"
                               disabled={updatingId === t.id && isPending}
-                              className="rounded-lg border-zinc-800 bg-zinc-900/80 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white h-7 px-2.5"
+                              className="rounded-none border-zinc-800 bg-zinc-900/80 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white h-7 px-2.5"
                             >
                               {updatingId === t.id && isPending ? (
                                 <Loader2 className="size-3 animate-spin" />
@@ -293,7 +293,7 @@ export function AdminSupportView({
                               )}
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="rounded-lg border-zinc-800 bg-zinc-950 font-sans text-xs">
+                          <DropdownMenuContent align="end" className="rounded-none border-zinc-800 bg-zinc-950 font-sans text-xs">
                             <DropdownMenuItem onClick={() => handleStatusChange(t.id, "open")}>
                               Mark as Open
                             </DropdownMenuItem>
@@ -313,7 +313,7 @@ export function AdminSupportView({
                           asChild
                           variant="outline"
                           size="sm"
-                          className="rounded-lg border-zinc-800 bg-zinc-900/80 text-white hover:bg-zinc-800 text-xs h-7 px-2.5 gap-1"
+                          className="rounded-none border-zinc-800 bg-zinc-900/80 text-white hover:bg-zinc-800 text-xs h-7 px-2.5 gap-1"
                         >
                           <Link href={`/support/${t.id}`}>
                             <span>Reply</span>

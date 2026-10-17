@@ -110,7 +110,7 @@ export function BugReportForm() {
         <button
           type="submit"
           disabled={isPending}
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 transition-all cursor-pointer"
+          className="inline-flex items-center gap-2 rounded-none bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 transition-all cursor-pointer"
         >
           {isPending ? (
             <>

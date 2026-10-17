@@ -73,7 +73,7 @@ export function StrategyReviewBoard({
               selectedOfferIndex,
             })
           }
-          className="rounded-lg bg-white text-black font-semibold text-xs hover:bg-zinc-200 h-10 px-5 w-full sm:w-auto shadow-xs transition-all active:scale-[0.98]"
+          className="rounded-none bg-white text-black font-semibold text-xs hover:bg-zinc-200 h-10 px-5 w-full sm:w-auto shadow-xs transition-all active:scale-[0.98]"
         >
           Confirm & Match Leads <ArrowRight className="size-3.5 ml-1.5" />
         </Button>
@@ -103,13 +103,13 @@ export function StrategyReviewBoard({
                   rows={4}
                   value={summaryText}
                   onChange={(e) => setSummaryText(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-700 bg-black/60 p-3 text-xs text-white focus:outline-none focus:ring-1 focus:ring-white leading-relaxed"
+                  className="w-full rounded-none border border-zinc-700 bg-black/60 p-3 text-xs text-white focus:outline-none focus:ring-1 focus:ring-white leading-relaxed"
                 />
                 <Button
                   type="button"
                   size="sm"
                   onClick={handleSaveOverview}
-                  className="rounded-md bg-white text-black text-xs font-semibold h-8 px-3"
+                  className="rounded-none bg-white text-black text-xs font-semibold h-8 px-3"
                 >
                   Save Summary
                 </Button>
@@ -135,7 +135,7 @@ export function StrategyReviewBoard({
             </div>
           </div>
 
-          <div className="rounded-lg bg-zinc-900/40 border border-zinc-800/80 p-3 text-xs text-zinc-400">
+          <div className="rounded-none bg-zinc-900/40 border border-zinc-800/80 p-3 text-xs text-zinc-400">
             <span className="font-semibold text-white">Target Market: </span>
             {overview.targetMarket}
           </div>
@@ -247,7 +247,7 @@ export function StrategyReviewBoard({
                   rows={3}
                   value={offers[activeTab]?.valueProp || ""}
                   onChange={(e) => handleUpdateOffer(activeTab, "valueProp", e.target.value)}
-                  className="w-full rounded-lg border border-zinc-800 bg-black/60 p-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-white leading-relaxed"
+                  className="w-full rounded-none border border-zinc-800 bg-black/60 p-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-white leading-relaxed"
                 />
               </div>
 
