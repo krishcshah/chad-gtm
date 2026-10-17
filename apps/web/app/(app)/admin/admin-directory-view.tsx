@@ -66,7 +66,7 @@ export function AdminDirectoryView({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", "chadgtm_apollo_leads_template.csv");
+    link.setAttribute("download", "autogtm_apollo_leads_template.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -145,7 +145,7 @@ export function AdminDirectoryView({
           <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
             {stats.distinctIndustries.toLocaleString()}
           </div>
-          <p className="text-xs text-zinc-500">Available for ChadGTM ICP matching</p>
+          <p className="text-xs text-zinc-500">Available for AutoGTM ICP matching</p>
         </div>
 
         {/* Verified Email Pct */}

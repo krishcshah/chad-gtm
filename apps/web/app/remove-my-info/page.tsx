@@ -4,8 +4,8 @@ import { ChadGtmLogo } from "@/components/chad-gtm-logo";
 import { PublicRemoveMyInfoForm } from "./public-remove-form";
 
 export const metadata = {
-  title: "Remove My Info · Data Erasure Request · ChadGTM",
-  description: "Request the removal of your personal or business email from the ChadGTM database under GDPR Art. 17.",
+  title: "Remove My Info · Data Erasure Request · AutoGTM",
+  description: "Request the removal of your personal or business email from the AutoGTM database under GDPR Art. 17.",
 };
 
 export default function RemoveMyInfoPage() {
@@ -16,7 +16,7 @@ export default function RemoveMyInfoPage() {
         <div className="mx-auto max-w-3xl px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <ChadGtmLogo compact />
-            <span className="font-semibold text-sm tracking-tight text-foreground">ChadGTM</span>
+            <span className="font-semibold text-sm tracking-tight text-foreground">AutoGTM</span>
           </div>
           <Link
             href="/"
@@ -37,7 +37,7 @@ export default function RemoveMyInfoPage() {
             Remove My Info
           </h1>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            If your professional email or contact details are listed in the ChadGTM outreach directory or if you wish to permanently purge your data from our systems, please submit your request below.
+            If your professional email or contact details are listed in the AutoGTM outreach directory or if you wish to permanently purge your data from our systems, please submit your request below.
           </p>
         </div>
 

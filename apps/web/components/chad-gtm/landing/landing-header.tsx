@@ -31,7 +31,7 @@ export function LandingHeader({ isLoggedIn }: { isLoggedIn: boolean }) {
             ROI Calculator
           </a>
           <a href="#comparison" className="transition-colors hover:text-white">
-            Why ChadGTM
+            Why AutoGTM
           </a>
           <a href="#pricing" className="transition-colors hover:text-white flex items-center gap-1.5">
             Pricing <span className="text-white font-medium rounded-full border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[10px]">$0/mo + 5¢</span>

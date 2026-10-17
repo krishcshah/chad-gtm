@@ -255,7 +255,7 @@ export function TicketThreadView({
             }}
             placeholder={
               isAdminUser
-                ? "Write an official response or resolution update as ChadGTM Engineering... (Ctrl+Enter to send)"
+                ? "Write an official response or resolution update as AutoGTM Engineering... (Ctrl+Enter to send)"
                 : "Type your reply or additional details here... (Ctrl+Enter to send)"
             }
             className="rounded-none border-zinc-800 bg-black text-xs text-white placeholder:text-zinc-600 focus:border-white font-mono resize-y"

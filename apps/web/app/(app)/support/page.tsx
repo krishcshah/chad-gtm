@@ -6,7 +6,7 @@ import { SupportHubView } from "@/components/support/support-hub-view";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Support & Feedback Center · ChadGTM",
+  title: "Support & Feedback Center · AutoGTM",
   description: "Report bugs, request features, share suggestions, or contact the core engineering team.",
 };
 

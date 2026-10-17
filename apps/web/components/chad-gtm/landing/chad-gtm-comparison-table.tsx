@@ -14,7 +14,7 @@ export function ChadGtmComparisonTable() {
     },
     {
       feature: "Autonomous URL-to-Campaign",
-      chadGtm: "Instant (60s Chad Neural Core™)",
+      chadGtm: "Instant (60s AutoGTM Neural Core™)",
       instantly: "Manual campaign setup",
       apollo: "Manual list building",
       agency: "2-3 weeks onboarding",
@@ -82,7 +82,7 @@ export function ChadGtmComparisonTable() {
             Comparative Architecture
           </h2>
           <p className="mt-4 text-xs sm:text-sm text-zinc-400 font-mono">
-            Direct capability matrix comparing ChadGTM against legacy cold email stacks and agencies.
+            Direct capability matrix comparing AutoGTM against legacy cold email stacks and agencies.
           </p>
         </div>
 
@@ -99,7 +99,7 @@ export function ChadGtmComparisonTable() {
                   <th className="p-3.5 sm:p-4 text-zinc-400 uppercase tracking-wider text-[11px]">Feature Specification</th>
                   <th className="p-3.5 sm:p-4 text-white bg-zinc-900 border-x border-zinc-700">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold uppercase tracking-wider text-xs">CHADGTM</span>
+                      <span className="font-bold uppercase tracking-wider text-xs">AUTOGTM</span>
                       <span className="border border-white bg-white text-black text-[9px] font-bold px-1 py-0.2 rounded-none">Active</span>
                     </div>
                   </th>

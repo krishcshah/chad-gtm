@@ -111,7 +111,7 @@ export function ChadGtmSequenceShowcase() {
             </span>
           </h2>
           <p className="mt-4 text-xs sm:text-sm text-zinc-400 font-sans max-w-2xl mx-auto leading-relaxed">
-            Sending a single cold email is a waste of time. ChadGTM automatically executes a proven 3-touch cadence for every single prospect, dynamically tailored by AI, and pauses instantly the second a buyer replies.
+            Sending a single cold email is a waste of time. AutoGTM automatically executes a proven 3-touch cadence for every single prospect, dynamically tailored by AI, and pauses instantly the second a buyer replies.
           </p>
         </div>
 
@@ -179,7 +179,7 @@ export function ChadGtmSequenceShowcase() {
               </div>
               <div className="flex flex-wrap items-center gap-2 text-zinc-500">
                 <span className="uppercase text-[10px] tracking-widest text-zinc-600 w-16">From:</span>
-                <span className="text-zinc-400">Alex Rivera &lt;alex@managed-pool-04.chadgtm.io&gt;</span>
+                <span className="text-zinc-400">Alex Rivera &lt;alex@managed-pool-04.autogtm.tech&gt;</span>
               </div>
               <div className="flex flex-wrap items-center gap-2 text-zinc-500 pt-1 border-t border-zinc-900">
                 <span className="uppercase text-[10px] tracking-widest text-zinc-600 w-16">Subject:</span>

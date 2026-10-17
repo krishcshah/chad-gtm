@@ -28,7 +28,7 @@ export function AiSettingsCard({}: AiSettingsCardProps) {
             <div>
               <div className="flex items-center gap-2">
                 <CardTitle className="text-sm font-bold uppercase tracking-wider text-white">
-                  Chad Neural Core™
+                  AutoGTM Neural Core™
                 </CardTitle>
                 <span className="rounded-none border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-[9px] font-mono tracking-widest text-zinc-300 uppercase">
                   Proprietary GTM System
@@ -59,7 +59,7 @@ export function AiSettingsCard({}: AiSettingsCardProps) {
               <Cpu className="size-3.5 text-zinc-400" />
               <span>Proprietary GTM Intelligence</span>
             </div>
-            <p className="text-zinc-300 font-mono text-xs">Chad Neural Core™ v2</p>
+            <p className="text-zinc-300 font-mono text-xs">AutoGTM Neural Core™ v2</p>
             <p className="text-[10px] text-zinc-500 font-sans leading-normal">
               Sub-second web reasoning &amp; multi-modal semantic synthesis calibrated specifically for B2B cold outreach conversion.
             </p>
@@ -96,7 +96,7 @@ export function AiSettingsCard({}: AiSettingsCardProps) {
               Dedicated Outbound Cluster Active
             </p>
             <p className="text-[11px] text-zinc-400 font-sans leading-relaxed">
-              Your ChadGTM workspace is pre-connected to the production Chad Neural Core™ cluster. All autonomous campaign research, ICP synthesis, tone calibration, and email sequencing dispatch automatically through our proprietary high-availability pipeline.
+              Your AutoGTM workspace is pre-connected to the production AutoGTM Neural Core™ cluster. All autonomous campaign research, ICP synthesis, tone calibration, and email sequencing dispatch automatically through our proprietary high-availability pipeline.
             </p>
           </div>
         </div>

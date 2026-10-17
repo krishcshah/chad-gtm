@@ -34,9 +34,9 @@ import { ChadGtmCalculator } from "@/components/chad-gtm/landing/chad-gtm-calcul
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "ChadGTM · Turn Your Website URL Into A Booked Sales Pipeline · $0/mo Platform",
+  title: "AutoGTM · Turn Your Website URL Into A Booked Sales Pipeline · $0/mo Platform",
   description:
-    "Stop paying $450/mo for Apollo and Instantly. Enter your URL—ChadGTM discovers verified decision-makers, crafts hyper-personalized copy, and runs an autonomous 3-touch sequence for just 5¢ per email. $0/month forever.",
+    "Stop paying $450/mo for Apollo and Instantly. Enter your URL—AutoGTM discovers verified decision-makers, crafts hyper-personalized copy, and runs an autonomous 3-touch sequence for just 5¢ per email. $0/month forever.",
 };
 
 export default async function LandingPage() {
@@ -76,8 +76,8 @@ export default async function LandingPage() {
               <div className="lg:col-span-7 space-y-6">
                 {/* Visual Eyebrow Badge */}
                 <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800/80 bg-zinc-950/90 px-3 py-1 text-xs text-zinc-300 font-sans shadow-xs">
-                  <img src="/chad-white-border.png" alt="Chad" className="size-3.5 object-contain" />
-                  <span className="font-semibold text-white">ChadGTM 2.0</span>
+                  <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="font-semibold text-white">AutoGTM 2.0</span>
                   <span className="text-zinc-600">·</span>
                   <span className="text-zinc-400">Autonomous Pipeline</span>
                 </div>
@@ -94,7 +94,7 @@ export default async function LandingPage() {
 
                 {/* Direct-Response Subtitle */}
                 <p className="text-xs sm:text-sm text-zinc-400 font-sans leading-relaxed max-w-xl">
-                  Enter your domain. ChadGTM extracts your offer, identifies verified buyers from our 100M+ directory, and runs autonomous 3-touch outreach straight into primary inboxes.
+                  Enter your domain. AutoGTM extracts your offer, identifies verified buyers from our 100M+ directory, and runs autonomous 3-touch outreach straight into primary inboxes.
                 </p>
 
                 {/* Primary Action Buttons */}
@@ -258,12 +258,12 @@ export default async function LandingPage() {
                 </div>
               </div>
 
-              {/* The ChadGTM Model */}
+              {/* The AutoGTM Model */}
               <div className="rounded-xl border border-zinc-700/80 bg-zinc-950/90 p-6 sm:p-8 space-y-6 flex flex-col justify-between relative shadow-xl card-shine">
                 <div className="space-y-4">
                   <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                     <span className="text-xs uppercase tracking-wider font-semibold text-white flex items-center gap-1.5">
-                      <Sparkles className="size-3.5 text-emerald-400" /> ChadGTM Autonomous Engine
+                      <Sparkles className="size-3.5 text-emerald-400" /> AutoGTM Autonomous Engine
                     </span>
                     <span className="rounded-full border border-emerald-500/40 bg-emerald-950/40 text-emerald-400 text-[10px] px-2.5 py-0.5 font-semibold">
                       $0/mo Platform Fee
@@ -291,7 +291,7 @@ export default async function LandingPage() {
                     </li>
                     <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2">
                       <span className="flex items-center gap-2 text-white">
-                        <Check className="size-3.5 text-emerald-400 shrink-0" /> Chad Neural Voice Calibration
+                        <Check className="size-3.5 text-emerald-400 shrink-0" /> AutoGTM Neural Voice Calibration
                       </span>
                       <span className="text-emerald-400 font-semibold font-mono">INCLUDED ($0)</span>
                     </li>
@@ -386,7 +386,7 @@ export default async function LandingPage() {
                   Yet in outbound sales, legacy tools force early-stage founders and growth teams to pay <strong className="text-white">$400–$800 every single month</strong> in recurring seat licenses. If you take a week off to close deals, you still pay $400. If you are testing a new product angle, you still pay $400.
                 </p>
                 <p>
-                  We built ChadGTM to treat cold email infrastructure as a utility. Our entire core software—campaign builder, lead directory scaling to 100M+ verified global contacts, UniBox, and CRM—is <strong className="text-white">$0/month forever</strong>. All mailboxes are pre-warmed, authenticated, and supplied directly by our admin fleet, so you pay strictly <strong className="text-white">$0.05 per email delivered</strong> with zero domain or DNS setup.
+                  We built AutoGTM to treat cold email infrastructure as a utility. Our entire core software—campaign builder, lead directory scaling to 100M+ verified global contacts, UniBox, and CRM—is <strong className="text-white">$0/month forever</strong>. All mailboxes are pre-warmed, authenticated, and supplied directly by our admin fleet, so you pay strictly <strong className="text-white">$0.05 per email delivered</strong> with zero domain or DNS setup.
                 </p>
                 <p className="text-zinc-400 text-xs pt-2">
                   Zero seat taxes. Zero monthly minimums. Pure pay-for-what-you-use growth.
@@ -395,7 +395,7 @@ export default async function LandingPage() {
 
               <div className="pt-4 border-t border-zinc-800/80 flex items-center justify-between">
                 <div>
-                  <div className="text-xs font-semibold text-white">The ChadGTM Core Team</div>
+                  <div className="text-xs font-semibold text-white">The AutoGTM Core Team</div>
                   <div className="text-[11px] text-zinc-400">Built for founders who hate paying SaaS seat taxes</div>
                 </div>
                 <Button asChild size="sm" className="rounded-lg bg-white text-black font-medium text-xs border border-white hover:bg-zinc-200 shadow-xs">
@@ -429,7 +429,7 @@ export default async function LandingPage() {
                 {
                   code: "Case Study 01",
                   quote:
-                    "ChadGTM completely replaced our $4,500/month SDR agency. We plugged in our URL, approved 3 email angles on the swipe deck, and booked 19 enterprise demos in our first 10 days.",
+                    "AutoGTM completely replaced our $4,500/month SDR agency. We plugged in our URL, approved 3 email angles on the swipe deck, and booked 19 enterprise demos in our first 10 days.",
                   author: "Julian Richter",
                   role: "Founder & CEO, CloudScale IO",
                   metric: "+280% Pipeline",
@@ -498,8 +498,8 @@ export default async function LandingPage() {
               {[
                 {
                   code: "SPEC_01",
-                  q: "Why is the core ChadGTM platform $0/month?",
-                  a: "We believe cold email software should not cost $97/month in recurring seat licenses. The core ChadGTM platform is 100% free ($0/mo) for unlimited campaigns, sequences, and lead storage. When using our autonomous shared mailbox pool, you pay strictly 5¢ per email.",
+                  q: "Why is the core AutoGTM platform $0/month?",
+                  a: "We believe cold email software should not cost $97/month in recurring seat licenses. The core AutoGTM platform is 100% free ($0/mo) for unlimited campaigns, sequences, and lead storage. When using our autonomous shared mailbox pool, you pay strictly 5¢ per email.",
                 },
                 {
                   code: "SPEC_02",
@@ -514,21 +514,21 @@ export default async function LandingPage() {
                 {
                   code: "SPEC_04",
                   q: "Do I need to buy secondary domains or configure DNS records?",
-                  a: "No. ChadGTM is 100% turnkey zero setup. Our admin fleet supplies, warms, and maintains all sender infrastructure with pre-configured SPF, DKIM, and DMARC authentication. You never have to buy domains or configure DNS.",
+                  a: "No. AutoGTM is 100% turnkey zero setup. Our admin fleet supplies, warms, and maintains all sender infrastructure with pre-configured SPF, DKIM, and DMARC authentication. You never have to buy domains or configure DNS.",
                 },
                 {
                   code: "SPEC_05",
-                  q: "How does ChadGTM maintain 99%+ deliverability?",
+                  q: "How does AutoGTM maintain 99%+ deliverability?",
                   a: "We enforce a strict ceiling of 30 emails per mailbox per day, distributed across our shared sender infrastructure with intelligent randomized delays (45–120 seconds). Each sender domain is pre-authenticated with verified SPF, DKIM, and DMARC records.",
                 },
                 {
                   code: "SPEC_06",
                   q: "What powers the autonomous company research and email generation?",
-                  a: "ChadGTM is powered by our proprietary Chad Neural Core™—a dedicated outbound intelligence model trained on 7+ years of cold campaign conversion data and over 50M+ sales touchpoints. It crawls your live website, extracts unique value propositions, matches high-intent buyer personas, and drafts high-converting outreach angles in seconds.",
+                  a: "AutoGTM is powered by our proprietary AutoGTM Neural Core™—a dedicated outbound intelligence model trained on 7+ years of cold campaign conversion data and over 50M+ sales touchpoints. It crawls your live website, extracts unique value propositions, matches high-intent buyer personas, and drafts high-converting outreach angles in seconds.",
                 },
                 {
                   code: "SPEC_07",
-                  q: "Is ChadGTM compliant with GDPR and CAN-SPAM regulations?",
+                  q: "Is AutoGTM compliant with GDPR and CAN-SPAM regulations?",
                   a: "Yes. Every outgoing email automatically includes one-click unsubscribe links and physical compliance footers. Any reply or opt-out is instantly honored and synchronized across all active campaigns.",
                 },
               ].map((faq, i) => (
@@ -605,7 +605,7 @@ export default async function LandingPage() {
           <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
             <ChadGtmLogo compact />
             <span className="text-zinc-700">|</span>
-            <span className="text-[11px]">© 2026 ChadGTM Engine. All rights reserved.</span>
+            <span className="text-[11px]">© 2026 AutoGTM Engine. All rights reserved.</span>
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-4 text-[11px]">

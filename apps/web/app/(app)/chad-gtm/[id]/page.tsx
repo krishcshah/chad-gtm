@@ -6,8 +6,8 @@ import { MissionControlView } from "./mission-control-view";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Mission Control · ChadGTM",
-  description: "Live real-time telemetry, opens, replies, and controls for ChadGTM autonomous outreach.",
+  title: "Mission Control · AutoGTM",
+  description: "Live real-time telemetry, opens, replies, and controls for AutoGTM autonomous outreach.",
 };
 
 export default async function ChadGtmRunPage({

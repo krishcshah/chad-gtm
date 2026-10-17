@@ -42,7 +42,7 @@ export function ChadGtmPricingCard({ isLoggedIn = false }: { isLoggedIn?: boolea
                 THE ALL-IN-ONE AUTONOMOUS ENGINE
               </div>
               <h3 className="text-2xl sm:text-4xl font-extrabold text-white uppercase tracking-wider">
-                ChadGTM Complete Suite
+                AutoGTM Complete Suite
               </h3>
               <p className="text-xs sm:text-sm text-zinc-400 font-sans leading-relaxed max-w-xl">
                 One unified platform. Everything unlocked with $0 platform subscription fees. Unlimited leads, unlimited mailboxes, and automated 3-touch outreach.
@@ -85,7 +85,7 @@ export function ChadGtmPricingCard({ isLoggedIn = false }: { isLoggedIn?: boolea
                 <div>
                   <div className="font-bold text-white uppercase tracking-wide text-[11px]">Autonomous ICP Extraction</div>
                   <div className="text-zinc-400 font-sans text-xs mt-0.5">
-                    Our proprietary Chad Neural Core™ crawls your domain to extract core value propositions, pain points, and buyer personas in 60s.
+                    Our proprietary AutoGTM Neural Core™ crawls your domain to extract core value propositions, pain points, and buyer personas in 60s.
                   </div>
                 </div>
               </div>

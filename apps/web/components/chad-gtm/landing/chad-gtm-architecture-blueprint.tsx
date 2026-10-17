@@ -30,7 +30,7 @@ const LAYERS: ArchLayer[] = [
   {
     id: "layer-1",
     tag: "TIER_01 // INFERENCE",
-    name: "Chad Neural Core™ Autonomous ICP Engine",
+    name: "AutoGTM Neural Core™ Autonomous ICP Engine",
     summary:
       "Instantaneous crawling of landing page DOM, meta tags, pricing tiers, and customer testimonials. Synthesizes core UVPs and ideal customer personas in under 400 milliseconds using our proprietary outbound intelligence model.",
     latency: "<400ms",
@@ -41,13 +41,13 @@ const LAYERS: ArchLayer[] = [
       "Generates 3 distinctive cold outreach angles per target ICP",
       "Identifies decision-maker titles (VP Eng, Head of Growth, CTO)",
     ],
-    specCode: `// STAGE 01: CHAD NEURAL CORE EXTRACTION
+    specCode: `// STAGE 01: AUTOGTM NEURAL CORE EXTRACTION
 const prompt = "Analyze domain DOM, identify UVP, map 3 ICP personas";
-const engine = chadNeuralCore({ mode: "autonomous_icp" });
+const engine = autoGtmNeuralCore({ mode: "autonomous_icp" });
 const extraction = await engine.synthesize({
   contents: [urlDOM, prompt],
   temperature: 0.2, // deterministic conversion focus
-  responseSchema: ChadGtmIcpSchema,
+  responseSchema: AutoGtmIcpSchema,
 });
 // Result: 3 calibrated outreach angles synthesized in 380ms`,
   },
@@ -126,7 +126,7 @@ export function ChadGtmArchitectureBlueprint() {
             Technical Architecture
           </h2>
           <p className="mt-3 text-xs sm:text-sm text-zinc-400 leading-relaxed max-w-2xl font-mono">
-            How ChadGTM autonomously bridges the gap between raw company websites and closed enterprise contracts with zero human intervention.
+            How AutoGTM autonomously bridges the gap between raw company websites and closed enterprise contracts with zero human intervention.
           </p>
         </div>
 

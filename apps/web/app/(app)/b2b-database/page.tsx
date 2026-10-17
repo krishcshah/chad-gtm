@@ -12,7 +12,7 @@ import { B2bPaywall } from "@/components/leads/b2b-paywall";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Global Directory · 100M+ Verified Leads · ChadGTM",
+  title: "Global Directory · 100M+ Verified Leads · AutoGTM",
   description:
     "Search 100M+ verified global B2B decision-makers, filter by company size, seniority, and industry, and export directly to autonomous campaigns.",
 };

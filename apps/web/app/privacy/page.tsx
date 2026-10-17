@@ -3,8 +3,8 @@ import { ArrowLeft, ShieldCheck, Lock, UserX, FileText } from "lucide-react";
 import { ChadGtmLogo } from "@/components/chad-gtm-logo";
 
 export const metadata = {
-  title: "Privacy Policy · ChadGTM",
-  description: "Privacy policy and GDPR data processing notice for ChadGTM.",
+  title: "Privacy Policy · AutoGTM",
+  description: "Privacy policy and GDPR data processing notice for AutoGTM.",
 };
 
 export default function PrivacyPage() {
@@ -15,7 +15,7 @@ export default function PrivacyPage() {
         <div className="mx-auto max-w-4xl px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <ChadGtmLogo compact />
-            <span className="font-semibold text-sm tracking-tight text-foreground">ChadGTM</span>
+            <span className="font-semibold text-sm tracking-tight text-foreground">AutoGTM</span>
           </div>
           <Link
             href="/"
@@ -36,7 +36,7 @@ export default function PrivacyPage() {
             Privacy Policy
           </h1>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Information regarding data collection and processing on the ChadGTM platform.
+            Information regarding data collection and processing on the AutoGTM platform.
           </p>
         </div>
 
@@ -44,7 +44,7 @@ export default function PrivacyPage() {
         <section className="space-y-3">
           <h2 className="text-lg font-bold text-foreground">1. Data Controller</h2>
           <div className="rounded-xl border border-border/60 bg-card/50 p-5 text-sm space-y-1 text-muted-foreground">
-            <p className="font-semibold text-foreground">ChadGTM Platform</p>
+            <p className="font-semibold text-foreground">AutoGTM Platform</p>
             <p className="pt-2">
               <strong className="text-foreground">Email for Privacy Requests:</strong>{" "}
               <a href="mailto:de.krish.shah@gmail.com" className="text-primary hover:underline">

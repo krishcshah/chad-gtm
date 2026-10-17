@@ -131,7 +131,7 @@ export function TicketCreateForm({ onSuccess }: { onSuccess?: () => void }) {
           id="url"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://chadgtm.com/campaigns/..."
+          placeholder="https://autogtm.tech/campaigns/..."
           className="rounded-none border-zinc-800 bg-black text-xs text-white placeholder:text-zinc-600 focus:border-white font-mono h-9"
         />
       </div>

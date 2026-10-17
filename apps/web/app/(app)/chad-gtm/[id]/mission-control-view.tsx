@@ -117,7 +117,7 @@ export function MissionControlView({
               href="/chad-gtm"
               className="text-xs text-zinc-400 hover:text-white flex items-center gap-1 font-medium transition-colors"
             >
-              <ChevronLeft className="size-3.5" /> Back to ChadGTM
+              <ChevronLeft className="size-3.5" /> Back to AutoGTM
             </Link>
             <span className="text-zinc-700">•</span>
             <span

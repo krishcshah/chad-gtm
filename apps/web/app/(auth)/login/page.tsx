@@ -34,7 +34,7 @@ export default function LoginPage() {
       <div className="mb-6 space-y-1.5 text-center">
         <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">Sign In</h1>
         <p className="text-xs text-zinc-400 font-sans">
-          ChadGTM Autonomous Outbound Engine
+          AutoGTM Autonomous Outbound Engine
         </p>
       </div>
 

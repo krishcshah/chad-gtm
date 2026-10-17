@@ -93,7 +93,7 @@ export function ChadGtmCalculator() {
             TRANSPARENT ROI // 5¢ UTILITY VS. 5 VENDOR INVOICES & AGENCY RETAINERS
           </div>
           <h2 className="text-3xl sm:text-5xl font-extrabold text-white uppercase tracking-tight">
-            How Much Will ChadGTM Cost You?
+            How Much Will AutoGTM Cost You?
           </h2>
           <p className="mt-3 text-xs sm:text-sm text-zinc-400 font-sans leading-relaxed max-w-xl mx-auto">
             Zero software subscription fees. Zero lead export paywalls. Drag the slider to your planned monthly volume to see your exact bill compared to paying for a fragmented DIY stack.
@@ -172,7 +172,7 @@ export function ChadGtmCalculator() {
           <div className="border-2 border-white bg-black p-6 sm:p-7 space-y-5 relative">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="size-3.5 text-white" /> What You Pay With ChadGTM
+                <Sparkles className="size-3.5 text-white" /> What You Pay With AutoGTM
               </span>
               <span className="border border-emerald-500/50 bg-emerald-950/40 text-emerald-400 text-[10px] font-bold px-2 py-0.5 uppercase tracking-widest">
                 Pay As You Send

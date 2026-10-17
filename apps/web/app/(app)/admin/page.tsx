@@ -12,7 +12,7 @@ import { ShieldCheck, ShieldAlert } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Admin Console · Mailbox Pool & Lead Directory · ChadGTM",
+  title: "Admin Console · Mailbox Pool & Lead Directory · AutoGTM",
   description:
     "Administrative oversight of shared mailbox infrastructure, Apollo B2B directory, registered users, page view analytics, support tickets, and GDPR data requests.",
 };

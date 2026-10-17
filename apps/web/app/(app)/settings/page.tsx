@@ -68,7 +68,7 @@ export default async function SettingsPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="font-medium">Theme</p>
-              <p className="text-sm text-muted-foreground">Dark is optimized for ChadGTM.</p>
+              <p className="text-sm text-muted-foreground">Dark is optimized for AutoGTM.</p>
             </div>
             <ThemeToggle />
           </div>
@@ -135,14 +135,14 @@ export default async function SettingsPage() {
       {/* Danger Zone: Permanent Account Deletion */}
       <DangerZoneCard userEmail={user.email} />
 
-      {/* ChadGTM Infrastructure Card */}
+      {/* AutoGTM Infrastructure Card */}
       <div className="rounded-2xl border border-white/10 bg-zinc-950/60 p-5 backdrop-blur-xl">
         <div className="flex items-center gap-2 text-xs font-bold text-white mb-2">
           <Sparkles className="size-4 text-cyan-400" />
-          <span>ChadGTM Autonomous Outbound Engine</span>
+          <span>AutoGTM Autonomous Outbound Engine</span>
         </div>
         <p className="text-xs text-zinc-400 leading-relaxed max-w-xl">
-          Powered by our proprietary Chad Neural Core™ trained on 50M+ sales touchpoints, 100M+ verified global decision-maker prospects, and autonomous managed mailboxes with safe 30/day delivery pacing.
+          Powered by our proprietary AutoGTM Neural Core™ trained on 50M+ sales touchpoints, 100M+ verified global decision-maker prospects, and autonomous managed mailboxes with safe 30/day delivery pacing.
         </p>
         <div className="mt-3 flex items-center gap-4 text-[11px] font-mono text-zinc-500">
           <span className="flex items-center gap-1.5">
@@ -155,7 +155,7 @@ export default async function SettingsPage() {
       </div>
 
       <p className="text-center text-xs text-zinc-500">
-        ChadGTM · Autonomous Go-To-Market & Cold Outreach Engine
+        AutoGTM · Autonomous Go-To-Market & Cold Outreach Engine
       </p>
     </div>
   );

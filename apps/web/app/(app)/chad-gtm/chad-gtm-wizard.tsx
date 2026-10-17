@@ -222,7 +222,7 @@ export function ChadGtmWizard({
           </div>
           <div>
             <h1 className="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-2">
-              ChadGTM <span className="text-zinc-500 font-normal text-xs">// Autonomous Engine</span>
+              AutoGTM <span className="text-zinc-500 font-normal text-xs">// Autonomous Engine</span>
             </h1>
           </div>
         </div>

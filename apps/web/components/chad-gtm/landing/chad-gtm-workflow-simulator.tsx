@@ -125,7 +125,7 @@ export function ChadGtmWorkflowSimulator() {
           </h2>
           <p className="mt-4 text-xs sm:text-sm text-zinc-400 font-mono max-w-2xl mx-auto">
             Zero CSV cleansing. Zero manual SMTP warmup. Zero cold writer's block.
-            ChadGTM drives meetings autonomously through a verified 5-stage architecture.
+            AutoGTM drives meetings autonomously through a verified 5-stage architecture.
           </p>
         </div>
 
@@ -211,7 +211,7 @@ export function ChadGtmWorkflowSimulator() {
                   </div>
                   <div className="text-zinc-400 flex items-center gap-2">
                     <CheckCircle2 className="size-3.5 text-white" />
-                    [Chad Neural Core™]: Synthesizing brand thesis, target buyers, and pain vectors...
+                    [AutoGTM Neural Core™]: Synthesizing brand thesis, target buyers, and pain vectors...
                   </div>
                 </div>
               </div>
