@@ -90,7 +90,7 @@ export default function LoginPage() {
       </form>
 
       <div className="mt-6 border-t border-zinc-800/80 pt-4 text-center text-xs text-zinc-400">
-        New to ChadGTM?{" "}
+        New to AutoGTM?{" "}
         <Link href="/signup" className="text-white hover:underline transition-colors font-medium">
           Create Account ($0/mo)
         </Link>

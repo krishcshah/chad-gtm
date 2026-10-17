@@ -45,7 +45,7 @@ export const TICKET_CATEGORIES: { id: TicketCategory; label: string; badge: stri
     id: "feature_request",
     label: "Feature Request",
     badge: "Feature",
-    description: "Idea or capability you'd like added to the ChadGTM autonomous pipeline.",
+    description: "Idea or capability you'd like added to the AutoGTM autonomous pipeline.",
   },
   {
     id: "suggestion",

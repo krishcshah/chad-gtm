@@ -224,7 +224,7 @@ export async function addMessageToTicket(
     ticketId,
     userId: currentUser.id,
     userName: currentUser.name || null,
-    userEmail: currentUser.email || "support@chadgtm.com",
+    userEmail: currentUser.email || "support@autogtm.tech",
     senderRole: role,
     message: text,
     createdAt: nowIso,

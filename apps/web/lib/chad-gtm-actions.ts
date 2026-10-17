@@ -136,7 +136,7 @@ export async function generateCalibrationEmailsAction(
       )
       .limit(1);
 
-    if (!run) throw new Error("ChadGTM session not found.");
+    if (!run) throw new Error("AutoGTM session not found.");
 
     const industries = (run.selectedIndustries as string[]) || [];
     const offers = (run.offers as any[]) || [];
@@ -283,7 +283,7 @@ export async function refineGtmCalibrationAction(
       )
       .limit(1);
 
-    if (!run) throw new Error("ChadGTM session not found.");
+    if (!run) throw new Error("AutoGTM session not found.");
 
     const offers = (run.offers as any[]) || [];
     const activeOffer = offers[selectedOfferIndex] || offers[0] || {
@@ -522,7 +522,7 @@ export async function launchChadGtmCampaignAction(
       )
       .limit(1);
 
-    if (!run) throw new Error("ChadGTM run not found.");
+    if (!run) throw new Error("AutoGTM run not found.");
 
     const industries = (run.selectedIndustries as string[]) || [];
     const dateStr = new Date().toISOString().slice(0, 10);
@@ -535,7 +535,7 @@ export async function launchChadGtmCampaignAction(
       id: listId,
       userId: user.id,
       workspaceId: workspace.id,
-      name: `${companyName} ChadGTM Leads (${dateStr})`,
+      name: `${companyName} AutoGTM Leads (${dateStr})`,
     });
 
     // 2. Fetch matched verified leads from SQLite directory (pull 500 targeted leads)
@@ -569,7 +569,7 @@ export async function launchChadGtmCampaignAction(
             industry: dl.industry,
             status: "new" as const,
             customFields: {},
-            tags: ["chad-gtm", "b2b-verified"],
+            tags: ["autogtm", "b2b-verified"],
           }))
         );
       }
@@ -603,7 +603,7 @@ export async function launchChadGtmCampaignAction(
       id: campaignId,
       userId: user.id,
       workspaceId: workspace.id,
-      name: `ChadGTM: ${companyName}`,
+      name: `AutoGTM: ${companyName}`,
       status: "running",
       leadListId: listId,
       templateId,
@@ -745,7 +745,7 @@ export async function launchChadGtmCampaignAction(
     return { ok: true, campaignId };
   } catch (err: any) {
     console.error("[chad-gtm-actions] launchChadGtmCampaign error:", err);
-    return { ok: false, error: err?.message || "Failed to launch ChadGTM campaign." };
+    return { ok: false, error: err?.message || "Failed to launch AutoGTM campaign." };
   }
 }
 
