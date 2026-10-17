@@ -78,7 +78,7 @@ export function AutoGtmLogo({
               v2.0
             </span>
           </div>
-          <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-400 mt-1 font-medium">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-400 mt-1 font-medium hidden sm:block">
             Autonomous Engine
           </span>
         </div>
