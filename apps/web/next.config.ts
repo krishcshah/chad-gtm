@@ -25,6 +25,19 @@ const nextConfig: NextConfig = {
   ],
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: false },
+  async headers() {
+    return [
+      {
+        source: "/:path*(ico|svg|png)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

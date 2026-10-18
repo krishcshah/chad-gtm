@@ -20,11 +20,12 @@ export const metadata: Metadata = {
     "Autonomous Go-To-Market & Cold Outreach Engine. Turn any website URL into booked pipeline in 60 seconds with our proprietary AutoGTM Neural Core™, 100M+ global B2B leads, and turnkey admin-managed mailboxes.",
   icons: {
     icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
-      { url: "/favicon.png", type: "image/png" },
-      { url: "/favicon.ico" },
+      { url: "/icon.svg?v=20261019", type: "image/svg+xml" },
+      { url: "/favicon.png?v=20261019", type: "image/png" },
+      { url: "/favicon.ico?v=20261019" },
     ],
-    apple: "/apple-touch-icon.png",
+    shortcut: "/favicon.ico?v=20261019",
+    apple: "/apple-touch-icon.png?v=20261019",
   },
 };
 
