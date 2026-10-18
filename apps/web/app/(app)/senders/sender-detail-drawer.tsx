@@ -1048,7 +1048,7 @@ export function SenderDetailDrawer({ sender, open, onOpenChange }: SenderDetailD
                       rows={3}
                       value={signatureText}
                       onChange={(e) => setSignatureText(e.target.value)}
-                      placeholder={"—\nElena Rostova\nGrowth & Outbound, ChadGTM"}
+                      placeholder={"—\nElena Rostova\nGrowth & Outbound, AutoGTM"}
                     />
                   </div>
 

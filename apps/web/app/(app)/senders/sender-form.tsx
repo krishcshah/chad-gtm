@@ -170,7 +170,7 @@ export function SenderForm() {
           </Field>
         </div>
         <Field label="Signature" hint="Appended to every email if your template includes {{signature}}.">
-          <Textarea rows={3} value={f.signature ?? ""} onChange={set("signature")} placeholder={"—\nElena Rostova\nGrowth & Outbound, ChadGTM"} />
+          <Textarea rows={3} value={f.signature ?? ""} onChange={set("signature")} placeholder={"—\nElena Rostova\nGrowth & Outbound, AutoGTM"} />
         </Field>
       </Section>
 

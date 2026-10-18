@@ -25,7 +25,7 @@ import { PerformanceBreakdown } from "./performance-breakdown";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Overview · Autonomous Outbound Command · ChadGTM" };
+export const metadata = { title: "Overview · Autonomous Outbound Command · AutoGTM" };
 
 function formatRelativeTime(dateInput: string | Date | null | undefined): string {
   if (!dateInput) return "Recently";
@@ -102,11 +102,11 @@ export default async function DashboardPage() {
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full border border-zinc-700/80 bg-zinc-900/90 px-2.5 py-0.5 text-[10px] font-medium text-zinc-200 tracking-tight">
-                  ChadGTM Engine // Autonomous Outbound
+                  AutoGTM Engine // Autonomous Outbound
                 </span>
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-medium text-emerald-400 tracking-tight">
                   <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-                  Chad Neural Core Active
+                  AutoGTM Neural Core Active
                 </span>
                 <span className="rounded-full border border-zinc-800 bg-zinc-900/90 px-2.5 py-0.5 text-[10px] font-medium text-zinc-300 tracking-tight">
                   Managed 5¢ Pool
@@ -373,7 +373,7 @@ export default async function DashboardPage() {
                 No GTM Strategy Configured Yet
               </h3>
               <p className="text-xs text-zinc-400 font-normal max-w-sm mx-auto mt-1 leading-relaxed">
-                Enter your company website to let our proprietary Chad Neural Core synthesize your ICP, calibrate
+                Enter your company website to let our proprietary AutoGTM Neural Core synthesize your ICP, calibrate
                 high-converting cold email angles, and launch verified B2B outreach in 60 seconds.
               </p>
             </div>
