@@ -7,11 +7,12 @@ import {
   CheckCircle2,
   Database,
   Search,
+  Sparkles,
 } from "lucide-react";
-import { Badge, Button } from "@smartreach/ui";
+import { Button } from "@smartreach/ui";
 
 const SAMPLE_PROSPECTS = [
-  // Diverse Top 7 (Displayed by default on "All Leads" tab to match category height)
+  // Preserved: 7 distinct leads on All Leads tab to match category height exactly
   {
     name: "Elena Rostova",
     title: "VP of Product Growth",
@@ -58,337 +59,136 @@ const SAMPLE_PROSPECTS = [
     emailType: "Verified Work Email",
   },
   {
-    name: "Charlotte Dupond",
-    title: "VP of Risk Management",
-    company: "Meridian Capital",
-    industry: "Financial Services",
-    email: "c.dupond@meridiancap.eu",
-    location: "London, UK",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Mateo Silva",
-    title: "VP of Cloud Infrastructure",
-    company: "Datasync Global",
-    industry: "Information Technology",
-    email: "mateo.silva@datasync.io",
-    location: "Toronto, Canada",
-    emailType: "Verified Work Email",
-  },
-
-  // Remaining Category Leads (7 per category total)
-  {
-    name: "David Kelling",
-    title: "Head of Solutions Architecture",
-    company: "CloudStack IO",
-    industry: "Computer Software",
-    email: "david.kelling@cloudstack.io",
-    location: "Austin, TX",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Priya Patel",
-    title: "VP of Engineering",
-    company: "AppForge Labs",
-    industry: "Computer Software",
-    email: "priya.patel@appforge.dev",
-    location: "New York, NY",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Henrik Lindqvist",
-    title: "Director of Product Ops",
-    company: "DevVelocity",
-    industry: "Computer Software",
-    email: "henrik.l@devvelocity.com",
-    location: "Stockholm, Sweden",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Rachel Torres",
-    title: "Chief Technology Officer",
-    company: "VectorScale AI",
-    industry: "Computer Software",
-    email: "rachel.torres@vectorscale.ai",
-    location: "Denver, CO",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Alex Mercer",
-    title: "VP of Enterprise Systems",
-    company: "HyperFlow Suite",
-    industry: "Computer Software",
-    email: "alex.mercer@hyperflow.io",
-    location: "Chicago, IL",
-    emailType: "Verified Work Email",
-  },
-
-  {
-    name: "Tariq Mansoor",
-    title: "Head of Treasury Tech",
-    company: "ApexFin Global",
-    industry: "Financial Services",
-    email: "tariq.mansoor@apexfin.com",
-    location: "Dubai, UAE",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Sarah Jenkins",
-    title: "Director of Compliance Ops",
-    company: "FinLuminate",
-    industry: "Financial Services",
-    email: "sarah.j@finluminate.com",
-    location: "Boston, MA",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Kenneth Zhao",
-    title: "VP of Strategic Growth",
-    company: "Altus Wealth Partners",
-    industry: "Financial Services",
-    email: "ken.zhao@altuswealth.com",
-    location: "San Francisco, CA",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Evelyn Walsh",
-    title: "Chief Operating Officer",
-    company: "Crestline Asset Mgmt",
-    industry: "Financial Services",
-    email: "e.walsh@crestlineam.com",
-    location: "Chicago, IL",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Robert Fischer",
-    title: "Head of Institutional Sales",
-    company: "Zurich Ledger AG",
-    industry: "Financial Services",
-    email: "rfischer@zurichledger.ch",
-    location: "Zurich, Switzerland",
-    emailType: "Verified Work Email",
-  },
-
-  {
-    name: "Jennifer Wu",
-    title: "Chief Info Security Officer",
-    company: "IronWall Security",
-    industry: "Information Technology",
-    email: "jennifer.wu@ironwallsec.com",
-    location: "Washington, DC",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Nathan Brooks",
-    title: "Director of Enterprise Arch",
-    company: "Nexus Networks",
-    industry: "Information Technology",
-    email: "nathan.brooks@nexusnetworks.com",
-    location: "Dallas, TX",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Ananya Sharma",
-    title: "Head of IT Operations",
-    company: "OmniCloud Systems",
-    industry: "Information Technology",
-    email: "ananya.s@omnicloud.in",
-    location: "Bengaluru, India",
-    emailType: "Verified Work Email",
-  },
-  {
     name: "Carlos Mendez",
-    title: "VP of Systems Engineering",
-    company: "CoreInfrastructure",
-    industry: "Information Technology",
-    email: "cmendez@coreinfra.com",
-    location: "Miami, FL",
+    title: "VP of Enterprise Security",
+    company: "FortressGuard",
+    industry: "Cybersecurity",
+    email: "carlos.mendez@fortressguard.io",
+    location: "Chicago, IL",
     emailType: "Verified Work Email",
   },
   {
-    name: "Samuel Thorne",
-    title: "Director of Datacenter Ops",
-    company: "TierZero Systems",
-    industry: "Information Technology",
-    email: "sthorne@tierzeroops.com",
-    location: "Salt Lake City, UT",
-    emailType: "Verified Work Email",
-  },
-
-  {
-    name: "Dr. Benjamin Hayes",
-    title: "VP of Computational Biology",
-    company: "GenoMetrics",
-    industry: "Biotechnology",
-    email: "b.hayes@genometrics.bio",
-    location: "Cambridge, MA",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Miriam Al-Sabah",
-    title: "Director of Clinical Informatics",
-    company: "ThermaGen Therapeutics",
-    industry: "Biotechnology",
-    email: "m.alsabah@thermagen.com",
-    location: "San Diego, CA",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Dr. Klaus Werner",
-    title: "Chief Scientific Officer",
-    company: "NeuroVector Biotech",
-    industry: "Biotechnology",
-    email: "k.werner@neurovector.de",
-    location: "Munich, Germany",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Olivia Sterling",
-    title: "VP of Regulatory Operations",
-    company: "CytoPulse Pharma",
-    industry: "Biotechnology",
-    email: "o.sterling@cytopulse.com",
-    location: "Raleigh, NC",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Dr. Jonathan Rey",
-    title: "Head of Translational Med",
-    company: "HelixNova Biosciences",
-    industry: "Biotechnology",
-    email: "j.rey@helixnova.com",
-    location: "Basel, Switzerland",
-    emailType: "Verified Work Email",
-  },
-  {
-    name: "Maya Lin",
-    title: "Director of Lab Automation",
-    company: "Veloce Biosystems",
-    industry: "Biotechnology",
-    email: "maya.lin@velocebio.com",
-    location: "San Francisco, CA",
+    name: "Amina Al-Mansoor",
+    title: "Chief Operating Officer",
+    company: "Aura Logistics",
+    industry: "Supply Chain & Logistics",
+    email: "amina.mansoor@auralogistics.com",
+    location: "London, UK",
     emailType: "Verified Work Email",
   },
 ];
 
+const INDUSTRIES = [
+  "All Leads",
+  "Computer Software",
+  "Financial Services",
+  "Biotechnology",
+  "Information Technology",
+  "Cybersecurity",
+];
+
 export function ChadGtmLeadsPreview() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [activeCategory, setActiveCategory] = useState("All");
+  const [activeCategory, setActiveCategory] = useState("All Leads");
 
-  const categories = ["All", "Computer Software", "Financial Services", "Information Technology", "Biotechnology"];
-
-  const filtered = SAMPLE_PROSPECTS.filter((p) => {
-    const matchCat = activeCategory === "All" || p.industry === activeCategory;
-    const matchSearch =
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.email.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchCat && matchSearch;
-  });
-
-  const displayedLeads = filtered.slice(0, 7);
+  const filteredLeads =
+    activeCategory === "All Leads"
+      ? SAMPLE_PROSPECTS
+      : SAMPLE_PROSPECTS.filter((p) => p.industry === activeCategory);
 
   return (
-    <section id="leads" className="relative py-20 sm:py-28 border-t border-zinc-800 bg-black overflow-hidden">
+    <section id="leads" className="relative py-24 sm:py-32 border-t border-zinc-800/80 bg-[#050505] overflow-hidden font-sans">
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-3xl mx-auto mb-14">
-          <div className="inline-flex items-center gap-2 rounded-none border border-zinc-800 bg-zinc-950 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-zinc-300 mb-4">
-            <Database className="size-3 text-zinc-400" />
-            GLOBAL DIRECTORY // ZERO SCRAPING TAX
+        <div className="text-center max-w-3xl mx-auto mb-16">
+          <div className="inline-flex items-center gap-2 rounded-none border border-emerald-500/30 bg-emerald-950/20 px-3 py-1 font-mono text-xs text-emerald-400 mb-4">
+            <Database className="size-3 text-emerald-400" />
+            <span>Built-In B2B Directory · Zero Export Taxes</span>
           </div>
-          <h2 className="text-3xl sm:text-5xl font-bold tracking-tight text-white uppercase">
-            100M+ Verified Global Leads
+          <h2 className="text-3xl sm:text-5xl font-bold tracking-tight text-white">
+            10.2M verified decision-makers. Included at $0.
           </h2>
-          <p className="mt-4 text-xs sm:text-sm text-zinc-400 font-mono">
-            High-velocity enterprise directory. Actively ingesting and indexing our complete 100,000,000+ contact database across 190+ countries—with zero credit paywalls or export fees.
+          <p className="mt-4 text-sm sm:text-base text-zinc-400 max-w-2xl mx-auto leading-relaxed">
+            Stop buying $99/mo export credits on Apollo or ZoomInfo. Search, filter, and launch campaigns directly against our high-speed verified SQLite database with zero per-contact fees.
           </p>
         </div>
 
         {/* Directory Card Screen */}
-        <div className="mx-auto max-w-5xl rounded-none border border-zinc-800 bg-zinc-950 p-4 sm:p-6">
+        <div className="mx-auto max-w-5xl rounded-none border border-zinc-800 bg-zinc-950 p-4 sm:p-6 shadow-2xl">
           {/* Stats Header Bar */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pb-5 border-b border-zinc-800 text-center font-mono">
             <div className="p-3 rounded-none bg-black border border-zinc-800">
-              <div className="text-xl sm:text-2xl font-bold text-white">100M+</div>
-              <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-0.5">Directory Ingestion Target</div>
+              <div className="text-xl sm:text-2xl font-bold text-white">10.2M</div>
+              <div className="text-[10px] text-zinc-500 uppercase tracking-wider mt-0.5">
+                Verified B2B Leads
+              </div>
             </div>
             <div className="p-3 rounded-none bg-black border border-zinc-800">
-              <div className="text-xl sm:text-2xl font-bold text-white">72M+</div>
-              <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-0.5">Direct Work Emails</div>
+              <div className="text-xl sm:text-2xl font-bold text-emerald-400">7.4 GB</div>
+              <div className="text-[10px] text-zinc-500 uppercase tracking-wider mt-0.5">
+                Indexed SQLite Engine
+              </div>
             </div>
             <div className="p-3 rounded-none bg-black border border-zinc-800">
               <div className="text-xl sm:text-2xl font-bold text-white">190+</div>
-              <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-0.5">Countries Covered</div>
+              <div className="text-[10px] text-zinc-500 uppercase tracking-wider mt-0.5">
+                Countries Covered
+              </div>
             </div>
             <div className="p-3 rounded-none bg-black border border-zinc-800">
-              <div className="text-xl sm:text-2xl font-bold text-white">$0.00</div>
-              <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-0.5">Export Credits Fee</div>
+              <div className="text-xl sm:text-2xl font-bold text-white">$0</div>
+              <div className="text-[10px] text-zinc-500 uppercase tracking-wider mt-0.5">
+                Export / Lead Fees
+              </div>
             </div>
           </div>
 
-          {/* Search & Category Pills */}
-          <div className="mt-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 font-mono">
-            <div className="relative flex-1 w-full sm:max-w-sm">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Filter by title, person, or domain..."
-                className="w-full rounded-none border border-zinc-800 bg-black py-2 pl-9 pr-4 text-xs text-white placeholder-zinc-600 outline-none focus:border-white"
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
-              {categories.map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => setActiveCategory(cat)}
-                  className={`rounded-none px-2.5 py-1 text-[11px] font-mono uppercase tracking-wider transition-colors border ${
-                    activeCategory === cat
-                      ? "border-white bg-white text-black font-semibold"
-                      : "border-zinc-800 bg-black text-zinc-400 hover:text-white hover:border-zinc-700"
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
+          {/* Industry Filter Pills */}
+          <div className="flex flex-wrap items-center gap-1.5 py-4 border-b border-zinc-800">
+            {INDUSTRIES.map((ind) => (
+              <button
+                key={ind}
+                type="button"
+                onClick={() => setActiveCategory(ind)}
+                className={`rounded-none px-3 py-1.5 text-xs transition-colors ${
+                  activeCategory === ind
+                    ? "border border-white bg-white text-black font-semibold"
+                    : "border border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:text-white hover:border-zinc-700"
+                }`}
+              >
+                {ind}
+              </button>
+            ))}
           </div>
 
-          {/* Prospects Table */}
-          <div className="mt-5 overflow-x-auto rounded-none border border-zinc-800 bg-black [-webkit-overflow-scrolling:touch]">
-            <table className="w-full text-left border-collapse text-xs min-w-[660px] font-mono">
+          {/* Data Table */}
+          <div className="overflow-x-auto pt-3">
+            <table className="w-full text-left text-xs font-sans">
               <thead>
-                <tr className="border-b border-zinc-800 text-zinc-400 bg-zinc-950 text-[10px] uppercase tracking-wider">
-                  <th className="p-3 font-semibold">Decision Maker</th>
-                  <th className="p-3 font-semibold">Company</th>
-                  <th className="p-3 font-semibold">Industry</th>
-                  <th className="p-3 font-semibold">Email</th>
-                  <th className="p-3 font-semibold">Location</th>
-                  <th className="p-3 font-semibold text-right">Verification</th>
+                <tr className="border-b border-zinc-800/80 text-[10px] font-mono uppercase tracking-wider text-zinc-500">
+                  <th className="py-2.5 px-3">Decision Maker</th>
+                  <th className="py-2.5 px-3">Title &amp; Company</th>
+                  <th className="py-2.5 px-3">Industry</th>
+                  <th className="py-2.5 px-3">Location</th>
+                  <th className="py-2.5 px-3 text-right">Verification</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-800">
-                {displayedLeads.map((p, i) => (
-                  <tr key={i} className="hover:bg-zinc-900/50 transition-colors">
-                    <td className="p-3">
+              <tbody className="divide-y divide-zinc-900">
+                {filteredLeads.map((p, idx) => (
+                  <tr key={idx} className="hover:bg-zinc-900/40 transition-colors">
+                    <td className="py-3 px-3">
                       <div className="font-semibold text-white">{p.name}</div>
-                      <div className="text-[10px] text-zinc-400 font-sans">{p.title}</div>
+                      <div className="text-[11px] text-zinc-500 font-mono select-all">
+                        {p.email.split("@")[0]}@•••.{p.email.split(".").pop()}
+                      </div>
                     </td>
-                    <td className="p-3 text-zinc-300 font-medium">{p.company}</td>
-                    <td className="p-3 text-zinc-400">{p.industry}</td>
-                    <td className="p-3">
-                      <span className="font-mono text-xs text-zinc-400 select-none filter blur-[4.5px] hover:blur-[3px] transition-all pointer-events-none">
-                        {p.email}
-                      </span>
+                    <td className="py-3 px-3">
+                      <div className="text-zinc-200">{p.title}</div>
+                      <div className="text-[11px] text-zinc-500">{p.company}</div>
                     </td>
-                    <td className="p-3 text-zinc-400">{p.location}</td>
-                    <td className="p-3 text-right">
-                      <span className="rounded-none border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-[9px] uppercase tracking-widest text-zinc-300">
-                        Verified
+                    <td className="py-3 px-3 text-zinc-400 font-mono text-[11px]">{p.industry}</td>
+                    <td className="py-3 px-3 text-zinc-400 text-[11px]">{p.location}</td>
+                    <td className="py-3 px-3 text-right">
+                      <span className="inline-flex items-center gap-1 border border-emerald-500/30 bg-emerald-950/20 text-emerald-400 px-2 py-0.5 text-[10px] font-mono rounded-none">
+                        <CheckCircle2 className="size-3" /> Verified
                       </span>
                     </td>
                   </tr>
@@ -397,13 +197,19 @@ export function ChadGtmLeadsPreview() {
             </table>
           </div>
 
-          <div className="mt-5 pt-4 border-t border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left font-mono">
-            <span className="text-[11px] text-zinc-500 uppercase tracking-wider">
-              Sample records previewed · Complete 100M+ database unlocked on signup
-            </span>
-            <Button asChild size="sm" className="rounded-none bg-white hover:bg-zinc-200 text-black font-semibold text-xs font-mono uppercase tracking-wider gap-1.5 border border-white w-full sm:w-auto">
+          {/* Bottom Banner */}
+          <div className="mt-5 pt-4 border-t border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-400">
+            <div className="flex items-center gap-2">
+              <Sparkles className="size-3.5 text-emerald-400" />
+              <span>Full directory unlocked automatically when you enter your company URL</span>
+            </div>
+            <Button
+              asChild
+              size="sm"
+              className="rounded-none bg-white text-black font-semibold text-xs hover:bg-zinc-200 border border-white"
+            >
               <Link href="/signup">
-                Access 100M+ Leads <ArrowRight className="size-3.5" />
+                Access All 10.2M Leads Free <ArrowRight className="size-3.5 ml-1" />
               </Link>
             </Button>
           </div>

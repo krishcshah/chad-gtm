@@ -51,12 +51,10 @@ export function ChadGtmCalculator() {
   }
 
   // 5. Technical DNS & Domain Provisioning
-  // Purchasing domains, DNS propagation, SPF/DKIM/DMARC records, custom tracking domains ($50 base + $7/inbox)
   const techSetupCost = Math.round(50 + inboxesNeeded * 7);
 
   // 6. Mailbox Fleet Maintenance, Campaign Dispatch & Reply Management (Agency / Operator Retainer)
-  // Ongoing daily warmup monitoring, burnt domain rotation, unibox reply triage & lead routing
-  // Cut strictly in half: $175/mo base + $22.50/inbox/mo
+  // Preserved constraint: Halved 5th mailbox maintenance cost
   const agencyManagementCost = Math.round((350 + inboxesNeeded * 45) / 2);
 
   let agencyPlanName = "Starter Agency / Operator Retainer";
@@ -73,7 +71,7 @@ export function ChadGtmCalculator() {
   // Combined DIY competitor stack (5 invoices: Leads + Sending Tool + Mailboxes + DNS + Agency Ops)
   const traditionalCost = apolloCost + instantlyCost + mailboxCost + techSetupCost + agencyManagementCost;
 
-  // ChadGTM Pricing: Strictly 5¢ per email delivered
+  // AutoGTM Pricing: Strictly 5¢ per email delivered
   const chadGtmCost = Math.round(emailVolume * 0.05);
 
   // Net Savings
@@ -84,262 +82,187 @@ export function ChadGtmCalculator() {
   const PRESETS = [3000, 6000, 12000, 25000, 50000];
 
   return (
-    <section id="roi-calculator" className="relative py-20 sm:py-28 border-t border-zinc-800 bg-black font-mono overflow-hidden">
+    <section id="roi-calculator" className="relative py-24 sm:py-32 border-t border-zinc-800/80 bg-black font-sans overflow-hidden">
       <div className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
-        {/* Clean, Centered Header (No confusing price-tag on the top right) */}
-        <div className="text-center max-w-3xl mx-auto mb-12">
-          <div className="inline-flex items-center gap-2 border border-zinc-800 bg-zinc-950 px-3 py-1 text-[10px] uppercase tracking-widest text-zinc-400 mb-4">
+        {/* Clean, Centered Header */}
+        <div className="text-center max-w-3xl mx-auto mb-16">
+          <div className="inline-flex items-center gap-2 border border-emerald-500/30 bg-emerald-950/20 px-3 py-1 text-xs font-mono text-emerald-400 mb-4">
             <TrendingUp className="size-3 text-emerald-400" />
-            TRANSPARENT ROI // 5¢ UTILITY VS. 5 VENDOR INVOICES & AGENCY RETAINERS
+            <span>Interactive ROI Calculator · Pure Utility Math</span>
           </div>
-          <h2 className="text-3xl sm:text-5xl font-extrabold text-white uppercase tracking-tight">
-            How Much Will AutoGTM Cost You?
+          <h2 className="text-3xl sm:text-5xl font-bold text-white tracking-tight">
+            Calculate your exact savings with AutoGTM.
           </h2>
-          <p className="mt-3 text-xs sm:text-sm text-zinc-400 font-sans leading-relaxed max-w-xl mx-auto">
-            Zero software subscription fees. Zero lead export paywalls. Drag the slider to your planned monthly volume to see your exact bill compared to paying for a fragmented DIY stack.
+          <p className="mt-4 text-sm sm:text-base text-zinc-400 leading-relaxed max-w-xl mx-auto">
+            Zero software subscription fees. Zero per-contact export paywalls. Drag the slider to your planned monthly volume to see your exact bill compared to a fragmented 5-vendor stack.
           </p>
         </div>
 
         {/* Unified Volume Controller Box */}
-        <div className="border border-zinc-800 bg-zinc-950 p-6 sm:p-8 mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-6 border-b border-zinc-850">
+        <div className="border border-zinc-800 bg-zinc-950 p-6 sm:p-8 mb-6 shadow-2xl rounded-none">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-6 border-b border-zinc-800">
             <div>
-              <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold">
-                Target Monthly Outbound Volume
+              <div className="text-xs uppercase tracking-wider text-zinc-500 font-mono font-semibold">
+                Planned Monthly Email Dispatch Volume
               </div>
-              <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-3xl sm:text-4xl font-extrabold text-white">
-                  {emailVolume.toLocaleString()}
-                </span>
-                <span className="text-xs text-zinc-400 uppercase tracking-wider">
+              <div className="text-2xl sm:text-4xl font-extrabold text-white font-mono mt-1">
+                {emailVolume.toLocaleString()}{" "}
+                <span className="text-xs sm:text-sm text-zinc-400 font-sans font-normal">
                   emails / month
                 </span>
               </div>
+              <div className="text-xs text-zinc-400 mt-1 font-sans">
+                Outreaches ~{leadsNeeded.toLocaleString()} verified decision-makers on a 3-touch cadence
+              </div>
             </div>
 
-            {/* Quick Presets */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[10px] text-zinc-500 uppercase tracking-widest mr-1">Quick Select:</span>
-              {PRESETS.map((preset) => (
+            {/* Quick volume preset chips */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {PRESETS.map((vol) => (
                 <button
-                  key={preset}
-                  onClick={() => setEmailVolume(preset)}
-                  className={`px-3 py-1.5 text-xs font-bold border transition-colors ${
-                    emailVolume === preset
-                      ? "border-white bg-white text-black"
-                      : "border-zinc-800 bg-black text-zinc-400 hover:text-white hover:border-zinc-700"
+                  key={vol}
+                  type="button"
+                  onClick={() => setEmailVolume(vol)}
+                  className={`rounded-none px-2.5 py-1 text-xs font-mono transition-colors ${
+                    emailVolume === vol
+                      ? "border border-white bg-white text-black font-semibold"
+                      : "border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white hover:border-zinc-700"
                   }`}
                 >
-                  {preset >= 1000 ? `${preset / 1000}k` : preset}
+                  {(vol / 1000).toFixed(0)}k
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Smooth Slider */}
+          {/* Range Slider */}
           <div className="space-y-2">
             <input
               type="range"
-              min={1000}
-              max={50000}
-              step={1000}
+              min="1000"
+              max="50000"
+              step="500"
               value={emailVolume}
               onChange={(e) => setEmailVolume(Number(e.target.value))}
-              className="w-full h-2 bg-zinc-800 rounded-none appearance-none cursor-pointer accent-white"
+              className="w-full h-2 bg-zinc-900 rounded-none appearance-none cursor-pointer accent-white"
             />
-            <div className="flex justify-between text-[10px] text-zinc-500 uppercase tracking-widest pt-1">
+            <div className="flex justify-between text-[10px] text-zinc-500 font-mono">
               <span>1,000 / mo</span>
-              <span>10,000 / mo</span>
+              <span>12,000 / mo</span>
               <span>25,000 / mo</span>
               <span>50,000 / mo</span>
             </div>
           </div>
-
-          {/* Quiet Technical Context Line */}
-          <div className="mt-4 pt-4 border-t border-zinc-900 text-xs text-zinc-400 font-sans flex flex-wrap items-center gap-x-4 gap-y-1">
-            <span>
-              • Required Leads: <strong className="text-zinc-200 font-mono">{leadsNeeded.toLocaleString()} verified contacts</strong> (3-touch cadence)
-            </span>
-            <span>
-              • Mailbox Fleet: <strong className="text-zinc-200 font-mono">{inboxesNeeded} inboxes across {domainsNeeded} domains</strong> (safe 30/day cap)
-            </span>
-          </div>
         </div>
 
-        {/* 2-Column Side-by-Side Comparison */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
-          {/* Column 1: ChadGTM (What You Actually Pay) */}
-          <div className="border-2 border-white bg-black p-6 sm:p-7 space-y-5 relative">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="size-3.5 text-white" /> What You Pay With AutoGTM
+        {/* Side-by-Side Financial Comparison */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+          {/* Competitor Breakdown */}
+          <div className="border border-rose-950/80 bg-zinc-950 p-6 sm:p-7 space-y-4 rounded-none">
+            <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+              <span className="text-xs uppercase tracking-wider font-semibold text-rose-400 font-mono">
+                Fragmented DIY Stack (5 Invoices)
               </span>
-              <span className="border border-emerald-500/50 bg-emerald-950/40 text-emerald-400 text-[10px] font-bold px-2 py-0.5 uppercase tracking-widest">
-                Pay As You Send
-              </span>
+              <span className="text-xs text-zinc-500 font-mono">Industry Standard</span>
             </div>
 
-            <div className="border-y border-zinc-800 py-4">
-              <div className="flex items-baseline gap-2">
-                <span className="text-4xl sm:text-5xl font-extrabold text-white tracking-tight">
-                  ${chadGtmCost.toLocaleString()}
-                </span>
-                <span className="text-xs text-zinc-400 uppercase tracking-widest">/ month</span>
+            <div className="space-y-2.5 text-xs">
+              <div className="flex justify-between text-zinc-300">
+                <span>Apollo B2B Lead Exports</span>
+                <span className="font-mono text-rose-400 font-semibold">${apolloCost}/mo</span>
               </div>
-              <div className="text-[11px] text-zinc-400 font-sans mt-1">
-                Exactly 5¢ per email delivered ({emailVolume.toLocaleString()} × $0.05). Nothing else.
+              <div className="text-[11px] text-zinc-500 font-mono pl-2">
+                Plan: {apolloPlanName}
+              </div>
+
+              <div className="flex justify-between text-zinc-300 pt-1">
+                <span>Instantly / Smartlead Sending Tool</span>
+                <span className="font-mono text-rose-400 font-semibold">${instantlyCost}/mo</span>
+              </div>
+              <div className="text-[11px] text-zinc-500 font-mono pl-2">
+                Plan: {instantlyPlanName}
+              </div>
+
+              <div className="flex justify-between text-zinc-300 pt-1">
+                <span>Mailbox Inboxes &amp; Domains</span>
+                <span className="font-mono text-rose-400 font-semibold">${mailboxCost}/mo</span>
+              </div>
+              <div className="text-[11px] text-zinc-500 font-mono pl-2">
+                {inboxesNeeded} mailboxes ($5/ea) + {domainsNeeded} secondary domains ($2/ea)
+              </div>
+
+              <div className="flex justify-between text-zinc-300 pt-1">
+                <span>DNS / SPF / DKIM / Tracking Setup</span>
+                <span className="font-mono text-rose-400 font-semibold">${techSetupCost}/mo</span>
+              </div>
+
+              <div className="flex justify-between text-zinc-300 pt-1">
+                <span>Mailbox Ops &amp; Reply Triage Retainer</span>
+                <span className="font-mono text-rose-400 font-semibold">${agencyManagementCost}/mo</span>
+              </div>
+              <div className="text-[11px] text-zinc-500 font-mono pl-2">
+                {agencyPlanName} (Halved benchmark)
               </div>
             </div>
 
-            <div className="space-y-3 text-xs text-zinc-300 font-sans">
-              <div className="flex items-start gap-2.5">
-                <Check className="size-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold text-white font-mono">$0 Platform Software</span>
-                  <p className="text-[11px] text-zinc-400">Zero seat taxes, no recurring monthly base fees.</p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-2.5">
-                <Check className="size-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold text-white font-mono">$0 Lead Export Fees</span>
-                  <p className="text-[11px] text-zinc-400">100M+ global leads directory included with zero paywalls.</p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-2.5">
-                <Check className="size-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold text-white font-mono">$0 Mailbox Fleet & Domains</span>
-                  <p className="text-[11px] text-zinc-400">All {inboxesNeeded} inboxes pre-warmed & supplied by admin.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <Check className="size-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold text-white font-mono">Automated 3-Touch Cadence</span>
-                  <p className="text-[11px] text-zinc-400">Opener + Touch #2 value bump + Touch #3 breakup sent on autopilot.</p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-2.5">
-                <Check className="size-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold text-white font-mono">Zero DNS / Technical Labor</span>
-                  <p className="text-[11px] text-zinc-400">SPF, DKIM, DMARC, and deliverability managed automatically.</p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-2.5">
-                <Check className="size-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold text-white font-mono">Autonomous Outreach Agent Included</span>
-                  <p className="text-[11px] text-zinc-400">Campaign sending, daily reply triage in UniBox, burned domain rotation & tone calibration ($0 retainer).</p>
-                </div>
-              </div>
+            <div className="pt-4 border-t border-zinc-900 flex justify-between items-baseline">
+              <span className="text-xs text-zinc-400 font-mono uppercase">Total Traditional Spend:</span>
+              <span className="text-2xl font-bold text-rose-400 font-mono">${traditionalCost}/mo</span>
             </div>
           </div>
 
-          {/* Column 2: Fragmented DIY Stack (What Others Charge) */}
-          <div className="border border-zinc-800 bg-zinc-950/70 p-6 sm:p-7 space-y-5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                What You Pay With Apollo + Instantly + Agency DIY
-              </span>
-              <span className="border border-zinc-800 bg-black text-zinc-500 text-[10px] uppercase tracking-widest px-2 py-0.5">
-                5 Separate Invoices
-              </span>
-            </div>
-
-            <div className="border-y border-zinc-800 py-4">
-              <div className="flex items-baseline gap-2">
-                <span className="text-4xl sm:text-5xl font-bold text-zinc-500 tracking-tight">
-                  ${traditionalCost.toLocaleString()}
+          {/* AutoGTM Cost Card */}
+          <div className="border border-emerald-900/80 bg-zinc-950 p-6 sm:p-7 space-y-4 flex flex-col justify-between rounded-none shadow-xl">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                <span className="text-xs uppercase tracking-wider font-semibold text-emerald-400 font-mono flex items-center gap-1.5">
+                  <Sparkles className="size-3.5" /> AutoGTM Autonomous Engine
                 </span>
-                <span className="text-xs text-zinc-500 uppercase tracking-widest">/ month combined</span>
-              </div>
-              <div className="text-[11px] text-zinc-500 font-sans mt-1">
-                Sum of 5 recurring vendor bills & agency retainers every month
-              </div>
-            </div>
-
-            <div className="space-y-3 text-xs text-zinc-400 font-sans">
-              <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
-                <div>
-                  <div className="text-zinc-200 font-mono font-bold">1. Apollo.io Leads & Exports</div>
-                  <div className="text-[11px] text-zinc-500">{apolloPlanName}</div>
-                </div>
-                <span className="font-mono font-bold text-white">${apolloCost.toLocaleString()}/mo</span>
-              </div>
-
-              <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
-                <div>
-                  <div className="text-zinc-200 font-mono font-bold">2. Instantly.ai Sending Tool</div>
-                  <div className="text-[11px] text-zinc-500">{instantlyPlanName}</div>
-                </div>
-                <span className="font-mono font-bold text-white">${instantlyCost.toLocaleString()}/mo</span>
-              </div>
-
-              <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
-                <div>
-                  <div className="text-zinc-200 font-mono font-bold">3. Mailboxes & Secondary Domains</div>
-                  <div className="text-[11px] text-zinc-500">{inboxesNeeded} inboxes ($5/mo) + {domainsNeeded} domains ($2/mo)</div>
-                </div>
-                <span className="font-mono font-bold text-white">${mailboxCost.toLocaleString()}/mo</span>
-              </div>
-
-              <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
-                <div>
-                  <div className="text-zinc-200 font-mono font-bold">4. Technical DNS & Domain Provisioning</div>
-                  <div className="text-[11px] text-zinc-500">SPF, DKIM, DMARC, custom tracking & registrar records</div>
-                </div>
-                <span className="font-mono font-bold text-white">${techSetupCost.toLocaleString()}/mo</span>
-              </div>
-
-              <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
-                <div>
-                  <div className="text-zinc-200 font-mono font-bold">5. Mailbox Maintenance & Campaign Ops</div>
-                  <div className="text-[11px] text-zinc-500">{agencyPlanName}</div>
-                </div>
-                <span className="font-mono font-bold text-white">${agencyManagementCost.toLocaleString()}/mo</span>
-              </div>
-
-              <div className="pt-1 text-[11px] text-zinc-500">
-                *(Note: Managing {inboxesNeeded} mailboxes, rotating burned domains & daily reply triage typically costs $400–$1,800/mo for a freelance operator or agency)*
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Clear "You Pocket The Difference" Savings Banner (Unmistakably NOT a cost) */}
-        <div className="border border-emerald-500/40 bg-zinc-950 p-6 sm:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="flex items-start gap-4">
-            <div className="p-3 border border-emerald-500/30 bg-emerald-950/30 text-emerald-400 shrink-0 hidden sm:block">
-              <PiggyBank className="size-6" />
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold flex items-center gap-1.5">
-                <ArrowDownRight className="size-3" />
-                YOU KEEP IN YOUR BANK ACCOUNT:
-              </div>
-              <div className="text-2xl sm:text-3xl font-extrabold text-white mt-0.5">
-                Save ${monthlySavings.toLocaleString()} <span className="text-xs text-zinc-400 font-normal">/ month</span>
-                <span className="text-emerald-400 text-lg sm:text-xl font-bold ml-2">
-                  (${annualSavings.toLocaleString()} / year)
+                <span className="border border-emerald-500/30 bg-emerald-950/30 text-emerald-400 text-[10px] px-2 py-0.5 font-mono rounded-none">
+                  Save ~{savingsPct}%
                 </span>
               </div>
-              <p className="text-xs text-zinc-400 font-sans mt-1">
-                You retain <strong className="text-white font-mono">{savingsPct}%</strong> more pipeline capital compared to paying fragmented SaaS subscriptions and agency management retainers.
-              </p>
+
+              <div className="space-y-2.5 text-xs text-zinc-300">
+                <div className="flex justify-between items-center py-1 border-b border-zinc-900">
+                  <span>Software Platform Subscription</span>
+                  <span className="font-mono text-emerald-400 font-semibold">FREE ($0/mo)</span>
+                </div>
+                <div className="flex justify-between items-center py-1 border-b border-zinc-900">
+                  <span>10.2M B2B Directory Lead Access</span>
+                  <span className="font-mono text-emerald-400 font-semibold">INCLUDED ($0)</span>
+                </div>
+                <div className="flex justify-between items-center py-1 border-b border-zinc-900">
+                  <span>Pre-Warmed Sender Mailboxes</span>
+                  <span className="font-mono text-emerald-400 font-semibold">INCLUDED ($0)</span>
+                </div>
+                <div className="flex justify-between items-center py-1 border-b border-zinc-900">
+                  <span>AI Personalization &amp; 3-Touch Cadence</span>
+                  <span className="font-mono text-emerald-400 font-semibold">INCLUDED ($0)</span>
+                </div>
+                <div className="flex justify-between items-center py-1">
+                  <span>Utility Delivery ({emailVolume.toLocaleString()} @ 5¢/ea)</span>
+                  <span className="font-mono text-white font-bold">${chadGtmCost}/mo</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-zinc-800 space-y-3">
+              <div className="flex justify-between items-baseline">
+                <span className="text-xs text-zinc-400 font-mono uppercase">Total AutoGTM Cost:</span>
+                <span className="text-3xl font-extrabold text-white font-mono">${chadGtmCost}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs text-emerald-400 font-mono pt-1">
+                <span>Net Savings:</span>
+                <span className="font-bold">+${monthlySavings}/mo (${annualSavings.toLocaleString()} / year)</span>
+              </div>
+              <Button asChild size="lg" className="w-full mt-2 rounded-none bg-white text-black font-semibold text-xs border border-white hover:bg-zinc-200">
+                <Link href="/signup">
+                  Deploy at $0/Month <ArrowRight className="size-3.5 ml-1" />
+                </Link>
+              </Button>
             </div>
           </div>
-
-          <Button asChild size="lg" className="rounded-none bg-white hover:bg-zinc-200 text-black font-bold uppercase tracking-wider text-xs border border-white h-11 px-8 w-full md:w-auto shadow-lg shrink-0">
-            <Link href="/signup">
-              Start at 5¢ / Email <ArrowRight className="size-3.5 ml-1.5" />
-            </Link>
-          </Button>
         </div>
       </div>
     </section>

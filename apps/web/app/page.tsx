@@ -2,7 +2,6 @@ import Link from "next/link";
 import {
   ArrowRight,
   CheckCircle2,
-  Rocket,
   Sparkles,
   Star,
   Terminal,
@@ -16,16 +15,16 @@ import {
   Mail,
   Check,
   X,
+  Target,
+  Globe,
+  Database,
+  Server,
 } from "lucide-react";
 import { Button } from "@smartreach/ui";
-import { ChadGtmLogo } from "@/components/chad-gtm-logo";
 import { getSession } from "@/lib/session";
 import { LandingHeader } from "@/components/chad-gtm/landing/landing-header";
 import { ChadGtmHeroScanner } from "@/components/chad-gtm/landing/chad-gtm-hero-scanner";
-import { ChadGtmHeroTelemetry } from "@/components/chad-gtm/landing/chad-gtm-hero-telemetry";
 import { ChadGtmSequenceShowcase } from "@/components/chad-gtm/landing/chad-gtm-sequence-showcase";
-import { ChadGtmArchitectureBlueprint } from "@/components/chad-gtm/landing/chad-gtm-architecture-blueprint";
-import { ChadGtmWorkflowSimulator } from "@/components/chad-gtm/landing/chad-gtm-workflow-simulator";
 import { ChadGtmPricingCard } from "@/components/chad-gtm/landing/chad-gtm-pricing-card";
 import { ChadGtmComparisonTable } from "@/components/chad-gtm/landing/chad-gtm-comparison-table";
 import { ChadGtmLeadsPreview } from "@/components/chad-gtm/landing/chad-gtm-leads-preview";
@@ -34,9 +33,9 @@ import { ChadGtmCalculator } from "@/components/chad-gtm/landing/chad-gtm-calcul
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "AutoGTM · Turn Your Website URL Into A Booked Sales Pipeline · $0/mo Platform",
+  title: "AutoGTM · Turn Your Website URL Into Booked Sales Meetings · $0/mo Platform",
   description:
-    "Stop paying $450/mo for Apollo and Instantly. Enter your URL—AutoGTM discovers verified decision-makers, crafts hyper-personalized copy, and runs an autonomous 3-touch sequence for just 5¢ per email. $0/month forever.",
+    "The autonomous outbound engine with $0/month software fees. Drop in your domain—our AI extracts your offer, matches 10.2M verified decision-makers, and sends personalized sequences from pre-warmed mailboxes. Pay strictly 5¢ per email.",
 };
 
 export default async function LandingPage() {
@@ -44,197 +43,145 @@ export default async function LandingPage() {
   const isLoggedIn = Boolean(session?.user);
 
   return (
-    <div className="min-h-screen bg-black text-zinc-100 antialiased font-sans app-shell selection:bg-white selection:text-black">
+    <div className="min-h-screen bg-[#050505] text-zinc-100 antialiased font-sans selection:bg-white selection:text-black">
       {/* Top Header Navigation */}
       <LandingHeader isLoggedIn={isLoggedIn} />
 
       <main className="relative">
-        {/* ========================================================================= */}
-        {/* HERO SECTION: High-Converting Marketing Hook */}
-        {/* ========================================================================= */}
-        <section className="relative overflow-hidden pt-12 pb-16 sm:pt-20 sm:pb-24 border-b border-zinc-800 bg-black">
-          {/* Subtle Grid Coordinate Guides */}
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#18181b15_1px,transparent_1px),linear-gradient(to_bottom,#18181b15_1px,transparent_1px)] bg-[size:4rem_4rem] pointer-events-none" />
+        {/* Subtle Ambient Radial Backlight */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1200px] h-[600px] bg-gradient-to-b from-emerald-500/[0.07] via-cyan-500/[0.03] to-transparent blur-3xl pointer-events-none" />
 
+        {/* ========================================================================= */}
+        {/* HERO SECTION: Centered Series A Product Stage */}
+        {/* ========================================================================= */}
+        <section className="relative overflow-hidden pt-16 pb-24 sm:pt-24 sm:pb-32 border-b border-zinc-800/80">
           <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             {/* Top Market Positioning Banner */}
-            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3 mb-8 text-[11px] font-mono text-zinc-400 uppercase tracking-widest">
+            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3 mb-12 text-[11px] font-mono text-zinc-400 uppercase tracking-widest">
               <div className="flex items-center gap-2">
-                <span className="size-2 bg-emerald-500 rounded-none animate-pulse shrink-0" />
+                <span className="size-2 bg-emerald-400 rounded-none animate-pulse shrink-0" />
                 <span className="font-bold text-white">THE $0/MO OUTBOUND ENGINE</span>
-                <span className="text-zinc-600">·</span>
+                <span className="text-zinc-600 hidden sm:inline">·</span>
                 <span className="text-zinc-400 hidden sm:inline">5¢ PER DELIVERED EMAIL</span>
               </div>
-              <div className="flex items-center gap-3 text-zinc-500 text-[10px]">
+              <div className="hidden sm:flex items-center gap-3 text-zinc-500 text-[10px]">
                 <span className="text-emerald-400 font-semibold">99.8% INBOX PLACEMENT</span>
               </div>
             </div>
 
-            {/* Asymmetrical 12-Column Hero Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
-              {/* Left Column: Core Marketing Pitch (7 cols) */}
-              <div className="lg:col-span-7 space-y-6">
-                {/* Visual Eyebrow Badge */}
-                <div className="inline-flex items-center gap-2 rounded-none border border-zinc-800 bg-zinc-950 px-3 py-1 text-xs text-zinc-300 font-mono shadow-none">
-                  <span className="size-2 rounded-none bg-emerald-400 animate-pulse" />
-                  <span className="font-semibold text-white">AutoGTM 2.0</span>
-                  <span className="text-zinc-600">·</span>
-                  <span className="text-zinc-400">Autonomous Pipeline</span>
-                </div>
-
-                {/* Main Killer Headline */}
-                <div className="space-y-2.5">
-                  <h1 className="text-3xl font-extrabold tracking-tight sm:text-5xl xl:text-6xl text-white uppercase leading-[1.08]">
-                    Turn Any Website URL Into Booked Sales Meetings.
-                  </h1>
-                  <p className="text-xs sm:text-sm font-mono text-zinc-400 uppercase tracking-wider truncate">
-                    [Live in 60 seconds, 0 per month software.]
-                  </p>
-                </div>
-
-                {/* Direct-Response Subtitle */}
-                <p className="text-xs sm:text-sm text-zinc-400 font-sans leading-relaxed max-w-xl">
-                  Enter your domain. AutoGTM extracts your offer, identifies verified buyers from our 100M+ directory, and runs autonomous 3-touch outreach straight into primary inboxes.
-                </p>
-
-                {/* Primary Action Buttons */}
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
-                  <Button
-                    asChild
-                    size="lg"
-                    className="rounded-none h-11 px-7 bg-white hover:bg-zinc-200 text-black font-semibold text-xs border border-white gap-2 w-full sm:w-auto shadow-none active:translate-y-[1px]"
-                  >
-                    <Link href={isLoggedIn ? "/chad-gtm" : "/signup"}>
-                      <Sparkles className="size-4" />
-                      Launch Free GTM Engine <ArrowRight className="size-4 ml-1" />
-                    </Link>
-                  </Button>
-                  <Button
-                    asChild
-                    variant="outline"
-                    size="lg"
-                    className="rounded-none h-11 px-6 border-zinc-800 bg-zinc-950 text-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-700 text-xs font-semibold w-full sm:w-auto shadow-none active:translate-y-[1px]"
-                  >
-                    <a href="#roi-calculator">
-                      See ROI Calculator
-                    </a>
-                  </Button>
-                </div>
-
-                {/* Trust Guarantees */}
-                <div className="pt-1 flex flex-wrap items-center gap-4 text-xs font-sans text-zinc-400">
-                  <span className="flex items-center gap-1.5 text-zinc-300">
-                    <CheckCircle2 className="size-3.5 text-emerald-400" /> $0/mo Platform Fee
-                  </span>
-                  <span className="flex items-center gap-1.5 text-zinc-300">
-                    <CheckCircle2 className="size-3.5 text-emerald-400" /> No Card Needed
-                  </span>
-                  <span className="flex items-center gap-1.5 text-zinc-300">
-                    <CheckCircle2 className="size-3.5 text-emerald-400" /> Cancel Anytime
-                  </span>
-                </div>
-
-                {/* High-Impact Proof Metric Strip */}
-                <div className="pt-5 border-t border-zinc-800/80 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs font-sans">
-                  <div className="rounded-none border border-zinc-800 bg-zinc-950 p-3 card-shine">
-                    <div className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider truncate">Platform</div>
-                    <div className="text-white font-bold text-lg mt-0.5">$0/mo</div>
-                    <div className="text-[11px] text-zinc-400 truncate">Zero Seat Tax</div>
-                  </div>
-                  <div className="rounded-none border border-zinc-800 bg-zinc-950 p-3 card-shine">
-                    <div className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider truncate">Directory</div>
-                    <div className="text-white font-bold text-lg mt-0.5">100M+</div>
-                    <div className="text-[11px] text-zinc-400 truncate">Verified B2B</div>
-                  </div>
-                  <div className="rounded-none border border-zinc-800 bg-zinc-950 p-3 card-shine">
-                    <div className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider truncate">Cadence</div>
-                    <div className="text-white font-bold text-lg mt-0.5">3-Touch</div>
-                    <div className="text-[11px] text-zinc-400 truncate">Auto Cadence</div>
-                  </div>
-                  <div className="rounded-none border border-zinc-800 bg-zinc-950 p-3 card-shine">
-                    <div className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider truncate">Delivery</div>
-                    <div className="text-white font-bold text-lg mt-0.5">5¢</div>
-                    <div className="text-[11px] text-zinc-400 truncate">Per Sent Email</div>
-                  </div>
-                </div>
+            {/* Centered Hero Header */}
+            <div className="text-center max-w-4xl mx-auto space-y-6">
+              {/* Eyebrow Badge */}
+              <div className="inline-flex items-center gap-2 rounded-none border border-emerald-500/30 bg-emerald-950/20 px-3.5 py-1 text-xs text-emerald-400 font-mono">
+                <span className="size-2 rounded-none bg-emerald-400 animate-pulse" />
+                <span className="font-semibold text-white">AutoGTM 2.0</span>
+                <span className="text-zinc-600">·</span>
+                <span className="text-zinc-300">The Autonomous Sales Pipeline</span>
               </div>
 
-              {/* Right Column: Live Telemetry Radar HUD (5 cols) */}
-              <div className="lg:col-span-5 w-full">
-                <ChadGtmHeroTelemetry />
+              {/* Main Headline */}
+              <h1 className="text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-white leading-[1.06]">
+                Turn your website URL into{" "}
+                <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-300 bg-clip-text text-transparent">
+                  booked sales meetings.
+                </span>
+              </h1>
+
+              {/* Subhead */}
+              <p className="text-base sm:text-lg text-zinc-300 font-sans leading-relaxed max-w-2xl mx-auto">
+                Drop in your domain. AutoGTM extracts your value proposition, matches verified decision-makers from our 10.2M B2B directory, and launches personalized 3-touch sequences from pre-warmed mailboxes straight into primary inboxes.
+              </p>
+
+              {/* Preserved Bracket Tagline */}
+              <div className="text-xs sm:text-sm font-mono text-emerald-400/90 uppercase tracking-wider">
+                [Live in 60 seconds · $0 per month software forever · 5¢ per email]
               </div>
             </div>
 
-            {/* Embedded Live URL Scanner Sandbox */}
-            <div id="scanner" className="mt-14 pt-10 border-t border-zinc-800">
+            {/* Center-Stage Interactive URL Scanner */}
+            <div className="mt-12">
               <ChadGtmHeroScanner />
+            </div>
+
+            {/* Infrastructure Status Strip Below Scanner */}
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-4 sm:gap-8 text-xs font-mono text-zinc-400">
+              <span className="flex items-center gap-2 text-zinc-300">
+                <span className="size-2 rounded-none bg-emerald-400 animate-pulse" />
+                <span>11 System Mailboxes Pre-warmed</span>
+              </span>
+              <span>·</span>
+              <span className="text-zinc-300">10,227,232 Verified Contacts</span>
+              <span>·</span>
+              <span className="text-zinc-300">Safe 30/Day Inbox Pacing</span>
+              <span>·</span>
+              <span className="text-zinc-300">Oracle OCI Frankfurt (130.61.146.177)</span>
             </div>
           </div>
         </section>
 
         {/* ========================================================================= */}
-        {/* THE SAAS SUBSCRIPTION TRAP VS CHADGTM (THE ANCHOR COMPARISON) */}
+        {/* THE SAAS SUBSCRIPTION TRAP VS AUTOGTM (THE ANCHOR COMPARISON) */}
         {/* ========================================================================= */}
-        <section className="py-20 sm:py-24 border-b border-zinc-800 bg-zinc-950 font-mono">
+        <section className="py-24 sm:py-32 border-b border-zinc-800/80 bg-zinc-950/80">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="text-center max-w-3xl mx-auto mb-14">
-              <div className="inline-flex items-center gap-2 border border-zinc-800 bg-black px-3 py-1 text-[10px] uppercase tracking-widest text-zinc-400 mb-3">
-                <DollarSign className="size-3 text-white" />
-                THE COLD OUTBOUND RECKONING // UNFAIR ADVANTAGE
+            <div className="text-center max-w-3xl mx-auto mb-16">
+              <div className="inline-flex items-center gap-2 border border-zinc-800 bg-black px-3 py-1 text-[10px] font-mono uppercase tracking-widest text-zinc-400 mb-4">
+                <DollarSign className="size-3 text-emerald-400" />
+                The Cold Outbound Reckoning
               </div>
-              <h2 className="text-3xl sm:text-5xl font-bold text-white uppercase tracking-wider">
-                The $1,200+/Month Outbound Trap Is Dead.
+              <h2 className="text-3xl sm:text-5xl font-bold text-white tracking-tight">
+                The $1,200/month cold outreach trap is dead.
               </h2>
-              <p className="mt-3 text-xs sm:text-sm text-zinc-400 font-sans max-w-2xl mx-auto leading-relaxed">
-                Why pay 5 separate software vendor invoices plus an agency retainer ($1,200+/mo) before booking a single sales call? Here is the exact math traditional cold email vendors don't want you to see.
+              <p className="mt-3 text-sm sm:text-base text-zinc-400 font-sans max-w-2xl mx-auto leading-relaxed">
+                Why pay 5 separate software vendor invoices plus an agency retainer ($1,200+/mo) before booking a single sales call? Here is the exact math legacy outbound vendors don't want you to see.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-5xl mx-auto items-stretch font-sans">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-5xl mx-auto items-stretch font-sans">
               {/* The Old Fragmented Way */}
-              <div className="rounded-xl border border-rose-950/60 bg-zinc-950/90 p-6 sm:p-8 space-y-6 flex flex-col justify-between card-shine shadow-xs">
+              <div className="rounded-none border border-rose-950/80 bg-zinc-950 p-6 sm:p-8 space-y-6 flex flex-col justify-between">
                 <div className="space-y-4">
                   <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
                     <span className="text-xs uppercase tracking-wider font-semibold text-rose-400">
-                       The Fragmented SaaS &amp; Agency Trap
+                      The Fragmented SaaS &amp; Agency Trap
                     </span>
-                    <span className="rounded-full border border-rose-900/60 bg-rose-950/30 text-rose-400 text-[10px] px-2.5 py-0.5 font-medium">
+                    <span className="rounded-none border border-rose-900/60 bg-rose-950/40 text-rose-400 text-[10px] px-2.5 py-0.5 font-mono">
                       ~$1,291/mo Total Tax
                     </span>
                   </div>
 
-                  <ul className="space-y-3 text-xs text-zinc-400">
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-900 pb-2">
+                  <ul className="space-y-3.5 text-xs text-zinc-400">
+                    <li className="flex items-start justify-between gap-2 border-b border-zinc-900/80 pb-2.5">
                       <span className="flex items-center gap-2 text-zinc-300">
                         <X className="size-3.5 text-rose-500 shrink-0" /> Apollo Lead Export Credits
                       </span>
                       <span className="text-rose-400 font-semibold font-mono">$99/mo</span>
                     </li>
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-900 pb-2">
+                    <li className="flex items-start justify-between gap-2 border-b border-zinc-900/80 pb-2.5">
                       <span className="flex items-center gap-2 text-zinc-300">
                         <X className="size-3.5 text-rose-500 shrink-0" /> Instantly / Smartlead Seat
                       </span>
                       <span className="text-rose-400 font-semibold font-mono">$97/mo</span>
                     </li>
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-900 pb-2">
+                    <li className="flex items-start justify-between gap-2 border-b border-zinc-900/80 pb-2.5">
                       <span className="flex items-center gap-2 text-zinc-300">
                         <X className="size-3.5 text-rose-500 shrink-0" /> 5 Secondary Domains &amp; DNS
                       </span>
                       <span className="text-rose-400 font-semibold font-mono">$60/mo</span>
                     </li>
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-900 pb-2">
+                    <li className="flex items-start justify-between gap-2 border-b border-zinc-900/80 pb-2.5">
                       <span className="flex items-center gap-2 text-zinc-300">
                         <X className="size-3.5 text-rose-500 shrink-0" /> Google Workspace Inboxes
                       </span>
                       <span className="text-rose-400 font-semibold font-mono">$36/mo</span>
                     </li>
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-900 pb-2">
+                    <li className="flex items-start justify-between gap-2 border-b border-zinc-900/80 pb-2.5">
                       <span className="flex items-center gap-2 text-zinc-300">
                         <X className="size-3.5 text-rose-500 shrink-0" /> Clay Enrichment Credits
                       </span>
                       <span className="text-rose-400 font-semibold font-mono">$149/mo</span>
                     </li>
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-900 pb-2">
+                    <li className="flex items-start justify-between gap-2 border-b border-zinc-900/80 pb-2.5">
                       <span className="flex items-center gap-2 text-zinc-300">
                         <X className="size-3.5 text-rose-500 shrink-0" /> Mailbox Ops &amp; Reply Retainer
                       </span>
@@ -259,43 +206,43 @@ export default async function LandingPage() {
               </div>
 
               {/* The AutoGTM Model */}
-              <div className="rounded-xl border border-zinc-700/80 bg-zinc-950/90 p-6 sm:p-8 space-y-6 flex flex-col justify-between relative shadow-xl card-shine">
+              <div className="rounded-none border border-emerald-900/80 bg-zinc-950 p-6 sm:p-8 space-y-6 flex flex-col justify-between relative shadow-xl">
                 <div className="space-y-4">
                   <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                     <span className="text-xs uppercase tracking-wider font-semibold text-white flex items-center gap-1.5">
                       <Sparkles className="size-3.5 text-emerald-400" /> AutoGTM Autonomous Engine
                     </span>
-                    <span className="rounded-full border border-emerald-500/40 bg-emerald-950/40 text-emerald-400 text-[10px] px-2.5 py-0.5 font-semibold">
+                    <span className="rounded-none border border-emerald-500/40 bg-emerald-950/40 text-emerald-400 text-[10px] px-2.5 py-0.5 font-mono font-semibold">
                       $0/mo Platform Fee
                     </span>
                   </div>
 
-                  <ul className="space-y-3 text-xs text-zinc-300">
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2">
+                  <ul className="space-y-3.5 text-xs text-zinc-300">
+                    <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
                       <span className="flex items-center gap-2 text-white">
-                        <Check className="size-3.5 text-emerald-400 shrink-0" /> 100M+ Global Lead Directory
+                        <Check className="size-3.5 text-emerald-400 shrink-0" /> 10.2M Global Lead Directory
                       </span>
                       <span className="text-emerald-400 font-semibold font-mono">INCLUDED ($0)</span>
                     </li>
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2">
+                    <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
                       <span className="flex items-center gap-2 text-white">
                         <Check className="size-3.5 text-emerald-400 shrink-0" /> Pre-Warmed Shared Mailbox Pool
                       </span>
                       <span className="text-emerald-400 font-semibold font-mono">INCLUDED ($0)</span>
                     </li>
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2">
+                    <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
                       <span className="flex items-center gap-2 text-white">
                         <Check className="size-3.5 text-emerald-400 shrink-0" /> Autonomous 3-Touch Follow-Up Engine
                       </span>
                       <span className="text-emerald-400 font-semibold font-mono">INCLUDED ($0)</span>
                     </li>
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2">
+                    <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
                       <span className="flex items-center gap-2 text-white">
                         <Check className="size-3.5 text-emerald-400 shrink-0" /> AutoGTM Neural Voice Calibration
                       </span>
                       <span className="text-emerald-400 font-semibold font-mono">INCLUDED ($0)</span>
                     </li>
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2">
+                    <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
                       <span className="flex items-center gap-2 text-white">
                         <Check className="size-3.5 text-emerald-400 shrink-0" /> Turnkey Admin-Supplied Mailbox Fleet
                       </span>
@@ -333,12 +280,7 @@ export default async function LandingPage() {
         <ChadGtmSequenceShowcase />
 
         {/* ========================================================================= */}
-        {/* 5-STEP WORKFLOW SIMULATOR (HOW IT WORKS IN 60 SECONDS) */}
-        {/* ========================================================================= */}
-        <ChadGtmWorkflowSimulator />
-
-        {/* ========================================================================= */}
-        {/* 100M+ GLOBAL VERIFIED LEADS DIRECTORY PREVIEW */}
+        {/* 10.2M GLOBAL VERIFIED LEADS DIRECTORY PREVIEW */}
         {/* ========================================================================= */}
         <ChadGtmLeadsPreview />
 
@@ -360,43 +302,43 @@ export default async function LandingPage() {
         {/* ========================================================================= */}
         {/* FOUNDER MANIFESTO: WHY WE CHARGE $0/MONTH */}
         {/* ========================================================================= */}
-        <section className="py-20 sm:py-24 border-t border-zinc-800/80 bg-zinc-950/60 font-sans">
+        <section className="py-24 sm:py-32 border-t border-zinc-800/80 bg-zinc-950 font-sans">
           <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-            <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-8 sm:p-10 space-y-6 card-shine shadow-xs">
-              <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
+            <div className="rounded-none border border-zinc-800 bg-black p-8 sm:p-12 space-y-6">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
                 <div className="flex items-center gap-2">
-                  <Terminal className="size-4 text-zinc-400" />
-                  <span className="text-xs uppercase font-semibold tracking-wider text-white">
-                    Founder Note // Why We Charge $0/Month
+                  <Terminal className="size-4 text-emerald-400" />
+                  <span className="text-xs uppercase font-semibold tracking-wider text-white font-mono">
+                    Founder Note // Why We Charge $0/Month Forever
                   </span>
                 </div>
-                <span className="text-[10px] text-zinc-400 font-medium uppercase tracking-wider bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-full">
+                <span className="text-[10px] text-zinc-400 font-mono uppercase tracking-wider bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-none">
                   Transparency Manifesto
                 </span>
               </div>
 
-              <div className="space-y-4 text-xs sm:text-sm text-zinc-300 leading-relaxed">
-                <p className="font-semibold text-white text-sm sm:text-base">
-                  "Why does every cold email platform charge you $97/month for a login screen?"
+              <div className="space-y-4 text-sm sm:text-base text-zinc-300 leading-relaxed">
+                <p className="font-semibold text-white text-base sm:text-lg">
+                  "Why does every cold email platform charge you $97/month just for a login screen?"
                 </p>
                 <p>
-                  Think about it: AWS doesn't charge you $99/month just to create a database. Stripe doesn't charge you $99/month just to open a payment gateway. They charge you a tiny fraction of a cent when you actually consume compute or process money.
+                  Think about it: AWS doesn't charge you $99/month just to create a database. Stripe doesn't charge you $99/month just to open a payment gateway. They charge you a fraction of a cent when you actually consume compute or process money.
                 </p>
                 <p>
-                  Yet in outbound sales, legacy tools force early-stage founders and growth teams to pay <strong className="text-white">$400–$800 every single month</strong> in recurring seat licenses. If you take a week off to close deals, you still pay $400. If you are testing a new product angle, you still pay $400.
+                  Yet in outbound sales, legacy vendors force early-stage founders and growth teams to pay <strong className="text-white">$400–$800 every single month</strong> in recurring seat taxes. If you take a week off to close deals, you still pay $400. If you are testing a new angle, you still pay $400.
                 </p>
                 <p>
-                  We built AutoGTM to treat cold email infrastructure as a utility. Our entire core software—campaign builder, lead directory scaling to 100M+ verified global contacts, UniBox, and CRM—is <strong className="text-white">$0/month forever</strong>. All mailboxes are pre-warmed, authenticated, and supplied directly by our admin fleet, so you pay strictly <strong className="text-white">$0.05 per email delivered</strong> with zero domain or DNS setup.
+                  We built AutoGTM to treat outbound infrastructure as a utility. Our entire core software—campaign builder, 10.2M verified B2B directory, UniBox, and CRM—is <strong className="text-white">$0/month forever</strong>. All mailboxes are pre-warmed, authenticated, and supplied directly by our admin fleet, so you pay strictly <strong className="text-white">$0.05 per email delivered</strong> with zero domain or DNS setup.
                 </p>
-                <p className="text-zinc-400 text-xs pt-2">
-                  Zero seat taxes. Zero monthly minimums. Pure pay-for-what-you-use growth.
+                <p className="text-zinc-400 text-xs pt-2 font-mono">
+                  Zero seat taxes · Zero monthly minimums · Pure pay-for-what-you-use growth.
                 </p>
               </div>
 
-              <div className="pt-4 border-t border-zinc-800/80 flex items-center justify-between">
+              <div className="pt-6 border-t border-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
                   <div className="text-xs font-semibold text-white">The AutoGTM Core Team</div>
-                  <div className="text-[11px] text-zinc-400">Built for founders who hate paying SaaS seat taxes</div>
+                  <div className="text-[11px] text-zinc-400">Built for founders who hate paying recurring SaaS seat taxes</div>
                 </div>
                 <Button asChild size="sm" className="rounded-none bg-white text-black font-semibold text-xs border border-white hover:bg-zinc-200 shadow-none active:translate-y-[1px]">
                   <Link href="/signup">Start Free ($0/mo)</Link>
@@ -407,24 +349,24 @@ export default async function LandingPage() {
         </section>
 
         {/* ========================================================================= */}
-        {/* PRODUCTION CASE STUDIES & OPERATOR TELEMETRY */}
+        {/* OPERATOR CASE STUDIES */}
         {/* ========================================================================= */}
-        <section className="relative py-20 sm:py-28 border-t border-zinc-800/80 bg-black overflow-hidden font-sans">
+        <section className="relative py-24 sm:py-32 border-t border-zinc-800/80 bg-[#050505] overflow-hidden font-sans">
           <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="text-center max-w-2xl mx-auto mb-14">
-              <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800/80 bg-zinc-950/90 px-3 py-1 text-xs text-zinc-400 mb-3 shadow-xs">
+            <div className="text-center max-w-2xl mx-auto mb-16">
+              <div className="inline-flex items-center gap-2 rounded-none border border-zinc-800 bg-zinc-950 px-3 py-1 text-xs text-zinc-400 mb-3">
                 <Star className="size-3 text-emerald-400" />
-                <span>Verified Outcomes · Operator Case Studies</span>
+                <span>Verified Outcomes · Founder Case Studies</span>
               </div>
-              <h2 className="text-2xl sm:text-4xl font-bold text-white uppercase tracking-tight">
+              <h2 className="text-3xl sm:text-5xl font-bold text-white tracking-tight">
                 Real Pipeline. Real Meetings.
               </h2>
-              <p className="mt-2 text-xs sm:text-sm text-zinc-400">
-                Audited results from B2B founders and revenue leaders running autonomous outreach.
+              <p className="mt-3 text-xs sm:text-sm text-zinc-400">
+                Audited outcomes from B2B founders running autonomous outreach.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-6xl mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
               {[
                 {
                   code: "Case Study 01",
@@ -454,22 +396,27 @@ export default async function LandingPage() {
                   badge: "Fintech API",
                 },
               ].map((t, i) => (
-                <div key={i} className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-6 flex flex-col justify-between relative group hover:border-zinc-700/80 transition-colors card-shine shadow-xs">
+                <div
+                  key={i}
+                  className="rounded-none border border-zinc-800 bg-zinc-950 p-7 flex flex-col justify-between relative group hover:border-zinc-700 transition-colors"
+                >
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between text-xs text-zinc-400 border-b border-zinc-800/80 pb-2.5">
-                      <span className="font-medium text-zinc-300">{t.code}</span>
-                      <span className="rounded-full border border-zinc-800 bg-zinc-900/80 px-2 py-0.5 text-[10px] text-zinc-400">{t.badge}</span>
+                    <div className="flex items-center justify-between text-xs text-zinc-400 border-b border-zinc-800 pb-3">
+                      <span className="font-mono text-zinc-400">{t.code}</span>
+                      <span className="rounded-none border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-[10px] text-zinc-400 font-mono">
+                        {t.badge}
+                      </span>
                     </div>
-                    <p className="text-xs text-zinc-300 leading-relaxed">
+                    <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed font-sans">
                       "{t.quote}"
                     </p>
                   </div>
-                  <div className="mt-6 pt-4 border-t border-zinc-800/80 flex items-center justify-between text-xs">
+                  <div className="mt-6 pt-4 border-t border-zinc-800 flex items-center justify-between text-xs">
                     <div>
                       <div className="font-semibold text-white">{t.author}</div>
                       <div className="text-[11px] text-zinc-400">{t.role}</div>
                     </div>
-                    <span className="text-[11px] font-semibold text-emerald-400 rounded-full border border-emerald-500/30 bg-emerald-950/30 px-2.5 py-0.5">
+                    <span className="text-[11px] font-semibold text-emerald-400 font-mono border border-emerald-500/30 bg-emerald-950/30 px-2.5 py-0.5 rounded-none">
                       {t.metric}
                     </span>
                   </div>
@@ -480,145 +427,56 @@ export default async function LandingPage() {
         </section>
 
         {/* ========================================================================= */}
-        {/* SYSTEM DOCUMENTATION & OBJECTION-HANDLING FAQ */}
+        {/* FINAL HIGH-CONVERTING CTA BANNER */}
         {/* ========================================================================= */}
-        <section id="faq" className="py-20 sm:py-28 border-t border-zinc-800/80 bg-black font-sans">
-          <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-12">
-              <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800/80 bg-zinc-950/90 px-3 py-1 text-xs text-zinc-400 mb-3 shadow-xs">
-                <Terminal className="size-3 text-zinc-400" />
-                <span>System Documentation · Common Inquiries</span>
-              </div>
-              <h2 className="text-2xl sm:text-4xl font-bold text-white uppercase tracking-tight">
-                Frequently Asked Questions
-              </h2>
-            </div>
-
-            <div className="space-y-3">
-              {[
-                {
-                  code: "SPEC_01",
-                  q: "Why is the core AutoGTM platform $0/month?",
-                  a: "We believe cold email software should not cost $97/month in recurring seat licenses. The core AutoGTM platform is 100% free ($0/mo) for unlimited campaigns, sequences, and lead storage. When using our autonomous shared mailbox pool, you pay strictly 5¢ per email.",
-                },
-                {
-                  code: "SPEC_02",
-                  q: "How does the 'Pay Just 5 Cents Per Email' model work?",
-                  a: "If you don't want to buy secondary domains, configure DNS (SPF, DKIM, DMARC), or warm up mailboxes for 3 weeks, you can dispatch via our managed enterprise shared mailbox pool. You pay strictly $0.05 per email delivered. There are no recurring monthly minimums and no hidden markups.",
-                },
-                {
-                  code: "SPEC_03",
-                  q: "How does the 3-touch follow-up cadence work?",
-                  a: "Every prospect automatically receives an initial personalized opener, followed by Touch #2 (Value & Proof Bump, 3 days later), and Touch #3 (Polite Permission Breakup, 4 days after that). The instant a prospect replies or books a meeting, all remaining follow-ups are cancelled automatically.",
-                },
-                {
-                  code: "SPEC_04",
-                  q: "Do I need to buy secondary domains or configure DNS records?",
-                  a: "No. AutoGTM is 100% turnkey zero setup. Our admin fleet supplies, warms, and maintains all sender infrastructure with pre-configured SPF, DKIM, and DMARC authentication. You never have to buy domains or configure DNS.",
-                },
-                {
-                  code: "SPEC_05",
-                  q: "How does AutoGTM maintain 99%+ deliverability?",
-                  a: "We enforce a strict ceiling of 30 emails per mailbox per day, distributed across our shared sender infrastructure with intelligent randomized delays (45–120 seconds). Each sender domain is pre-authenticated with verified SPF, DKIM, and DMARC records.",
-                },
-                {
-                  code: "SPEC_06",
-                  q: "What powers the autonomous company research and email generation?",
-                  a: "AutoGTM is powered by our proprietary AutoGTM Neural Core™—a dedicated outbound intelligence model trained on 7+ years of cold campaign conversion data and over 50M+ sales touchpoints. It crawls your live website, extracts unique value propositions, matches high-intent buyer personas, and drafts high-converting outreach angles in seconds.",
-                },
-                {
-                  code: "SPEC_07",
-                  q: "Is AutoGTM compliant with GDPR and CAN-SPAM regulations?",
-                  a: "Yes. Every outgoing email automatically includes one-click unsubscribe links and physical compliance footers. Any reply or opt-out is instantly honored and synchronized across all active campaigns.",
-                },
-              ].map((faq, i) => (
-                <div key={i} className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 hover:border-zinc-700/80 transition-colors card-shine shadow-xs">
-                  <h4 className="text-xs sm:text-sm font-semibold text-white flex items-center gap-2">
-                    <span className="text-zinc-500 font-mono text-xs">{faq.code}</span> {faq.q}
-                  </h4>
-                  <p className="mt-2 text-xs text-zinc-400 leading-relaxed pl-6">
-                    {faq.a}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ========================================================================= */}
-        {/* FINAL BOTTOM HIGH-CONVERTING CTA BANNER */}
-        {/* ========================================================================= */}
-        <section className="relative py-20 sm:py-28 border-t border-zinc-800/80 bg-zinc-950/80 overflow-hidden font-sans">
-          <div className="relative mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
-            <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800/80 bg-zinc-900/90 px-3 py-1 text-xs text-zinc-400 mb-4 shadow-xs">
-              <Rocket className="size-3 text-emerald-400" />
-              <span>Deploy in 60 seconds · $0 platform fee</span>
-            </div>
-            <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight uppercase">
-              Ready To Replace Your Fragmented $450/Month Outbound Stack?
-              <br />
-              <span className="text-zinc-500 text-2xl sm:text-4xl block mt-2 font-normal font-mono">
-                [LIVE IN UNDER 60 SECONDS · 5¢ / EMAIL]
-              </span>
+        <section className="py-20 sm:py-28 border-t border-zinc-800 bg-black font-sans">
+          <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 text-center space-y-6">
+            <h2 className="text-3xl sm:text-5xl font-bold text-white tracking-tight">
+              Ready to turn your domain into qualified meetings?
             </h2>
-            <p className="mt-4 text-xs sm:text-sm text-zinc-400 max-w-xl mx-auto leading-relaxed">
-              Join forward-thinking founders and revenue leaders generating qualified meetings autonomously. No secondary domains to buy. No seat licenses to manage.
+            <p className="text-sm sm:text-base text-zinc-400 max-w-xl mx-auto leading-relaxed">
+              Join founders scaling predictable outbound pipeline with zero monthly subscription fees and zero technical setup.
             </p>
-
-            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 max-w-sm sm:max-w-none mx-auto">
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
               <Button
                 asChild
                 size="lg"
-                className="rounded-none h-12 px-8 bg-white hover:bg-zinc-200 text-black font-semibold text-xs border border-white gap-2 w-full sm:w-auto shadow-none active:translate-y-[1px]"
+                className="rounded-none h-12 px-8 bg-white hover:bg-zinc-200 text-black font-semibold text-xs border border-white gap-2 w-full sm:w-auto shadow-none"
               >
-                <Link href={isLoggedIn ? "/chad-gtm" : "/signup"}>
+                <Link href="/signup">
                   Launch Free GTM Engine <ArrowRight className="size-4 ml-1" />
                 </Link>
               </Button>
+              <Button
+                asChild
+                variant="outline"
+                size="lg"
+                className="rounded-none h-12 px-7 border-zinc-800 bg-zinc-950 text-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-700 text-xs font-semibold w-full sm:w-auto shadow-none"
+              >
+                <Link href="/login">
+                  Sign In to Mission Control
+                </Link>
+              </Button>
             </div>
-
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-3 sm:gap-6 text-xs text-zinc-400">
-              <span className="flex items-center gap-1.5 text-zinc-300">
-                <CheckCircle2 className="size-3 text-emerald-400" />
-                No credit card required
-              </span>
-              <span className="flex items-center gap-1.5 text-zinc-300">
-                <CheckCircle2 className="size-3 text-emerald-400" />
-                Live in 60 seconds
-              </span>
-              <span className="flex items-center gap-1.5 text-zinc-300">
-                <CheckCircle2 className="size-3 text-emerald-400" />
-                $0/mo platform fee forever
-              </span>
-              <span className="flex items-center gap-1.5 text-zinc-300">
-                <CheckCircle2 className="size-3 text-emerald-400" />
-                Cancel anytime
-              </span>
-            </div>
+            <p className="text-[11px] text-zinc-500 font-mono pt-2">
+              $0 platform fee · 10.2M verified leads · 5¢ per sent email
+            </p>
           </div>
         </section>
       </main>
 
-      {/* Global Architectural Footer */}
-      <footer className="border-t border-zinc-800/80 bg-black py-8 text-xs text-zinc-500 font-sans">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
-          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
-            <ChadGtmLogo compact />
-            <span className="text-zinc-700">|</span>
-            <span className="text-[11px]">© 2026 AutoGTM Engine. All rights reserved.</span>
+      {/* Modern Minimalist Footer */}
+      <footer className="border-t border-zinc-800 bg-[#030303] py-10 font-sans text-xs text-zinc-500">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-zinc-300">AutoGTM</span>
+            <span>·</span>
+            <span>The $0/Month Autonomous Outbound Engine</span>
           </div>
-
-          <div className="flex flex-wrap items-center justify-center gap-4 text-[11px]">
-            <div className="flex items-center gap-2">
-              <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-zinc-400 font-medium">System Operational</span>
-            </div>
-            <Link href="/privacy" className="hover:text-white transition-colors">
-              Privacy
-            </Link>
-            <Link href="/impressum" className="hover:text-white transition-colors">
-              Impressum
-            </Link>
+          <div className="flex items-center gap-4 text-zinc-400">
+            <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
+            <Link href="/impressum" className="hover:text-white transition-colors">Impressum</Link>
+            <Link href="/remove-my-info" className="hover:text-white transition-colors">Opt-Out / Remove Info</Link>
           </div>
         </div>
       </footer>

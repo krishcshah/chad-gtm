@@ -1,7 +1,6 @@
 "use client";
 
 import { Check, X, Sparkles, Minus } from "lucide-react";
-import { Badge } from "@smartreach/ui";
 
 export function ChadGtmComparisonTable() {
   const rows = [
@@ -14,14 +13,14 @@ export function ChadGtmComparisonTable() {
     },
     {
       feature: "Autonomous URL-to-Campaign",
-      chadGtm: "Instant (60s AutoGTM Neural Core™)",
+      chadGtm: "Instant (60s Autonomous Crawler)",
       instantly: "Manual campaign setup",
       apollo: "Manual list building",
       agency: "2-3 weeks onboarding",
     },
     {
       feature: "Built-In B2B Lead Directory",
-      chadGtm: "100M+ verified leads included ($0)",
+      chadGtm: "10.2M verified leads included ($0)",
       instantly: "Requires paid add-on ($$$)",
       apollo: "Strict export credit limits",
       agency: "Bundled in retainer",
@@ -71,66 +70,65 @@ export function ChadGtmComparisonTable() {
   ];
 
   return (
-    <section id="comparison" className="relative py-20 sm:py-28 border-t border-zinc-800 bg-black overflow-hidden">
+    <section id="comparison" className="relative py-24 sm:py-32 border-t border-zinc-800/80 bg-[#050505] overflow-hidden font-sans">
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-3xl mx-auto mb-14">
-          <div className="inline-flex items-center gap-2 rounded-none border border-zinc-800 bg-zinc-950 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-zinc-300 mb-4">
-            <Sparkles className="size-3 text-zinc-400" />
-            BENCHMARK // COMPETITIVE MATRIX
+        <div className="text-center max-w-3xl mx-auto mb-16">
+          <div className="inline-flex items-center gap-2 rounded-none border border-emerald-500/30 bg-emerald-950/20 px-3 py-1 font-mono text-xs text-emerald-400 mb-4">
+            <Sparkles className="size-3 text-emerald-400" />
+            <span>Feature &amp; Economics Benchmark</span>
           </div>
-          <h2 className="text-3xl sm:text-5xl font-bold tracking-tight text-white uppercase">
-            Comparative Architecture
+          <h2 className="text-3xl sm:text-5xl font-bold tracking-tight text-white">
+            How AutoGTM compares to the legacy stack.
           </h2>
-          <p className="mt-4 text-xs sm:text-sm text-zinc-400 font-mono">
-            Direct capability matrix comparing AutoGTM against legacy cold email stacks and agencies.
+          <p className="mt-4 text-sm sm:text-base text-zinc-400 max-w-2xl mx-auto leading-relaxed">
+            See why high-velocity founders are abandoning fragmented $1,200/mo toolchains for our autonomous $0/mo utility platform.
           </p>
         </div>
 
         {/* Mobile Swipe Hint */}
-        <div className="sm:hidden text-center text-[10px] text-zinc-500 mb-3 flex items-center justify-center gap-1.5 font-mono uppercase tracking-widest">
-          <span>← Swipe horizontally to inspect matrix →</span>
+        <div className="sm:hidden text-center text-[11px] text-zinc-500 font-mono mb-3">
+          ← Scroll horizontally to view full matrix →
         </div>
 
-        <div className="mx-auto max-w-5xl rounded-none border border-zinc-800 bg-zinc-950 overflow-hidden">
-          <div className="overflow-x-auto [-webkit-overflow-scrolling:touch]">
-            <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[680px]">
-              <thead>
-                <tr className="border-b border-zinc-800 bg-black font-mono">
-                  <th className="p-3.5 sm:p-4 text-zinc-400 uppercase tracking-wider text-[11px]">Feature Specification</th>
-                  <th className="p-3.5 sm:p-4 text-white bg-zinc-900 border-x border-zinc-700">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold uppercase tracking-wider text-xs">AUTOGTM</span>
-                      <span className="border border-white bg-white text-black text-[9px] font-bold px-1 py-0.2 rounded-none">Active</span>
-                    </div>
-                  </th>
-                  <th className="p-3.5 sm:p-4 text-zinc-400 uppercase tracking-wider text-[11px]">Instantly.ai</th>
-                  <th className="p-3.5 sm:p-4 text-zinc-400 uppercase tracking-wider text-[11px]">Apollo.io</th>
-                  <th className="p-3.5 sm:p-4 text-zinc-400 uppercase tracking-wider text-[11px]">SDR Agency</th>
+        {/* Table Container */}
+        <div className="overflow-x-auto rounded-none border border-zinc-800 bg-zinc-950 shadow-2xl">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-zinc-800 bg-zinc-900/50">
+                <th className="py-4 px-5 text-zinc-400 font-mono uppercase tracking-wider text-[11px]">
+                  Capability / Feature
+                </th>
+                <th className="py-4 px-5 font-bold text-white bg-emerald-950/30 border-x border-emerald-900/50">
+                  <div className="flex items-center gap-2">
+                    <span className="size-2 rounded-none bg-emerald-400 animate-pulse" />
+                    <span>AutoGTM ($0/mo)</span>
+                  </div>
+                </th>
+                <th className="py-4 px-5 text-zinc-400 font-mono uppercase tracking-wider text-[11px]">
+                  Instantly.ai
+                </th>
+                <th className="py-4 px-5 text-zinc-400 font-mono uppercase tracking-wider text-[11px]">
+                  Apollo.io
+                </th>
+                <th className="py-4 px-5 text-zinc-400 font-mono uppercase tracking-wider text-[11px]">
+                  Cold Email Agency
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-900">
+              {rows.map((row, idx) => (
+                <tr key={idx} className="hover:bg-zinc-900/40 transition-colors">
+                  <td className="py-4 px-5 font-medium text-zinc-300">{row.feature}</td>
+                  <td className="py-4 px-5 font-semibold text-emerald-400 bg-emerald-950/20 border-x border-emerald-900/30">
+                    {row.chadGtm}
+                  </td>
+                  <td className="py-4 px-5 text-zinc-400 font-mono">{row.instantly}</td>
+                  <td className="py-4 px-5 text-zinc-400 font-mono">{row.apollo}</td>
+                  <td className="py-4 px-5 text-zinc-400 font-mono">{row.agency}</td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800 font-mono text-xs">
-                {rows.map((r, i) => (
-                  <tr key={i} className="hover:bg-zinc-900/40 transition-colors">
-                    <td className="p-3.5 sm:p-4 font-sans font-medium text-zinc-200">
-                      {r.feature}
-                    </td>
-                    <td className="p-3.5 sm:p-4 bg-zinc-900/70 border-x border-zinc-700 font-bold text-white">
-                      {r.chadGtm}
-                    </td>
-                    <td className="p-3.5 sm:p-4 text-zinc-400">
-                      {r.instantly}
-                    </td>
-                    <td className="p-3.5 sm:p-4 text-zinc-400">
-                      {r.apollo}
-                    </td>
-                    <td className="p-3.5 sm:p-4 text-zinc-400">
-                      {r.agency}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </section>
