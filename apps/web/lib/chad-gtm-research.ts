@@ -1,11 +1,12 @@
 /**
- * ChadGTM Deep Autonomous Website & Company Research Engine.
- * Scrapes target domains, extracts brand and product signals,
- * and synthesizes Business Overview, ICP, and 3 distinct high-converting Offer Hooks.
+ * AutoGTM Deep Autonomous Website & Company Research Engine.
+ * Crawls target domains and subpages, extracts brand and product signals,
+ * and synthesizes Business Overview, ICP, and 3 bespoke high-converting Offer Hooks.
  */
 
 import { getDirectoryFacets } from "./leads-directory";
 import type { AiEngineOptions } from "./ai";
+import { crawlCompanyDomain, type CrawledCompanyProfile } from "./gtm-crawler";
 
 export interface ScrapedCompanyData {
   url: string;
@@ -15,6 +16,9 @@ export interface ScrapedCompanyData {
   headings: string[];
   bodySnippets: string[];
   subpageSnippets: Array<{ path: string; text: string }>;
+  pricingSignals?: string[];
+  featuresAndBullets?: string[];
+  combinedCorpus?: string;
   fetchFailed: boolean;
   failureReason?: string;
 }
@@ -56,438 +60,42 @@ export interface SynthesizedGtmStrategy {
   scrapedData: ScrapedCompanyData;
 }
 
-function cleanHtmlTags(html: string): string {
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
-    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
-    .replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function extractDomain(rawUrl: string): string {
-  try {
-    let u = rawUrl.trim();
-    if (!/^https?:\/\//i.test(u)) {
-      u = `https://${u}`;
-    }
-    const parsed = new URL(u);
-    return parsed.hostname.replace(/^www\./i, "");
-  } catch {
-    return rawUrl.replace(/^https?:\/\//i, "").split("/")[0].replace(/^www\./i, "");
-  }
-}
-
 /**
- * Scraping and content discovery pipeline.
+ * Resilient multi-tier crawling pipeline.
  */
 export async function scrapeCompanyWebsite(rawUrl: string): Promise<ScrapedCompanyData> {
-  let url = rawUrl.trim();
-  if (!/^https?:\/\//i.test(url)) {
-    url = `https://${url}`;
-  }
+  const profile: CrawledCompanyProfile = await crawlCompanyDomain(rawUrl);
 
-  const domain = extractDomain(url);
-
-  const fallbackResult: ScrapedCompanyData = {
-    url,
-    domain,
-    title: domain,
-    description: `Leading provider of modern solutions and services on ${domain}.`,
-    headings: [],
-    bodySnippets: [],
-    subpageSnippets: [],
-    fetchFailed: false,
-  };
-
-  const headers = {
-    "User-Agent":
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 (SmartReach/ChadGTM-Engine)",
-    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-  };
-
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-
-    const res = await fetch(url, {
-      headers,
-      signal: controller.signal,
-      redirect: "follow",
-    }).finally(() => clearTimeout(timeout));
-
-    if (!res.ok) {
-      fallbackResult.fetchFailed = true;
-      fallbackResult.failureReason = `HTTP ${res.status} response from host`;
-      return fallbackResult;
-    }
-
-    const html = await res.text();
-
-    // Extract title
-    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-    const title = titleMatch ? cleanHtmlTags(titleMatch[1]) : domain;
-
-    // Extract meta description or og:description
-    let description = "";
-    const metaDescMatch =
-      html.match(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i) ||
-      html.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i) ||
-      html.match(/<meta\s+content=["']([^"']+)["']\s+name=["']description["']/i);
-    if (metaDescMatch) {
-      description = cleanHtmlTags(metaDescMatch[1]);
-    }
-
-    // Extract H1 and H2
-    const headings: string[] = [];
-    const headingMatches = html.matchAll(/<h[12][^>]*>(.*?)<\/h[12]>/gi);
-    for (const m of headingMatches) {
-      const text = cleanHtmlTags(m[1]);
-      if (text.length > 5 && text.length < 160 && !headings.includes(text)) {
-        headings.push(text);
-        if (headings.length >= 8) break;
-      }
-    }
-
-    // Extract key paragraphs
-    const bodySnippets: string[] = [];
-    const pMatches = html.matchAll(/<p[^>]*>(.*?)<\/p>/gi);
-    for (const m of pMatches) {
-      const text = cleanHtmlTags(m[1]);
-      if (text.length > 40 && text.length < 400 && !bodySnippets.includes(text)) {
-        bodySnippets.push(text);
-        if (bodySnippets.length >= 6) break;
-      }
-    }
-
-    // Heuristically discover subpages (/about, /product, /pricing, /solutions)
-    const subpageLinks: string[] = [];
-    const linkMatches = html.matchAll(/<a\s+(?:[^>]*?\s+)?href=["']([^"']+)["']/gi);
-    for (const lm of linkMatches) {
-      const rawHref = lm[1].trim();
-      if (/^(?:\/|https?:\/\/)/i.test(rawHref) && /(?:about|product|solution|pricing|features)/i.test(rawHref)) {
-        try {
-          const resolved = new URL(rawHref, url).toString();
-          if (new URL(resolved).hostname === new URL(url).hostname && !subpageLinks.includes(resolved)) {
-            subpageLinks.push(resolved);
-            if (subpageLinks.length >= 2) break;
-          }
-        } catch {}
-      }
-    }
-
-    const subpageSnippets: Array<{ path: string; text: string }> = [];
-    if (subpageLinks.length > 0) {
-      await Promise.allSettled(
-        subpageLinks.map(async (subUrl) => {
-          try {
-            const subCtrl = new AbortController();
-            const subTimer = setTimeout(() => subCtrl.abort(), 4000);
-            const subRes = await fetch(subUrl, {
-              headers,
-              signal: subCtrl.signal,
-            }).finally(() => clearTimeout(subTimer));
-
-            if (subRes.ok) {
-              const subHtml = await subRes.text();
-              const subP = subHtml.matchAll(/<p[^>]*>(.*?)<\/p>/gi);
-              const pTexts: string[] = [];
-              for (const p of subP) {
-                const cleaned = cleanHtmlTags(p[1]);
-                if (cleaned.length > 40 && cleaned.length < 300) {
-                  pTexts.push(cleaned);
-                  if (pTexts.length >= 2) break;
-                }
-              }
-              if (pTexts.length > 0) {
-                const pathname = new URL(subUrl).pathname;
-                subpageSnippets.push({ path: pathname, text: pTexts.join(" ") });
-              }
-            }
-          } catch {}
-        })
-      );
-    }
-
-    // If body snippets are empty (e.g. client-side rendered Single Page Application like React/Vite/Next),
-    // discover and inspect client-side JavaScript bundles to extract headings, features, and case studies
-    if (bodySnippets.length === 0) {
-      const scriptMatches = html.matchAll(/<script\s+(?:[^>]*?\s+)?src=["']([^"']+\.js)["']/gi);
-      for (const sm of scriptMatches) {
-        const src = sm[1];
-        if (src.includes("index") || src.includes("app") || src.includes("main") || src.includes("bundle") || src.includes("assets")) {
-          try {
-            const scriptUrl = new URL(src, url).toString();
-            const scCtrl = new AbortController();
-            const scTimer = setTimeout(() => scCtrl.abort(), 4500);
-            const scRes = await fetch(scriptUrl, { headers, signal: scCtrl.signal }).finally(() => clearTimeout(scTimer));
-            if (scRes.ok) {
-              const jsCode = await scRes.text();
-              const textMatches = jsCode.matchAll(/"([^"\\]{45,260})"/g);
-              for (const tm of textMatches) {
-                const s = tm[1].trim();
-                if (
-                  !s.includes("webpack") &&
-                  !s.includes("import") &&
-                  !s.includes("function") &&
-                  !s.includes("{") &&
-                  !s.includes("}") &&
-                  !s.includes("var ") &&
-                  !s.includes("const ") &&
-                  !bodySnippets.includes(s)
-                ) {
-                  bodySnippets.push(s);
-                  if (bodySnippets.length >= 8) break;
-                }
-              }
-
-              // Extract prominent headings from bundle
-              const headingCandidates = jsCode.matchAll(/"([A-Z][A-Za-z0-9\s,–—\-]{12,70})"/g);
-              for (const hc of headingCandidates) {
-                const h = hc[1].trim();
-                if (
-                  !headings.includes(h) &&
-                  (h.includes("Cold") ||
-                    h.includes("Email") ||
-                    h.includes("Outbound") ||
-                    h.includes("Infrastructure") ||
-                    h.includes("Domain") ||
-                    h.includes("Deliverability") ||
-                    h.includes("Platform") ||
-                    h.includes("Client") ||
-                    h.includes("Agency"))
-                ) {
-                  headings.push(h);
-                  if (headings.length >= 6) break;
-                }
-              }
-            }
-          } catch {}
-        }
-      }
-    }
-
-    return {
-      url,
-      domain,
-      title: title || domain,
-      description: description || (headings[0] ? headings[0] : `Specialized B2B products from ${domain}`),
-      headings,
-      bodySnippets,
-      subpageSnippets,
-      fetchFailed: false,
-    };
-  } catch (err: any) {
-    fallbackResult.fetchFailed = true;
-    fallbackResult.failureReason = err?.message || "Connection timeout or SSL error";
-    return fallbackResult;
-  }
-}
-
-/**
- * Intelligent deterministic fallback generator when AI API key is omitted,
- * rate-limited, or during offline sandbox runs.
- */
-function simulateGtmStrategy(
-  scraped: ScrapedCompanyData,
-  optionalNotes?: string,
-  candidateIndustries: string[] = []
-): SynthesizedGtmStrategy {
-  const brandName =
-    scraped.title && !scraped.title.includes("http") && scraped.title.length < 35
-      ? scraped.title.split(/[-|–:]/)[0].trim()
-      : scraped.domain.split(".")[0].charAt(0).toUpperCase() + scraped.domain.split(".")[0].slice(1);
-
-  const notesText = optionalNotes ? ` Focus: ${optionalNotes}.` : "";
-  const combinedText = `${scraped.title} ${scraped.description} ${scraped.headings.join(" ")} ${notesText}`.toLowerCase();
-
-  // Industry matching heuristic against real DB industries
-  let matchedIndustries = candidateIndustries.slice(0, 5);
-  if (candidateIndustries.length > 0) {
-    const matched = candidateIndustries.filter((ind) => {
-      const lowerInd = ind.toLowerCase();
-      return (
-        combinedText.includes(lowerInd) ||
-        (lowerInd.includes("tech") && combinedText.includes("software")) ||
-        (lowerInd.includes("financial") && (combinedText.includes("fintech") || combinedText.includes("payment"))) ||
-        (lowerInd.includes("marketing") && (combinedText.includes("growth") || combinedText.includes("brand"))) ||
-        (lowerInd.includes("hospital") && combinedText.includes("health"))
-      );
-    });
-    if (matched.length > 0) {
-      matchedIndustries = matched.slice(0, 6);
-    }
-  }
-
-  // Titles
-  let targetTitles = ["VP of Sales", "Head of Business Development", "Chief Revenue Officer", "Managing Director"];
-  if (combinedText.includes("engineer") || combinedText.includes("developer") || combinedText.includes("api") || combinedText.includes("devops")) {
-    targetTitles = ["VP of Engineering", "Chief Technology Officer", "Head of Product", "Director of Infrastructure"];
-  } else if (combinedText.includes("recruit") || combinedText.includes("talent") || combinedText.includes("hiring")) {
-    targetTitles = ["Head of Talent Acquisition", "VP of People", "Managing Director", "Staffing Partner"];
-  }
-
-  // Heuristics for category & competitor intelligence
-  const isInboxInfra =
-    combinedText.includes("inbox") ||
-    combinedText.includes("mailbox") ||
-    combinedText.includes("leadskingdom") ||
-    combinedText.includes("deliverability") ||
-    combinedText.includes("infrastructure") ||
-    combinedText.includes("secondary domain");
-
-  const isWebDesign =
-    !isInboxInfra &&
-    (combinedText.includes("web design") ||
-      combinedText.includes("website redesign") ||
-      combinedText.includes("ui/ux") ||
-      combinedText.includes("landing page") ||
-      combinedText.includes("web development"));
-
-  let categoryIntelligence: CategoryIntelligence;
-  let offers: GtmOffer[];
-
-  if (isInboxInfra) {
-    categoryIntelligence = {
-      serviceCategory: "Cold Email Infrastructure & Managed Mailbox Fleet",
-      provenOutboundMeta: [
-        "2024-2026 Google and Yahoo sender guidelines mandate strict DMARC enforcement and max 30 sends/inbox/day",
-        "Isolating secondary domains from root domain prevents corporate domain blacklisting and Google Workspace bans",
-        "Turnkey outbound launch from scratch enables B2B client acquisition with predictable CAC vs paying $3k+/mo in ad networks",
-      ],
-      competitorBenchmarks: [
-        { name: "Mailforge", offer: "$3/inbox secondary infrastructure with automated DNS", angle: "Seat Cost Slash" },
-        { name: "Infraforge", offer: "Private cloud cold email mailboxes with automated IP rotation", angle: "Deliverability" },
-        { name: "Salesforge", offer: "Unified outbound execution with pre-warmed mailbox sync", angle: "Outbound Stack" },
-      ],
-    };
-
-    offers = [
-      {
-        title: "Turnkey Client Acquisition Launch",
-        angle: "Turnkey Outbound Setup (Zero Outbound Angle)",
-        valueProp: `Build and launch your outbound sending engine from scratch with pre-warmed secondary domains, zero tech setup, and predictable client pipeline without paying $3k+/mo in ad spend.`,
-        cta: `Would you be open to a 45-second video showing how peer firms launch turnkey client reach-outs?`,
-      },
-      {
-        title: "80% Seat Cost Slash & Domain Shield",
-        angle: "Secondary Domain Isolation (Active Outbound Angle)",
-        valueProp: `Cut Google Workspace $7/user seat costs by 80% on secondary prospecting inboxes and completely isolate outreach to protect corporate root domain reputation.`,
-        cta: `Could I send over a 1-page breakdown showing how peer teams cut secondary seat costs by 80%?`,
-      },
-      {
-        title: "Deliverability Remediation & Compliance Audit",
-        angle: "Technical DNS Alignment (Technical Defect Angle)",
-        valueProp: `Audit and align missing SPF/DKIM/DMARC records and migrate to high-reputation IP pools to eliminate spam folder drops under Yahoo & Google bulk caps.`,
-        cta: `Mind if I share a 40-second screen capture showing where the DNS record drop is happening?`,
-      },
-    ];
-  } else if (isWebDesign) {
-    categoryIntelligence = {
-      serviceCategory: "B2B Web Design & Conversion Rate Optimization",
-      provenOutboundMeta: [
-        "68% of local service quotes originate on mobile devices with high drop-off on slow forms",
-        "Replacing multi-field intake forms with 1-tap mobile booking doubles quote completions",
-      ],
-      competitorBenchmarks: [
-        { name: "Boutique Design Studios", offer: "$5k-$15k custom site redesigns on 6-week timelines", angle: "Long Timeline / High Fee" },
-        { name: "Webflow Agencies", offer: "Turnkey landing pages focused on conversion rate optimization", angle: "Speed & Conversion" },
-      ],
-    };
-
-    offers = [
-      {
-        title: "Mobile Speed & Layout Shift Audit",
-        angle: "Mobile Performance (Friction Angle)",
-        valueProp: `Eliminate 4-second mobile layout delays and cut load times under 0.5s to capture the 30% of visitors who bounce before forms render.`,
-        cta: `Mind if I send over a 45-second screen recording showing where the drop-off happens?`,
-      },
-      {
-        title: "Frictionless 1-Tap Mobile Intake",
-        angle: "Conversion Optimization (ROI Angle)",
-        valueProp: `Streamline consultation booking from 12 required fields down to 3 without losing lead qualification, doubling booked quotes.`,
-        cta: `Could I share a 40-second teardown showing how peer firms cut intake friction?`,
-      },
-      {
-        title: "Direct Tap-to-Call Emergency Dispatch",
-        angle: "High-Intent Dispatch (Conversion Angle)",
-        valueProp: `Make primary service dispatch phone numbers 1-tap clickable on mobile screens so urgent clients never have to memorize numbers.`,
-        cta: `Worth a quick look if I send the clip?`,
-      },
-    ];
-  } else {
-    categoryIntelligence = {
-      serviceCategory: `${brandName} B2B Operational Solutions`,
-      provenOutboundMeta: [
-        "Align outbound messaging with prospect maturity: turnkey launch for newbies vs infrastructure optimization for active outbounders",
-      ],
-      competitorBenchmarks: [
-        { name: "Legacy SaaS Suites", offer: "High monthly seat fees with complex onboarding", angle: "High Friction" },
-      ],
-    };
-
-    offers = [
-      {
-        title: "Turnkey Client Acquisition Launch",
-        angle: "New Client Pipeline (Zero Outbound Angle)",
-        valueProp: `Set up an automated direct outreach engine to acquire qualified B2B clients predictably without relying solely on referrals or paid advertising.`,
-        cta: `Would you be open to a 45-second video walk-through this week?`,
-      },
-      {
-        title: "Operational Cost & Workflow Optimization",
-        angle: "Efficiency & Margin (Active Teams Angle)",
-        valueProp: `Eliminate manual handoffs and cut recurring SaaS infrastructure expenses by 80% with automated execution workflows.`,
-        cta: `Could I send over a 1-page breakdown detailing the workflow benchmarks?`,
-      },
-      {
-        title: "Risk-Free Diagnostic Review",
-        angle: "Frictionless Audit (Diagnostic Angle)",
-        valueProp: `Benchmark operational bottlenecks and deliverability health with zero setup overhead or commitment.`,
-        cta: `Would you be against taking a 60-second interactive test drive this week?`,
-      },
-    ];
-  }
+  const subpageSnippets = profile.subpages.map((sub) => ({
+    path: sub.path,
+    text: [
+      sub.title ? `Title: ${sub.title}` : "",
+      sub.headings.length ? `Headings: ${sub.headings.join(" | ")}` : "",
+      sub.keyParagraphs.slice(0, 3).join(" "),
+      sub.pricingSignals.length ? `Pricing: ${sub.pricingSignals.join(" ")}` : "",
+    ]
+      .filter(Boolean)
+      .join(" — "),
+  }));
 
   return {
-    companyName: brandName,
-    categoryIntelligence,
-    businessOverview: {
-      summary: `${brandName} empowers modern B2B organizations to accelerate growth and operational efficiency through intelligent automation and reliable workflows.${notesText}`,
-      valuePropositions: [
-        `Eliminate manual friction and accelerate execution speed across team operations.`,
-        `Predictable, scalable output delivered without ballooning internal headcount.`,
-        `Enterprise-grade reliability with seamless integration into existing toolchains.`,
-      ],
-      keyDifferentiators: [
-        `Zero setup overhead with rapid time-to-value within days.`,
-        `Tailored specifically for high-velocity mid-market and enterprise teams.`,
-        `Transparent, predictable ROI backed by verified performance metrics.`,
-      ],
-      targetMarket: "High-growth mid-market and enterprise teams seeking operational scale.",
-    },
-    icpProfile: {
-      targetTitles,
-      companySizes: ["11-50", "51-200", "201-500"],
-      industries: matchedIndustries.length > 0 ? matchedIndustries : ["Information Technology and Services", "Financial Services", "Marketing And Advertising"],
-      painPoints: [
-        "Time-consuming manual workflows that cap team pipeline and output.",
-        "High customer acquisition costs and low response rates with traditional outreach.",
-        "Difficulty scaling operations without increasing headcount and overhead.",
-      ],
-    },
-    offers,
-    scrapedData: scraped,
+    url: profile.normalizedUrl,
+    domain: profile.domain,
+    title: profile.rootPage.title,
+    description: profile.rootPage.description,
+    headings: profile.rootPage.headings,
+    bodySnippets: profile.rootPage.keyParagraphs,
+    subpageSnippets,
+    pricingSignals: profile.rootPage.pricingSignals,
+    featuresAndBullets: profile.rootPage.featuresAndBullets,
+    combinedCorpus: profile.combinedCorpus,
+    fetchFailed: profile.fetchFailed,
+    failureReason: profile.failureReason,
   };
 }
 
 /**
- * Synthesize Go-To-Market strategy from scraped data using LLM or structured synthesis.
+ * Deep multi-stage AI reasoning pipeline.
  */
 export async function synthesizeGtmStrategy(
   scraped: ScrapedCompanyData,
@@ -495,7 +103,7 @@ export async function synthesizeGtmStrategy(
   aiOptions?: AiEngineOptions
 ): Promise<SynthesizedGtmStrategy> {
   const facets = getDirectoryFacets();
-  const topIndustries = facets.industries.slice(0, 30).map((i) => i.value);
+  const topIndustries = facets.industries.slice(0, 40).map((i) => i.value);
 
   const apiKey =
     aiOptions?.apiKey ||
@@ -508,69 +116,75 @@ export async function synthesizeGtmStrategy(
   }
 
   const prompt = `You are an elite B2B Go-To-Market (GTM) strategist and cold outreach architect.
-Analyze the following scraped company profile and generate a comprehensive B2B outbound campaign strategy.
+Analyze the following multi-page crawl data for this company and generate a high-converting, tailored B2B outbound campaign strategy.
 
-TARGET COMPANY INFORMATION:
-- URL: ${scraped.url}
-- Title: ${scraped.title}
-- Description: ${scraped.description}
-- Key Headings: ${scraped.headings.slice(0, 5).join(" | ")}
-- Content Snippets: ${scraped.bodySnippets.slice(0, 4).join(" | ")}
-- Subpage Context: ${scraped.subpageSnippets.map((s) => `${s.path}: ${s.text}`).join(" | ")}
-- Optional Founder / Campaign Context: ${optionalNotes || "None provided"}
+=== SCRAPED DOMAIN & CORPUS DATA ===
+${scraped.combinedCorpus || `URL: ${scraped.url}\nTitle: ${scraped.title}\nDescription: ${scraped.description}`}
 
-MATCHING DIRECTORY B2B INDUSTRIES (MUST PICK 3-5 EXACT STRINGS FROM THIS LIST):
+=== OPTIONAL USER-PROVIDED CONTEXT / OFFER NOTES ===
+${optionalNotes || "None provided"}
+
+=== AVAILABLE B2B DIRECTORY TARGET INDUSTRIES (CHOOSE 3-5 EXACT MATCHING STRINGS) ===
 ${JSON.stringify(topIndustries)}
 
-CRITICAL INSTRUCTIONS FOR OUTBOUND MATURITY ARCHITECTURE:
-1. Infer the clean, concise brand name and identify the generic service category (e.g. "Cold Email Infrastructure", "Accounting & Fractional CFO", "Staffing & Recruiting", "B2B SaaS").
-2. In categoryIntelligence, identify 2-3 direct or similar-size competitors, their offers/pricing models, and proven cold email meta angles for this exact niche.
-3. In businessOverview, provide a 2-3 sentence summary explaining what problem the product solves, 3 value propositions, and 3 key differentiators.
-4. In icp, list 3-5 high-signal decision maker job titles (e.g. "VP of Sales", "CTO", "Head of Talent"), 3 company size ranges, 3-5 matching industry strings from the list above, and 3 acute pain points.
-5. In offers, create exactly 3 distinct high-converting cold email angles addressing prospect OUTBOUND MATURITY:
-   - Offer 1: "Turnkey Client Acquisition Launch" (Targeting Outbound Newbies: companies relying on referrals or ads with 0 cold email active).
-   - Offer 2: "Cost Slash & Domain Isolation" (Targeting Active Outbounders: cutting $7/user seat fees and isolating secondary domains).
-   - Offer 3: "Technical Deliverability & Audit Fix" (Targeting Technical Defect / Deliverability Issues).
+=== CRITICAL STRATEGY GUIDELINES ===
+1. Brand Inference: Extract the clean, authoritative brand name from the crawl (e.g. "Resend", "Acme", "Retool").
+2. Category Intelligence: Identify their exact market category (e.g. "Developer Tools / Email API", "B2B Payroll & HR", "Fintech Payment Gateway"). List 2-3 genuine industry competitors and 2 actionable cold outreach principles for this category.
+3. Business Overview:
+   - summary: 2-3 concise, punchy sentences detailing the core problem solved, the mechanism, and the target audience.
+   - valuePropositions: Exactly 3 distinct, specific value propositions derived from their crawl data.
+   - keyDifferentiators: Exactly 3 concrete technical or business differentiators vs alternative solutions.
+   - targetMarket: Description of their primary buying audience.
+4. Ideal Customer Profile (ICP):
+   - targetTitles: 3-5 realistic executive decision-maker job titles who hold budget for this product (e.g. "CTO", "VP of Engineering", "Head of Product", "Chief Revenue Officer").
+   - companySizes: 2-3 realistic team size brackets (e.g. "11-50", "51-200", "201-500").
+   - industries: Pick 3-5 EXACT strings from the directory list above that represent ideal buyers.
+   - painPoints: 3 specific, acute operational or economic headaches their prospective buyers face.
+5. Bespoke Outbound Angles (Must be genuinely customized to THIS specific company's product, NOT generic placeholders):
+   - Angle 1 (Acute Pain-Relief Hook): Addresses the daily friction or technical nightmare their target buyer hates dealing with.
+   - Angle 2 (Direct ROI & Economics Hook): Focuses on measurable business outcomes, speed-to-market, cost-reduction, or revenue impact.
+   - Angle 3 (Zero-Risk Asset / Interactive Pilot Hook): Offers a frictionless first step (e.g. a 5-minute benchmark, sample sandbox, or teardown) with a conversational, low-friction question CTA.
 
-Respond STRICTLY with a valid JSON object matching this structure:
+Respond STRICTLY with a valid JSON object matching this exact schema:
 {
-  "companyName": "Brand Name",
+  "companyName": "Inferred Brand Name",
   "categoryIntelligence": {
-    "serviceCategory": "Generic Category Name",
-    "provenOutboundMeta": ["Meta Tip 1", "Meta Tip 2"],
+    "serviceCategory": "Exact Market Category",
+    "provenOutboundMeta": ["Category outbound tip 1", "Category outbound tip 2"],
     "competitorBenchmarks": [
-      { "name": "Competitor 1", "offer": "Their pricing/offer", "angle": "Their angle" }
+      { "name": "Competitor A", "offer": "Their positioning", "angle": "Their outbound hook" },
+      { "name": "Competitor B", "offer": "Their positioning", "angle": "Their outbound hook" }
     ]
   },
   "businessOverview": {
     "summary": "2-3 concise sentences...",
-    "valuePropositions": ["Prop 1", "Prop 2", "Prop 3"],
-    "keyDifferentiators": ["Diff 1", "Diff 2", "Diff 3"],
-    "targetMarket": "Description of primary market"
+    "valuePropositions": ["Value prop 1", "Value prop 2", "Value prop 3"],
+    "keyDifferentiators": ["Differentiator 1", "Differentiator 2", "Differentiator 3"],
+    "targetMarket": "Primary buying audience"
   },
   "icpProfile": {
-    "targetTitles": ["Title 1", "Title 2", "Title 3"],
-    "companySizes": ["11-50", "51-200", "201-500"],
-    "industries": ["Exact Industry 1", "Exact Industry 2"],
-    "painPoints": ["Pain 1", "Pain 2", "Pain 3"]
+    "targetTitles": ["VP of Engineering", "Head of Product", "CTO"],
+    "companySizes": ["11-50", "51-200"],
+    "industries": ["Exact Industry From List", "Another Exact Industry"],
+    "painPoints": ["Pain point 1", "Pain point 2", "Pain point 3"]
   },
   "offers": [
     {
-      "title": "Turnkey Client Acquisition Launch",
-      "angle": "New Outbound Setup",
-      "valueProp": "Value statement focused on launching client acquisition from scratch without ad spend...",
+      "title": "Bespoke Offer Title 1",
+      "angle": "Acute Pain-Relief",
+      "valueProp": "Specific value proposition tailored to pain relief...",
       "cta": "Low-friction question CTA (under 15 words)"
     },
     {
-      "title": "Cost Slash & Domain Isolation",
-      "angle": "Secondary Domain Isolation",
-      "valueProp": "Value statement focused on cutting $7/seat costs and protecting root domain...",
+      "title": "Bespoke Offer Title 2",
+      "angle": "Direct ROI & Velocity",
+      "valueProp": "Specific value proposition tailored to ROI and velocity...",
       "cta": "Low-friction question CTA (under 15 words)"
     },
     {
-      "title": "Technical Deliverability & Audit Fix",
-      "angle": "Technical DNS Alignment",
-      "valueProp": "Value statement focused on fixing DNS records and spam drops...",
+      "title": "Bespoke Offer Title 3",
+      "angle": "Zero-Risk Pilot / Teardown",
+      "valueProp": "Specific value proposition tailored to low-risk proof...",
       "cta": "Low-friction question CTA (under 15 words)"
     }
   ]
@@ -581,7 +195,7 @@ Respond STRICTLY with a valid JSON object matching this structure:
     let rawJson = "";
 
     if (provider === "openai" || (!process.env.GEMINI_API_KEY && process.env.OPENAI_API_KEY)) {
-      const openAiKey = aiOptions?.apiKey || process.env.OPENAI_API_KEY!;
+      const openAiKey = aiOptions?.apiKey || process.env.OPENAI_API_KEY;
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -589,101 +203,227 @@ Respond STRICTLY with a valid JSON object matching this structure:
           Authorization: `Bearer ${openAiKey}`,
         },
         body: JSON.stringify({
-          model: aiOptions?.model || "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content: "You are an expert B2B Go-To-Market and cold email strategy engine. Return valid JSON only.",
-            },
-            { role: "user", content: prompt },
-          ],
+          model: aiOptions?.model || "gpt-4o",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.2,
           response_format: { type: "json_object" },
-          temperature: 0.7,
         }),
       });
-      if (!res.ok) throw new Error(`OpenAI error ${res.status}`);
+
+      if (!res.ok) {
+        throw new Error(`OpenAI API error: HTTP ${res.status}`);
+      }
       const data = await res.json();
       rawJson = data.choices?.[0]?.message?.content || "";
     } else {
-      const geminiKey = aiOptions?.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY!;
-      const model = aiOptions?.model || "gemini-3.8-flash";
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`;
+      // Google Gemini API (gemini-2.5-flash / gemini-1.5-flash)
+      const geminiKey =
+        aiOptions?.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+      const model = aiOptions?.model || "gemini-2.5-flash";
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
+
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
+            temperature: 0.2,
             responseMimeType: "application/json",
-            temperature: 0.7,
           },
         }),
       });
+
       if (!res.ok) {
-        const candidateModels = ["gemini-3-flash-preview", "gemini-2.5-flash", "gemini-flash-latest"];
-        let resolved = false;
-        for (const fbModel of candidateModels) {
-          if (fbModel === model) continue;
-          try {
-            const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/${fbModel}:generateContent?key=${encodeURIComponent(geminiKey)}`;
-            const fbRes = await fetch(fallbackUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: {
-                  responseMimeType: "application/json",
-                  temperature: 0.7,
-                },
-              }),
-            });
-            if (fbRes.ok) {
-              const data = await fbRes.json();
-              rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-              resolved = true;
-              break;
-            }
-          } catch {}
+        // Fallback to gemini-1.5-flash if 2.5 is not accessible with key
+        const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
+        const fallbackRes = await fetch(fallbackUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.2,
+              responseMimeType: "application/json",
+            },
+          }),
+        });
+        if (!fallbackRes.ok) {
+          throw new Error(`Gemini API error: HTTP ${fallbackRes.status}`);
         }
-        if (!resolved) {
-          throw new Error(`Gemini error ${res.status}`);
-        }
+        const fallbackData = await fallbackRes.json();
+        rawJson = fallbackData.candidates?.[0]?.content?.parts?.[0]?.text || "";
       } else {
         const data = await res.json();
         rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
       }
     }
 
-    const cleaned = rawJson.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-    const parsed = JSON.parse(cleaned);
+    const cleanedJson = rawJson
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+
+    const parsed = JSON.parse(cleanedJson);
 
     return {
-      companyName: parsed.companyName || scraped.domain.split(".")[0],
+      companyName: parsed.companyName || scraped.domain,
+      categoryIntelligence: parsed.categoryIntelligence,
       businessOverview: {
-        summary: parsed.businessOverview?.summary || `${parsed.companyName} simplifies workflows for modern businesses.`,
-        valuePropositions: Array.isArray(parsed.businessOverview?.valuePropositions)
-          ? parsed.businessOverview.valuePropositions
-          : ["Automate high-friction tasks", "Increase operational velocity", "Improve output quality"],
-        keyDifferentiators: Array.isArray(parsed.businessOverview?.keyDifferentiators)
-          ? parsed.businessOverview.keyDifferentiators
-          : ["Rapid setup", "Proven ROI", "Scalable infrastructure"],
-        targetMarket: parsed.businessOverview?.targetMarket || "High-growth B2B companies",
+        summary:
+          parsed.businessOverview?.summary ||
+          `Modern solutions and high-performance infrastructure engineered on ${scraped.domain}.`,
+        valuePropositions:
+          parsed.businessOverview?.valuePropositions?.length >= 3
+            ? parsed.businessOverview.valuePropositions
+            : [
+                "Zero manual configuration with instant API integrations.",
+                "High-performance deliverability and guaranteed low latency.",
+                "Transparent volume-based pricing with predictable scale.",
+              ],
+        keyDifferentiators:
+          parsed.businessOverview?.keyDifferentiators?.length >= 3
+            ? parsed.businessOverview.keyDifferentiators
+            : [
+                "Modern developer experience with declarative SDKs.",
+                "Enterprise SLA and SOC-2 compliant security.",
+                "Autonomous optimization requiring zero ongoing maintenance.",
+              ],
+        targetMarket:
+          parsed.businessOverview?.targetMarket ||
+          "High-growth technology companies and scaling product teams.",
       },
       icpProfile: {
-        targetTitles: Array.isArray(parsed.icpProfile?.targetTitles) ? parsed.icpProfile.targetTitles : ["VP of Sales", "CTO"],
-        companySizes: Array.isArray(parsed.icpProfile?.companySizes) ? parsed.icpProfile.companySizes : ["11-50", "51-200"],
-        industries: Array.isArray(parsed.icpProfile?.industries) && parsed.icpProfile.industries.length > 0
-          ? parsed.icpProfile.industries
-          : topIndustries.slice(0, 4),
-        painPoints: Array.isArray(parsed.icpProfile?.painPoints) ? parsed.icpProfile.painPoints : ["Operational bottlenecks", "High acquisition cost"],
+        targetTitles:
+          parsed.icpProfile?.targetTitles?.length >= 2
+            ? parsed.icpProfile.targetTitles
+            : ["VP of Engineering", "Head of Product", "Chief Technology Officer"],
+        companySizes:
+          parsed.icpProfile?.companySizes?.length >= 2
+            ? parsed.icpProfile.companySizes
+            : ["11-50", "51-200", "201-500"],
+        industries:
+          parsed.icpProfile?.industries?.length >= 1
+            ? parsed.icpProfile.industries.filter((ind: string) => topIndustries.includes(ind))
+            : topIndustries.slice(0, 3),
+        painPoints:
+          parsed.icpProfile?.painPoints?.length >= 2
+            ? parsed.icpProfile.painPoints
+            : [
+                "High operational complexity and engineering overhead.",
+                "Poor visibility and unreliable third-party deliverability.",
+                "Escalating seat-based costs with diminishing productivity.",
+              ],
       },
-      offers: Array.isArray(parsed.offers) && parsed.offers.length >= 3
-        ? parsed.offers
-        : simulateGtmStrategy(scraped, optionalNotes, topIndustries).offers,
+      offers:
+        Array.isArray(parsed.offers) && parsed.offers.length >= 3
+          ? parsed.offers.slice(0, 3)
+          : [
+              {
+                title: "Acute Pain-Relief",
+                angle: "Operational Overhead Reduction",
+                valueProp: `Eliminate friction and automate core workflows on ${scraped.domain}.`,
+                cta: "Open to seeing a 3-minute teardown this week?",
+              },
+              {
+                title: "Direct ROI & Velocity",
+                angle: "Cost & Speed Acceleration",
+                valueProp: `Slash integration costs while accelerating feature delivery.`,
+                cta: "Worth a brief chat on how your team handles this currently?",
+              },
+              {
+                title: "Zero-Risk Pilot",
+                angle: "Risk-Free Trial & Benchmarks",
+                valueProp: `Test drive the platform with zero migration risk or upfront cost.`,
+                cta: "Mind if I send over the benchmark comparisons?",
+              },
+            ],
       scrapedData: scraped,
     };
-  } catch (err) {
-    console.warn("[chad-gtm-research] AI synthesis failed, using high-fidelity fallback:", err);
+  } catch (err: any) {
     return simulateGtmStrategy(scraped, optionalNotes, topIndustries);
   }
+}
+
+/**
+ * High-fidelity heuristic synthesis fallback when AI API keys are not reachable.
+ */
+function simulateGtmStrategy(
+  scraped: ScrapedCompanyData,
+  optionalNotes?: string,
+  topIndustries: string[] = []
+): SynthesizedGtmStrategy {
+  const brandName =
+    scraped.title && scraped.title.length < 30
+      ? scraped.title.split(/[-|·]/)[0].trim()
+      : scraped.domain.split(".")[0].toUpperCase();
+
+  const primaryIndustry = topIndustries.length > 0 ? topIndustries[0] : "Software & Technology";
+  const secondaryIndustry = topIndustries.length > 1 ? topIndustries[1] : "Internet";
+  const tertiaryIndustry = topIndustries.length > 2 ? topIndustries[2] : "Information Technology";
+
+  return {
+    companyName: brandName,
+    categoryIntelligence: {
+      serviceCategory: `${brandName} Solutions & Cloud Platforms`,
+      provenOutboundMeta: [
+        "Focus on immediate operational velocity rather than vague features.",
+        "Highlight frictionless migration and zero setup penalty.",
+      ],
+      competitorBenchmarks: [
+        {
+          name: "Traditional Enterprise Vendors",
+          offer: "High seat license fees and complex manual configurations",
+          angle: "Pay-as-you-go transparency vs locked annual enterprise contracts",
+        },
+      ],
+    },
+    businessOverview: {
+      summary:
+        scraped.description ||
+        `${brandName} delivers next-generation infrastructure and software solutions tailored for high-growth modern teams.`,
+      valuePropositions: [
+        "Instant implementation with zero manual configuration.",
+        "Predictable utility billing eliminating bloated monthly seat taxes.",
+        "Guaranteed high reliability and automated ongoing execution.",
+      ],
+      keyDifferentiators: [
+        "Modern API-first and developer-grade architecture.",
+        "Fully managed infrastructure with zero operational burden.",
+        "Real-time analytics and transparent performance metrics.",
+      ],
+      targetMarket: "Technology founders, technical executives, and scaling operations leaders.",
+    },
+    icpProfile: {
+      targetTitles: ["Chief Technology Officer", "VP of Engineering", "Head of Operations"],
+      companySizes: ["11-50", "51-200", "201-500"],
+      industries: [primaryIndustry, secondaryIndustry, tertiaryIndustry],
+      painPoints: [
+        "Excessive engineering overhead spent maintaining legacy solutions.",
+        "Unpredictable software licensing fees with locked multi-year contracts.",
+        "Slow deployment velocity hindering rapid feature experimentation.",
+      ],
+    },
+    offers: [
+      {
+        title: "Operational Friction Relief",
+        angle: "Zero-Maintenance Velocity",
+        valueProp: `Replace hours of manual configuration with autonomous workflows engineered for ${brandName}.`,
+        cta: "Would you be against a 4-minute walkthrough of the architecture?",
+      },
+      {
+        title: "Cost Rationalization & ROI",
+        angle: "Utility Pricing vs Seat Taxes",
+        valueProp: `Eliminate expensive per-seat software pricing in favor of pay-per-use execution.`,
+        cta: "Open to comparing your current toolchain spend against our benchmarks?",
+      },
+      {
+        title: "Risk-Free Interactive Pilot",
+        angle: "Guaranteed Outcome Evaluation",
+        valueProp: `Deploy a parallel pilot in under 60 seconds with zero migration risk.`,
+        cta: "Mind if I send across a sandbox access link to test?",
+      },
+    ],
+    scrapedData: scraped,
+  };
 }

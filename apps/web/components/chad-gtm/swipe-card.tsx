@@ -1,7 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Check, X, Edit3, Sparkles, Building2, User, Briefcase, ChevronRight, ThumbsUp, RotateCcw } from "lucide-react";
+import {
+  Check,
+  X,
+  Edit3,
+  Building2,
+  User,
+  Briefcase,
+  ChevronRight,
+  ThumbsUp,
+  RotateCcw,
+  Sparkles,
+} from "lucide-react";
 import { Button } from "@smartreach/ui";
 
 export interface EmailCalibrationSample {
@@ -15,7 +26,16 @@ export interface EmailCalibrationSample {
   bodyText: string;
   bodyHtml?: string;
   approved: boolean;
+  rejectedReason?: string;
 }
+
+const REJECTION_TAGS = [
+  "Too generic",
+  "Too salesy / pushy",
+  "Too long / verbose",
+  "Weak call to action",
+  "Wrong persona tone",
+];
 
 export function SwipeCardDeck({
   samples,
@@ -30,6 +50,7 @@ export function SwipeCardDeck({
   const [editingSample, setEditingSample] = useState<EmailCalibrationSample | null>(null);
   const [editSubject, setEditSubject] = useState("");
   const [editBody, setEditBody] = useState("");
+  const [showRejectMenu, setShowRejectMenu] = useState(false);
 
   const currentCard = deck[currentIndex];
   const isFinished = currentIndex >= deck.length;
@@ -41,14 +62,16 @@ export function SwipeCardDeck({
     setDeck(updated);
     setApprovedCount((c) => c + 1);
     setCurrentIndex((i) => i + 1);
+    setShowRejectMenu(false);
   };
 
-  const handleReject = () => {
+  const handleRejectWithReason = (reason?: string) => {
     if (!currentCard) return;
     const updated = [...deck];
-    updated[currentIndex] = { ...currentCard, approved: false };
+    updated[currentIndex] = { ...currentCard, approved: false, rejectedReason: reason };
     setDeck(updated);
     setCurrentIndex((i) => i + 1);
+    setShowRejectMenu(false);
   };
 
   const handleApproveAll = () => {
@@ -73,8 +96,10 @@ export function SwipeCardDeck({
     );
     setDeck(updated);
     setEditingSample(null);
-    setApprovedCount((c) => c + 1);
-    setCurrentIndex((i) => i + 1);
+    if (currentIndex < deck.length && deck[currentIndex]?.id === editingSample.id) {
+      setApprovedCount((c) => c + 1);
+      setCurrentIndex((i) => i + 1);
+    }
   };
 
   const handleFinish = () => {
@@ -84,19 +109,21 @@ export function SwipeCardDeck({
   return (
     <div className="mx-auto max-w-2xl space-y-6 font-sans">
       {/* Header & Calibration Progress */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="rounded-full border border-zinc-700/80 bg-zinc-900/80 px-2.5 py-0.5 text-[10px] font-semibold text-zinc-300">
+            <span className="rounded-none border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-zinc-300">
               Stage 04 // Calibration
             </span>
-            <span className="text-[10px] uppercase tracking-wider text-zinc-500">Tone Alignment</span>
+            <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">
+              Tone Alignment
+            </span>
           </div>
           <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white mt-1">
             Voice & Angle Calibration Deck
           </h2>
           <p className="text-xs text-zinc-400 mt-0.5">
-            Approve or reject sample copy. Lock in cadence before dispatching.
+            Approve or reject sample copy to lock in your tone before launching outreach.
           </p>
         </div>
 
@@ -105,9 +132,7 @@ export function SwipeCardDeck({
             <div className="text-xs font-semibold text-white">
               {Math.min(currentIndex, deck.length)} of {deck.length} Reviewed
             </div>
-            <div className="text-[10px] text-zinc-500">
-              {approvedCount} approved
-            </div>
+            <div className="text-[10px] text-zinc-500">{approvedCount} approved</div>
           </div>
           <Button
             type="button"
@@ -122,9 +147,9 @@ export function SwipeCardDeck({
       </div>
 
       {/* Progress Bar */}
-      <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
+      <div className="h-1 w-full bg-zinc-900 border border-zinc-800">
         <div
-          className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+          className="h-full bg-emerald-500 transition-all duration-300"
           style={{ width: `${(Math.min(currentIndex, deck.length) / deck.length) * 100}%` }}
         />
       </div>
@@ -133,16 +158,16 @@ export function SwipeCardDeck({
       {!isFinished && currentCard ? (
         <div className="relative">
           {/* Active Card */}
-          <div className="relative rounded-none border border-zinc-800/80 bg-zinc-950/90 p-5 sm:p-7 shadow-xl card-shine">
-            {/* Prospect Metadata Chip Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-zinc-900/50 p-3.5 border border-zinc-800/60 mb-4">
+          <div className="relative rounded-none border border-zinc-800 bg-zinc-950 p-5 sm:p-7 shadow-xl">
+            {/* Prospect Metadata Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-zinc-900/60 p-3 border border-zinc-800 mb-4">
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <User className="size-3.5 text-zinc-400 shrink-0" />
                   <span className="text-sm font-semibold text-white">
                     {currentCard.recipientName}
                   </span>
-                  <span className="rounded-full border border-zinc-700/60 bg-zinc-800/70 px-2 py-0.5 text-[10px] font-medium text-zinc-300">
+                  <span className="rounded-none border border-zinc-700 bg-zinc-800 px-2 py-0.5 text-[10px] font-mono text-zinc-300">
                     {currentCard.recipientTitle}
                   </span>
                 </div>
@@ -164,23 +189,25 @@ export function SwipeCardDeck({
                 variant="ghost"
                 size="sm"
                 onClick={() => startEdit(currentCard)}
-                className="rounded-none text-xs font-medium text-zinc-400 hover:text-white hover:bg-zinc-800/60"
+                className="rounded-none text-xs font-medium text-zinc-400 hover:text-white hover:bg-zinc-800"
               >
                 <Edit3 className="size-3 mr-1" /> Edit Copy
               </Button>
             </div>
 
             {/* Email Subject Line */}
-            <div className="rounded-lg bg-zinc-900/40 border border-zinc-800/80 px-4 py-3 mb-3">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 block mb-1">
+            <div className="bg-zinc-900/40 border border-zinc-800 px-4 py-3 mb-3">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 block mb-1">
                 Subject
               </span>
-              <p className="text-xs sm:text-sm font-semibold text-white tracking-tight">{currentCard.subject}</p>
+              <p className="text-xs sm:text-sm font-semibold text-white tracking-tight">
+                {currentCard.subject}
+              </p>
             </div>
 
             {/* Email Body */}
-            <div className="rounded-lg bg-zinc-900/40 border border-zinc-800/80 p-4 min-h-[140px]">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 block mb-2">
+            <div className="bg-zinc-900/40 border border-zinc-800 p-4 min-h-[140px]">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 block mb-2">
                 Body Preview
               </span>
               <div className="whitespace-pre-line text-xs sm:text-sm leading-relaxed text-zinc-300 font-sans">
@@ -188,47 +215,80 @@ export function SwipeCardDeck({
               </div>
             </div>
 
-            {/* Action Bar (Reject / Approve Buttons) */}
-            <div className="flex items-center justify-center gap-10 mt-6 pt-5 border-t border-zinc-800/80">
+            {/* Rejection Tags Selection */}
+            {showRejectMenu && (
+              <div className="mt-4 p-3 bg-zinc-900/80 border border-red-900/50 space-y-2 animate-in fade-in">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-red-400 block">
+                  Why are you rejecting this variation?
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {REJECTION_TAGS.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => handleRejectWithReason(tag)}
+                      className="rounded-none border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-[11px] text-zinc-300 hover:border-red-500 hover:text-white hover:bg-red-950/40 transition-colors"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => handleRejectWithReason()}
+                    className="rounded-none border border-zinc-800 bg-transparent px-2.5 py-1 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
+                  >
+                    Skip Reason →
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Swipe Action Buttons */}
+            <div className="flex items-center justify-between gap-4 pt-6 mt-4 border-t border-zinc-800">
               <button
                 type="button"
-                onClick={handleReject}
-                className="group flex flex-col items-center gap-2 focus:outline-none cursor-pointer"
+                onClick={() => {
+                  if (showRejectMenu) {
+                    handleRejectWithReason();
+                  } else {
+                    setShowRejectMenu(true);
+                  }
+                }}
+                className="group flex flex-1 items-center justify-center gap-2 border border-zinc-800 bg-zinc-900/40 hover:bg-red-950/30 hover:border-red-800/80 py-3 text-xs font-semibold text-zinc-300 hover:text-red-300 transition-all rounded-none"
               >
-                <div className="flex size-13 items-center justify-center rounded-full border border-rose-500/30 bg-rose-500/10 text-rose-400 transition-all duration-200 group-hover:scale-105 group-hover:bg-rose-500/20 group-hover:border-rose-500/60 group-active:scale-95 shadow-xs">
-                  <X className="size-6" />
+                <div className="flex size-6 items-center justify-center border border-zinc-700 group-hover:border-red-500 bg-zinc-800 group-hover:bg-red-500/20 text-zinc-400 group-hover:text-red-400 transition-colors rounded-none">
+                  <X className="size-3.5" />
                 </div>
-                <span className="text-[11px] font-medium text-zinc-400 group-hover:text-rose-300 transition-colors">
-                  Discard (←)
-                </span>
+                <span>Reject Variation</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleApprove}
-                className="group flex flex-col items-center gap-2 focus:outline-none cursor-pointer"
+                className="group flex flex-1 items-center justify-center gap-2 border border-zinc-800 bg-zinc-900/40 hover:bg-emerald-950/30 hover:border-emerald-800/80 py-3 text-xs font-semibold text-zinc-300 hover:text-emerald-300 transition-all rounded-none"
               >
-                <div className="flex size-13 items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/20 text-emerald-300 transition-all duration-200 group-hover:scale-105 group-hover:bg-emerald-500/30 group-hover:border-emerald-500/70 group-active:scale-95 shadow-xs">
-                  <Check className="size-6" />
+                <div className="flex size-6 items-center justify-center border border-zinc-700 group-hover:border-emerald-500 bg-zinc-800 group-hover:bg-emerald-500/20 text-zinc-400 group-hover:text-emerald-400 transition-colors rounded-none">
+                  <Check className="size-3.5" />
                 </div>
-                <span className="text-[11px] font-medium text-zinc-400 group-hover:text-emerald-300 transition-colors">
-                  Approve (→)
-                </span>
+                <span>Approve Tone & Angle</span>
               </button>
             </div>
           </div>
         </div>
       ) : (
         /* Finished Calibration Screen */
-        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-8 text-center space-y-4 shadow-xl card-shine">
-          <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 shadow-sm">
+        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-8 text-center space-y-4 shadow-xl">
+          <div className="mx-auto flex size-12 items-center justify-center border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 rounded-none">
             <Check className="size-6" />
           </div>
           <div>
-            <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">Calibration Deck Completed</h3>
+            <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+              Calibration Deck Completed
+            </h3>
             <p className="text-xs sm:text-sm text-zinc-400 max-w-md mx-auto mt-1">
-              Reviewed {deck.length} variations · {approvedCount} approved · {deck.length - approvedCount} rejected.
-              Ready to analyze your feedback and refine the outbound model.
+              Reviewed {deck.length} variations · {approvedCount} approved ·{" "}
+              {deck.length - approvedCount} rejected. Ready to analyze feedback and lock in your
+              outbound tone.
             </p>
           </div>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-3">
@@ -239,6 +299,7 @@ export function SwipeCardDeck({
               onClick={() => {
                 setCurrentIndex(0);
                 setApprovedCount(0);
+                setShowRejectMenu(false);
               }}
               className="rounded-none text-xs font-medium border-zinc-800 hover:border-zinc-700 w-full sm:w-auto h-9"
             >
@@ -247,9 +308,10 @@ export function SwipeCardDeck({
             <Button
               type="button"
               onClick={handleFinish}
-              className="rounded-none text-xs font-semibold bg-white hover:bg-zinc-200 text-black w-full sm:w-auto h-9 shadow-xs transition-all active:scale-[0.98]"
+              className="rounded-none text-xs font-semibold bg-white hover:bg-zinc-200 text-black w-full sm:w-auto h-9 transition-all active:scale-[0.98]"
             >
-              Adjust Copy to My Preferences ({approvedCount} approved) <ChevronRight className="size-3.5 ml-1" />
+              Adjust Copy to My Preferences ({approvedCount} approved){" "}
+              <ChevronRight className="size-3.5 ml-1" />
             </Button>
           </div>
         </div>
@@ -258,15 +320,15 @@ export function SwipeCardDeck({
       {/* Inline Quick-Edit Modal */}
       {editingSample && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-none border border-zinc-800/80 bg-zinc-950/95 backdrop-blur-xl p-6 space-y-4 shadow-2xl card-shine font-sans">
-            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
+          <div className="w-full max-w-lg rounded-none border border-zinc-800 bg-zinc-950 p-6 space-y-4 shadow-2xl font-sans">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                 <Edit3 className="size-4 text-emerald-400" /> Edit Cold Email Copy
               </h3>
               <button
                 type="button"
                 onClick={() => setEditingSample(null)}
-                className="rounded-none p-1 text-zinc-400 hover:text-white hover:bg-zinc-800/60 transition-colors"
+                className="rounded-none p-1 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
               >
                 <X className="size-4" />
               </button>
@@ -281,7 +343,7 @@ export function SwipeCardDeck({
                   type="text"
                   value={editSubject}
                   onChange={(e) => setEditSubject(e.target.value)}
-                  className="w-full rounded-md border border-zinc-800 bg-black/60 px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-white"
+                  className="w-full rounded-none border border-zinc-800 bg-black/60 px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-white"
                 />
               </div>
 
@@ -293,12 +355,12 @@ export function SwipeCardDeck({
                   rows={8}
                   value={editBody}
                   onChange={(e) => setEditBody(e.target.value)}
-                  className="w-full rounded-md border border-zinc-800 bg-black/60 p-3 text-xs font-sans text-white focus:outline-none focus:ring-1 focus:ring-white leading-relaxed"
+                  className="w-full rounded-none border border-zinc-800 bg-black/60 p-3 text-xs font-sans text-white focus:outline-none focus:ring-1 focus:ring-white leading-relaxed"
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-zinc-800/80">
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-zinc-800">
               <Button
                 type="button"
                 variant="outline"

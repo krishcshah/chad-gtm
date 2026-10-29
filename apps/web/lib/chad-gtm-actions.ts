@@ -338,6 +338,7 @@ ${JSON.stringify(
     body: r.bodyText,
     toTitle: r.recipientTitle,
     toCompany: r.recipientCompany,
+    rejectedReason: (r as any).rejectedReason || "General tone / style mismatch",
   }))
 )}
 
