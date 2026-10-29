@@ -8,7 +8,7 @@ import { CampaignActions } from "./campaign-actions";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Campaigns & Target Leads · ChadGTM" };
+export const metadata = { title: "Campaigns & Target Leads · AutoGTM" };
 
 export default async function CampaignsPage() {
   const { user, workspace } = await requireWorkspace();
@@ -55,7 +55,7 @@ export default async function CampaignsPage() {
               No Outbound Campaigns Yet
             </h3>
             <p className="text-xs text-zinc-400 font-normal max-w-md mx-auto leading-relaxed">
-              Enter your company website to let our proprietary Chad Neural Core extract your ICP, match verified decision-makers from our 100M+ global directory, and start autonomous outreach in under 60 seconds.
+              Enter your company website to let our proprietary AutoGTM Neural Core extract your ICP, match verified decision-makers from our 100M+ global directory, and start autonomous outreach in under 60 seconds.
             </p>
           </div>
           <Button
