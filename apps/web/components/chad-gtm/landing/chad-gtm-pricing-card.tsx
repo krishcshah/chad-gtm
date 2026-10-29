@@ -28,7 +28,7 @@ export function ChadGtmPricingCard({ isLoggedIn = false }: { isLoggedIn?: boolea
             </span>
           </h2>
           <p className="mt-4 text-sm sm:text-base text-zinc-400 font-sans leading-relaxed max-w-2xl mx-auto">
-            Zero subscription fees for the entire platform. 10.2M verified B2B contacts, autonomous company research, AI copywriting, built-in email verification, and pre-warmed shared mailboxes. Pure pay-as-you-go utility billing.
+            Zero subscription fees for the entire platform. 100M+ verified B2B contacts, autonomous company research, AI copywriting, built-in email verification, and pre-warmed shared mailboxes. Pure pay-as-you-go utility billing.
           </p>
         </div>
 
@@ -73,9 +73,9 @@ export function ChadGtmPricingCard({ isLoggedIn = false }: { isLoggedIn?: boolea
               <div className="flex items-start gap-3 text-zinc-200">
                 <Check className="size-4 text-emerald-400 shrink-0 mt-0.5" />
                 <div>
-                  <div className="font-semibold text-white text-xs">10.2M Verified B2B Directory</div>
+                  <div className="font-semibold text-white text-xs">100M+ Verified B2B Directory</div>
                   <div className="text-zinc-400 text-xs mt-0.5 leading-relaxed">
-                    Unrestricted query access to 10,227,232 verified decision-makers with zero export credit charges.
+                    Unrestricted query access to 100M+ verified decision-makers with zero export credit charges.
                   </div>
                 </div>
               </div>

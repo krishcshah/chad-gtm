@@ -20,7 +20,7 @@ export function ChadGtmComparisonTable() {
     },
     {
       feature: "Built-In B2B Lead Directory",
-      chadGtm: "10.2M verified leads included ($0)",
+      chadGtm: "100M+ verified leads included ($0)",
       instantly: "Requires paid add-on ($$$)",
       apollo: "Strict export credit limits",
       agency: "Bundled in retainer",

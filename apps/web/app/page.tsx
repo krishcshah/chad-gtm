@@ -35,7 +35,7 @@ export const dynamic = "force-dynamic";
 export const metadata = {
   title: "AutoGTM · Turn Your Website URL Into Booked Sales Meetings · $0/mo Platform",
   description:
-    "The autonomous outbound engine with $0/month software fees. Drop in your domain—our AI extracts your offer, matches 10.2M verified decision-makers, and sends personalized sequences from pre-warmed mailboxes. Pay strictly 5¢ per email.",
+    "The all-in-one autonomous outbound platform with $0/month software fees. Turn your company URL directly into booked sales meetings. From 100M+ verified decision-makers to automated custom script writing, multi-touch inbox delivery, and smart reply triage—pay strictly 5¢ per email.",
 };
 
 export default async function LandingPage() {
@@ -60,12 +60,12 @@ export default async function LandingPage() {
             <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3 mb-12 text-[11px] font-mono text-zinc-400 uppercase tracking-widest">
               <div className="flex items-center gap-2">
                 <span className="size-2 bg-emerald-400 rounded-none animate-pulse shrink-0" />
-                <span className="font-bold text-white">THE $0/MO OUTBOUND ENGINE</span>
+                <span className="font-bold text-white">THE ALL-IN-ONE OUTBOUND PLATFORM</span>
                 <span className="text-zinc-600 hidden sm:inline">·</span>
-                <span className="text-zinc-400 hidden sm:inline">5¢ PER DELIVERED EMAIL</span>
+                <span className="text-zinc-400 hidden sm:inline">LEADS → SCRIPTS → OUTREACH → BOOKINGS</span>
               </div>
               <div className="hidden sm:flex items-center gap-3 text-zinc-500 text-[10px]">
-                <span className="text-emerald-400 font-semibold">99.8% INBOX PLACEMENT</span>
+                <span className="text-emerald-400 font-semibold">$0/MO SOFTWARE · 5¢ PER EMAIL</span>
               </div>
             </div>
 
@@ -76,7 +76,7 @@ export default async function LandingPage() {
                 <span className="size-2 rounded-none bg-emerald-400 animate-pulse" />
                 <span className="font-semibold text-white">AutoGTM 2.0</span>
                 <span className="text-zinc-600">·</span>
-                <span className="text-zinc-300">The Autonomous Sales Pipeline</span>
+                <span className="text-zinc-300">The All-In-One Outbound Machine</span>
               </div>
 
               {/* Main Headline */}
@@ -87,9 +87,9 @@ export default async function LandingPage() {
                 </span>
               </h1>
 
-              {/* Subhead */}
+              {/* Subhead: Highlighting the Core Selling Points */}
               <p className="text-base sm:text-lg text-zinc-300 font-sans leading-relaxed max-w-2xl mx-auto">
-                Drop in your domain. AutoGTM extracts your value proposition, matches verified decision-makers from our 10.2M B2B directory, and launches personalized 3-touch sequences from pre-warmed mailboxes straight into primary inboxes.
+                The all-inclusive outbound platform that turns your company URL into qualified sales meetings. From 100M+ verified leads to automated custom script writing, multi-touch inbox delivery, and smart reply triage—all in one place with zero monthly software fees.
               </p>
 
               {/* Preserved Bracket Tagline */}
@@ -103,18 +103,18 @@ export default async function LandingPage() {
               <ChadGtmHeroScanner />
             </div>
 
-            {/* Infrastructure Status Strip Below Scanner */}
+            {/* Core Selling Points Status Strip Below Scanner */}
             <div className="mt-8 flex flex-wrap items-center justify-center gap-4 sm:gap-8 text-xs font-mono text-zinc-400">
               <span className="flex items-center gap-2 text-zinc-300">
                 <span className="size-2 rounded-none bg-emerald-400 animate-pulse" />
-                <span>11 System Mailboxes Pre-warmed</span>
+                <span>Automated Custom Script Writing</span>
               </span>
               <span>·</span>
-              <span className="text-zinc-300">10,227,232 Verified Contacts</span>
+              <span className="text-zinc-300">Autonomous Multi-Touch Outreach</span>
               <span>·</span>
-              <span className="text-zinc-300">Safe 30/Day Inbox Pacing</span>
+              <span className="text-zinc-300">Smart Reply Triage &amp; Calendar Booking</span>
               <span>·</span>
-              <span className="text-zinc-300">Oracle OCI Frankfurt (130.61.146.177)</span>
+              <span className="text-zinc-300">100M+ Verified Decision-Makers</span>
             </div>
           </div>
         </section>
@@ -220,31 +220,31 @@ export default async function LandingPage() {
                   <ul className="space-y-3.5 text-xs text-zinc-300">
                     <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
                       <span className="flex items-center gap-2 text-white">
-                        <Check className="size-3.5 text-emerald-400 shrink-0" /> 10.2M Global Lead Directory
+                        <Check className="size-3.5 text-emerald-400 shrink-0" /> 100M+ Verified Decision-Maker Directory
                       </span>
                       <span className="text-emerald-400 font-semibold font-mono">INCLUDED ($0)</span>
                     </li>
                     <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
                       <span className="flex items-center gap-2 text-white">
-                        <Check className="size-3.5 text-emerald-400 shrink-0" /> Pre-Warmed Shared Mailbox Pool
+                        <Check className="size-3.5 text-emerald-400 shrink-0" /> Automated Custom Script Writing &amp; Angles
                       </span>
                       <span className="text-emerald-400 font-semibold font-mono">INCLUDED ($0)</span>
                     </li>
                     <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
                       <span className="flex items-center gap-2 text-white">
-                        <Check className="size-3.5 text-emerald-400 shrink-0" /> Autonomous 3-Touch Follow-Up Engine
+                        <Check className="size-3.5 text-emerald-400 shrink-0" /> Autonomous Multi-Touch Follow-Up Engine
                       </span>
                       <span className="text-emerald-400 font-semibold font-mono">INCLUDED ($0)</span>
                     </li>
                     <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
                       <span className="flex items-center gap-2 text-white">
-                        <Check className="size-3.5 text-emerald-400 shrink-0" /> AutoGTM Neural Voice Calibration
+                        <Check className="size-3.5 text-emerald-400 shrink-0" /> Unified Reply Triage &amp; Calendar Booking (UniBox)
                       </span>
                       <span className="text-emerald-400 font-semibold font-mono">INCLUDED ($0)</span>
                     </li>
                     <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
                       <span className="flex items-center gap-2 text-white">
-                        <Check className="size-3.5 text-emerald-400 shrink-0" /> Turnkey Admin-Supplied Mailbox Fleet
+                        <Check className="size-3.5 text-emerald-400 shrink-0" /> Pre-Warmed Shared Mailbox Fleet
                       </span>
                       <span className="text-emerald-400 font-semibold font-mono">ZERO SETUP</span>
                     </li>
@@ -275,12 +275,12 @@ export default async function LandingPage() {
         </section>
 
         {/* ========================================================================= */}
-        {/* 3-TOUCH AUTONOMOUS SEQUENCE SHOWCASE (THE SECRET TO 9.4% REPLIES) */}
+        {/* ALL-IN-ONE PLATFORM WORKFLOW: SCRIPTS → OUTREACH → REPLIES → BOOKINGS */}
         {/* ========================================================================= */}
         <ChadGtmSequenceShowcase />
 
         {/* ========================================================================= */}
-        {/* 10.2M GLOBAL VERIFIED LEADS DIRECTORY PREVIEW */}
+        {/* 100M+ GLOBAL VERIFIED LEADS DIRECTORY PREVIEW */}
         {/* ========================================================================= */}
         <ChadGtmLeadsPreview />
 
@@ -328,7 +328,7 @@ export default async function LandingPage() {
                   Yet in outbound sales, legacy vendors force early-stage founders and growth teams to pay <strong className="text-white">$400–$800 every single month</strong> in recurring seat taxes. If you take a week off to close deals, you still pay $400. If you are testing a new angle, you still pay $400.
                 </p>
                 <p>
-                  We built AutoGTM to treat outbound infrastructure as a utility. Our entire core software—campaign builder, 10.2M verified B2B directory, UniBox, and CRM—is <strong className="text-white">$0/month forever</strong>. All mailboxes are pre-warmed, authenticated, and supplied directly by our admin fleet, so you pay strictly <strong className="text-white">$0.05 per email delivered</strong> with zero domain or DNS setup.
+                  We built AutoGTM to treat outbound infrastructure as a utility. Our entire core software—campaign builder, 100M+ verified B2B directory, UniBox, and CRM—is <strong className="text-white">$0/month forever</strong>. All mailboxes are pre-warmed, authenticated, and supplied directly by our admin fleet, so you pay strictly <strong className="text-white">$0.05 per email delivered</strong> with zero domain or DNS setup.
                 </p>
                 <p className="text-zinc-400 text-xs pt-2 font-mono">
                   Zero seat taxes · Zero monthly minimums · Pure pay-for-what-you-use growth.
@@ -459,7 +459,7 @@ export default async function LandingPage() {
               </Button>
             </div>
             <p className="text-[11px] text-zinc-500 font-mono pt-2">
-              $0 platform fee · 10.2M verified leads · 5¢ per sent email
+              $0 platform fee · 100M+ verified leads · 5¢ per sent email
             </p>
           </div>
         </section>

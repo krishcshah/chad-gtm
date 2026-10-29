@@ -229,7 +229,7 @@ export function ChadGtmCalculator() {
                   <span className="font-mono text-emerald-400 font-semibold">FREE ($0/mo)</span>
                 </div>
                 <div className="flex justify-between items-center py-1 border-b border-zinc-900">
-                  <span>10.2M B2B Directory Lead Access</span>
+                  <span>100M+ B2B Directory Lead Access</span>
                   <span className="font-mono text-emerald-400 font-semibold">INCLUDED ($0)</span>
                 </div>
                 <div className="flex justify-between items-center py-1 border-b border-zinc-900">

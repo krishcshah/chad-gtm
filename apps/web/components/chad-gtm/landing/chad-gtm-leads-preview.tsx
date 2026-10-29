@@ -104,10 +104,10 @@ export function ChadGtmLeadsPreview() {
             <span>Built-In B2B Directory · Zero Export Taxes</span>
           </div>
           <h2 className="text-3xl sm:text-5xl font-bold tracking-tight text-white">
-            10.2M verified decision-makers. Included at $0.
+            100M+ verified decision-makers. Included at $0.
           </h2>
           <p className="mt-4 text-sm sm:text-base text-zinc-400 max-w-2xl mx-auto leading-relaxed">
-            Stop buying $99/mo export credits on Apollo or ZoomInfo. Search, filter, and launch campaigns directly against our high-speed verified SQLite database with zero per-contact fees.
+            Stop buying $99/mo export credits on Apollo or ZoomInfo. Search, filter, and launch campaigns directly against our high-speed verified database with zero per-contact fees.
           </p>
         </div>
 
@@ -116,15 +116,15 @@ export function ChadGtmLeadsPreview() {
           {/* Stats Header Bar */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pb-5 border-b border-zinc-800 text-center font-mono">
             <div className="p-3 rounded-none bg-black border border-zinc-800">
-              <div className="text-xl sm:text-2xl font-bold text-white">10.2M</div>
+              <div className="text-xl sm:text-2xl font-bold text-white">100M+</div>
               <div className="text-[10px] text-zinc-500 uppercase tracking-wider mt-0.5">
                 Verified B2B Leads
               </div>
             </div>
             <div className="p-3 rounded-none bg-black border border-zinc-800">
-              <div className="text-xl sm:text-2xl font-bold text-emerald-400">7.4 GB</div>
+              <div className="text-xl sm:text-2xl font-bold text-emerald-400">High-Speed</div>
               <div className="text-[10px] text-zinc-500 uppercase tracking-wider mt-0.5">
-                Indexed SQLite Engine
+                Verified Search Engine
               </div>
             </div>
             <div className="p-3 rounded-none bg-black border border-zinc-800">
@@ -209,7 +209,7 @@ export function ChadGtmLeadsPreview() {
               className="rounded-none bg-white text-black font-semibold text-xs hover:bg-zinc-200 border border-white"
             >
               <Link href="/signup">
-                Access All 10.2M Leads Free <ArrowRight className="size-3.5 ml-1" />
+                Access All 100M+ Leads Free <ArrowRight className="size-3.5 ml-1" />
               </Link>
             </Button>
           </div>

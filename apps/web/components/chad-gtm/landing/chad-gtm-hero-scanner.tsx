@@ -108,7 +108,7 @@ export function ChadGtmHeroScanner() {
   const steps = [
     "Crawling homepage, pricing, and product positioning...",
     "Extracting core value propositions and differentiators...",
-    "Querying 10.2M verified B2B decision-makers in directory...",
+    "Querying 100M+ verified B2B decision-makers in directory...",
     "Synthesizing high-converting cold email angles...",
   ];
 
@@ -147,7 +147,7 @@ export function ChadGtmHeroScanner() {
             </span>
           </div>
           <span className="rounded-none border border-emerald-500/30 bg-emerald-950/20 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-emerald-400">
-            10.2M B2B Directory Synced
+            100M+ B2B Directory Synced
           </span>
         </div>
 
