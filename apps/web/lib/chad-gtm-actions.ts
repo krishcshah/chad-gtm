@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { ensureOutreachSpintax, schema } from "@smartreach/database";
 import { nowIso } from "@smartreach/shared";
-import { getDb, ensureChadGtmTables } from "./db";
+import { getDb, ensureChadGtmTables, ensureAgentTables } from "./db";
 import { requireUser } from "./session";
 import { getActiveWorkspace } from "./workspaces";
 import {
@@ -25,6 +25,11 @@ import {
 } from "./ai";
 import { extractSenderFirstName } from "@smartreach/email-engine";
 import { ensureCampaignLeadSnapshot } from "./campaign-drafts";
+import { DrizzleAgentStore } from "./agent/store";
+import { ToolRegistry } from "./agent/registry";
+import { GtmAnalysisPlanner } from "./agent/planner";
+import { AgentRuntime } from "./agent/runtime";
+import { PHASE_1_TOOLS } from "./agent/tools";
 
 export interface CalibrationFeedbackItem {
   id?: string;
@@ -189,7 +194,8 @@ function fetchTargetedLeads(
   return targeted;
 }
 
-function compactCustomFields(raw: Record<string, string> | undefined): Record<string, string> {  if (!raw) return {};
+function compactCustomFields(raw: Record<string, string> | undefined): Record<string, string> {
+  if (!raw) return {};
   const skip = /^(email|first|last|full|name|job|title|company|industry|location|city|state|country|phone|website|linkedin)/i;
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(raw)) {
@@ -227,12 +233,63 @@ async function mapWithConcurrency<T, R>(
 export async function analyzeWebsiteAction(
   rawUrl: string,
   optionalNotes?: string
-): Promise<{ ok: boolean; runId?: string; strategy?: SynthesizedGtmStrategy; error?: string }> {
+): Promise<{
+  ok: boolean;
+  runId?: string;
+  strategy?: SynthesizedGtmStrategy;
+  agentRunId?: string;
+  error?: string;
+}> {
   try {
     const user = await requireUser();
     const workspace = await getActiveWorkspace(user.id);
     const db = getDb();
     await ensureChadGtmTables(db);
+
+    // Phase 1: run the analysis through the agent harness. If anything in the
+    // harness fails, fall back to the legacy direct path so the user is never
+    // blocked by the new runtime.
+    if (process.env.AGENT_RUNTIME_ENABLED !== "false") {
+      try {
+        await ensureAgentTables(db);
+        const runtime = new AgentRuntime({
+          store: new DrizzleAgentStore(db),
+          registry: new ToolRegistry().registerAll(PHASE_1_TOOLS),
+          planner: new GtmAnalysisPlanner(),
+          db,
+          maxSteps: 10,
+        });
+
+        const agentRun = await runtime.start({
+          userId: user.id,
+          workspaceId: workspace.id,
+          kind: "gtm_analysis",
+          goal: rawUrl,
+          input: { url: rawUrl, notes: optionalNotes ?? "" },
+          budgetCents: 200,
+        });
+        const result = await runtime.runUntilPause(agentRun.id);
+        const state = result.run.state as any;
+
+        if (state?.persistence?.chadGtmRunId && state?.strategy) {
+          return {
+            ok: true,
+            runId: state.persistence.chadGtmRunId,
+            strategy: state.strategy as SynthesizedGtmStrategy,
+            agentRunId: agentRun.id,
+          };
+        }
+
+        console.warn("[chad-gtm-actions] agent analysis did not complete; using fallback", {
+          agentRunId: agentRun.id,
+          status: result.run.status,
+          stoppedBecause: result.stoppedBecause,
+          error: result.run.error,
+        });
+      } catch (agentErr: any) {
+        console.error("[chad-gtm-actions] agent runtime failed; using fallback", agentErr);
+      }
+    }
 
     const scraped = await scrapeCompanyWebsite(rawUrl);
     const aiOpts = await getWorkspaceAiOptions(user.id);

@@ -18,6 +18,7 @@ import {
   Loader2,
   Sliders,
   CheckCircle2,
+  GitBranch,
 } from "lucide-react";
 import { Button } from "@smartreach/ui";
 import { toast } from "sonner";
@@ -130,6 +131,14 @@ export function MissionControlView({
               <span className={`size-1.5 rounded-none ${status === "active" ? "bg-emerald-400 animate-pulse" : "bg-zinc-500"}`} />
               {status === "active" ? "Engine Active" : "Engine Paused"}
             </span>
+            {run?.agentRunId && (
+              <Link
+                href={`/chad-gtm/${runId}/trace`}
+                className="inline-flex items-center gap-1.5 border border-zinc-700 bg-zinc-900 px-2.5 py-0.5 text-[10px] font-mono uppercase tracking-wider text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors"
+              >
+                <GitBranch className="size-3" /> Agent Trace
+              </Link>
+            )}
           </div>
 
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2">

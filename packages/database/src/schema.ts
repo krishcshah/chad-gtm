@@ -818,6 +818,8 @@ export const chadGtmRuns = pgTable(
       .default([]),
     dailyEmailLimit: integer("daily_email_limit").notNull().default(30),
     campaignId: text("campaign_id").references(() => campaigns.id, { onDelete: "set null" }),
+    /** Optional link to the agent execution trace that produced this run. */
+    agentRunId: text("agent_run_id"),
     approvedEmailSamples: jsonb("approved_email_samples")
       .$type<Array<{
         leadId?: string;
@@ -857,6 +859,100 @@ export const chadGtmRuns = pgTable(
     index("chad_gtm_runs_workspace_idx").on(t.workspaceId),
     index("chad_gtm_runs_status_idx").on(t.status),
     index("chad_gtm_runs_campaign_idx").on(t.campaignId),
+  ],
+);
+
+/* ─── Agent runtime: durable runs, steps, and LLM generations ─────────── */
+
+export const agentRuns = pgTable(
+  "agent_runs",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }),
+    kind: text("kind").notNull().default("gtm_analysis"),
+    goal: text("goal").notNull().default(""),
+    status: text("status", {
+      enum: ["running", "waiting_approval", "completed", "failed", "cancelled"],
+    })
+      .notNull()
+      .default("running"),
+    phase: text("phase").notNull().default("intake"),
+    input: jsonb("input").$type<Record<string, any>>().notNull().default({}),
+    state: jsonb("state").$type<Record<string, any>>().notNull().default({}),
+    error: text("error"),
+    budgetCents: integer("budget_cents"),
+    startedAt: text("started_at").notNull().default(isoNow),
+    finishedAt: text("finished_at"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("agent_runs_user_idx").on(t.userId, t.createdAt),
+    index("agent_runs_workspace_idx").on(t.workspaceId, t.createdAt),
+    index("agent_runs_status_idx").on(t.status, t.updatedAt),
+  ],
+);
+
+export const agentSteps = pgTable(
+  "agent_steps",
+  {
+    id: id(),
+    runId: text("run_id")
+      .notNull()
+      .references(() => agentRuns.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    agent: text("agent").notNull().default("orchestrator"),
+    tool: text("tool"),
+    status: text("status", {
+      enum: ["running", "succeeded", "failed", "skipped"],
+    })
+      .notNull()
+      .default("running"),
+    input: jsonb("input").$type<Record<string, any>>().notNull().default({}),
+    output: jsonb("output").$type<Record<string, any>>().notNull().default({}),
+    error: text("error"),
+    latencyMs: integer("latency_ms"),
+    tokens: integer("tokens"),
+    costMicros: integer("cost_micros"),
+    startedAt: text("started_at").notNull().default(isoNow),
+    finishedAt: text("finished_at"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("agent_steps_run_seq_unique").on(t.runId, t.seq),
+    index("agent_steps_run_idx").on(t.runId, t.seq),
+  ],
+);
+
+export const aiGenerations = pgTable(
+  "ai_generations",
+  {
+    id: id(),
+    runId: text("run_id").references(() => agentRuns.id, { onDelete: "set null" }),
+    stepId: text("step_id").references(() => agentSteps.id, { onDelete: "set null" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    purpose: text("purpose").notNull().default("email"),
+    provider: text("provider").notNull().default("google"),
+    model: text("model").notNull().default(""),
+    promptHash: text("prompt_hash"),
+    prompt: text("prompt"),
+    response: text("response"),
+    tokensIn: integer("tokens_in"),
+    tokensOut: integer("tokens_out"),
+    costMicros: integer("cost_micros"),
+    latencyMs: integer("latency_ms"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("ai_generations_run_idx").on(t.runId, t.createdAt),
+    index("ai_generations_user_idx").on(t.userId, t.createdAt),
   ],
 );
 
