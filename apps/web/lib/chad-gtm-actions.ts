@@ -174,7 +174,11 @@ function fetchTargetedLeads(
   if (targeted.length >= desired) return targeted;
 
   const seen = new Set(targeted.map((lead) => lead.email.toLowerCase()));
-  const fallback = getMatchingDirectoryLeadsForExport(base, desired * 3, offset);
+  let fallback = getMatchingDirectoryLeadsForExport(base, desired * 3, offset);
+  if (fallback.length === 0 && offset > 0) {
+    // Niche industries can have fewer rows than the rotation offset.
+    fallback = getMatchingDirectoryLeadsForExport(base, desired * 3, 0);
+  }
   for (const lead of fallback) {
     if (targeted.length >= desired) break;
     const key = lead.email.toLowerCase();
