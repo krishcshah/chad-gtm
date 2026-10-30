@@ -27,7 +27,6 @@ interface PresetTarget {
   icp: {
     titles: string[];
     industries: string[];
-    leadsMatched: number;
   };
   sampleEmail: {
     subject: string;
@@ -44,11 +43,10 @@ const PRESETS: PresetTarget[] = [
     icp: {
       titles: ["Head of Payments", "VP of Engineering", "Chief Revenue Officer"],
       industries: ["Financial Services", "Computer Software", "Internet"],
-      leadsMatched: 14820,
     },
     sampleEmail: {
-      subject: "Quick question on cross-border interchange rates?",
-      body: "Hey {{firstName}},\n\nSaw {{companyName}}'s recent push into multi-currency expansion. Most growth engineering teams we speak with find that 12-18% of global transactions face elevated authorization drop-offs due to legacy card routing.\n\nWe built an automated payment routing benchmark that identifies sub-optimal interchange paths without changing your core provider. Would you be open to seeing a 3-minute diagnostic run against your top international corridors?",
+      subject: "Quick question on cross-border routing?",
+      body: "Hey {{first_name}},\n\nSaw {{company}}'s push into multi-currency expansion. Most growth teams find that international authorization drop-offs trace back to routing and retry logic, not the provider itself.\n\nWe put together a short routing diagnostic that maps where international payments lose conversion. Would you be open to seeing it?",
     },
   },
   {
@@ -59,11 +57,10 @@ const PRESETS: PresetTarget[] = [
     icp: {
       titles: ["VP of Product", "Head of Engineering", "Founding Engineer"],
       industries: ["Computer Software", "Information Technology", "Internet"],
-      leadsMatched: 9430,
     },
     sampleEmail: {
-      subject: "Fixing sprint bloat for {{companyName}}'s dev team",
-      body: "Hi {{firstName}},\n\nNoticed {{companyName}}'s rapid engineering team growth. When engineering squads cross 20+ devs, sprint meetings often double in length while cycle velocity drops by 30% due to cluttered Jira overhead.\n\nWe put together a streamlined async issue-triage framework modeled after high-velocity teams like Ramp and Vercel. Worth a quick 5-minute glance?",
+      subject: "Sprint bloat at {{company}}?",
+      body: "Hi {{first_name}},\n\nNoticed {{company}}'s engineering team is growing. When squads get bigger, sprint meetings tend to get longer while cycle time slips.\n\nWe put together an async issue-triage framework modeled after high-velocity product teams. Worth a quick look?",
     },
   },
   {
@@ -74,11 +71,10 @@ const PRESETS: PresetTarget[] = [
     icp: {
       titles: ["Chief Technology Officer", "Lead Architect", "Backend Lead"],
       industries: ["Computer Software", "Internet", "Telecommunications"],
-      leadsMatched: 11250,
     },
     sampleEmail: {
-      subject: "Postgres scaling bottleneck at {{companyName}}?",
-      body: "Hey {{firstName}},\n\nLoved {{companyName}}'s recent feature rollout. As data volume scales past 50M rows, managing standalone auth, real-time edge triggers, and connection pooling usually requires dedicated DevOps hours that distract from shipping product.\n\nWould it be useful if I sent over a breakdown of how teams cut Postgres maintenance overhead by 60% with zero lock-in?",
+      subject: "Postgres scaling at {{company}}?",
+      body: "Hey {{first_name}},\n\nAs data volume grows, managing auth, realtime triggers, and connection pooling usually turns into dedicated DevOps work that distracts from shipping product.\n\nWould it be useful if I sent over a short breakdown of how teams keep Postgres maintenance overhead low without lock-in?",
     },
   },
   {
@@ -89,16 +85,21 @@ const PRESETS: PresetTarget[] = [
     icp: {
       titles: ["VP of Customer Experience", "Head of AI", "Product Director"],
       industries: ["Telecommunications", "Hospitality", "Computer Software"],
-      leadsMatched: 6840,
     },
     sampleEmail: {
-      subject: "Sub-500ms voice agent latency test",
-      body: "Hi {{firstName}},\n\nWith {{companyName}} handling inbound voice support, customer drop-offs surge whenever speech-to-speech latency creeps above 800ms.\n\nWe benchmarked voice pipeline orchestration across top conversational engines. Can I share a 60-second audio clip showing sub-450ms human-like conversational responsiveness?",
+      subject: "Voice agent latency at {{company}}?",
+      body: "Hi {{first_name}},\n\nWith {{company}} handling inbound voice support, customer drop-offs climb whenever speech-to-speech latency rises.\n\nWe benchmarked voice pipeline orchestration across conversational engines. Can I share a short clip showing what lower latency sounds like?",
     },
   },
 ];
 
-export function ChadGtmHeroScanner() {
+export function ChadGtmHeroScanner({
+  directoryTotal = 10_227_232,
+  isLoggedIn = false,
+}: {
+  directoryTotal?: number;
+  isLoggedIn?: boolean;
+}) {
   const [targetUrl, setTargetUrl] = useState("stripe.com");
   const [selectedPreset, setSelectedPreset] = useState<PresetTarget>(PRESETS[0]);
   const [isScanning, setIsScanning] = useState(false);
@@ -108,8 +109,8 @@ export function ChadGtmHeroScanner() {
   const steps = [
     "Crawling homepage, pricing, and product positioning...",
     "Extracting core value propositions and differentiators...",
-    "Querying 100M+ verified B2B decision-makers in directory...",
-    "Synthesizing high-converting cold email angles...",
+    `Querying ${directoryTotal.toLocaleString("en-US")} local B2B directory contacts...`,
+    "Synthesizing bespoke cold email angles...",
   ];
 
   const handleRunScan = (preset?: PresetTarget) => {
@@ -139,15 +140,15 @@ export function ChadGtmHeroScanner() {
           <div className="flex items-center gap-2">
             <span className="size-2 rounded-none bg-emerald-400 animate-pulse" />
             <span className="text-xs font-semibold text-white tracking-tight">
-              Interactive Campaign Preview
+              Sample Campaign Preview
             </span>
             <span className="text-zinc-600 hidden sm:inline">·</span>
             <span className="text-xs text-zinc-400 hidden sm:inline">
-              See what AutoGTM generates for any domain in seconds
+              See the shape of a run before you connect your domain
             </span>
           </div>
           <span className="rounded-none border border-emerald-500/30 bg-emerald-950/20 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-emerald-400">
-            100M+ B2B Directory Synced
+            {directoryTotal.toLocaleString("en-US")} Directory Contacts
           </span>
         </div>
 
@@ -160,7 +161,7 @@ export function ChadGtmHeroScanner() {
                 type="text"
                 value={targetUrl}
                 onChange={(e) => setTargetUrl(e.target.value)}
-                placeholder="Enter company website (e.g. stripe.com)"
+                placeholder="Enter a domain to preview (e.g. stripe.com)"
                 className="w-full rounded-none border border-zinc-800 bg-zinc-950 py-3 pl-10 pr-4 font-sans text-xs text-white placeholder-zinc-500 outline-none transition-colors focus:border-white"
               />
             </div>
@@ -178,7 +179,7 @@ export function ChadGtmHeroScanner() {
               ) : (
                 <>
                   <Sparkles className="size-3.5" />
-                  Generate Campaign Preview
+                  Preview sample campaign
                 </>
               )}
             </Button>
@@ -186,7 +187,7 @@ export function ChadGtmHeroScanner() {
 
           {/* Quick Preset Buttons */}
           <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-zinc-400">
-            <span className="text-[11px] text-zinc-500">Test live presets:</span>
+            <span className="text-[11px] text-zinc-500">Try a sample company:</span>
             {PRESETS.map((p) => (
               <button
                 key={p.name}
@@ -211,7 +212,7 @@ export function ChadGtmHeroScanner() {
               <Loader2 className="size-4 animate-spin text-emerald-400" />
               <div className="space-y-0.5">
                 <span className="text-xs font-semibold text-white">
-                  Autonomous Intelligence in Progress
+                  Sample analysis in progress
                 </span>
                 <p className="text-[11px] font-mono text-zinc-400">{steps[scanStep]}</p>
               </div>
@@ -251,7 +252,7 @@ export function ChadGtmHeroScanner() {
                   <Target className="size-3 text-emerald-400" />
                 </div>
                 <div className="text-xs font-bold text-white tracking-tight">
-                  {selectedPreset.icp.leadsMatched.toLocaleString()} Verified Leads
+                  ICP title + industry match
                 </div>
                 <div className="flex flex-wrap gap-1 pt-0.5">
                   {selectedPreset.icp.titles.slice(0, 2).map((title) => (
@@ -264,7 +265,7 @@ export function ChadGtmHeroScanner() {
                   ))}
                 </div>
                 <div className="text-[10px] text-zinc-500 font-mono pt-1">
-                  Industry: {selectedPreset.icp.industries[0]}
+                  Directory: {directoryTotal.toLocaleString("en-US")} contacts
                 </div>
               </div>
 
@@ -277,10 +278,10 @@ export function ChadGtmHeroScanner() {
                   3-Touch Autonomous Flow
                 </div>
                 <p className="text-[11px] text-zinc-400 leading-relaxed">
-                  Zero DNS setup. Rotates across 11 pre-warmed mailboxes at 30/day cap.
+                  Admin-managed shared mailboxes. 30/day cap, 45–120s jitter.
                 </p>
                 <div className="text-[10px] text-zinc-500 font-mono pt-1">
-                  Cost: 5¢ per verified send
+                  Cost: 5¢ per delivered email
                 </div>
               </div>
             </div>
@@ -295,7 +296,7 @@ export function ChadGtmHeroScanner() {
                   </span>
                 </div>
                 <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">
-                  Calibrated for 9.4% Reply Rate
+                  Sample copy · tone calibration deck
                 </span>
               </div>
 
@@ -342,11 +343,21 @@ export function ChadGtmHeroScanner() {
                   size="sm"
                   className="rounded-none bg-white text-black font-semibold text-xs hover:bg-zinc-200 border border-white"
                 >
-                  <Link href="/signup">
-                    Launch This Campaign Free ($0/mo) <ArrowRight className="size-3.5 ml-1" />
+                  <Link
+                    href={
+                      isLoggedIn
+                        ? "/chad-gtm"
+                        : `/signup?url=${encodeURIComponent(targetUrl)}`
+                    }
+                  >
+                    Analyze My Website Free <ArrowRight className="size-3.5 ml-1" />
                   </Link>
                 </Button>
               </div>
+              <p className="text-[10px] font-mono text-zinc-500">
+                Product preview only. Your real crawl, ICP, and calibration run on your
+                domain after signup.
+              </p>
             </div>
           </div>
         )}

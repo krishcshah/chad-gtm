@@ -5,10 +5,14 @@ import Link from "next/link";
 import { ArrowRight, Check, Sparkles, TrendingUp, PiggyBank, ArrowDownRight } from "lucide-react";
 import { Button } from "@smartreach/ui";
 
-export function ChadGtmCalculator() {
+export function ChadGtmCalculator({
+  directoryTotal = 10_227_232,
+}: {
+  directoryTotal?: number;
+}) {
   const [emailVolume, setEmailVolume] = useState<number>(6000);
 
-  // 1. Cadence Model: 3-touch sequence (1 Opener + 2 Follow-Ups) = up to 3 emails per verified lead
+  // 1. Cadence Model: 3-touch sequence (1 Opener + 2 Follow-Ups) = up to 3 emails per contact
   const leadsNeeded = Math.ceil(emailVolume / 3);
 
   // 2. Mailbox Infrastructure: Safe cold outreach cap is 30 emails/mailbox/day (20 sending days = 600 emails/mo)
@@ -112,7 +116,7 @@ export function ChadGtmCalculator() {
                 </span>
               </div>
               <div className="text-xs text-zinc-400 mt-1 font-sans">
-                Outreaches ~{leadsNeeded.toLocaleString()} verified decision-makers on a 3-touch cadence
+                Outreaches ~{leadsNeeded.toLocaleString()} contacts on a 3-touch cadence
               </div>
             </div>
 
@@ -229,11 +233,11 @@ export function ChadGtmCalculator() {
                   <span className="font-mono text-emerald-400 font-semibold">FREE ($0/mo)</span>
                 </div>
                 <div className="flex justify-between items-center py-1 border-b border-zinc-900">
-                  <span>100M+ B2B Directory Lead Access</span>
+                  <span>{directoryTotal.toLocaleString("en-US")} B2B Directory Lead Access</span>
                   <span className="font-mono text-emerald-400 font-semibold">INCLUDED ($0)</span>
                 </div>
                 <div className="flex justify-between items-center py-1 border-b border-zinc-900">
-                  <span>Pre-Warmed Sender Mailboxes</span>
+                  <span>Managed Shared Mailboxes</span>
                   <span className="font-mono text-emerald-400 font-semibold">INCLUDED ($0)</span>
                 </div>
                 <div className="flex justify-between items-center py-1 border-b border-zinc-900">

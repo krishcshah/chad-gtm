@@ -11,6 +11,24 @@ export function LandingHeader({ isLoggedIn }: { isLoggedIn: boolean }) {
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <AutoGtmLogo />
 
+        <nav className="hidden items-center gap-6 font-mono text-[10px] uppercase tracking-widest text-zinc-500 lg:flex">
+          <Link href="#how-it-works" className="transition-colors hover:text-white">
+            How it works
+          </Link>
+          <Link href="#directory" className="transition-colors hover:text-white">
+            Directory
+          </Link>
+          <Link href="#deliverability" className="transition-colors hover:text-white">
+            Deliverability
+          </Link>
+          <Link href="#pricing" className="transition-colors hover:text-white">
+            Pricing
+          </Link>
+          <Link href="#faq" className="transition-colors hover:text-white">
+            FAQ
+          </Link>
+        </nav>
+
         {/* Essential Action CTAs */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {isLoggedIn ? (

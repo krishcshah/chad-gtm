@@ -49,6 +49,15 @@ export interface DirectoryFacets {
   teamSizes: DirectoryFacetItem[];
 }
 
+export interface DirectoryStats {
+  totalLeads: number;
+  distinctIndustries: number;
+  distinctCountries: number;
+  verifiedEmailCount: number;
+  verifiedEmailPct: number;
+  fileSizeBytes: number;
+}
+
 export interface DirectorySearchParams {
   query?: string;
   industries?: string[];
@@ -79,8 +88,11 @@ export interface DirectorySearchResult {
 let cachedDb: DatabaseSync | null = null;
 let cachedFacets: DirectoryFacets | null = null;
 let cachedFacetsAt = 0;
+let cachedStats: DirectoryStats | null = null;
+let cachedStatsAt = 0;
 let cachedFtsReady: boolean | null = null;
 const FACET_CACHE_TTL_MS = 5 * 60_000;
+const STATS_CACHE_TTL_MS = 5 * 60_000;
 const COUNT_CACHE_TTL_MS = 30_000;
 const countCache = new Map<string, { total: number; at: number }>();
 const statementCache = new Map<string, ReturnType<DatabaseSync["prepare"]>>();
@@ -958,6 +970,8 @@ export async function ingestCsvContent(
   // Invalidate facet cache so new industries/countries immediately show up
   cachedFacets = null;
   cachedFacetsAt = 0;
+  cachedStats = null;
+  cachedStatsAt = 0;
   countCache.clear();
 
   const totalRow = db.prepare("SELECT COUNT(*) as cnt FROM leads").get() as { cnt: number };
@@ -973,6 +987,8 @@ export async function ingestCsvContent(
 export function invalidateDirectoryFacetsCache(): void {
   cachedFacets = null;
   cachedFacetsAt = 0;
+  cachedStats = null;
+  cachedStatsAt = 0;
   countCache.clear();
   cachedFtsReady = null;
 }
@@ -1113,6 +1129,8 @@ export async function importDirectoryLeadsFromCsv(
   // Invalidate facet cache immediately so counts refresh
   cachedFacets = null;
   cachedFacetsAt = 0;
+  cachedStats = null;
+  cachedStatsAt = 0;
   countCache.clear();
 
   const totalRow = db.prepare("SELECT COUNT(*) as cnt FROM leads").get() as { cnt: number };
@@ -1128,14 +1146,10 @@ export async function importDirectoryLeadsFromCsv(
 /**
  * Get live database metrics for the admin telemetry view.
  */
-export function getDirectoryStats(): {
-  totalLeads: number;
-  distinctIndustries: number;
-  distinctCountries: number;
-  verifiedEmailCount: number;
-  verifiedEmailPct: number;
-  fileSizeBytes: number;
-} {
+export function getDirectoryStats(): DirectoryStats {
+  if (cachedStats && Date.now() - cachedStatsAt < STATS_CACHE_TTL_MS) {
+    return cachedStats;
+  }
   try {
     const db = getDirectoryDb();
     const totalRow = db.prepare("SELECT COUNT(*) as cnt FROM leads").get() as { cnt: number };
@@ -1156,7 +1170,7 @@ export function getDirectoryStats(): {
       }
     } catch {}
 
-    return {
+    const stats: DirectoryStats = {
       totalLeads,
       distinctIndustries: indRow?.cnt || 0,
       distinctCountries: countryRow?.cnt || 0,
@@ -1164,6 +1178,9 @@ export function getDirectoryStats(): {
       verifiedEmailPct,
       fileSizeBytes,
     };
+    cachedStats = stats;
+    cachedStatsAt = Date.now();
+    return stats;
   } catch (err) {
     console.error("[leads-directory] Failed to get stats:", err);
     return {

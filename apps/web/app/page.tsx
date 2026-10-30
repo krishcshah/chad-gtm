@@ -1,482 +1,766 @@
 import Link from "next/link";
 import {
   ArrowRight,
+  Check,
   CheckCircle2,
-  Sparkles,
-  Star,
-  Terminal,
-  Activity,
-  ShieldCheck,
-  Zap,
-  TrendingUp,
-  DollarSign,
-  Layers,
+  FileSearch,
+  Gauge,
+  Globe2,
+  Inbox,
   Lock,
   Mail,
-  Check,
-  X,
+  MousePointerClick,
+  Send,
+  ShieldCheck,
+  Sparkles,
   Target,
-  Globe,
-  Database,
-  Server,
+  Terminal,
+  Workflow,
+  X,
+  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@smartreach/ui";
 import { getSession } from "@/lib/session";
 import { LandingHeader } from "@/components/chad-gtm/landing/landing-header";
 import { ChadGtmHeroScanner } from "@/components/chad-gtm/landing/chad-gtm-hero-scanner";
-import { ChadGtmSequenceShowcase } from "@/components/chad-gtm/landing/chad-gtm-sequence-showcase";
-import { ChadGtmPricingCard } from "@/components/chad-gtm/landing/chad-gtm-pricing-card";
-import { ChadGtmComparisonTable } from "@/components/chad-gtm/landing/chad-gtm-comparison-table";
-import { ChadGtmLeadsPreview } from "@/components/chad-gtm/landing/chad-gtm-leads-preview";
 import { ChadGtmCalculator } from "@/components/chad-gtm/landing/chad-gtm-calculator";
+import { getDirectoryFacets, getDirectoryStats } from "@/lib/leads-directory";
+import { getDb } from "@/lib/db";
+import { schema } from "@smartreach/database";
+import { and, eq, isNull, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "AutoGTM · Turn Your Website URL Into Booked Sales Meetings · $0/mo Platform",
+  title: "AutoGTM — Turn One URL Into a Calibrated Outbound Engine",
   description:
-    "The all-in-one autonomous outbound platform with $0/month software fees. Turn your company URL directly into booked sales meetings. From 100M+ verified decision-makers to automated custom script writing, multi-touch inbox delivery, and smart reply triage—pay strictly 5¢ per email.",
+    "AutoGTM studies your website, builds the ICP, finds verified buyers, writes the angles, and runs the sequence. $0/month platform, 5¢ per delivered email, 10.2M+ contacts.",
 };
+
+const FALLBACK_TOTAL_LEADS = 10_227_232;
+
+function formatNumber(value: number): string {
+  return value.toLocaleString("en-US");
+}
+
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="inline-flex items-center gap-2 border border-zinc-800 bg-zinc-950 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-zinc-400">
+      <span className="size-1.5 bg-emerald-400" />
+      {children}
+    </div>
+  );
+}
+
+function SectionHeading({
+  eyebrow,
+  title,
+  description,
+  align = "left",
+}: {
+  eyebrow: string;
+  title: React.ReactNode;
+  description?: React.ReactNode;
+  align?: "left" | "center";
+}) {
+  return (
+    <div
+      className={
+        align === "center"
+          ? "mx-auto max-w-3xl text-center space-y-4"
+          : "max-w-3xl space-y-4"
+      }
+    >
+      <Eyebrow>{eyebrow}</Eyebrow>
+      <h2 className="text-3xl font-bold tracking-tight text-white sm:text-5xl">
+        {title}
+      </h2>
+      {description ? (
+        <p className="text-sm leading-relaxed text-zinc-400 sm:text-base">
+          {description}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function Stat({
+  value,
+  label,
+  detail,
+}: {
+  value: React.ReactNode;
+  label: string;
+  detail?: string;
+}) {
+  return (
+    <div className="border border-zinc-800/80 bg-zinc-950/80 p-5">
+      <div className="font-mono text-2xl font-bold tracking-tight text-white sm:text-3xl">
+        {value}
+      </div>
+      <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+        {label}
+      </div>
+      {detail ? <p className="mt-2 text-xs text-zinc-400">{detail}</p> : null}
+    </div>
+  );
+}
+
+function FeatureCard({
+  step,
+  title,
+  description,
+  icon: Icon,
+}: {
+  step: string;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+}) {
+  return (
+    <div className="group relative border border-zinc-800/80 bg-zinc-950/70 p-6 transition-colors hover:border-zinc-600">
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">
+          {step}
+        </span>
+        <Icon className="size-4 text-zinc-500 transition-colors group-hover:text-emerald-400" />
+      </div>
+      <h3 className="mt-6 text-base font-semibold tracking-tight text-white">
+        {title}
+      </h3>
+      <p className="mt-2 text-xs leading-relaxed text-zinc-400 sm:text-sm">
+        {description}
+      </p>
+    </div>
+  );
+}
 
 export default async function LandingPage() {
   const session = await getSession();
   const isLoggedIn = Boolean(session?.user);
 
+  let totalLeads = FALLBACK_TOTAL_LEADS;
+  let distinctIndustries = 2_493;
+  let distinctCountries = 716;
+  let topIndustries: Array<{ value: string; label: string; count: number }> = [];
+  let activeMailboxes = 11;
+
+  try {
+    const facets = getDirectoryFacets();
+    const stats = getDirectoryStats();
+    totalLeads = facets.totalLeads || stats.totalLeads || FALLBACK_TOTAL_LEADS;
+    distinctIndustries = stats.distinctIndustries || distinctIndustries;
+    distinctCountries = stats.distinctCountries || distinctCountries;
+    topIndustries = facets.industries.slice(0, 12);
+  } catch {
+    // The landing page must render even if the directory is temporarily locked.
+  }
+
+  try {
+    const db = getDb();
+    const [row] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.senderAccounts)
+      .where(
+        and(
+          eq(schema.senderAccounts.isSystemPool, true),
+          eq(schema.senderAccounts.status, "active"),
+          isNull(schema.senderAccounts.deletedAt)
+        )
+      );
+    activeMailboxes = Number(row?.count ?? activeMailboxes);
+  } catch {
+    // Keep the known production fallback; this is display-only.
+  }
+
+  const primaryHref = isLoggedIn ? "/chad-gtm" : "/signup";
+
   return (
-    <div className="min-h-screen bg-[#050505] text-zinc-100 antialiased font-sans selection:bg-white selection:text-black">
-      {/* Top Header Navigation */}
+    <div className="min-h-screen bg-[#050505] text-zinc-100 antialiased selection:bg-white selection:text-black">
       <LandingHeader isLoggedIn={isLoggedIn} />
 
-      <main className="relative">
-        {/* Subtle Ambient Radial Backlight */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1200px] h-[600px] bg-gradient-to-b from-emerald-500/[0.07] via-cyan-500/[0.03] to-transparent blur-3xl pointer-events-none" />
+      <main>
+        {/* ── HERO ─────────────────────────────────────────────────────── */}
+        <section className="relative overflow-hidden border-b border-zinc-800/80">
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#18181b_1px,transparent_1px),linear-gradient(to_bottom,#18181b_1px,transparent_1px)] bg-[size:64px_64px] opacity-[0.18]" />
+          <div className="pointer-events-none absolute left-1/2 top-0 h-[520px] w-[900px] -translate-x-1/2 bg-gradient-to-b from-emerald-500/[0.08] via-cyan-500/[0.03] to-transparent blur-3xl" />
 
-        {/* ========================================================================= */}
-        {/* HERO SECTION: Centered Series A Product Stage */}
-        {/* ========================================================================= */}
-        <section className="relative overflow-hidden pt-16 pb-24 sm:pt-24 sm:pb-32 border-b border-zinc-800/80">
-          <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            {/* Top Market Positioning Banner */}
-            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3 mb-12 text-[11px] font-mono text-zinc-400 uppercase tracking-widest">
-              <div className="flex items-center gap-2">
-                <span className="size-2 bg-emerald-400 rounded-none animate-pulse shrink-0" />
-                <span className="font-bold text-white">THE ALL-IN-ONE OUTBOUND PLATFORM</span>
-                <span className="text-zinc-600 hidden sm:inline">·</span>
-                <span className="text-zinc-400 hidden sm:inline">LEADS → SCRIPTS → OUTREACH → BOOKINGS</span>
-              </div>
-              <div className="hidden sm:flex items-center gap-3 text-zinc-500 text-[10px]">
-                <span className="text-emerald-400 font-semibold">$0/MO SOFTWARE · 5¢ PER EMAIL</span>
-              </div>
+          <div className="relative mx-auto max-w-7xl px-4 pb-20 pt-10 sm:px-6 sm:pb-28 sm:pt-14 lg:px-8">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 pb-4 font-mono text-[10px] uppercase tracking-widest text-zinc-500">
+              <span className="flex items-center gap-2">
+                <span className="size-1.5 animate-pulse bg-emerald-400" />
+                <span className="text-zinc-300">Human-calibrated · machine-executed</span>
+              </span>
+              <span className="hidden sm:inline">
+                $0/mo platform · 5¢ per delivered email
+              </span>
             </div>
 
-            {/* Centered Hero Header */}
-            <div className="text-center max-w-4xl mx-auto space-y-6">
-              {/* Eyebrow Badge */}
-              <div className="inline-flex items-center gap-2 rounded-none border border-emerald-500/30 bg-emerald-950/20 px-3.5 py-1 text-xs text-emerald-400 font-mono">
-                <span className="size-2 rounded-none bg-emerald-400 animate-pulse" />
-                <span className="font-semibold text-white">AutoGTM 2.0</span>
-                <span className="text-zinc-600">·</span>
-                <span className="text-zinc-300">The All-In-One Outbound Machine</span>
+            <div className="mx-auto mt-14 max-w-4xl space-y-6 text-center sm:mt-20">
+              <div className="inline-flex items-center gap-2 border border-emerald-500/30 bg-emerald-950/20 px-3.5 py-1 font-mono text-[11px] text-emerald-400">
+                <Sparkles className="size-3" />
+                <span className="font-semibold text-white">AutoGTM</span>
+                <span className="text-zinc-600">/</span>
+                <span>The outbound engine for one-person GTM teams</span>
               </div>
 
-              {/* Main Headline */}
-              <h1 className="text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-white leading-[1.06]">
-                Turn your website URL into{" "}
+              <h1 className="text-4xl font-bold leading-[1.05] tracking-tight text-white sm:text-6xl lg:text-7xl">
+                Your website is the brief.
+                <br />
                 <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-300 bg-clip-text text-transparent">
-                  booked sales meetings.
+                  We run the outbound.
                 </span>
               </h1>
 
-              {/* Subhead: Highlighting the Core Selling Points */}
-              <p className="text-base sm:text-lg text-zinc-300 font-sans leading-relaxed max-w-2xl mx-auto">
-                The all-inclusive outbound platform that turns your company URL into qualified sales meetings. From 100M+ verified leads to automated custom script writing, multi-touch inbox delivery, and smart reply triage—all in one place with zero monthly software fees.
+              <p className="mx-auto max-w-2xl text-sm leading-relaxed text-zinc-300 sm:text-lg">
+                AutoGTM studies your site, builds the ICP, finds real buyers, writes
+                the angles, and runs the sequence. You approve the voice. It handles
+                the rest.
               </p>
 
-              {/* Preserved Bracket Tagline */}
-              <div className="text-xs sm:text-sm font-mono text-emerald-400/90 uppercase tracking-wider">
-                [Live in 60 seconds · $0 per month software forever · 5¢ per email]
+              <div className="flex flex-col items-center justify-center gap-3 pt-2 sm:flex-row">
+                <Button
+                  asChild
+                  size="lg"
+                  className="h-12 w-full gap-2 rounded-none border border-white bg-white px-7 text-xs font-semibold text-black shadow-none transition-all hover:bg-zinc-200 active:translate-y-[1px] sm:w-auto"
+                >
+                  <Link href={primaryHref}>
+                    Analyze my website <ArrowRight className="size-4" />
+                  </Link>
+                </Button>
+                <Button
+                  asChild
+                  variant="outline"
+                  size="lg"
+                  className="h-12 w-full rounded-none border-zinc-800 bg-zinc-950 px-7 text-xs font-semibold text-zinc-300 shadow-none transition-colors hover:border-zinc-600 hover:bg-zinc-900 hover:text-white sm:w-auto"
+                >
+                  <Link href="#how-it-works">See how it works</Link>
+                </Button>
               </div>
+
+              <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">
+                {formatNumber(totalLeads)} contacts · {activeMailboxes} shared mailboxes
+                · 30/day cap · 45–120s jitter
+              </p>
             </div>
 
-            {/* Center-Stage Interactive URL Scanner */}
-            <div className="mt-12">
-              <ChadGtmHeroScanner />
-            </div>
-
-            {/* Core Selling Points Status Strip Below Scanner */}
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-4 sm:gap-8 text-xs font-mono text-zinc-400">
-              <span className="flex items-center gap-2 text-zinc-300">
-                <span className="size-2 rounded-none bg-emerald-400 animate-pulse" />
-                <span>Automated Custom Script Writing</span>
-              </span>
-              <span>·</span>
-              <span className="text-zinc-300">Autonomous Multi-Touch Outreach</span>
-              <span>·</span>
-              <span className="text-zinc-300">Smart Reply Triage &amp; Calendar Booking</span>
-              <span>·</span>
-              <span className="text-zinc-300">100M+ Verified Decision-Makers</span>
+            <div className="mt-12 sm:mt-16">
+              <ChadGtmHeroScanner
+                directoryTotal={totalLeads}
+                isLoggedIn={isLoggedIn}
+              />
             </div>
           </div>
         </section>
 
-        {/* ========================================================================= */}
-        {/* THE SAAS SUBSCRIPTION TRAP VS AUTOGTM (THE ANCHOR COMPARISON) */}
-        {/* ========================================================================= */}
-        <section className="py-24 sm:py-32 border-b border-zinc-800/80 bg-zinc-950/80">
+        {/* ── LIVE SYSTEM STRIP ────────────────────────────────────────── */}
+        <section className="border-b border-zinc-800/80 bg-zinc-950/60">
+          <div className="mx-auto grid max-w-7xl grid-cols-2 divide-x divide-zinc-800/80 px-4 sm:px-6 lg:grid-cols-4 lg:px-8">
+            {[
+              {
+                value: formatNumber(totalLeads),
+                label: "directory contacts",
+              },
+              {
+                value: formatNumber(distinctIndustries),
+                label: "industries indexed",
+              },
+              {
+                value: String(activeMailboxes),
+                label: "admin-managed mailboxes",
+              },
+              {
+                value: "30/day",
+                label: "hard cap per mailbox",
+              },
+            ].map((item) => (
+              <div key={item.label} className="px-4 py-5 sm:px-6">
+                <div className="font-mono text-lg font-bold text-white sm:text-xl">
+                  {item.value}
+                </div>
+                <div className="mt-0.5 font-mono text-[9px] uppercase tracking-widest text-zinc-500 sm:text-[10px]">
+                  {item.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── THE SHIFT ────────────────────────────────────────────────── */}
+        <section className="border-b border-zinc-800/80 py-20 sm:py-28">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="text-center max-w-3xl mx-auto mb-16">
-              <div className="inline-flex items-center gap-2 border border-zinc-800 bg-black px-3 py-1 text-[10px] font-mono uppercase tracking-widest text-zinc-400 mb-4">
-                <DollarSign className="size-3 text-emerald-400" />
-                The Cold Outbound Reckoning
-              </div>
-              <h2 className="text-3xl sm:text-5xl font-bold text-white tracking-tight">
-                The $1,200/month cold outreach trap is dead.
-              </h2>
-              <p className="mt-3 text-sm sm:text-base text-zinc-400 font-sans max-w-2xl mx-auto leading-relaxed">
-                Why pay 5 separate software vendor invoices plus an agency retainer ($1,200+/mo) before booking a single sales call? Here is the exact math legacy outbound vendors don't want you to see.
-              </p>
-            </div>
+            <div className="grid gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
+              <SectionHeading
+                eyebrow="The shift"
+                title={
+                  <>
+                    Outbound is not a
+                    <br />
+                    five-tool job anymore.
+                  </>
+                }
+                description="Most early-stage teams stitch together a data vendor, a sending tool, a warmup service, an enrichment tool, and an agency retainer. The stack costs more than the first hire and still needs an operator."
+              />
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-5xl mx-auto items-stretch font-sans">
-              {/* The Old Fragmented Way */}
-              <div className="rounded-none border border-rose-950/80 bg-zinc-950 p-6 sm:p-8 space-y-6 flex flex-col justify-between">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
-                    <span className="text-xs uppercase tracking-wider font-semibold text-rose-400">
-                      The Fragmented SaaS &amp; Agency Trap
-                    </span>
-                    <span className="rounded-none border border-rose-900/60 bg-rose-950/40 text-rose-400 text-[10px] px-2.5 py-0.5 font-mono">
-                      ~$1,291/mo Total Tax
-                    </span>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="border border-rose-950/80 bg-zinc-950 p-5">
+                  <div className="font-mono text-[10px] uppercase tracking-widest text-rose-400">
+                    The fragmented stack
                   </div>
-
-                  <ul className="space-y-3.5 text-xs text-zinc-400">
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-900/80 pb-2.5">
-                      <span className="flex items-center gap-2 text-zinc-300">
-                        <X className="size-3.5 text-rose-500 shrink-0" /> Apollo Lead Export Credits
-                      </span>
-                      <span className="text-rose-400 font-semibold font-mono">$99/mo</span>
-                    </li>
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-900/80 pb-2.5">
-                      <span className="flex items-center gap-2 text-zinc-300">
-                        <X className="size-3.5 text-rose-500 shrink-0" /> Instantly / Smartlead Seat
-                      </span>
-                      <span className="text-rose-400 font-semibold font-mono">$97/mo</span>
-                    </li>
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-900/80 pb-2.5">
-                      <span className="flex items-center gap-2 text-zinc-300">
-                        <X className="size-3.5 text-rose-500 shrink-0" /> 5 Secondary Domains &amp; DNS
-                      </span>
-                      <span className="text-rose-400 font-semibold font-mono">$60/mo</span>
-                    </li>
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-900/80 pb-2.5">
-                      <span className="flex items-center gap-2 text-zinc-300">
-                        <X className="size-3.5 text-rose-500 shrink-0" /> Google Workspace Inboxes
-                      </span>
-                      <span className="text-rose-400 font-semibold font-mono">$36/mo</span>
-                    </li>
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-900/80 pb-2.5">
-                      <span className="flex items-center gap-2 text-zinc-300">
-                        <X className="size-3.5 text-rose-500 shrink-0" /> Clay Enrichment Credits
-                      </span>
-                      <span className="text-rose-400 font-semibold font-mono">$149/mo</span>
-                    </li>
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-900/80 pb-2.5">
-                      <span className="flex items-center gap-2 text-zinc-300">
-                        <X className="size-3.5 text-rose-500 shrink-0" /> Mailbox Ops &amp; Reply Retainer
-                      </span>
-                      <span className="text-rose-400 font-semibold font-mono">$850/mo</span>
-                    </li>
-                    <li className="flex items-start justify-between gap-2 pt-1 text-zinc-500 text-[11px]">
-                      <span>3 Weeks Wasted Warming Inboxes</span>
-                      <span className="text-zinc-400 font-mono">21 Days Lost</span>
-                    </li>
+                  <ul className="mt-4 space-y-3 text-xs text-zinc-400">
+                    {[
+                      "Lead data + export credits",
+                      "Sending seats + inbox rental",
+                      "DNS, domains, warmup",
+                      "Enrichment credits",
+                      "Agency / SDR retainer",
+                    ].map((item) => (
+                      <li key={item} className="flex items-center gap-2">
+                        <X className="size-3.5 shrink-0 text-rose-500" />
+                        {item}
+                      </li>
+                    ))}
                   </ul>
+                  <div className="mt-5 border-t border-zinc-900 pt-3 font-mono text-[11px] text-rose-400">
+                    Often $1,200+/mo before the first meeting
+                  </div>
                 </div>
 
-                <div className="pt-4 border-t border-zinc-900">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-xs uppercase tracking-wider text-zinc-500 font-medium">Total Fixed Cost:</span>
-                    <span className="text-2xl font-bold text-rose-400 font-mono">$15,492 / year</span>
+                <div className="border border-emerald-900/70 bg-zinc-950 p-5">
+                  <div className="font-mono text-[10px] uppercase tracking-widest text-emerald-400">
+                    The AutoGTM path
                   </div>
-                  <p className="text-[11px] text-zinc-500 mt-1">
-                    You pay this recurring burn whether you send 10 emails or zero.
-                  </p>
-                </div>
-              </div>
-
-              {/* The AutoGTM Model */}
-              <div className="rounded-none border border-emerald-900/80 bg-zinc-950 p-6 sm:p-8 space-y-6 flex flex-col justify-between relative shadow-xl">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-                    <span className="text-xs uppercase tracking-wider font-semibold text-white flex items-center gap-1.5">
-                      <Sparkles className="size-3.5 text-emerald-400" /> AutoGTM Autonomous Engine
-                    </span>
-                    <span className="rounded-none border border-emerald-500/40 bg-emerald-950/40 text-emerald-400 text-[10px] px-2.5 py-0.5 font-mono font-semibold">
-                      $0/mo Platform Fee
-                    </span>
-                  </div>
-
-                  <ul className="space-y-3.5 text-xs text-zinc-300">
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
-                      <span className="flex items-center gap-2 text-white">
-                        <Check className="size-3.5 text-emerald-400 shrink-0" /> 100M+ Verified Decision-Maker Directory
-                      </span>
-                      <span className="text-emerald-400 font-semibold font-mono">INCLUDED ($0)</span>
-                    </li>
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
-                      <span className="flex items-center gap-2 text-white">
-                        <Check className="size-3.5 text-emerald-400 shrink-0" /> Automated Custom Script Writing &amp; Angles
-                      </span>
-                      <span className="text-emerald-400 font-semibold font-mono">INCLUDED ($0)</span>
-                    </li>
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
-                      <span className="flex items-center gap-2 text-white">
-                        <Check className="size-3.5 text-emerald-400 shrink-0" /> Autonomous Multi-Touch Follow-Up Engine
-                      </span>
-                      <span className="text-emerald-400 font-semibold font-mono">INCLUDED ($0)</span>
-                    </li>
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
-                      <span className="flex items-center gap-2 text-white">
-                        <Check className="size-3.5 text-emerald-400 shrink-0" /> Unified Reply Triage &amp; Calendar Booking (UniBox)
-                      </span>
-                      <span className="text-emerald-400 font-semibold font-mono">INCLUDED ($0)</span>
-                    </li>
-                    <li className="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
-                      <span className="flex items-center gap-2 text-white">
-                        <Check className="size-3.5 text-emerald-400 shrink-0" /> Pre-Warmed Shared Mailbox Fleet
-                      </span>
-                      <span className="text-emerald-400 font-semibold font-mono">ZERO SETUP</span>
-                    </li>
-                    <li className="flex items-start justify-between gap-2 pt-1 text-zinc-400 text-[11px]">
-                      <span>Managed Mesh Delivery (Zero Setup)</span>
-                      <span className="text-white font-semibold font-mono">5¢ / email</span>
-                    </li>
+                  <ul className="mt-4 space-y-3 text-xs text-zinc-300">
+                    {[
+                      "One URL intake",
+                      `Built-in ${formatNumber(totalLeads)} directory`,
+                      "Agent-run research + copy",
+                      "Shared mailbox dispatch",
+                      "UniBox reply triage",
+                    ].map((item) => (
+                      <li key={item} className="flex items-center gap-2">
+                        <Check className="size-3.5 shrink-0 text-emerald-400" />
+                        {item}
+                      </li>
+                    ))}
                   </ul>
-                </div>
-
-                <div className="pt-4 border-t border-zinc-800">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-xs uppercase tracking-wider text-zinc-400 font-medium">Base Monthly Cost:</span>
-                    <span className="text-2xl font-bold text-white font-mono">$0 / month forever</span>
+                  <div className="mt-5 border-t border-zinc-800 pt-3 font-mono text-[11px] text-emerald-400">
+                    $0/mo + 5¢ per delivered email
                   </div>
-                  <p className="text-[11px] text-zinc-400 mt-1">
-                    Send 1,000 emails = $50. Pause for summer = $0. Pure utility billing.
-                  </p>
-                  <Button asChild size="lg" className="w-full mt-4 rounded-none bg-white text-black font-semibold text-xs border border-white hover:bg-zinc-200 shadow-none active:translate-y-[1px]">
-                    <Link href="/signup">
-                      Deploy Your $0/Mo Pipeline <ArrowRight className="size-3.5 ml-1" />
-                    </Link>
-                  </Button>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* ========================================================================= */}
-        {/* ALL-IN-ONE PLATFORM WORKFLOW: SCRIPTS → OUTREACH → REPLIES → BOOKINGS */}
-        {/* ========================================================================= */}
-        <ChadGtmSequenceShowcase />
+        {/* ── HOW IT WORKS ─────────────────────────────────────────────── */}
+        <section id="how-it-works" className="border-b border-zinc-800/80 bg-zinc-950/40 py-20 sm:py-28">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <SectionHeading
+              eyebrow="How it works"
+              title="Four steps. One operator."
+              description="You are not learning a campaign editor. You are approving a strategy and a voice, then watching the machine work."
+            />
 
-        {/* ========================================================================= */}
-        {/* 100M+ GLOBAL VERIFIED LEADS DIRECTORY PREVIEW */}
-        {/* ========================================================================= */}
-        <ChadGtmLeadsPreview />
+            <div className="mt-12 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+              <FeatureCard
+                step="01 / Intake"
+                title="Drop the URL"
+                description="AutoGTM crawls your homepage, pricing, product pages, and proof. Static fetch first; headless Chromium when the site is client-rendered."
+                icon={Globe2}
+              />
+              <FeatureCard
+                step="02 / Strategy"
+                title="Review the brief"
+                description="You get a company summary, multi-persona ICP, three outbound angles, pricing intelligence, and proof points. Edit anything."
+                icon={FileSearch}
+              />
+              <FeatureCard
+                step="03 / Calibration"
+                title="Swipe the voice"
+                description="Approve or reject sample emails with reasons like too generic, too salesy, or wrong persona. The next cards adapt to your taste."
+                icon={MousePointerClick}
+              />
+              <FeatureCard
+                step="04 / Launch"
+                title="Run and triage"
+                description="Three touches, 30 emails per mailbox per day, 45–120s jitter, automatic stop on reply, and a UniBox for every response."
+                icon={Send}
+              />
+            </div>
+          </div>
+        </section>
 
-        {/* ========================================================================= */}
-        {/* OUTBOUND ECONOMIC BENCHMARK & ROI SAVINGS CALCULATOR */}
-        {/* ========================================================================= */}
-        <ChadGtmCalculator />
+        {/* ── AGENT TRACE ──────────────────────────────────────────────── */}
+        <section className="border-b border-zinc-800/80 py-20 sm:py-28">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="grid gap-12 lg:grid-cols-[1fr_1.05fr] lg:items-center">
+              <SectionHeading
+                eyebrow="No black box"
+                title="You can see the work."
+                description="Every run is a durable trace: each tool call, artifact, error, and timing. If the crawler misses a page or the model fails, you see exactly where. No mystery pipeline."
+              />
 
-        {/* ========================================================================= */}
-        {/* SIDE-BY-SIDE COMPETITIVE COMPARISON MATRIX */}
-        {/* ========================================================================= */}
-        <ChadGtmComparisonTable />
-
-        {/* ========================================================================= */}
-        {/* PRICING SECTION ($0/MO + PAY JUST 5 CENTS PER EMAIL) */}
-        {/* ========================================================================= */}
-        <ChadGtmPricingCard isLoggedIn={isLoggedIn} />
-
-        {/* ========================================================================= */}
-        {/* FOUNDER MANIFESTO: WHY WE CHARGE $0/MONTH */}
-        {/* ========================================================================= */}
-        <section className="py-24 sm:py-32 border-t border-zinc-800/80 bg-zinc-950 font-sans">
-          <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-            <div className="rounded-none border border-zinc-800 bg-black p-8 sm:p-12 space-y-6">
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
-                <div className="flex items-center gap-2">
-                  <Terminal className="size-4 text-emerald-400" />
-                  <span className="text-xs uppercase font-semibold tracking-wider text-white font-mono">
-                    Founder Note // Why We Charge $0/Month Forever
+              <div className="border border-zinc-800 bg-[#080808]">
+                <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
+                  <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-zinc-500">
+                    <Terminal className="size-3.5 text-emerald-400" />
+                    Agent trace / gtm_analysis
+                  </div>
+                  <span className="border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-emerald-300">
+                    completed
                   </span>
                 </div>
-                <span className="text-[10px] text-zinc-400 font-mono uppercase tracking-wider bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-none">
-                  Transparency Manifesto
+                <div className="space-y-0 divide-y divide-zinc-900 font-mono text-[11px]">
+                  {[
+                    { seq: "01", tool: "crawl_company", time: "4.7s", note: "homepage + pricing + proof" },
+                    { seq: "02", tool: "synthesize_strategy", time: "10.9s", note: "3 personas · 3 offers" },
+                    { seq: "03", tool: "persist_gtm_run", time: "15ms", note: "strategy saved" },
+                    { seq: "04", tool: "complete", time: "—", note: "ready for review" },
+                  ].map((row) => (
+                    <div key={row.seq} className="flex items-center gap-3 px-4 py-3">
+                      <span className="text-zinc-600">{row.seq}</span>
+                      <span className="w-40 shrink-0 text-zinc-200">{row.tool}</span>
+                      <span className="w-14 shrink-0 text-zinc-500">{row.time}</span>
+                      <span className="truncate text-zinc-500">{row.note}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-zinc-800 px-4 py-3 font-mono text-[10px] text-zinc-500">
+                  Measured on a production analysis run. Timings vary by site.
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── DIRECTORY ────────────────────────────────────────────────── */}
+        <section id="directory" className="border-b border-zinc-800/80 bg-zinc-950/40 py-20 sm:py-28">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
+              <SectionHeading
+                eyebrow="The directory"
+                title={
+                  <>
+                    {formatNumber(totalLeads)} contacts.
+                    <br />
+                    Not a round number we invented.
+                  </>
+                }
+                description="A local, indexed B2B directory. Search by industry, title, company, and location. No export credits, no per-seat data tax."
+              />
+              <Button
+                asChild
+                variant="outline"
+                className="h-11 shrink-0 rounded-none border-zinc-700 bg-zinc-950 px-5 text-xs font-semibold text-zinc-200 hover:border-zinc-500 hover:bg-zinc-900"
+              >
+                <Link href="/b2b-database">
+                  Browse the directory <ArrowRight className="ml-1.5 size-3.5" />
+                </Link>
+              </Button>
+            </div>
+
+            <div className="mt-10 grid gap-3 sm:grid-cols-3">
+              <Stat value={formatNumber(totalLeads)} label="contacts" detail="Indexed and searchable" />
+              <Stat value={formatNumber(distinctIndustries)} label="industries" detail="Real directory facets" />
+              <Stat value={formatNumber(distinctCountries)} label="countries" detail="Location-aware filters" />
+            </div>
+
+            <div className="mt-8 border border-zinc-800/80 bg-zinc-950/70 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 pb-3">
+                <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">
+                  Top industries by count
+                </span>
+                <span className="font-mono text-[10px] text-zinc-600">
+                  live from directory_facets_cache
                 </span>
               </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {(topIndustries.length > 0
+                  ? topIndustries
+                  : [
+                      { value: "Financial Services", label: "Financial Services", count: 13197 },
+                      { value: "Computer Software", label: "Computer Software", count: 7054 },
+                      { value: "Information Technology", label: "Information Technology", count: 5459 },
+                    ]
+                ).map((industry) => (
+                  <span
+                    key={industry.value}
+                    className="inline-flex items-center gap-2 border border-zinc-800 bg-zinc-900/60 px-2.5 py-1 text-[11px] text-zinc-300"
+                  >
+                    {industry.label}
+                    <span className="font-mono text-[10px] text-zinc-500">
+                      {formatNumber(industry.count)}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
 
-              <div className="space-y-4 text-sm sm:text-base text-zinc-300 leading-relaxed">
-                <p className="font-semibold text-white text-base sm:text-lg">
-                  "Why does every cold email platform charge you $97/month just for a login screen?"
-                </p>
-                <p>
-                  Think about it: AWS doesn't charge you $99/month just to create a database. Stripe doesn't charge you $99/month just to open a payment gateway. They charge you a fraction of a cent when you actually consume compute or process money.
-                </p>
-                <p>
-                  Yet in outbound sales, legacy vendors force early-stage founders and growth teams to pay <strong className="text-white">$400–$800 every single month</strong> in recurring seat taxes. If you take a week off to close deals, you still pay $400. If you are testing a new angle, you still pay $400.
-                </p>
-                <p>
-                  We built AutoGTM to treat outbound infrastructure as a utility. Our entire core software—campaign builder, 100M+ verified B2B directory, UniBox, and CRM—is <strong className="text-white">$0/month forever</strong>. All mailboxes are pre-warmed, authenticated, and supplied directly by our admin fleet, so you pay strictly <strong className="text-white">$0.05 per email delivered</strong> with zero domain or DNS setup.
-                </p>
-                <p className="text-zinc-400 text-xs pt-2 font-mono">
-                  Zero seat taxes · Zero monthly minimums · Pure pay-for-what-you-use growth.
-                </p>
+        {/* ── DELIVERABILITY ──────────────────────────────────────────── */}
+        <section id="deliverability" className="border-b border-zinc-800/80 py-20 sm:py-28">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <SectionHeading
+              eyebrow="Deliverability"
+              title="The boring parts are the product."
+              description="Outbound dies on volume. AutoGTM is built around caps, jitter, suppression, and reply detection — not a bigger send button."
+            />
+
+            <div className="mt-12 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {[
+                {
+                  icon: Gauge,
+                  title: "30/day hard cap",
+                  body: "Per-mailbox daily ceiling enforced atomically at send time. Backlogs cannot breach it.",
+                },
+                {
+                  icon: Workflow,
+                  title: "45–120s jitter",
+                  body: "Randomized spacing between sends. No machine-gun bursts, no duplicate content hashes.",
+                },
+                {
+                  icon: ShieldCheck,
+                  title: "RFC 8058 unsubscribe",
+                  body: "One-click List-Unsubscribe headers on every send. Suppression is checked again at send time.",
+                },
+                {
+                  icon: Inbox,
+                  title: "Auto-stop on reply",
+                  body: "IMAP sync pauses the sequence the moment a prospect replies. Quoted history is stripped.",
+                },
+                {
+                  icon: Mail,
+                  title: "Threaded follow-ups",
+                  body: "In-Reply-To and References headers keep the three touches in one clean thread.",
+                },
+                {
+                  icon: Lock,
+                  title: "Workspace isolation",
+                  body: "Leads, campaigns, mailboxes, and replies are scoped to the active workspace.",
+                },
+              ].map((item) => (
+                <div
+                  key={item.title}
+                  className="border border-zinc-800/80 bg-zinc-950/70 p-5"
+                >
+                  <item.icon className="size-4 text-emerald-400" />
+                  <h3 className="mt-4 text-sm font-semibold text-white">{item.title}</h3>
+                  <p className="mt-1.5 text-xs leading-relaxed text-zinc-400">{item.body}</p>
+                </div>
+              ))}
+            </div>
+
+            <p className="mt-6 font-mono text-[10px] uppercase tracking-widest text-zinc-600">
+              Admin-managed shared mailboxes · your root domain stays untouched · no DNS setup
+            </p>
+          </div>
+        </section>
+
+        {/* ── PRICING ─────────────────────────────────────────────────── */}
+        <section id="pricing" className="border-b border-zinc-800/80 bg-zinc-950/50 py-20 sm:py-28">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <SectionHeading
+              eyebrow="Pricing"
+              title="$0/month. 5¢ per delivered email."
+              description="No seats, no minimums, no annual contract. Pay for what you actually send, and pause whenever you want."
+              align="center"
+            />
+
+            <div className="mx-auto mt-12 grid max-w-5xl gap-3 lg:grid-cols-2">
+              <div className="border border-zinc-800 bg-zinc-950 p-6 sm:p-8">
+                <div className="flex items-baseline justify-between border-b border-zinc-800 pb-4">
+                  <div>
+                    <div className="font-mono text-[10px] uppercase tracking-widest text-emerald-400">
+                      Platform
+                    </div>
+                    <div className="mt-1 text-lg font-semibold text-white">Everything above the wire</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-4xl font-bold tracking-tight text-white">$0</div>
+                    <div className="font-mono text-[10px] text-zinc-500">/ month</div>
+                  </div>
+                </div>
+                <ul className="mt-5 space-y-3 text-xs text-zinc-300">
+                  {[
+                    "Company crawl + positioning brief",
+                    "Multi-persona ICP and 3 angles",
+                    `${formatNumber(totalLeads)} contact directory access`,
+                    "Swipe voice calibration",
+                    "Mission Control + UniBox",
+                    "Workspace isolation",
+                  ].map((item) => (
+                    <li key={item} className="flex items-start gap-2">
+                      <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-400" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
               </div>
 
-              <div className="pt-6 border-t border-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                  <div className="text-xs font-semibold text-white">The AutoGTM Core Team</div>
-                  <div className="text-[11px] text-zinc-400">Built for founders who hate paying recurring SaaS seat taxes</div>
+              <div className="border border-emerald-900/60 bg-zinc-950 p-6 sm:p-8">
+                <div className="flex items-baseline justify-between border-b border-zinc-800 pb-4">
+                  <div>
+                    <div className="font-mono text-[10px] uppercase tracking-widest text-emerald-400">
+                      Delivery
+                    </div>
+                    <div className="mt-1 text-lg font-semibold text-white">Only when it leaves the wire</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-4xl font-bold tracking-tight text-white">5¢</div>
+                    <div className="font-mono text-[10px] text-zinc-500">/ delivered email</div>
+                  </div>
                 </div>
-                <Button asChild size="sm" className="rounded-none bg-white text-black font-semibold text-xs border border-white hover:bg-zinc-200 shadow-none active:translate-y-[1px]">
-                  <Link href="/signup">Start Free ($0/mo)</Link>
+                <ul className="mt-5 space-y-3 text-xs text-zinc-300">
+                  {[
+                    "Admin-managed shared mailboxes",
+                    "30/day per-mailbox cap",
+                    "45–120s randomized jitter",
+                    "One-click unsubscribe + suppression",
+                    "In-Reply-To threading",
+                    "IMAP reply sync + auto-stop",
+                  ].map((item) => (
+                    <li key={item} className="flex items-start gap-2">
+                      <Check className="mt-0.5 size-3.5 shrink-0 text-emerald-400" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+                <Button
+                  asChild
+                  className="mt-6 h-11 w-full rounded-none border border-white bg-white text-xs font-semibold text-black hover:bg-zinc-200"
+                >
+                  <Link href={primaryHref}>
+                    Start free <ArrowRight className="ml-1.5 size-3.5" />
+                  </Link>
                 </Button>
               </div>
             </div>
+
+            <p className="mt-6 text-center font-mono text-[10px] uppercase tracking-widest text-zinc-600">
+              Send 1,000 emails = $50 · send nothing = $0 · no card required to explore
+            </p>
           </div>
         </section>
 
-        {/* ========================================================================= */}
-        {/* OPERATOR CASE STUDIES */}
-        {/* ========================================================================= */}
-        <section className="relative py-24 sm:py-32 border-t border-zinc-800/80 bg-[#050505] overflow-hidden font-sans">
-          <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="text-center max-w-2xl mx-auto mb-16">
-              <div className="inline-flex items-center gap-2 rounded-none border border-zinc-800 bg-zinc-950 px-3 py-1 text-xs text-zinc-400 mb-3">
-                <Star className="size-3 text-emerald-400" />
-                <span>Verified Outcomes · Founder Case Studies</span>
-              </div>
-              <h2 className="text-3xl sm:text-5xl font-bold text-white tracking-tight">
-                Real Pipeline. Real Meetings.
-              </h2>
-              <p className="mt-3 text-xs sm:text-sm text-zinc-400">
-                Audited outcomes from B2B founders running autonomous outreach.
-              </p>
-            </div>
+        {/* ── ROI CALCULATOR ──────────────────────────────────────────── */}
+        <ChadGtmCalculator directoryTotal={totalLeads} />
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
+        {/* ── FAQ ─────────────────────────────────────────────────────── */}
+        <section id="faq" className="border-t border-zinc-800/80 bg-zinc-950/40 py-20 sm:py-28">
+          <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+            <SectionHeading
+              eyebrow="FAQ"
+              title="The questions a technical buyer asks."
+              align="center"
+            />
+
+            <div className="mt-10 divide-y divide-zinc-800 border border-zinc-800 bg-zinc-950">
               {[
                 {
-                  code: "Case Study 01",
-                  quote:
-                    "AutoGTM completely replaced our $4,500/month SDR agency. We plugged in our URL, approved 3 email angles on the swipe deck, and booked 19 enterprise demos in our first 10 days.",
-                  author: "Julian Richter",
-                  role: "Founder & CEO, CloudScale IO",
-                  metric: "+280% Pipeline",
-                  badge: "Enterprise SaaS",
+                  q: "Is it really $0/month?",
+                  a: "Yes. The platform, directory access, research, calibration, Mission Control, and UniBox are $0. You pay 5¢ per delivered email. No seat licenses, no minimums, no annual contract.",
                 },
                 {
-                  code: "Case Study 02",
-                  quote:
-                    "The 3-touch follow-up cadence is ruthless. Our 9.4% conversion rate came almost entirely from Touch 2 and Touch 3. We didn't have to touch a single DNS record or buy a burner domain.",
-                  author: "Maya Lindqvist",
-                  role: "Head of Growth, DevSync Labs",
-                  metric: "9.4% Conversion",
-                  badge: "DevTools",
+                  q: "Do I need to buy domains or configure DNS?",
+                  a: "No. AutoGTM dispatches through admin-managed shared mailboxes. Your root domain stays untouched. You do not buy burner domains or wait for inbox warmup to start.",
                 },
                 {
-                  code: "Case Study 03",
-                  quote:
-                    "We used to pay Apollo $99/mo plus Instantly $97/mo. Paying $0 platform fee and just 5 cents per email on the managed pool saves our early-stage startup over $2,100 a year.",
-                  author: "David Thorne",
-                  role: "Co-Founder, PayFlow API",
-                  metric: "$2,100+ Savings",
-                  badge: "Fintech API",
+                  q: "Where do the leads come from?",
+                  a: `A local, indexed B2B directory currently holding ${formatNumber(totalLeads)} contacts across ${formatNumber(distinctIndustries)} industries and ${formatNumber(distinctCountries)} countries. It is searchable by industry, title, company, and location without export credits.`,
                 },
-              ].map((t, i) => (
-                <div
-                  key={i}
-                  className="rounded-none border border-zinc-800 bg-zinc-950 p-7 flex flex-col justify-between relative group hover:border-zinc-700 transition-colors"
-                >
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between text-xs text-zinc-400 border-b border-zinc-800 pb-3">
-                      <span className="font-mono text-zinc-400">{t.code}</span>
-                      <span className="rounded-none border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-[10px] text-zinc-400 font-mono">
-                        {t.badge}
-                      </span>
-                    </div>
-                    <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed font-sans">
-                      "{t.quote}"
-                    </p>
-                  </div>
-                  <div className="mt-6 pt-4 border-t border-zinc-800 flex items-center justify-between text-xs">
-                    <div>
-                      <div className="font-semibold text-white">{t.author}</div>
-                      <div className="text-[11px] text-zinc-400">{t.role}</div>
-                    </div>
-                    <span className="text-[11px] font-semibold text-emerald-400 font-mono border border-emerald-500/30 bg-emerald-950/30 px-2.5 py-0.5 rounded-none">
-                      {t.metric}
+                {
+                  q: "How do you avoid spamming the same person?",
+                  a: "Today: per-workspace suppression, one-click unsubscribe, a 30/day mailbox cap, randomized jitter, and automatic stop on reply. A global cross-workspace contact ledger is the next safety release.",
+                },
+                {
+                  q: "Can I use my Calendly or Cal.com link?",
+                  a: "Scheduling handoff is the next release. Today, interested replies land in UniBox for manual booking. The next release adds a bring-your-own Calendly/Cal.com link mode and a zero-setup ICS confirmation mode, so you never need to create a new scheduling account.",
+                },
+                {
+                  q: "What happens if the AI writes something wrong?",
+                  a: "You review every angle and sample before launch, and every agent run is traceable step by step. Claim-level evidence checks and a copy critic are the next quality release; until then, human approval is the safety rail.",
+                },
+                {
+                  q: "Is my workspace isolated?",
+                  a: "Yes. Leads, campaigns, mailboxes, replies, and run state are scoped to the active workspace. The shared sender pool is admin-managed, not shared between tenants at the data layer.",
+                },
+              ].map((item) => (
+                <details key={item.q} className="group px-5 py-4 sm:px-6">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-medium text-white">
+                    {item.q}
+                    <span className="font-mono text-zinc-500 transition-transform group-open:rotate-45">
+                      +
                     </span>
-                  </div>
-                </div>
+                  </summary>
+                  <p className="mt-3 max-w-3xl text-xs leading-relaxed text-zinc-400 sm:text-sm">
+                    {item.a}
+                  </p>
+                </details>
               ))}
             </div>
           </div>
         </section>
 
-        {/* ========================================================================= */}
-        {/* FINAL HIGH-CONVERTING CTA BANNER */}
-        {/* ========================================================================= */}
-        <section className="py-20 sm:py-28 border-t border-zinc-800 bg-black font-sans">
-          <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 text-center space-y-6">
-            <h2 className="text-3xl sm:text-5xl font-bold text-white tracking-tight">
-              Ready to turn your domain into qualified meetings?
+        {/* ── FINAL CTA ───────────────────────────────────────────────── */}
+        <section className="border-t border-zinc-800/80 bg-black py-20 sm:py-28">
+          <div className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
+            <div className="mx-auto flex size-10 items-center justify-center border border-emerald-500/30 bg-emerald-500/10">
+              <Target className="size-5 text-emerald-400" />
+            </div>
+            <h2 className="mt-6 text-3xl font-bold tracking-tight text-white sm:text-5xl">
+              Your next 100 emails
+              <br />
+              should be worth sending.
             </h2>
-            <p className="text-sm sm:text-base text-zinc-400 max-w-xl mx-auto leading-relaxed">
-              Join founders scaling predictable outbound pipeline with zero monthly subscription fees and zero technical setup.
+            <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-zinc-400 sm:text-base">
+              Start with your URL. Approve the strategy and the voice. Let the machine
+              handle the pacing, the follow-ups, and the reply triage.
             </p>
-            <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Button
                 asChild
                 size="lg"
-                className="rounded-none h-12 px-8 bg-white hover:bg-zinc-200 text-black font-semibold text-xs border border-white gap-2 w-full sm:w-auto shadow-none"
+                className="h-12 w-full gap-2 rounded-none border border-white bg-white px-8 text-xs font-semibold text-black shadow-none hover:bg-zinc-200 sm:w-auto"
               >
-                <Link href="/signup">
-                  Launch Free GTM Engine <ArrowRight className="size-4 ml-1" />
+                <Link href={primaryHref}>
+                  Analyze my website <ArrowRight className="size-4" />
                 </Link>
               </Button>
               <Button
                 asChild
                 variant="outline"
                 size="lg"
-                className="rounded-none h-12 px-7 border-zinc-800 bg-zinc-950 text-zinc-300 hover:bg-zinc-900 hover:text-white hover:border-zinc-700 text-xs font-semibold w-full sm:w-auto shadow-none"
+                className="h-12 w-full rounded-none border-zinc-800 bg-zinc-950 px-7 text-xs font-semibold text-zinc-300 hover:border-zinc-600 hover:bg-zinc-900 hover:text-white sm:w-auto"
               >
-                <Link href="/login">
-                  Sign In to Mission Control
-                </Link>
+                <Link href="/login">Sign in to Mission Control</Link>
               </Button>
             </div>
-            <p className="text-[11px] text-zinc-500 font-mono pt-2">
-              $0 platform fee · 100M+ verified leads · 5¢ per sent email
+            <p className="mt-6 font-mono text-[10px] uppercase tracking-widest text-zinc-600">
+              $0 platform · 5¢ per delivered email · {formatNumber(totalLeads)} contacts
             </p>
           </div>
         </section>
       </main>
 
-      {/* Modern Minimalist Footer */}
-      <footer className="border-t border-zinc-800 bg-[#030303] py-10 font-sans text-xs text-zinc-500">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <footer className="border-t border-zinc-800 bg-[#030303] py-10 text-xs text-zinc-500">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 sm:flex-row sm:px-6 lg:px-8">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-zinc-300">AutoGTM</span>
             <span>·</span>
-            <span>The $0/Month Autonomous Outbound Engine</span>
+            <span>The outbound engine for one-person GTM teams</span>
           </div>
           <div className="flex items-center gap-4 text-zinc-400">
-            <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
-            <Link href="/impressum" className="hover:text-white transition-colors">Impressum</Link>
-            <Link href="/remove-my-info" className="hover:text-white transition-colors">Opt-Out / Remove Info</Link>
+            <Link href="/privacy" className="hover:text-white">
+              Privacy
+            </Link>
+            <Link href="/impressum" className="hover:text-white">
+              Impressum
+            </Link>
+            <Link href="/remove-my-info" className="hover:text-white">
+              Opt-Out / Remove Info
+            </Link>
           </div>
         </div>
       </footer>
