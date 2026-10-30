@@ -292,7 +292,7 @@ export function ChadGtmHeroScanner({
                 <div className="flex items-center gap-2">
                   <Mail className="size-3.5 text-zinc-400" />
                   <span className="text-xs font-semibold text-white">
-                    Generated Outbound Angle: Touch 1 (Day 0)
+                    Sample Outbound Angle: Touch 1 (Day 0)
                   </span>
                 </div>
                 <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">

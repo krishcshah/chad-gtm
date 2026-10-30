@@ -333,7 +333,7 @@ export default async function LandingPage() {
                   <ul className="mt-4 space-y-3 text-xs text-zinc-300">
                     {[
                       "One URL intake",
-                      `Built-in ${formatNumber(totalLeads)} directory`,
+                      `Built-in ${formatNumber(totalLeads)}-contact directory`,
                       "Agent-run research + copy",
                       "Shared mailbox dispatch",
                       "UniBox reply triage",
