@@ -35,6 +35,13 @@ const syncMs = Number(process.env.ENGINE_SYNC_MS ?? 120_000);
 
 console.log(`[engine] SmartReach sending engine online — tick every ${intervalMs}ms, IMAP sync every ${syncMs}ms`);
 
+// Never let a stray async failure take down the dispatch loop. PM2 restarts
+// are acceptable for a hard crash, but a single bad IMAP socket should not
+// interrupt sending for every mailbox.
+process.on("unhandledRejection", (reason) => {
+  console.error("[engine] unhandled rejection:", reason);
+});
+
 const stop = startWorkerLoop(db, {
   intervalMs,
   onTick: (r) => {

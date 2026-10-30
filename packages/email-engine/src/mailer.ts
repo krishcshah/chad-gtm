@@ -82,7 +82,7 @@ export async function testSmtp(sender: SenderRow): Promise<{ ok: boolean; messag
 }
 
 export function makeImapClient(sender: SenderRow): ImapFlow {
-  return new ImapFlow({
+  const client = new ImapFlow({
     host: sender.imapHost,
     port: sender.imapPort || 993,
     secure: (sender.imapPort || 993) === 993,
@@ -93,6 +93,16 @@ export function makeImapClient(sender: SenderRow): ImapFlow {
     logger: false,
     socketTimeout: 10_000,
   } as any);
+
+  // ImapFlow emits 'error' for auth failures and dropped sockets. Without a
+  // listener Node treats it as an uncaught exception and kills the worker.
+  client.on("error", (err: any) => {
+    console.error(
+      `[imap] ${sender.email} client error: ${err?.responseText || err?.message || err}`,
+    );
+  });
+
+  return client;
 }
 
 export async function testImap(sender: SenderRow): Promise<{ ok: boolean; message: string; latencyMs?: number }> {

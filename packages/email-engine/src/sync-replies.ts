@@ -458,6 +458,7 @@ export async function syncSenderReplies(db: EngineDb, sender: SenderRow): Promis
   if (!sender.imapHost || !sender.imapPasswordEnc) return { found: 0 };
   let found = 0;
   let client: any = null;
+  let closed = false;
   try {
     client = makeImapClient(sender);
     await client.connect();
@@ -485,6 +486,7 @@ export async function syncSenderReplies(db: EngineDb, sender: SenderRow): Promis
       }
     }
     await client.logout();
+    closed = true;
     await db
       .update(schema.senderAccounts)
       .set({ lastSyncAt: new Date().toISOString(), imapStatus: "ok" })
@@ -492,16 +494,23 @@ export async function syncSenderReplies(db: EngineDb, sender: SenderRow): Promis
     return { found };
   } catch (err: any) {
     const message = String(err?.responseText || err?.message || "IMAP sync failed");
+    const isAuthFailure = /auth|login|credential|AUTHENTICATIONFAILED/i.test(message);
     await db
       .update(schema.senderAccounts)
-      .set({ imapStatus: "failed" })
+      .set({ imapStatus: isAuthFailure ? "failed" : "error" })
       .where(eq(schema.senderAccounts.id, sender.id));
     return { found, error: message };
   } finally {
-    try {
-      if (client?.usable) await client.logout();
-    } catch {
-      /* noop */
+    if (!closed && client) {
+      try {
+        if (client.usable) {
+          await client.logout();
+        } else if (typeof client.close === "function") {
+          client.close();
+        }
+      } catch {
+        /* noop */
+      }
     }
   }
 }
