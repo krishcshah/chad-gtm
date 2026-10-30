@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
-import { schema } from "@smartreach/database";
+import { ensureOutreachSpintax, schema } from "@smartreach/database";
 import { nowIso } from "@smartreach/shared";
 import { getDb, ensureChadGtmTables } from "./db";
 import { requireUser } from "./session";
@@ -20,10 +20,205 @@ import {
   generateEmailScriptOnTheFly,
   getWorkspaceAiOptions,
   investigateLeadDossier,
+  type CampaignResearchContext,
   type LeadProfile,
 } from "./ai";
 import { extractSenderFirstName } from "@smartreach/email-engine";
 import { ensureCampaignLeadSnapshot } from "./campaign-drafts";
+
+export interface CalibrationFeedbackItem {
+  id?: string;
+  leadId?: string;
+  recipientName?: string;
+  recipientCompany?: string;
+  recipientTitle?: string;
+  recipientIndustry?: string;
+  subject: string;
+  bodyText: string;
+  bodyHtml?: string;
+  approved: boolean;
+  rejectedReason?: string;
+}
+
+const REJECTION_CONSTRAINTS: Record<string, string> = {
+  "Too generic":
+    "Never write a generic value proposition. Name a specific workflow, role, or metric in the first two sentences.",
+  "Too salesy / pushy":
+    "Do not pitch, pressure, or stack benefits. Write like a peer sharing an observation, not a vendor closing a deal.",
+  "Too long / verbose":
+    "Keep the body under 55 words. One idea per paragraph. Cut every sentence that does not earn the next one.",
+  "Weak call to action":
+    "End with one specific, low-friction permission question. No 'let me know', no calendar link, no vague 'thoughts?'.",
+  "Wrong persona tone":
+    "Match the recipient's seniority and function. Use their language; do not explain their own job back to them.",
+};
+
+function buildStyleGuidance(feedback?: CalibrationFeedbackItem[]): {
+  examples: Array<{ subject: string; bodyText: string; recipientTitle?: string }>;
+  negatives: string[];
+} {
+  if (!feedback || feedback.length === 0) {
+    return { examples: [], negatives: [] };
+  }
+
+  const approved = feedback.filter((f) => f.approved);
+  const rejected = feedback.filter((f) => !f.approved);
+
+  const examples = approved.slice(0, 3).map((f) => ({
+    subject: f.subject,
+    bodyText: f.bodyText,
+    recipientTitle: f.recipientTitle,
+  }));
+
+  const negatives = new Set<string>();
+  for (const item of rejected) {
+    const mapped = item.rejectedReason ? REJECTION_CONSTRAINTS[item.rejectedReason] : "";
+    if (mapped) negatives.add(mapped);
+  }
+
+  if (approved.length > 0) {
+    const avgWords = Math.round(
+      approved.reduce(
+        (sum, f) => sum + f.bodyText.split(/\s+/).filter(Boolean).length,
+        0
+      ) / approved.length
+    );
+    if (avgWords > 0 && avgWords < 80) {
+      negatives.add(`Match the approved length: roughly ${avgWords} words, not more.`);
+    }
+    const firstGreeting = approved
+      .map((f) => f.bodyText.trim().split(/\s+/)[0]?.replace(/[^A-Za-z]/g, ""))
+      .find((g) => g && /^(hi|hey|hello|dear)$/i.test(g));
+    if (!firstGreeting) {
+      negatives.add("Do not open with a greeting or a name. Start with the observation.");
+    }
+  }
+
+  if (rejected.length > 0 && approved.length === 0) {
+    negatives.add("The user rejected every draft. Change the angle materially, not just the wording.");
+  }
+
+  return { examples, negatives: Array.from(negatives) };
+}
+
+function buildCampaignContext(
+  run: typeof schema.chadGtmRuns.$inferSelect,
+  activeOffer: { title?: string; angle?: string; valueProp?: string; cta?: string }
+): CampaignResearchContext {
+  const overview = (run.businessOverview as any) || {};
+  const icp = (run.icpProfile as any) || {};
+  const isOwnOffer = /autogtm|chadgtm|smartreach/i.test(
+    `${run.url || ""} ${run.companyName || ""}`
+  );
+
+  return {
+    companyName: run.companyName || "our company",
+    companySummary: overview.summary,
+    valueProposition: activeOffer.valueProp,
+    angle: activeOffer.angle,
+    cta: activeOffer.cta,
+    offerTitle: activeOffer.title,
+    painPoints: Array.isArray(icp.painPoints) ? icp.painPoints : [],
+    targetTitles: Array.isArray(icp.targetTitles) ? icp.targetTitles : [],
+    isOutboundInfrastructure: isOwnOffer,
+  };
+}
+
+function stableHash(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash << 5) - hash + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function getTargetTitles(run: typeof schema.chadGtmRuns.$inferSelect): string[] {
+  const icp = (run.icpProfile as any) || {};
+  const flat = Array.isArray(icp.targetTitles) ? icp.targetTitles : [];
+  const personaTitles = Array.isArray(icp.personas)
+    ? icp.personas.flatMap((p: any) => (Array.isArray(p?.titles) ? p.titles : []))
+    : [];
+  return Array.from(
+    new Set(
+      [...flat, ...personaTitles]
+        .map((t) => String(t || "").trim())
+        .filter((t) => t.length >= 2)
+    )
+  ).slice(0, 8);
+}
+
+/**
+ * Prefer leads whose titles match the ICP, then top up with industry-only
+ * matches. Prevents a campaign from starving when title formats vary wildly.
+ */
+function fetchTargetedLeads(
+  industries: string[],
+  targetTitles: string[],
+  desired: number,
+  offset: number
+) {
+  const base = {
+    industries: industries.length > 0 ? industries : undefined,
+    hasEmail: true,
+  };
+  if (targetTitles.length === 0) {
+    return getMatchingDirectoryLeadsForExport(base, desired, offset);
+  }
+
+  const targeted = getMatchingDirectoryLeadsForExport(
+    { ...base, jobTitles: targetTitles },
+    desired,
+    offset
+  );
+  if (targeted.length >= desired) return targeted;
+
+  const seen = new Set(targeted.map((lead) => lead.email.toLowerCase()));
+  const fallback = getMatchingDirectoryLeadsForExport(base, desired * 3, offset);
+  for (const lead of fallback) {
+    if (targeted.length >= desired) break;
+    const key = lead.email.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    targeted.push(lead);
+  }
+  return targeted;
+}
+
+function compactCustomFields(raw: Record<string, string> | undefined): Record<string, string> {  if (!raw) return {};
+  const skip = /^(email|first|last|full|name|job|title|company|industry|location|city|state|country|phone|website|linkedin)/i;
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (Object.keys(out).length >= 12) break;
+    if (skip.test(key)) continue;
+    const text = String(value ?? "").trim();
+    if (!text) continue;
+    out[key] = text.slice(0, 200);
+  }
+  return out;
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+
+  async function worker() {
+    while (true) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      results[index] = await fn(items[index]!, index);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, () => worker())
+  );
+  return results;
+}
 
 export async function analyzeWebsiteAction(
   rawUrl: string,
@@ -118,7 +313,12 @@ export async function searchMatchingLeadsAction(
 
 export async function generateCalibrationEmailsAction(
   runId: string,
-  selectedOfferIndex = 0
+  selectedOfferIndex = 0,
+  options: {
+    feedback?: CalibrationFeedbackItem[];
+    count?: number;
+    offset?: number;
+  } = {}
 ): Promise<{ ok: boolean; emailSamples?: any[]; error?: string }> {
   try {
     const user = await requireUser();
@@ -147,17 +347,37 @@ export async function generateCalibrationEmailsAction(
       cta: "Open to a brief 4-minute demo this Thursday?",
     };
 
-    // Get 10 sample verified leads from SQLite directory
-    const matchingLeads = getMatchingDirectoryLeadsForExport(
-      {
-        industries: industries.length > 0 ? industries : undefined,
-        hasEmail: true,
-      },
-      10
+    const count = Math.min(10, Math.max(1, options.count || 10));
+    const offset = Math.max(0, Math.floor(options.offset || 0));
+
+    // Pull verified leads from the SQLite directory. Offset lets adaptive
+    // re-generation show new prospects instead of repeating the same deck.
+    const matchingLeads = fetchTargetedLeads(
+      industries,
+      getTargetTitles(run),
+      count,
+      offset
     );
+
+    if (matchingLeads.length === 0) {
+      throw new Error(
+        "No verified leads match the selected industries. Pick another industry facet."
+      );
+    }
 
     const aiOpts = await getWorkspaceAiOptions(user.id);
     const overview = run.businessOverview as any;
+    const guidance = buildStyleGuidance(options.feedback);
+    const campaignContext = buildCampaignContext(run, activeOffer);
+
+    // Persist the in-progress feedback vector so it survives a refresh and is
+    // available to the final calibration/launch step.
+    if (options.feedback && options.feedback.length > 0) {
+      await db
+        .update(schema.chadGtmRuns)
+        .set({ approvedEmailSamples: options.feedback as any, updatedAt: nowIso() })
+        .where(eq(schema.chadGtmRuns.id, runId));
+    }
 
     // Resolve sender first name from active sender account or system pool
     const activeSender = (await db
@@ -175,8 +395,10 @@ export async function generateCalibrationEmailsAction(
 
     const resolvedSenderName = extractSenderFirstName(activeSender);
 
-    const emailSamples = await Promise.all(
-      matchingLeads.map(async (dl, idx) => {
+    const emailSamples = await mapWithConcurrency(
+      matchingLeads,
+      3,
+      async (dl, idx) => {
         const leadProfile: LeadProfile = {
           id: dl.leadId,
           email: dl.email,
@@ -186,32 +408,42 @@ export async function generateCalibrationEmailsAction(
           jobTitle: dl.jobTitle,
           industry: dl.industry,
           location: dl.location,
+          customFields: compactCustomFields(dl.rawAttributes),
         };
 
-        const instruction = `Product/Company: ${run.companyName}.
-Summary: ${overview?.summary || "Leading B2B solution"}.
-Core Value Offer: ${activeOffer.valueProp}.
-Outreach Angle: ${activeOffer.angle}.
-Call to Action: ${activeOffer.cta}.
-Pitch this value offer directly to ${dl.jobTitle} at ${dl.companyName}.`;
+        const instruction = `Company: ${run.companyName}.
+Business summary: ${overview?.summary || "B2B solution"}.
+Core value offer: ${activeOffer.valueProp}.
+Outreach angle: ${activeOffer.angle}.
+Call to action: ${activeOffer.cta}.
+Write to ${dl.jobTitle || "the buyer"} at ${dl.companyName || "the target account"}. Use only the offer above, in the prospect's language. Do not mention unrelated services or invent proof.`;
 
-        const dossier = await investigateLeadDossier(leadProfile, instruction);
+        const dossier = await investigateLeadDossier(
+          leadProfile,
+          instruction,
+          campaignContext
+        );
 
         const script = await generateEmailScriptOnTheFly({
           ...aiOpts,
           lead: leadProfile,
           dossier,
+          campaignContext,
           customInstruction: instruction,
           senderName: resolvedSenderName,
-          fallbackSubject: `${dossier.suggestedSubject || activeOffer.angle.toLowerCase()}`,
+          fallbackSubject: `${dossier.suggestedSubject || activeOffer.angle?.toLowerCase() || "quick note"}`,
           fallbackBody: `Hi ${dl.firstName || "there"},\n\n${dossier.humanObservation}\n\n${dossier.frictionPoke}\n\n${dossier.customAssetDeliverable}\n\n${dossier.lowFrictionCta}\n\nBest,\n${resolvedSenderName}`,
-          index: idx,
+          index: offset + idx,
+          styleExamples: guidance.examples,
+          negativeConstraints: guidance.negatives,
+          requireSpintax: false,
         });
 
         return {
-          id: `sample-${idx + 1}`,
+          id: `sample-${offset + idx + 1}`,
           leadId: dl.leadId,
-          recipientName: dl.fullName || `${dl.firstName} ${dl.lastName}`.trim() || "Decision Maker",
+          recipientName:
+            dl.fullName || `${dl.firstName} ${dl.lastName}`.trim() || "Decision Maker",
           recipientCompany: dl.companyName || "Organization",
           recipientTitle: dl.jobTitle || "Executive",
           recipientIndustry: dl.industry || "Business",
@@ -223,13 +455,54 @@ Pitch this value offer directly to ${dl.jobTitle} at ${dl.companyName}.`;
           dossier,
           approved: false,
         };
-      })
+      }
     );
 
     return { ok: true, emailSamples };
   } catch (err: any) {
     console.error("[chad-gtm-actions] generateCalibrationEmails error:", err);
     return { ok: false, error: err?.message || "Failed to generate calibration deck." };
+  }
+}
+
+/**
+ * Adaptive mid-deck generation. The client calls this when the user has
+ * calibrated enough cards; the returned cards are conditioned on approvals and
+ * rejection reasons collected so far.
+ */
+export async function generateAdaptiveCalibrationSamplesAction(
+  runId: string,
+  selectedOfferIndex: number,
+  feedback: CalibrationFeedbackItem[],
+  existingCount: number
+): Promise<{ ok: boolean; emailSamples?: any[]; error?: string }> {
+  return generateCalibrationEmailsAction(runId, selectedOfferIndex, {
+    feedback,
+    count: 3,
+    offset: Math.max(0, existingCount),
+  });
+}
+
+export async function saveCalibrationFeedbackAction(
+  runId: string,
+  feedback: CalibrationFeedbackItem[]
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const user = await requireUser();
+    const db = getDb();
+    await ensureChadGtmTables(db);
+    await db
+      .update(schema.chadGtmRuns)
+      .set({ approvedEmailSamples: feedback as any, updatedAt: nowIso() })
+      .where(
+        and(
+          eq(schema.chadGtmRuns.id, runId),
+          eq(schema.chadGtmRuns.userId, user.id)
+        )
+      );
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Failed to save calibration feedback." };
   }
 }
 
@@ -244,6 +517,8 @@ export interface CalibrationProfile {
   calibratedBodyTemplate: string;
   approvedCount: number;
   rejectedCount: number;
+  styleExemplars?: Array<{ subject: string; bodyText: string; recipientTitle?: string }>;
+  rejectionConstraints?: string[];
 }
 
 export async function refineGtmCalibrationAction(
@@ -259,6 +534,7 @@ export async function refineGtmCalibrationAction(
     bodyText: string;
     bodyHtml?: string;
     approved: boolean;
+    rejectedReason?: string;
   }>,
   selectedOfferIndex = 0
 ): Promise<{
@@ -348,8 +624,8 @@ TASK:
 3. In "keyAdjustments", list exactly 3 concrete adjustments made to all future copies (e.g. "Eliminated introductory fluff greetings", "Kept body strictly under 60 words", "Replaced calendar links with 4-minute curiosity questions").
 4. In "dos", list 3 strict writing rules to follow for this campaign.
 5. In "donts", list 3 strict rules of what to NEVER do.
-6. In "calibratedSubjectTemplate", formulate an optimal subject line template with variables like {{company}} or {{first_name}}.
-7. In "calibratedBodyTemplate", formulate the calibrated email body template with variables {{first_name}}, {{company}}, {{job_title}}, {{industry}}, and {{sender_name}}.
+6. In "calibratedSubjectTemplate", formulate an optimal subject line template with variables like {{company}} or {{first_name}}. Include 2-3 spintax variants where natural, e.g. "{quick|brief} question re: {{company}}".
+7. In "calibratedBodyTemplate", formulate the calibrated email body template with variables {{first_name}}, {{company}}, {{job_title}}, {{industry}}, and {{sender_name}}. Include a greeting spintax group like {Hi|Hey|Hello} and at least one other low-risk {a|b} variant. Never spin names, companies, numbers, or factual claims.
 8. In "customAiInstruction", create a comprehensive instruction prompt for the dynamic AI sending engine so that every future lead receives a personalized email adhering strictly to these calibrated preferences.
 9. In "refinedSamples", provide 2-3 freshly refined sample emails demonstrating the adjusted copy for sample decision makers.
 
@@ -479,12 +755,19 @@ Respond STRICTLY with a valid JSON object matching this structure:
       refinedSamples = approved.length > 0 ? approved.slice(0, 3) : calibrationDeck.slice(0, 3);
     }
 
-    // Persist into database
+    // Persist into database. Keep the full deck (approved + rejected with
+    // reasons) so the feedback vector survives refreshes and later re-calibration.
+    const guidance = buildStyleGuidance(calibrationDeck as CalibrationFeedbackItem[]);
+    if (profile) {
+      profile.styleExemplars = guidance.examples;
+      profile.rejectionConstraints = guidance.negatives;
+    }
+
     await db
       .update(schema.chadGtmRuns)
       .set({
         calibrationProfile: profile,
-        approvedEmailSamples: approved.length > 0 ? approved : calibrationDeck.slice(0, 3),
+        approvedEmailSamples: calibrationDeck,
         updatedAt: nowIso(),
       })
       .where(eq(schema.chadGtmRuns.id, runId));
@@ -539,20 +822,28 @@ export async function launchChadGtmCampaignAction(
       name: `${companyName} AutoGTM Leads (${dateStr})`,
     });
 
-    // 2. Fetch matched verified leads from SQLite directory (pull 500 targeted leads)
-    const matchingDirectoryLeads = getMatchingDirectoryLeadsForExport(
-      {
-        industries: industries.length > 0 ? industries : undefined,
-        hasEmail: true,
-      },
-      500
+    // 2. Fetch matched verified leads from SQLite directory. Rotate the offset
+    // by run id so consecutive campaigns do not target the same first 500 rows.
+    const leadOffset = stableHash(runId) % 5000;
+    const matchingDirectoryLeads = fetchTargetedLeads(
+      industries,
+      getTargetTitles(run),
+      500,
+      leadOffset
     );
 
-    if (matchingDirectoryLeads.length > 0) {
-      const CHUNK = 100;
-      for (let i = 0; i < matchingDirectoryLeads.length; i += CHUNK) {
-        const batch = matchingDirectoryLeads.slice(i, i + CHUNK);
-        await db.insert(schema.leads).values(
+    if (matchingDirectoryLeads.length === 0) {
+      throw new Error(
+        "No verified leads match the selected industries. Refine the ICP or pick another industry facet."
+      );
+    }
+
+    const CHUNK = 100;
+    for (let i = 0; i < matchingDirectoryLeads.length; i += CHUNK) {
+      const batch = matchingDirectoryLeads.slice(i, i + CHUNK);
+      await db
+        .insert(schema.leads)
+        .values(
           batch.map((dl) => ({
             id: crypto.randomUUID(),
             userId: user.id,
@@ -569,23 +860,31 @@ export async function launchChadGtmCampaignAction(
             phone: dl.phone,
             industry: dl.industry,
             status: "new" as const,
-            customFields: {},
+            customFields: compactCustomFields(dl.rawAttributes),
             tags: ["autogtm", "b2b-verified"],
           }))
-        );
-      }
+        )
+        .onConflictDoNothing();
     }
 
-    // 3. Create calibrated Email Template in PostgreSQL
+    // 3. Create calibrated Email Template in PostgreSQL.
+    // The user explicitly approved these samples, so prefer them over a
+    // synthesized template. Spintax is added deterministically at this layer.
     const primarySample = approvedSamples[0] || {
       subject: calibratedProfile.calibratedSubjectTemplate || `Accelerating growth for {{company}}`,
-      bodyText: calibratedProfile.calibratedBodyTemplate || `Hi {{first_name}},\n\nWould love to share how our team helps companies in your space scale operations.\n\nBest,\n{{sender_name}}`,
+      bodyText:
+        calibratedProfile.calibratedBodyTemplate ||
+        `Hi {{first_name}},\n\nWould love to share how our team helps companies in your space scale operations.\n\nBest,\n{{sender_name}}`,
       bodyHtml: `<p>Hi {{first_name}},</p><p>Would love to share how our team helps companies in your space scale operations.</p><p>Best,<br/>{{sender_name}}</p>`,
     };
 
-    const finalSubject = calibratedProfile.calibratedSubjectTemplate || primarySample.subject;
-    const finalBodyText = calibratedProfile.calibratedBodyTemplate || primarySample.bodyText;
-    const finalBodyHtml = primarySample.bodyHtml || `<p>${finalBodyText.replace(/\n/g, "<br/>")}</p>`;
+    const finalSubject = primarySample.subject || calibratedProfile.calibratedSubjectTemplate;
+    const finalBodyText = ensureOutreachSpintax(
+      primarySample.bodyText || calibratedProfile.calibratedBodyTemplate
+    );
+    const finalBodyHtml = ensureOutreachSpintax(
+      primarySample.bodyHtml || `<p>${finalBodyText.replace(/\n/g, "<br/>")}</p>`
+    );
 
     const templateId = crypto.randomUUID();
     await db.insert(schema.emailTemplates).values({
@@ -608,10 +907,10 @@ export async function launchChadGtmCampaignAction(
       status: "running",
       leadListId: listId,
       templateId,
-      dailyLimit: Math.min(500, Math.max(10, dailyLimit)),
-      minDelaySec: 60,
-      maxDelaySec: 180,
-      maxEmailsPerSenderPerDay: 30, // Target pace 30 emails/mailbox
+      dailyLimit: Math.min(500, Math.max(30, dailyLimit)),
+      minDelaySec: 45,
+      maxDelaySec: 120,
+      maxEmailsPerSenderPerDay: 30, // hard per-mailbox ceiling
       stopOnReply: true,
       retryFailed: true,
       trackOpens: true,
@@ -636,9 +935,36 @@ export async function launchChadGtmCampaignAction(
       delayDays: 0,
     });
 
-    const aiPromptStep1 =
+    const styleExemplars: Array<{ subject: string; bodyText: string; recipientTitle?: string }> =
+      Array.isArray(calibratedProfile.styleExemplars) && calibratedProfile.styleExemplars.length > 0
+        ? calibratedProfile.styleExemplars
+        : (approvedSamples || [])
+            .filter((s) => s && s.approved !== false)
+            .slice(0, 3)
+            .map((s) => ({
+              subject: s.subject || "",
+              bodyText: s.bodyText || "",
+              recipientTitle: s.recipientTitle,
+            }));
+
+    const aiPromptStep1 = [
       calibratedProfile.customAiInstruction ||
-      `Product/Company: ${companyName}. Value Offer: ${activeOffer.valueProp}. Angle: ${activeOffer.angle}. Voice: Top 0.001% cold email. Strictly 35-55 words. 3rd-grade reading level. Zero pleasantries. Zero self-intros. Zero feature dumps. 1-3 word lowercase subject. Low-friction curiosity CTA.`;
+        `Company: ${companyName}. Value offer: ${activeOffer.valueProp}. Angle: ${activeOffer.angle}. Call to action: ${activeOffer.cta}. Write a first-touch cold email in 35-70 words. No pleasantries, no self-intro, no feature dump. One specific observation, one friction, one low-friction permission question.`,
+      `SPINTAX: include {Hi|Hey|Hello} and at least one other {a|b} variant group. Never spin names, companies, numbers, or factual claims.`,
+      `Do not mention DNS, mailboxes, inbox warmup, or deliverability unless the campaign explicitly asks for it.`,
+    ].join("\n\n");
+
+    // Structured envelope: carries the user's offer, approved exemplars, and
+    // rejection constraints to the send-time generator through the DB.
+    const sendContext = buildCampaignContext(run, activeOffer);
+    const stepPrompt = (instruction: string) =>
+      JSON.stringify({
+        instruction,
+        context: sendContext,
+        styleExamples: styleExemplars,
+        negativeConstraints: calibratedProfile.rejectionConstraints || [],
+        requireSpintax: true,
+      });
 
     await db.insert(schema.sequenceStepVariants).values({
       id: crypto.randomUUID(),
@@ -648,7 +974,7 @@ export async function launchChadGtmCampaignAction(
       bodyText: finalBodyText,
       bodyHtml: finalBodyHtml,
       aiGenerateOnTheFly: true,
-      aiPrompt: aiPromptStep1,
+      aiPrompt: stepPrompt(aiPromptStep1),
     });
 
     // Step 2: Follow-Up #1 (Day 3, +3 days delay) - Value & Asset Drop (NO "just checking in")
@@ -663,8 +989,12 @@ export async function launchChadGtmCampaignAction(
     const step2Subject = finalSubject.toLowerCase().startsWith("re:")
       ? finalSubject
       : `re: ${finalSubject}`;
-    const step2BodyText = `Hi {{first_name}},\n\nPut together a 60-second video breakdown showing how {{company}} can optimize this without adding tools or complexity.\n\nWould you prefer I share the link here or send it to another email?\n\nBest,\n{{sender_name}}`;
-    const step2BodyHtml = `<p>Hi {{first_name}},</p><p>Put together a 60-second video breakdown showing how {{company}} can optimize this without adding tools or complexity.</p><p>Would you prefer I share the link here or send it to another email?</p><p>Best,<br/>{{sender_name}}</p>`;
+    const step2BodyText = ensureOutreachSpintax(
+      `Hi {{first_name}},\n\nPut together a short breakdown of where {{company}} is likely losing time in this workflow.\n\nWould you prefer I share the link here or send it to another email?\n\nBest,\n{{sender_name}}`
+    );
+    const step2BodyHtml = ensureOutreachSpintax(
+      `<p>Hi {{first_name}},</p><p>Put together a short breakdown of where {{company}} is likely losing time in this workflow.</p><p>Would you prefer I share the link here or send it to another email?</p><p>Best,<br/>{{sender_name}}</p>`
+    );
     const aiPromptStep2 = `Write follow-up #1 (sent 3 days after initial message) for ${companyName}. Recipient is {{job_title}} at {{company}}. Never say "just checking in" or "following up". Offer a 60-second asset or micro-audit tailored to ${activeOffer.valueProp}. Strictly under 35 words. Low-friction permission CTA.`;
 
     await db.insert(schema.sequenceStepVariants).values({
@@ -675,7 +1005,7 @@ export async function launchChadGtmCampaignAction(
       bodyText: step2BodyText,
       bodyHtml: step2BodyHtml,
       aiGenerateOnTheFly: true,
-      aiPrompt: aiPromptStep2,
+      aiPrompt: stepPrompt(aiPromptStep2),
     });
 
     // Step 3: Follow-Up #2 (Day 7, +4 days delay) - 9-Word Permission Breakup
@@ -690,8 +1020,12 @@ export async function launchChadGtmCampaignAction(
     const step3Subject = finalSubject.toLowerCase().startsWith("re:")
       ? finalSubject
       : `re: ${finalSubject}`;
-    const step3BodyText = `Hi {{first_name}},\n\nAssuming you're heads-down scaling {{company}} right now and this isn't a priority.\n\nShould I close your file for now, or check back with you next quarter?\n\nBest,\n{{sender_name}}`;
-    const step3BodyHtml = `<p>Hi {{first_name}},</p><p>Assuming you're heads-down scaling {{company}} right now and this isn't a priority.</p><p>Should I close your file for now, or check back with you next quarter?</p><p>Best,<br/>{{sender_name}}</p>`;
+    const step3BodyText = ensureOutreachSpintax(
+      `Hi {{first_name}},\n\nAssuming you're heads-down scaling {{company}} right now and this isn't a priority.\n\nShould I close your file for now, or check back with you next quarter?\n\nBest,\n{{sender_name}}`
+    );
+    const step3BodyHtml = ensureOutreachSpintax(
+      `<p>Hi {{first_name}},</p><p>Assuming you're heads-down scaling {{company}} right now and this isn't a priority.</p><p>Should I close your file for now, or check back with you next quarter?</p><p>Best,<br/>{{sender_name}}</p>`
+    );
     const aiPromptStep3 = `Write follow-up #2 (final breakup email, sent 7 days after initial outreach) for ${companyName}. Recipient is {{job_title}} at {{company}}. Zero guilt, polite permission close. Under 25 words. Ask if we should close the file or check back next quarter.`;
 
     await db.insert(schema.sequenceStepVariants).values({
@@ -702,7 +1036,7 @@ export async function launchChadGtmCampaignAction(
       bodyText: step3BodyText,
       bodyHtml: step3BodyHtml,
       aiGenerateOnTheFly: true,
-      aiPrompt: aiPromptStep3,
+      aiPrompt: stepPrompt(aiPromptStep3),
     });
 
     // 5. Bind Active System Pool Mailboxes to campaign_senders
@@ -717,14 +1051,21 @@ export async function launchChadGtmCampaignAction(
         )
       );
 
-    if (systemSenders.length > 0) {
-      await db.insert(schema.campaignSenders).values(
+    if (systemSenders.length === 0) {
+      throw new Error(
+        "No active shared mailboxes are available. Ask an admin to add or reactivate a system-pool sender before launching."
+      );
+    }
+
+    await db
+      .insert(schema.campaignSenders)
+      .values(
         systemSenders.map((s) => ({
           campaignId,
           senderId: s.id,
         }))
-      );
-    }
+      )
+      .onConflictDoNothing();
 
     // 6. Snapshot Leads into campaignLeads
     await ensureCampaignLeadSnapshot(db, campaignId, listId);

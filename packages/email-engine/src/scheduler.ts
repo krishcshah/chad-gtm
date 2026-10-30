@@ -45,6 +45,9 @@ import { isEngineDryRun } from "./queue-mode";
 
 const BATCH_SIZE = Number(process.env.ENGINE_BATCH_SIZE ?? 25);
 const RESCHEDULE_PAD_MIN = 5;
+/** Deliverability band for shared mailboxes; campaign values are clamped into it. */
+const MIN_JITTER_SEC = 45;
+const MAX_JITTER_SEC = 120;
 
 export interface TickResult {
   started: number;
@@ -256,6 +259,8 @@ export async function scheduleCampaign(
   // growing schedule so delays accumulate across the batch.
   let cursor = campaign.lastSenderIdx;
   let scheduleAt = new Date(now.getTime() + randomBetween(0, 5) * 1000);
+  const minJitter = Math.min(MAX_JITTER_SEC, Math.max(MIN_JITTER_SEC, campaign.minDelaySec));
+  const maxJitter = Math.min(MAX_JITTER_SEC, Math.max(minJitter, campaign.maxDelaySec));
   let enqueued = 0;
   // Track rows we finished (enqueued or cancelled) so senders-exhausted
   // unclaim does not reset already-handled leads (slice(enqueued) was wrong
@@ -379,7 +384,7 @@ export async function scheduleCampaign(
       hourly.set(pick.sender.id, (hourly.get(pick.sender.id) ?? 0) + 1);
       scheduleAt = addSeconds(
         scheduleAt,
-        randomBetween(campaign.minDelaySec, campaign.maxDelaySec),
+        randomBetween(minJitter, maxJitter),
       );
       handledIds.add(cl.id);
       enqueued++;

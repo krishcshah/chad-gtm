@@ -30,6 +30,7 @@ export { SUPPORTED_AI_MODELS, type AiModelDefinition };
 
 import {
   investigateLeadDossier,
+  type CampaignResearchContext,
   type LeadResearchDossier,
   type OutboundMaturity,
   type RecommendedAngle,
@@ -37,6 +38,7 @@ import {
 } from "./lead-investigation";
 export {
   investigateLeadDossier,
+  type CampaignResearchContext,
   type LeadResearchDossier,
   type OutboundMaturity,
   type RecommendedAngle,
@@ -59,6 +61,14 @@ export interface GenerateOnTheFlyOptions extends AiEngineOptions {
   vars?: Record<string, string | null | undefined>;
   index?: number;
   dossier?: LeadResearchDossier;
+  /** Campaign context; when present, lead research stops pitching AutoGTM's own service. */
+  campaignContext?: CampaignResearchContext;
+  /** Approved swipe samples used as few-shot voice exemplars. */
+  styleExamples?: Array<{ subject: string; bodyText: string; recipientTitle?: string }>;
+  /** Explicit "never write this" instructions from rejected cards. */
+  negativeConstraints?: string[];
+  /** Ask the model for `{Hi|Hey|Hello}`-style variants in the body. */
+  requireSpintax?: boolean;
 }
 
 export interface ImproveCopyOptions extends AiEngineOptions {
@@ -91,7 +101,31 @@ function parseJsonFromText(raw: string): any {
     // Attempt greedy object extraction
     const match = cleaned.match(/\{[\s\S]*\}/);
     if (match) {
-      return JSON.parse(match[0]);
+      try {
+        return JSON.parse(match[0]);
+      } catch {
+        // fall through to field repair
+      }
+    }
+
+    // Repair a truncated JSON object: models occasionally hit the token cap
+    // mid-string. Recover the fields we actually need instead of losing the
+    // whole generation (and silently falling back to a template).
+    const repaired: Record<string, string> = {};
+    for (const key of ["subject", "bodyText", "bodyHtml", "personalizationReason"]) {
+      const field = cleaned.match(
+        new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`, "s")
+      );
+      if (field?.[1]) {
+        try {
+          repaired[key] = JSON.parse(`"${field[1]}"`);
+        } catch {
+          repaired[key] = field[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
+        }
+      }
+    }
+    if (repaired.bodyText || repaired.bodyHtml) {
+      return repaired;
     }
     throw new Error("Failed to parse AI JSON response");
   }
@@ -500,48 +534,66 @@ function simulatePersonalizedScript(options: GenerateOnTheFlyOptions): Generated
 
 /**
  * Call Google Gemini REST API.
+ *
+ * Gemini 3.x models spend output tokens on hidden "thinking" by default, which
+ * truncates JSON responses when maxOutputTokens is small. Copy generation does
+ * not need deep reasoning, so thinking is disabled and the output budget raised.
  */
 async function callGemini(
   prompt: string,
   apiKey: string,
   model = "gemini-3.8-flash",
-  timeoutMs = 12000,
+  timeoutMs = 30000,
 ): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: 0.7,
-          maxOutputTokens: 1024,
-        },
-      }),
-      signal: controller.signal,
-    });
-
-    if (!res.ok) {
-      if ((res.status === 404 || res.status === 400) && model !== "gemini-2.5-flash") {
-        return callGemini(prompt, apiKey, "gemini-2.5-flash", timeoutMs);
+  const call = async (includeThinkingConfig: boolean): Promise<Response> => {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const generationConfig: Record<string, unknown> = {
+        responseMimeType: "application/json",
+        temperature: 0.7,
+        maxOutputTokens: 4096,
+      };
+      if (includeThinkingConfig) {
+        generationConfig.thinkingConfig = { thinkingBudget: 0 };
       }
-      const errText = await res.text().catch(() => "");
-      throw new Error(`Gemini API error (${res.status}): ${errText.slice(0, 300)}`);
+      return await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig,
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
     }
+  };
 
-    const data = (await res.json()) as any;
-    const candidate = data.candidates?.[0];
-    const text = candidate?.content?.parts?.[0]?.text;
-    if (!text) throw new Error("Gemini returned empty candidate response");
-    return text;
-  } finally {
-    clearTimeout(timer);
+  let res = await call(true);
+  if (res.status === 400) {
+    // Older models may reject thinkingConfig; retry without it.
+    res = await call(false);
   }
+
+  if (!res.ok) {
+    if ((res.status === 404 || res.status === 400) && model !== "gemini-3.5-flash") {
+      return callGemini(prompt, apiKey, "gemini-3.5-flash", timeoutMs);
+    }
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Gemini API error (${res.status}): ${errText.slice(0, 300)}`);
+  }
+
+  const data = (await res.json()) as any;
+  const candidate = data.candidates?.[0];
+  const text = candidate?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Gemini returned empty candidate response");
+  if (candidate?.finishReason === "MAX_TOKENS" && !text.includes("}")) {
+    throw new Error("Gemini response was truncated before valid JSON");
+  }
+  return text;
 }
 
 /**
@@ -551,7 +603,7 @@ async function callOpenAi(
   prompt: string,
   apiKey: string,
   model = "gpt-5-mini",
-  timeoutMs = 12000,
+  timeoutMs = 30000,
 ): Promise<string> {
   const url = "https://api.openai.com/v1/chat/completions";
   const controller = new AbortController();
@@ -603,7 +655,10 @@ async function callOpenAi(
 export async function generateEmailScriptOnTheFly(
   options: GenerateOnTheFlyOptions,
 ): Promise<GeneratedScript> {
-  const dossier = options.dossier || (await investigateLeadDossier(options.lead, options.customInstruction));
+  const campaignContext = options.campaignContext;
+  const dossier =
+    options.dossier ||
+    (await investigateLeadDossier(options.lead, options.customInstruction, campaignContext));
   const optionsWithDossier: GenerateOnTheFlyOptions = { ...options, dossier };
 
   const provider = (options.provider || "google").toLowerCase();
@@ -614,14 +669,51 @@ export async function generateEmailScriptOnTheFly(
     return simulatePersonalizedScript(optionsWithDossier);
   }
 
-  const { lead, customInstruction, senderName, fallbackSubject, fallbackBody } = options;
+  const { lead, customInstruction, senderName, fallbackSubject } = options;
 
-  const customFieldsFormatted = lead.customFields && Object.keys(lead.customFields).length > 0
-    ? Object.entries(lead.customFields).map(([k, v]) => `  * ${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join("\n")
-    : "  (None provided)";
+  const customFieldsFormatted =
+    lead.customFields && Object.keys(lead.customFields).length > 0
+      ? Object.entries(lead.customFields)
+          .map(([k, v]) => `  * ${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`)
+          .join("\n")
+      : "  (None provided)";
 
-  const prompt = `You are an elite, top 0.001% B2B cold outreach strategist and master copywriter.
-You write cutting-edge cold emails based on large-scale empirical data from Instantly, Smartlead, Lavender (100M+ emails analyzed), and Gong Labs (300k+ emails).
+  const styleExamples = (options.styleExamples || []).slice(0, 3);
+  const styleBlock = styleExamples.length
+    ? styleExamples
+        .map(
+          (s, i) =>
+            `Example ${i + 1}${s.recipientTitle ? ` (to a ${s.recipientTitle})` : ""}:\nSUBJECT: ${s.subject}\nBODY:\n${s.bodyText}`
+        )
+        .join("\n---\n")
+    : "None supplied yet.";
+
+  const negativeBlock = (options.negativeConstraints || []).filter(Boolean).length
+    ? options.negativeConstraints!.map((c) => `- ${c}`).join("\n")
+    : "- No additional user constraints.";
+
+  const isLegacyInfrastructureOffer =
+    !campaignContext && dossier.recommendedAngle !== "CAMPAIGN_VALUE_ANGLE";
+
+  const legacyRules = isLegacyInfrastructureOffer
+    ? `LEGACY OFFER RULES:
+${
+  dossier.outboundMaturity === "OUTBOUND_NEWBIE"
+    ? `- Do not assume they run cold email. Pitch a turnkey client-acquisition setup grounded in their local market.`
+    : dossier.outboundMaturity === "OUTBOUND_TECHNICAL_DEFECT"
+      ? `- Calmly mention the verified DNS defect (${dossier.verifiedDnsIssue}) and offer a 40-second fix walkthrough.`
+      : `- Focus on secondary mailbox cost and domain reputation, without insulting their current setup.`
+}`
+    : `CAMPAIGN RULES:
+- The offer belongs to ${campaignContext?.companyName || "the sender"}. Write from that company's perspective.
+- Never mention DNS, mailboxes, inbox warmup, domains, or deliverability unless the campaign instructions explicitly do.
+- Do not describe the sender's company unless the value proposition requires it. One clause maximum.`;
+
+  const spintaxRule = options.requireSpintax
+    ? `- SPINTAX REQUIRED: write the greeting as {Hi|Hey|Hello} and include at least two more {a|b|c} variant groups in the body (transitions or phrasing). Never spin a person's name, company name, number, or factual claim.`
+    : `- Do not use spintax in this draft; the campaign layer will add it at launch.`;
+
+  const prompt = `You are an elite cold-email writer. Your emails read like a sharp operator sent them from their phone — specific, short, and human. You are not writing marketing copy.
 
 RECIPIENT & ACCOUNT CONTEXT:
 - Full Name: ${lead.firstName || ""} ${lead.lastName || ""}
@@ -636,62 +728,47 @@ RECIPIENT & ACCOUNT CONTEXT:
 - Custom CSV Signals & Columns:
 ${customFieldsFormatted}
 
-DEEP PRE-COMPUTED LEAD RESEARCH & OUTBOUND MATURITY DOSSIER:
-- Outbound Maturity Stage: ${dossier.outboundMaturity} (${dossier.maturityRationale})
-- Recommended Angle: ${dossier.recommendedAngle}
-- Grounded Human Observation: "${dossier.humanObservation}"
-- Operational Friction Poke: "${dossier.frictionPoke}"
-- Custom Deliverable Asset: "${dossier.customAssetDeliverable}"
-- Frictionless CTA: "${dossier.lowFrictionCta}"
-- Digital Footprint & Domain: ${dossier.domain || "None"}
-- Business Summary: ${dossier.companyName} (${dossier.businessSummary})
+PRE-COMPUTED LEAD RESEARCH:
+- Prospect: ${dossier.companyName} (${dossier.businessSummary})
+- Role: ${dossier.role}
+- Grounded observation: "${dossier.humanObservation}"
+- Friction: "${dossier.frictionPoke}"
+- Suggested proof asset: "${dossier.customAssetDeliverable}"
+- Suggested CTA: "${dossier.lowFrictionCta}"
 
 SENDER & CAMPAIGN CONTEXT:
-- Sender Name: ${senderName || "Elena"}
-- Baseline Subject Reference: ${fallbackSubject || dossier.suggestedSubject || "quick note"}
-- Campaign Offering & Instructions:
-${customInstruction || "Pitch our solution tailored to their specific operational reality."}
+- Sender Name: ${senderName || "Alex"}
+- Baseline subject: ${fallbackSubject || dossier.suggestedSubject || "quick note"}
+- Campaign instructions:
+${customInstruction || "Write a specific, low-friction first touch for this lead."}
 
-CRITICAL OUTBOUND MATURITY COPYWRITING RULES:
-${dossier.outboundMaturity === "OUTBOUND_NEWBIE" 
-  ? `1. DO NOT assume or accuse ${lead.company || "this company"} of doing cold email or burning domains! They are an inbound/referral-based business.
-2. Pitch TURNKEY CLIENT ACQUISITION SETUP from scratch: landing high-value clients directly without ad spend or technical setup headaches.
-3. Ground the opening observation in their local market/services: "${dossier.humanObservation}".`
-  : dossier.outboundMaturity === "OUTBOUND_TECHNICAL_DEFECT"
-  ? `1. Present a calm, non-pushy heads-up regarding their verified DNS defect (${dossier.verifiedDnsIssue}).
-2. Offer a 40-second screen capture showing the exact DNS record fix.`
-  : `1. Address their active outbound operations: cut Google Workspace / M365 $7 seat costs by 80% and protect root domain reputation.`
-}
+${legacyRules}
 
-STRICT "ANTI-TO-DO" NEGATIVE CONSTRAINTS (VIOLATIONS WILL CAUSE COMPLETE FAILURE):
-1. NO OPENING PLEASANTRIES: NEVER start with "Hope you're well", "Hope this finds you well", "Happy Monday", etc. Start directly with the observation.
-2. NO SELF-INTRODUCTIONS: NEVER write "My name is X and I work at Y" or "I'm the founder of...". The recipient sees your name in the From line.
-3. NO FAKE FLATTERY: NEVER use "Loved your profile", "Congrats on the growth", or "Saw what you're building at {{company}}". It sounds robotic.
-4. NO PITCH-SLAP OR BOASTING: NEVER write "We specialize in...", "We recently rebuilt a peer site...", or quote arbitrary "+42%" metrics. Keep 85%+ focus on the prospect's world.
-5. NO BULLET POINTS OR FEATURE LISTS: Keep paragraphs short (1-2 sentences).
-6. NO CORPORATE JARGON: NEVER use buzzwords like "game-changer", "revolutionary", "cutting-edge", "synergy", "seamlessly streamline", "all-in-one", or "bespoke".
-7. NO TIME ASKS IN TOUCH 1: NEVER ask for "15 minutes next Tuesday", "a quick 20-minute call", or send a Calendly/booking link.
-8. NO DATED PSYCHOLOGY GIMMICKS: NEVER use "Would it be crazy if..." or similar scripted tropes.
-9. NO EXTERNAL LINKS OR ATTACHMENTS: Keep Email 1 link-free to guarantee 99%+ primary inbox placement.
-10. NO COMPLEX SENTENCE STRUCTURE: Use short, punchy 3rd-to-5th grade Anglo-Saxon words. Total body MUST be strictly under 55 words.
+VOICE EXEMPLARS — approved by the user. Match their rhythm, length, and level of directness. Do not copy sentences or facts:
+${styleBlock}
 
-THE 4-BEAT TOP 0.001% COPY ARCHITECTURE:
-- Beat 1: The Observation / Trigger (1 short sentence). An objective observation or diagnostic about their specific asset on mobile (e.g., "${dossier.humanObservation}").
-- Beat 2: The Friction / Poke the Bear (1-2 short sentences). Illuminate an unnoticed cost of inaction or human friction (e.g., "${dossier.frictionPoke}").
-- Beat 3: The Custom Value Asset (1 short sentence). A tangible, zero-friction diagnostic deliverable created specifically for them without naming agency features (e.g., "${dossier.customAssetDeliverable}").
-- Beat 4: The Low-Friction Micro-Permission CTA (1 short sentence, under 7 words). Ask for gentle permission to share the link (e.g., "${dossier.lowFrictionCta}").
+REJECTED PATTERNS — never produce these:
+${negativeBlock}
 
-LENGTH & FORMATTING STANDARDS:
-- Word Count: STRICTLY 35 to 55 words in the email body.
-- Reading Level: 3rd to 5th grade (ultra-simple words, short sentences).
-- Subject Line: STRICTLY 1 to 3 words, lowercase, referencing the specific asset or friction point (e.g., "${dossier.suggestedSubject}"). Never generic like "website speed" or "quick question".
+NON-NEGOTIABLE RULES:
+1. First line is an observation or specific premise. Never open with a greeting, pleasantry, or self-introduction.
+2. No fake familiarity ("Loved your profile", "Congrats on the growth", "Saw what you're building").
+3. No feature lists, bullet points, or stacked adjectives.
+4. No invented metrics, customers, integrations, or case studies. If the crawl did not prove it, do not claim it.
+5. No external links or attachments in a first touch.
+6. No calendar links and no time asks ("15 minutes", "quick call") in a first touch.
+7. No corporate filler: "leverage", "seamlessly", "robust", "cutting-edge", "game-changer", "revolutionize", "unlock", "supercharge", "elevate", "bespoke", "tailored solutions", "in today's fast-paced world".
+8. Use short Anglo-Saxon words. One or two sentences per paragraph.
+9. Subject: 1-4 words, lowercase, specific to the observation. No clickbait, no emoji, no "quick question".
+10. Body: 35-70 words. End with one permission-based question.
+${spintaxRule}
 
-Output strictly a JSON object:
+Return ONLY valid JSON:
 {
-  "subject": "1 to 3 words lowercase asset-specific subject",
-  "bodyText": "Plain-text formatted body under 55 words with single blank line between paragraphs",
-  "bodyHtml": "<p>HTML formatted body</p>",
-  "personalizationReason": "One clear sentence explaining the specific friction and trigger used"
+  "subject": "1-4 words, lowercase",
+  "bodyText": "plain-text body, 35-70 words, blank line between paragraphs",
+  "bodyHtml": "<p>HTML version</p>",
+  "personalizationReason": "one sentence naming the specific observation and friction used"
 }`;
 
   try {
@@ -703,16 +780,56 @@ Output strictly a JSON object:
     }
 
     const parsed = parseJsonFromText(rawJson);
-    const bodyText = String(parsed.bodyText || parsed.body || "").trim();
-    const subject = String(parsed.subject || fallbackSubject || dossier.suggestedSubject || "Quick question").trim();
+    const rawBody = String(parsed.bodyText || parsed.body || "").trim();
+    const rawSubject = String(
+      parsed.subject || fallbackSubject || dossier.suggestedSubject || "quick note"
+    ).trim();
+
+    const bodyText = scrubAiClichés(rawBody);
+    const subject = scrubAiClichés(rawSubject);
     const bodyHtml = String(parsed.bodyHtml || textToHtmlBlocks(bodyText)).trim();
-    const personalizationReason = String(parsed.personalizationReason || `Tailored to ${dossier.outboundMaturity} using lead research`).trim();
+    const personalizationReason = String(
+      parsed.personalizationReason || `Tailored to ${dossier.outboundMaturity} using lead research`
+    ).trim();
 
     return { subject, bodyText, bodyHtml, personalizationReason };
   } catch (err) {
     console.warn("[ai-engine] Generation API failed, falling back to simulated script:", err);
     return simulatePersonalizedScript(optionsWithDossier);
   }
+}
+
+const CLICHÉ_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/^\s*(?:i\s+)?hope (?:this|you)[^.\n]*[.\n]\s*/i, ""],
+  [/^\s*i (?:just )?wanted to reach out[^.\n]*[.\n]\s*/i, ""],
+  [/^\s*just checking in[^.\n]*[.\n]\s*/i, ""],
+  [/\bgame[- ]changer\b/gi, "useful"],
+  [/\brevolutioni[sz]e\b/gi, "change"],
+  [/\bseamless(?:ly)?\b/gi, "without friction"],
+  [/\bleverage\b/gi, "use"],
+  [/\bcutting[- ]edge\b/gi, "modern"],
+  [/\brobust\b/gi, "reliable"],
+  [/\bsupercharge\b/gi, "speed up"],
+  [/\bunlock\b/gi, "get"],
+  [/\belevate\b/gi, "improve"],
+  [/\bbespoke\b/gi, "custom"],
+  [/\btailored solutions\b/gi, "a specific fix"],
+  [/\bin today's fast[- ]paced world\b/gi, ""],
+  [/\btake your business to the next level\b/gi, "improve the workflow"],
+  [/\bi'?ll keep this brief[.,]?\s*/gi, ""],
+];
+
+/** Deterministic safety net: even a good model occasionally slips a cliché. */
+export function scrubAiClichés(input: string): string {
+  let output = input;
+  for (const [pattern, replacement] of CLICHÉ_REPLACEMENTS) {
+    output = output.replace(pattern, replacement);
+  }
+  return output
+    .replace(/[ \t]+/g, " ")
+    .replace(/[ \t]*\n[ \t]*/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 /**

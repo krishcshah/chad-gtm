@@ -16,6 +16,7 @@ import {
   type GenerateOnTheFlyOptions,
   type ImproveCopyOptions,
   type AiEngineOptions,
+  type CampaignResearchContext,
   type LeadResearchDossier,
   type OutboundMaturity,
 } from "@smartreach/email-engine/ai";
@@ -30,6 +31,7 @@ export {
   type GenerateOnTheFlyOptions,
   type ImproveCopyOptions,
   type AiEngineOptions,
+  type CampaignResearchContext,
   type AiModelDefinition,
   type LeadResearchDossier,
   type OutboundMaturity,
@@ -184,12 +186,32 @@ export async function getWorkspaceAiOptions(userId: string): Promise<AiEngineOpt
       } catch {}
     }
 
-    const systemKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || null;
+    const requestedProvider = (setting?.aiProvider || "google").toLowerCase();
+    const systemGeminiKey =
+      process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || null;
+    const systemOpenAiKey = process.env.OPENAI_API_KEY || null;
+
+    const provider: "google" | "openai" =
+      requestedProvider === "openai" ? "openai" : "google";
+    const fallbackKey = provider === "openai" ? systemOpenAiKey : systemGeminiKey;
+    const resolvedKey = apiKey || fallbackKey;
+
+    // If the workspace selected OpenAI but no OpenAI key exists, fall back to
+    // Google rather than silently failing every generation call.
+    if (provider === "openai" && !resolvedKey && systemGeminiKey) {
+      return {
+        apiKey: systemGeminiKey,
+        provider: "google" as const,
+        model: "gemini-3.8-flash",
+      };
+    }
 
     return {
-      apiKey: apiKey || systemKey,
-      provider: "google" as const,
-      model: "gemini-3.8-flash",
+      apiKey: resolvedKey,
+      provider,
+      model:
+        setting?.aiModel ||
+        (provider === "openai" ? "gpt-5-mini" : "gemini-3.8-flash"),
     };
   } catch {
     return {

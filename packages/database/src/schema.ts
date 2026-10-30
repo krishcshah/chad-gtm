@@ -824,10 +824,12 @@ export const chadGtmRuns = pgTable(
         recipientName?: string;
         recipientCompany?: string;
         recipientTitle?: string;
+        recipientIndustry?: string;
         subject: string;
         bodyText: string;
         bodyHtml?: string;
         approved: boolean;
+        rejectedReason?: string;
       }>>()
       .notNull()
       .default([]),

@@ -40,9 +40,15 @@ const REJECTION_TAGS = [
 export function SwipeCardDeck({
   samples,
   onComplete,
+  onRequestMore,
 }: {
   samples: EmailCalibrationSample[];
   onComplete: (approvedSamples: EmailCalibrationSample[]) => void;
+  /** Fetch additional cards conditioned on the swipes so far. */
+  onRequestMore?: (
+    feedback: EmailCalibrationSample[],
+    existingCount: number
+  ) => Promise<EmailCalibrationSample[]>;
 }) {
   const [deck, setDeck] = useState<EmailCalibrationSample[]>(samples);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -51,9 +57,45 @@ export function SwipeCardDeck({
   const [editSubject, setEditSubject] = useState("");
   const [editBody, setEditBody] = useState("");
   const [showRejectMenu, setShowRejectMenu] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [adaptiveNote, setAdaptiveNote] = useState("");
 
+  const MAX_DECK_SIZE = 16;
   const currentCard = deck[currentIndex];
-  const isFinished = currentIndex >= deck.length;
+  const isFinished = currentIndex >= deck.length && !isLoadingMore;
+
+  const maybeExtendDeck = async (
+    updatedDeck: EmailCalibrationSample[],
+    reviewedIndex: number
+  ) => {
+    if (!onRequestMore) return;
+    if (isLoadingMore) return;
+    if (updatedDeck.length >= MAX_DECK_SIZE) return;
+    if (updatedDeck.length - reviewedIndex > 2) return;
+
+    setIsLoadingMore(true);
+    try {
+      const feedback = updatedDeck.slice(0, reviewedIndex + 1);
+      const more = await onRequestMore(feedback, updatedDeck.length);
+      if (more && more.length > 0) {
+        const existingIds = new Set(updatedDeck.map((s) => s.id));
+        const fresh = more.filter((s) => !existingIds.has(s.id));
+        if (fresh.length > 0) {
+          setDeck((prev) => {
+            const prevIds = new Set(prev.map((s) => s.id));
+            return [...prev, ...fresh.filter((s) => !prevIds.has(s.id))];
+          });
+          setAdaptiveNote(
+            `Added ${fresh.length} new sample${fresh.length === 1 ? "" : "s"} conditioned on your feedback.`
+          );
+        }
+      }
+    } catch (err) {
+      console.warn("[swipe-card] adaptive generation failed", err);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   const handleApprove = () => {
     if (!currentCard) return;
@@ -61,8 +103,10 @@ export function SwipeCardDeck({
     updated[currentIndex] = { ...currentCard, approved: true };
     setDeck(updated);
     setApprovedCount((c) => c + 1);
-    setCurrentIndex((i) => i + 1);
+    const nextIndex = currentIndex + 1;
+    setCurrentIndex(nextIndex);
     setShowRejectMenu(false);
+    void maybeExtendDeck(updated, nextIndex);
   };
 
   const handleRejectWithReason = (reason?: string) => {
@@ -70,8 +114,10 @@ export function SwipeCardDeck({
     const updated = [...deck];
     updated[currentIndex] = { ...currentCard, approved: false, rejectedReason: reason };
     setDeck(updated);
-    setCurrentIndex((i) => i + 1);
+    const nextIndex = currentIndex + 1;
+    setCurrentIndex(nextIndex);
     setShowRejectMenu(false);
+    void maybeExtendDeck(updated, nextIndex);
   };
 
   const handleApproveAll = () => {
@@ -98,7 +144,9 @@ export function SwipeCardDeck({
     setEditingSample(null);
     if (currentIndex < deck.length && deck[currentIndex]?.id === editingSample.id) {
       setApprovedCount((c) => c + 1);
-      setCurrentIndex((i) => i + 1);
+      const nextIndex = currentIndex + 1;
+      setCurrentIndex(nextIndex);
+      void maybeExtendDeck(updated, nextIndex);
     }
   };
 
@@ -153,6 +201,28 @@ export function SwipeCardDeck({
           style={{ width: `${(Math.min(currentIndex, deck.length) / deck.length) * 100}%` }}
         />
       </div>
+
+      {adaptiveNote && (
+        <div className="flex items-center gap-2 border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 text-[11px] text-emerald-300">
+          <Sparkles className="size-3 shrink-0" />
+          {adaptiveNote}
+        </div>
+      )}
+
+      {/* Adaptive fetch while the deck is temporarily exhausted */}
+      {isLoadingMore && !currentCard ? (
+        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-8 text-center space-y-3">
+          <div className="mx-auto flex size-10 items-center justify-center border border-emerald-500/40 bg-emerald-500/10 text-emerald-400">
+            <Sparkles className="size-5 animate-pulse" />
+          </div>
+          <h3 className="text-sm font-semibold text-white">
+            Calibrating your next samples...
+          </h3>
+          <p className="mx-auto max-w-sm text-xs text-zinc-400">
+            Applying your approvals and rejection reasons to the next batch of prospects.
+          </p>
+        </div>
+      ) : null}
 
       {/* Main Tinder Card or Completion Screen */}
       {!isFinished && currentCard ? (
@@ -275,7 +345,7 @@ export function SwipeCardDeck({
             </div>
           </div>
         </div>
-      ) : (
+      ) : !isLoadingMore ? (
         /* Finished Calibration Screen */
         <div className="rounded-none border border-zinc-800 bg-zinc-950 p-8 text-center space-y-4 shadow-xl">
           <div className="mx-auto flex size-12 items-center justify-center border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 rounded-none">
@@ -315,7 +385,7 @@ export function SwipeCardDeck({
             </Button>
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* Inline Quick-Edit Modal */}
       {editingSample && (

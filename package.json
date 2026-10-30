@@ -16,6 +16,8 @@
     "db:generate": "npm run db:generate --workspace @smartreach/web",
     "db:migrate": "npm run db:migrate --workspace @smartreach/web",
     "db:seed": "npm run db:seed --workspace @smartreach/web",
+    "leads:ingest": "node scripts/ingest-leads.mjs",
+    "leads:index": "node scripts/build-leads-indexes.mjs",
     "engine": "npm run start --workspace @smartreach/email-engine",
     "lint": "npm run typecheck"
   },

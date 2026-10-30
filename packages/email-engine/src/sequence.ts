@@ -11,7 +11,7 @@ import {
 import { addCalendarDays } from "@smartreach/shared";
 import { and, asc, eq, isNull, lte, or, sql } from "drizzle-orm";
 import type { EngineDb } from "./db-port";
-import { generateEmailScriptOnTheFly, type LeadProfile } from "./ai";
+import { generateEmailScriptOnTheFly, type CampaignResearchContext, type LeadProfile } from "./ai";
 
 export type SequenceStepRow = {
   id: string;
@@ -102,6 +102,63 @@ export function renderWithVarsAndSpintax(
 }
 
 /**
+ * `aiPrompt` is either a structured JSON envelope (new campaigns) or a legacy
+ * plain-text instruction. Parsing it here keeps context and approved voice
+ * exemplars intact all the way to the send-time generator.
+ */
+export interface ParsedAiPromptPayload {
+  instruction: string;
+  campaignContext?: CampaignResearchContext;
+  styleExamples?: Array<{ subject: string; bodyText: string; recipientTitle?: string }>;
+  negativeConstraints?: string[];
+  requireSpintax?: boolean;
+}
+
+export function parseAiPromptPayload(raw: string): ParsedAiPromptPayload {
+  const text = (raw || "").trim();
+  if (!text) return { instruction: "" };
+
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === "object" && typeof parsed.instruction === "string") {
+      return {
+        instruction: parsed.instruction,
+        campaignContext: parsed.context,
+        styleExamples: Array.isArray(parsed.styleExamples) ? parsed.styleExamples : undefined,
+        negativeConstraints: Array.isArray(parsed.negativeConstraints)
+          ? parsed.negativeConstraints
+          : undefined,
+        requireSpintax: Boolean(parsed.requireSpintax),
+      };
+    }
+  } catch {
+    // Legacy plain-text prompt — fall through to inference.
+  }
+
+  const isInfrastructure = /(inbox|mailbox|deliverab|dns|domain|warmup|secondary email)/i.test(
+    text
+  );
+  const company = text.match(/(?:Product\/Company|Company):\s*([^.\n]+)/i)?.[1]?.trim();
+  const valueProposition = text.match(
+    /(?:Core Value Offer|Value Offer|Value Proposition):\s*([^.\n]+)/i
+  )?.[1]?.trim();
+  const cta = text.match(/(?:Call to Action|CTA):\s*([^.\n]+)/i)?.[1]?.trim();
+
+  return {
+    instruction: text,
+    campaignContext: company
+      ? {
+          companyName: company,
+          valueProposition,
+          cta,
+          isOutboundInfrastructure: isInfrastructure,
+        }
+      : undefined,
+    requireSpintax: /spintax|\{Hi\|/i.test(text),
+  };
+}
+
+/**
  * Resolve content for a campaign_lead at its current stepPosition.
  * Prefers sequence step+variant when steps exist; else falls back to template.
  */
@@ -150,9 +207,15 @@ export async function resolveStepContent(
           customFields: lead?.customFields || null,
         };
 
+        const payload = parseAiPromptPayload(picked.aiPrompt);
+
         const generated = await generateEmailScriptOnTheFly({
           lead: leadProfile,
-          customInstruction: picked.aiPrompt,
+          customInstruction: payload.instruction,
+          campaignContext: payload.campaignContext,
+          styleExamples: payload.styleExamples,
+          negativeConstraints: payload.negativeConstraints,
+          requireSpintax: payload.requireSpintax,
           senderName,
           fallbackSubject: finalSubject,
           fallbackBody: finalBodyText,

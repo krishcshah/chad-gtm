@@ -21,7 +21,7 @@ export function VelocitySlider({
   return (
     <div className="mx-auto max-w-xl space-y-6 font-sans">
       <div className="text-center space-y-2.5">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700/80 bg-zinc-900/80 px-3 py-1 text-xs font-medium text-zinc-300">
+        <span className="inline-flex items-center gap-1.5 rounded-none border border-zinc-700/80 bg-zinc-900/80 px-3 py-1 text-xs font-medium text-zinc-300">
           Stage 05 // Velocity
         </span>
         <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
@@ -32,14 +32,14 @@ export function VelocitySlider({
         </p>
       </div>
 
-      <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-6 sm:p-7 space-y-6 card-shine shadow-xl">
+      <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-6 sm:p-7 space-y-6 card-shine shadow-xl">
         {/* Slider Controls */}
         <div className="space-y-3.5">
           <div className="flex items-center justify-between text-xs">
             <span className="text-zinc-400 flex items-center gap-1.5 text-xs font-medium">
               <Gauge className="size-4 text-zinc-300" /> Sending Velocity
             </span>
-            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
+            <span className="rounded-none border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
               {dailyLimit} emails / day
             </span>
           </div>
@@ -51,7 +51,7 @@ export function VelocitySlider({
             step={10}
             value={dailyLimit}
             onChange={(e) => setDailyLimit(Number(e.target.value))}
-            className="w-full accent-white h-2 bg-zinc-800 rounded-full cursor-pointer"
+            className="w-full accent-white h-2 bg-zinc-800 rounded-none cursor-pointer"
           />
 
           <div className="flex items-center justify-between text-[11px] text-zinc-500 font-medium">
@@ -63,7 +63,7 @@ export function VelocitySlider({
 
         {/* Real-Time Impact Metric Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-          <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-4 space-y-1">
+          <div className="rounded-none border border-zinc-800/80 bg-zinc-900/40 p-4 space-y-1">
             <span className="text-xs font-medium text-zinc-400 flex items-center gap-1.5">
               <Calendar className="size-3.5 text-zinc-400" /> Weekly Volume
             </span>
@@ -73,7 +73,7 @@ export function VelocitySlider({
             <p className="text-[11px] text-zinc-500">Prospects contacted weekly</p>
           </div>
 
-          <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-4 space-y-1">
+          <div className="rounded-none border border-zinc-800/80 bg-zinc-900/40 p-4 space-y-1">
             <span className="text-xs font-medium text-zinc-400 flex items-center gap-1.5">
               <Mail className="size-3.5 text-zinc-400" /> Required Mailboxes
             </span>
@@ -85,7 +85,7 @@ export function VelocitySlider({
         </div>
 
         {/* Deliverability Guarantee Note */}
-        <div className="rounded-lg bg-zinc-900/40 border border-zinc-800/80 p-4 flex items-start gap-3 text-xs text-zinc-300">
+        <div className="rounded-none bg-zinc-900/40 border border-zinc-800/80 p-4 flex items-start gap-3 text-xs text-zinc-300">
           <ShieldCheck className="size-4 text-emerald-400 shrink-0 mt-0.5" />
           <div className="space-y-0.5">
             <span className="font-semibold text-white text-xs">Deliverability Guardrail:</span>
@@ -100,7 +100,7 @@ export function VelocitySlider({
           type="button"
           disabled={isLaunching}
           onClick={() => onLaunch(dailyLimit)}
-          className="w-full h-11 text-xs font-semibold tracking-tight bg-white hover:bg-zinc-200 text-black rounded-lg shadow-sm transition-all active:scale-[0.98] cursor-pointer"
+          className="w-full h-11 text-xs font-semibold tracking-tight bg-white hover:bg-zinc-200 text-black rounded-none shadow-sm transition-all active:scale-[0.98] cursor-pointer"
         >
           {isLaunching ? (
             <>

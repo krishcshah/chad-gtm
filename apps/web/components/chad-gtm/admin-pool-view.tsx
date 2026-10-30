@@ -115,9 +115,9 @@ export function AdminMailboxPoolView({
   return (
     <div className="space-y-6 font-sans">
       {/* Recommendation Banner */}
-      <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 flex flex-wrap items-center justify-between gap-4 card-shine shadow-xs">
+      <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-5 flex flex-wrap items-center justify-between gap-4 card-shine shadow-xs">
         <div className="flex items-start gap-3.5">
-          <div className="size-9 rounded-xl border border-zinc-700/80 bg-zinc-900 flex items-center justify-center text-white shrink-0 mt-0.5 shadow-xs">
+          <div className="size-9 rounded-none border border-zinc-700/80 bg-zinc-900 flex items-center justify-center text-white shrink-0 mt-0.5 shadow-xs">
             <Layers className="size-4 text-emerald-400" />
           </div>
           <div>
@@ -125,7 +125,7 @@ export function AdminMailboxPoolView({
               <h3 className="text-xs font-bold uppercase tracking-wider text-white">
                 Capacity Engine Telemetry
               </h3>
-              <span className="rounded-full border border-zinc-700/80 bg-zinc-900/80 px-2.5 py-0.5 text-[10px] font-semibold text-zinc-300">
+              <span className="rounded-none border border-zinc-700/80 bg-zinc-900/80 px-2.5 py-0.5 text-[10px] font-semibold text-zinc-300">
                 Active: {stats.activeMailboxes} / {stats.recommendedTotalMailboxes}
               </span>
             </div>
@@ -141,7 +141,7 @@ export function AdminMailboxPoolView({
           type="button"
           onClick={() => setShowUploader(!showUploader)}
           size="sm"
-          className="rounded-lg bg-white text-black font-semibold text-xs hover:bg-zinc-200 h-9 px-4 shadow-xs transition-all active:scale-[0.98]"
+          className="rounded-none bg-white text-black font-semibold text-xs hover:bg-zinc-200 h-9 px-4 shadow-xs transition-all active:scale-[0.98]"
         >
           <Upload className="size-3.5 mr-1.5" /> Bulk Import Mailboxes
         </Button>
@@ -149,7 +149,7 @@ export function AdminMailboxPoolView({
 
       {/* CSV Uploader Drawer */}
       {showUploader && (
-        <div className="rounded-xl border border-dashed border-zinc-700/80 bg-zinc-950/90 p-6 text-center space-y-3.5 card-shine shadow-md">
+        <div className="rounded-none border border-dashed border-zinc-700/80 bg-zinc-950/90 p-6 text-center space-y-3.5 card-shine shadow-md">
           <FileSpreadsheet className="mx-auto size-8 text-zinc-300" />
           <div>
             <h4 className="text-sm font-semibold text-white tracking-tight">
@@ -172,7 +172,7 @@ export function AdminMailboxPoolView({
               type="button"
               disabled={uploading}
               onClick={() => fileInputRef.current?.click()}
-              className="rounded-lg bg-white text-black text-xs font-semibold hover:bg-zinc-200 transition-all active:scale-[0.98]"
+              className="rounded-none bg-white text-black text-xs font-semibold hover:bg-zinc-200 transition-all active:scale-[0.98]"
             >
               {uploading ? (
                 <>
@@ -187,7 +187,7 @@ export function AdminMailboxPoolView({
             <a
               href="/example_senders.csv"
               download="example_senders.csv"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700/80 bg-zinc-900/60 px-3 py-2 text-xs font-medium text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-none border border-zinc-700/80 bg-zinc-900/60 px-3 py-2 text-xs font-medium text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors"
             >
               <Download className="size-3.5" /> Download Example CSV
             </a>
@@ -196,7 +196,7 @@ export function AdminMailboxPoolView({
               variant="outline"
               size="sm"
               onClick={() => setShowUploader(false)}
-              className="rounded-lg text-xs border-zinc-800 hover:border-zinc-700"
+              className="rounded-none text-xs border-zinc-800 hover:border-zinc-700"
             >
               Cancel
             </Button>
@@ -207,7 +207,7 @@ export function AdminMailboxPoolView({
       {/* Live Pool Status KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* Total Mailboxes */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-1.5 card-shine shadow-xs">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-1.5 card-shine shadow-xs">
           <span className="text-xs font-medium text-zinc-400 flex items-center gap-1.5">
             <Mail className="size-3.5 text-zinc-300" /> System Mailboxes
           </span>
@@ -220,7 +220,7 @@ export function AdminMailboxPoolView({
         </div>
 
         {/* Dynamic Capacity Utilization Gauge */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-1.5 card-shine shadow-xs">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-1.5 card-shine shadow-xs">
           <span className="text-xs font-medium text-zinc-400 flex items-center gap-1.5">
             <HeartPulse className="size-3.5 text-zinc-300" /> Fleet Utilization
           </span>
@@ -231,7 +231,7 @@ export function AdminMailboxPoolView({
           </div>
           <div className="pt-0.5">
             <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-semibold border ${
+              className={`inline-flex items-center gap-1.5 rounded-none px-2.5 py-0.5 text-[10px] font-semibold border ${
                 stats.utilizationStatus === "green"
                   ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
                   : stats.utilizationStatus === "yellow"
@@ -240,7 +240,7 @@ export function AdminMailboxPoolView({
               }`}
             >
               <span
-                className={`size-1.5 rounded-full ${
+                className={`size-1.5 rounded-none ${
                   stats.utilizationStatus === "green"
                     ? "bg-emerald-400"
                     : stats.utilizationStatus === "yellow"
@@ -258,7 +258,7 @@ export function AdminMailboxPoolView({
         </div>
 
         {/* Today's Emails Sent */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-1.5 card-shine shadow-xs">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-1.5 card-shine shadow-xs">
           <span className="text-xs font-medium text-zinc-400 flex items-center gap-1.5">
             <Mail className="size-3.5 text-zinc-300" /> Dispatched Today
           </span>
@@ -269,7 +269,7 @@ export function AdminMailboxPoolView({
         </div>
 
         {/* Active Demand */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-1.5 card-shine shadow-xs">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-1.5 card-shine shadow-xs">
           <span className="text-xs font-medium text-zinc-400 flex items-center gap-1.5">
             <ShieldCheck className="size-3.5 text-zinc-300" /> Target Sending Pace
           </span>
@@ -281,7 +281,7 @@ export function AdminMailboxPoolView({
       </div>
 
       {/* Mailbox Fleet Table */}
-      <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 overflow-hidden shadow-xs card-shine">
+      <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 overflow-hidden shadow-xs card-shine">
         <div className="flex items-center justify-between border-b border-zinc-800/80 px-4 py-3 bg-zinc-950">
           <div className="flex items-center gap-2">
             <Mail className="size-4 text-zinc-300" />
@@ -312,7 +312,7 @@ export function AdminMailboxPoolView({
                     <td className="px-4 py-3 font-medium text-white">{m.senderName}</td>
                     <td className="px-4 py-3 text-zinc-400 font-mono text-xs">{m.email}</td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                      <span className={`inline-flex items-center rounded-none px-2 py-0.5 text-[10px] font-semibold border ${
                         m.health >= 90
                           ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
                           : m.health >= 70
@@ -328,7 +328,7 @@ export function AdminMailboxPoolView({
                     <td className="px-4 py-3 text-zinc-500">{m.dailyLimit}</td>
                     <td className="px-4 py-3">
                       <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold border ${
+                        className={`inline-flex items-center rounded-none px-2.5 py-0.5 text-[10px] font-semibold border ${
                           m.status === "active"
                             ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
                             : "border-zinc-800 bg-zinc-900 text-zinc-400"
@@ -341,7 +341,7 @@ export function AdminMailboxPoolView({
                       <button
                         type="button"
                         onClick={() => handleToggle(m.id, m.status)}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900/60 px-2.5 py-1 text-xs font-medium text-zinc-300 hover:text-white hover:border-zinc-700 transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1.5 rounded-none border border-zinc-800 bg-zinc-900/60 px-2.5 py-1 text-xs font-medium text-zinc-300 hover:text-white hover:border-zinc-700 transition-colors cursor-pointer"
                       >
                         {m.status === "active" ? (
                           <>

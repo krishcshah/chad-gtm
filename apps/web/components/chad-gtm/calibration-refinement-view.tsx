@@ -65,7 +65,7 @@ export function CalibrationRefinementView({
     return (
       <div className="mx-auto max-w-2xl py-12 px-4 space-y-6 font-sans text-center">
         {/* Top Tag */}
-        <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/60 px-3.5 py-1 text-xs font-medium text-zinc-300">
+        <div className="inline-flex items-center gap-2 rounded-none border border-zinc-800 bg-zinc-900/60 px-3.5 py-1 text-xs font-medium text-zinc-300">
           <Cpu className="size-3.5 text-emerald-400 animate-pulse" />
           Calibration Engine // Refinement Pipeline
         </div>
@@ -81,10 +81,10 @@ export function CalibrationRefinementView({
         </div>
 
         {/* Live Telemetry Progress Card */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-6 space-y-4 text-left card-shine shadow-xl">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-6 space-y-4 text-left card-shine shadow-xl">
           <div className="flex items-center justify-between text-xs text-zinc-400 border-b border-zinc-800/80 pb-3 font-medium">
             <div className="flex items-center gap-2">
-              <span className="size-2 bg-emerald-400 rounded-full animate-pulse" />
+              <span className="size-2 bg-emerald-400 rounded-none animate-pulse" />
               <span>Synthesizing Preference Matrix</span>
             </div>
             <span className="text-zinc-500">Stage 04B // Voice Lock</span>
@@ -92,7 +92,7 @@ export function CalibrationRefinementView({
 
           {/* Current Operation Ticker */}
           <div className="flex items-start gap-3 py-2">
-            <div className="size-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white shrink-0 mt-0.5">
+            <div className="size-8 rounded-none bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white shrink-0 mt-0.5">
               <Terminal className="size-4 text-zinc-300" />
             </div>
             <div className="space-y-1">
@@ -107,9 +107,9 @@ export function CalibrationRefinementView({
 
           {/* Progress Bar */}
           <div className="space-y-2 pt-2">
-            <div className="h-2 w-full bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
+            <div className="h-2 w-full bg-zinc-900 rounded-none overflow-hidden border border-zinc-800">
               <div
-                className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                className="h-full bg-emerald-500 rounded-none transition-all duration-300"
                 style={{
                   width: `${((tickerIndex + 1) / REFINEMENT_TICKER_MESSAGES.length) * 100}%`,
                 }}
@@ -139,8 +139,8 @@ export function CalibrationRefinementView({
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-xs text-emerald-400 font-semibold flex items-center gap-1.5">
-              <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="rounded-none border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-xs text-emerald-400 font-semibold flex items-center gap-1.5">
+              <span className="size-1.5 rounded-none bg-emerald-400 animate-pulse" />
               Voice Calibrated // Preferences Locked
             </span>
             <span className="text-xs text-zinc-500">
@@ -185,7 +185,7 @@ export function CalibrationRefinementView({
               <span className="text-xs font-semibold text-zinc-400 flex items-center gap-1.5">
                 <Sliders className="size-3.5 text-zinc-300" /> Calibrated Voice
               </span>
-              <span className="text-[10px] font-semibold text-emerald-400 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5">
+              <span className="text-[10px] font-semibold text-emerald-400 rounded-none border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5">
                 Active
               </span>
             </div>
@@ -205,7 +205,7 @@ export function CalibrationRefinementView({
           </div>
 
           {/* Key Adjustments Made */}
-          <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-3 card-shine shadow-xs">
+          <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-3 card-shine shadow-xs">
             <span className="text-xs font-semibold text-zinc-300 block border-b border-zinc-800/60 pb-2">
               Key Adjustments Applied
             </span>
@@ -226,7 +226,7 @@ export function CalibrationRefinementView({
           {/* Rules: Do's & Don'ts */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             {/* Do's */}
-            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4 space-y-2">
+            <div className="rounded-none border border-emerald-500/20 bg-emerald-500/[0.04] p-4 space-y-2">
               <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
                 <Check className="size-3.5" /> Reinforced
               </span>
@@ -245,7 +245,7 @@ export function CalibrationRefinementView({
             </div>
 
             {/* Don'ts */}
-            <div className="rounded-xl border border-rose-500/20 bg-rose-500/[0.04] p-4 space-y-2">
+            <div className="rounded-none border border-rose-500/20 bg-rose-500/[0.04] p-4 space-y-2">
               <span className="text-xs font-semibold text-rose-400 flex items-center gap-1.5">
                 <X className="size-3.5" /> Eliminated
               </span>
@@ -266,7 +266,7 @@ export function CalibrationRefinementView({
         </div>
 
         {/* Right Column: Interactive Calibrated Copy Preview (7 cols) */}
-        <div className="lg:col-span-7 rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-6 space-y-4 card-shine shadow-xl">
+        <div className="lg:col-span-7 rounded-none border border-zinc-800/80 bg-zinc-950/90 p-6 space-y-4 card-shine shadow-xl">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 pb-3">
             <div className="flex items-center gap-2">
               <Mail className="size-4 text-zinc-300" />
@@ -276,11 +276,11 @@ export function CalibrationRefinementView({
             </div>
 
             {/* Preview View Selector */}
-            <div className="flex items-center gap-1.5 text-xs bg-zinc-900/60 p-1 rounded-lg border border-zinc-800/80">
+            <div className="flex items-center gap-1.5 text-xs bg-zinc-900/60 p-1 rounded-none border border-zinc-800/80">
               <button
                 type="button"
                 onClick={() => setSelectedPreviewTab(0)}
-                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                className={`px-2.5 py-1 rounded-none text-xs font-medium transition-all ${
                   selectedPreviewTab === 0
                     ? "bg-zinc-800 text-white shadow-xs"
                     : "text-zinc-400 hover:text-white"
@@ -293,7 +293,7 @@ export function CalibrationRefinementView({
                   key={idx}
                   type="button"
                   onClick={() => setSelectedPreviewTab(idx + 1)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                  className={`px-2.5 py-1 rounded-none text-xs font-medium transition-all ${
                     selectedPreviewTab === idx + 1
                       ? "bg-zinc-800 text-white shadow-xs"
                       : "text-zinc-400 hover:text-white"
@@ -321,7 +321,7 @@ export function CalibrationRefinementView({
           )}
 
           {/* Subject Line Box */}
-          <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-4 space-y-1">
+          <div className="rounded-none border border-zinc-800/80 bg-zinc-900/40 p-4 space-y-1">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 block">
               Calibrated Subject Line
             </span>
@@ -333,7 +333,7 @@ export function CalibrationRefinementView({
           </div>
 
           {/* Body Box */}
-          <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-4 space-y-2 min-h-[180px]">
+          <div className="rounded-none border border-zinc-800/80 bg-zinc-900/40 p-4 space-y-2 min-h-[180px]">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 block">
               Personalized Email Body
             </span>
@@ -346,7 +346,7 @@ export function CalibrationRefinementView({
           </div>
 
           {/* Dynamic AI Dispatch Notice */}
-          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-3.5 text-xs text-zinc-300 space-y-1">
+          <div className="rounded-none border border-emerald-500/20 bg-emerald-500/[0.04] p-3.5 text-xs text-zinc-300 space-y-1">
             <div className="flex items-center gap-1.5 text-white font-semibold">
               <Sparkles className="size-3.5 text-emerald-400" />
               Dynamic On-the-Fly Personalization Active

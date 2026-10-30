@@ -14,10 +14,16 @@ import {
   schema,
 } from "@smartreach/database";
 import { addSeconds, nowIso, randomBetween } from "@smartreach/shared";
-import { and, asc, desc, eq, inArray, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import type { EngineDb, JobRow, SenderRow } from "./db-port";
 import { makeTransport } from "./mailer";
-import { noteHourlySend, recordSend } from "./rotation";
+import {
+  noteHourlySend,
+  recordSend,
+  releaseSendSlot,
+  reserveSendSlot,
+  HARD_MAX_PER_SENDER_PER_DAY,
+} from "./rotation";
 import { isEngineDryRun, workerOwnsJob } from "./queue-mode";
 import { advanceSequenceAfterSend, loadCampaignSequenceSteps } from "./sequence";
 
@@ -176,9 +182,12 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
     return "skipped";
   }
 
+  let reserved = false;
+
   try {
-    // Send bodies as enqueued — no auto postal/unsub footer or List-Unsubscribe header.
-    // {{unsubscribe_url}} is resolved at schedule time when the template includes it.
+    // Send bodies as enqueued. RFC 8058 List-Unsubscribe headers are added
+    // below; {{unsubscribe_url}} is resolved at schedule time when the
+    // template includes it.
     const textBody = job.bodyText || "";
     const rawHtml = job.bodyHtml || job.bodyText || "";
     const htmlBody = injectEmailTracking(rawHtml, job.id, trackingAppUrl, {
@@ -220,8 +229,38 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
       return "sent";
     }
 
-    const transporter = makeTransport(sender);
+    // Atomic capacity reservation immediately before the network call. The
+    // scheduler checks this too, but jobs can sit in the queue for hours; the
+    // conditional upsert makes the cap safe even with overlapping workers.
+    const senderCap = Math.min(
+      sender.dailyLimit ?? HARD_MAX_PER_SENDER_PER_DAY,
+      campaign.maxEmailsPerSenderPerDay ?? HARD_MAX_PER_SENDER_PER_DAY,
+      HARD_MAX_PER_SENDER_PER_DAY,
+    );
+    const reservation = await reserveSendSlot(db, {
+      userId: campaign.userId,
+      senderId: sender.id,
+      campaignId: campaign.id,
+      senderCap,
+      campaignCap: Math.max(1, campaign.dailyLimit),
+    });
+    if (!reservation.ok) {
+      const retryAt = addSeconds(new Date(), 3600).toISOString();
+      await db
+        .update(schema.emailJobs)
+        .set({
+          status: "pending",
+          scheduledFor: retryAt,
+          processingAt: null,
+          updatedAt: nowS,
+        })
+        .where(eq(schema.emailJobs.id, job.id));
+      return "skipped";
+    }
+    reserved = true;
+
     const from = sender.fromName ? `"${sender.fromName.replace(/"/g, "")}" <${sender.email}>` : sender.email;
+    const transporter = makeTransport(sender);
     let info;
     try {
       const unsubToken = createUnsubscribeToken(campaign.userId, job.toEmail);
@@ -229,6 +268,7 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
       const unsubHeaders = listUnsubscribeHeaders(unsubApiUrl);
 
       let inReplyTo: string | undefined;
+      let references: string | undefined;
       if (job.stepPosition && job.stepPosition > 1) {
         const prior = await db
           .select({ messageId: schema.emailJobs.messageId })
@@ -239,10 +279,13 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
               eq(schema.emailJobs.status, "sent"),
             )
           )
-          .orderBy(desc(schema.emailJobs.sentAt))
-          .limit(1);
-        if (prior[0]?.messageId) {
-          inReplyTo = prior[0].messageId;
+          .orderBy(asc(schema.emailJobs.sentAt));
+        const ids = prior
+          .map((p: { messageId: string | null }) => p.messageId)
+          .filter((id: string | null): id is string => Boolean(id));
+        if (ids.length > 0) {
+          inReplyTo = ids[ids.length - 1];
+          references = ids.join(" ");
         }
       }
 
@@ -259,7 +302,7 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
       };
       if (inReplyTo) {
         mailOptions.inReplyTo = inReplyTo;
-        mailOptions.references = inReplyTo;
+        mailOptions.references = references || inReplyTo;
       }
 
       info = await transporter.sendMail(mailOptions);
@@ -291,11 +334,22 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
       .update(schema.leads)
       .set({ status: "contacted", updatedAt: nowS })
       .where(eq(schema.leads.id, job.leadId));
-    await recordSend(db, { userId: campaign.userId, entityType: "sender", entityId: sender.id });
-    await recordSend(db, { userId: campaign.userId, entityType: "campaign", entityId: campaign.id });
+    // The atomic reservation already recorded this send for both sender and
+    // campaign; do not increment the counters a second time.
     noteHourlySend(sender.id);
     return "sent";
   } catch (err: any) {
+    if (reserved) {
+      try {
+        await releaseSendSlot(db, {
+          userId: campaign.userId,
+          senderId: sender.id,
+          campaignId: campaign.id,
+        });
+      } catch (releaseErr) {
+        console.error("[processor] failed to release send reservation:", releaseErr);
+      }
+    }
     const attempts = job.attempts + 1;
     const message: string = err?.response || err?.message || "Send failed";
     const code: number | undefined = err?.responseCode;

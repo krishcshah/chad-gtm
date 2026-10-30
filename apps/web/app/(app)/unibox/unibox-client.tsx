@@ -126,15 +126,15 @@ function ThreadBubble({ m }: { m: UniboxThreadMessage }) {
   const bubble = rich
     ? ""
     : right
-      ? "rounded-xl rounded-tr-xs bg-zinc-800/90 border border-zinc-700/80 px-4 py-3 text-zinc-100 shadow-sm"
+      ? "rounded-none bg-zinc-800/90 border border-zinc-700/80 px-4 py-3 text-zinc-100 shadow-sm"
       : m.direction === "campaign" || m.fromRole === "automation"
-        ? "rounded-xl rounded-tl-xs border border-zinc-800/80 bg-zinc-900/70 px-4 py-3 text-foreground shadow-sm"
-        : "rounded-xl rounded-tl-xs border border-zinc-800/80 bg-zinc-950/90 px-4 py-3 text-foreground shadow-sm";
+        ? "rounded-none border border-zinc-800/80 bg-zinc-900/70 px-4 py-3 text-foreground shadow-sm"
+        : "rounded-none border border-zinc-800/80 bg-zinc-950/90 px-4 py-3 text-foreground shadow-sm";
 
   return (
     <div className={`flex w-full items-end gap-2.5 ${right ? "justify-end" : "justify-start"}`}>
       {!right ? (
-        <span className="mb-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-zinc-800 border border-zinc-700/80 text-[11px] font-semibold text-zinc-300 shadow-xs" aria-hidden>
+        <span className="mb-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-none bg-zinc-800 border border-zinc-700/80 text-[11px] font-semibold text-zinc-300 shadow-xs" aria-hidden>
           {initial}
         </span>
       ) : null}
@@ -142,7 +142,7 @@ function ThreadBubble({ m }: { m: UniboxThreadMessage }) {
         <p className={`flex items-baseline gap-2 text-[11px] text-muted-foreground ${right ? "flex-row-reverse" : ""}`}>
           <span className="truncate font-medium text-foreground">{senderLabel(m)}</span>
           {hint && hint !== senderLabel(m) ? (
-            <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400 font-medium">{hint}</span>
+            <span className="rounded-none bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400 font-medium">{hint}</span>
           ) : null}
           {time ? <time dateTime={m.sentAt} className="text-zinc-500">{time}</time> : null}
         </p>
@@ -166,7 +166,7 @@ function ThreadTranscript({ messages }: { messages: UniboxThreadMessage[] }) {
         nodes.push(
           <div key={`day-${key}`} className="flex items-center gap-3 py-1">
             <div className="h-px flex-1 bg-border" />
-            <span className="shrink-0 rounded-full border border-border bg-background px-2.5 py-0.5 text-[11px] font-medium text-foreground/80">
+            <span className="shrink-0 rounded-none border border-border bg-background px-2.5 py-0.5 text-[11px] font-medium text-foreground/80">
               {label}
             </span>
             <div className="h-px flex-1 bg-border" />
@@ -359,17 +359,17 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
     <div className="unibox-root flex h-[calc(100dvh-6.5rem)] min-h-[580px] max-h-[920px] flex-col gap-3.5 w-full max-w-none overflow-hidden flex-1">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between shrink-0">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-xs">
+          <div className="flex h-9 w-9 items-center justify-center rounded-none bg-primary/10 text-primary shadow-xs">
             <Inbox className="size-5" aria-hidden />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold tracking-tight">UniBox</h1>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-500">
-                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="inline-flex items-center gap-1.5 rounded-none bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-500">
+                <span className="size-1.5 rounded-none bg-emerald-500 animate-pulse" />
                 Live Sync
               </span>
-              <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
+              <span className="inline-flex items-center rounded-none border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
                 {unread} unread
               </span>
             </div>
@@ -447,11 +447,11 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
                   } ${isUnread ? "bg-white/[0.02]" : ""}`}
                 >
                   <div className="relative mt-0.5 shrink-0">
-                    <span className="flex size-8 items-center justify-center rounded-full bg-zinc-800 border border-zinc-700/80 text-[11px] font-semibold text-zinc-200">
+                    <span className="flex size-8 items-center justify-center rounded-none bg-zinc-800 border border-zinc-700/80 text-[11px] font-semibold text-zinc-200">
                       {initial}
                     </span>
                     {isUnread && (
-                      <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-emerald-500 ring-2 ring-zinc-950" />
+                      <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-none bg-emerald-500 ring-2 ring-zinc-950" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -471,7 +471,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
                     </p>
                     {c.tag ? (
                       <div className="mt-1.5 flex items-center gap-1.5">
-                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-medium ${getTagBadgeClass(c.tag)}`}>
+                        <span className={`inline-flex items-center rounded-none border px-2 py-0.5 text-[9px] font-medium ${getTagBadgeClass(c.tag)}`}>
                           {tagLabel(c.tag)}
                         </span>
                       </div>
@@ -562,7 +562,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
                             setComposerCollapsed(false);
                           }
                         }}
-                        className="group flex items-center justify-between rounded-xl border border-zinc-800/80 bg-zinc-950/60 px-4 py-3 shadow-xs cursor-pointer hover:bg-zinc-900/40 hover:border-zinc-700 transition-all card-shine"
+                        className="group flex items-center justify-between rounded-none border border-zinc-800/80 bg-zinc-950/60 px-4 py-3 shadow-xs cursor-pointer hover:bg-zinc-900/40 hover:border-zinc-700 transition-all card-shine"
                       >
                         <div className="flex items-center gap-2.5 text-xs text-muted-foreground truncate">
                           <SendHorizonal className="size-3.5 shrink-0 text-muted-foreground group-hover:text-primary transition-colors" />

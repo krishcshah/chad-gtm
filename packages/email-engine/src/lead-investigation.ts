@@ -16,7 +16,25 @@ export type RecommendedAngle =
   | "TURNKEY_OUTBOUND_LAUNCH"
   | "SECONDARY_SEAT_COST_SLASH"
   | "TECHNICAL_DNS_REMEDIATION"
-  | "LOCAL_SERVICE_FRICTION";
+  | "LOCAL_SERVICE_FRICTION"
+  | "CAMPAIGN_VALUE_ANGLE";
+
+/**
+ * Context for user-defined campaigns. When provided, lead research must serve
+ * the user's offer — not AutoGTM's own inbox-infrastructure pitch.
+ */
+export interface CampaignResearchContext {
+  companyName: string;
+  companySummary?: string;
+  valueProposition?: string;
+  angle?: string;
+  cta?: string;
+  painPoints?: string[];
+  offerTitle?: string;
+  targetTitles?: string[];
+  /** Only true for AutoGTM's own outbound-infrastructure offer. */
+  isOutboundInfrastructure?: boolean;
+}
 
 export interface LeadResearchDossier {
   companyName: string;
@@ -176,10 +194,15 @@ function inferBusinessProfile(lead: LeadProfile): { category: string; summary: s
 
 /**
  * Pre-computes complete lead research dossier and determines outbound maturity.
+ *
+ * Legacy behavior (no context): AutoGTM's own inbox-infrastructure pitch.
+ * New behavior (context supplied): generic, role-aware research for the user's
+ * actual offer. This prevents every customer campaign from pitching mailboxes.
  */
 export async function investigateLeadDossier(
   lead: LeadProfile,
-  campaignInstruction?: string
+  campaignInstruction?: string,
+  context?: CampaignResearchContext
 ): Promise<LeadResearchDossier> {
   const companyName = lead.company || "your team";
   const firstName = lead.firstName || "there";
@@ -189,6 +212,16 @@ export async function investigateLeadDossier(
   const domain = extractCleanDomain(lead.website, lead.email);
 
   const businessInfo = inferBusinessProfile(lead);
+
+  if (context && !context.isOutboundInfrastructure && context.companyName?.trim()) {
+    return buildCampaignDossier(lead, businessInfo, context, {
+      companyName,
+      contactName,
+      role,
+      location,
+      domain,
+    });
+  }
 
   // 1. Check for verified technical defects (custom fields or live DNS check)
   const customBottleneck = (
@@ -326,5 +359,146 @@ CRITICAL: ${
     lowFrictionCta,
     suggestedSubject,
     contextualPromptNote,
+  };
+}
+
+/**
+ * Campaign-aware dossier. Grounded in the prospect's role and the user's offer,
+ * with no AutoGTM-specific DNS/mailbox assumptions.
+ */
+function buildCampaignDossier(
+  lead: LeadProfile,
+  businessInfo: { category: string; summary: string },
+  context: CampaignResearchContext,
+  identity: {
+    companyName: string;
+    contactName: string;
+    role: string;
+    location: string;
+    domain: string;
+  }
+): LeadResearchDossier {
+  const { companyName, contactName, role, location, domain } = identity;
+  const friction = roleFriction(role, lead.industry || businessInfo.category);
+  const pains = (context.painPoints || []).filter(Boolean);
+  const painIndex = Math.abs(hashString(`${companyName}:${role}`)) % Math.max(pains.length, 1);
+  const chosenPain = pains[painIndex] || friction.poke;
+
+  const fields = (lead.customFields || {}) as Record<string, unknown>;
+  const trigger = String(
+    fields.trigger ||
+      fields.recent_news ||
+      fields.hiring_signal ||
+      fields.tech_stack ||
+      fields.ice_breaker ||
+      ""
+  ).trim();
+
+  const humanObservation = trigger
+    ? `${companyName} is dealing with ${trigger} while scaling ${businessInfo.category.toLowerCase()}.`
+    : `${companyName} is scaling ${businessInfo.category.toLowerCase()} across ${location}.`;
+
+  const offerName = context.companyName.trim();
+  const valueProposition =
+    context.valueProposition || `a faster way to handle ${friction.area}`;
+
+  const frictionPoke = chosenPain.endsWith(".") ? chosenPain : `${chosenPain}.`;
+  const customAssetDeliverable = `Put together a 90-second teardown of how ${offerName} changes ${friction.area} for ${companyName}.`;
+  const lowFrictionCta = (context.cta || "Worth a quick look?").replace(/[.?!]+$/, "?");
+
+  return {
+    companyName,
+    contactName,
+    role,
+    location,
+    domain,
+    industryCategory: businessInfo.category,
+    businessSummary: businessInfo.summary,
+    outboundMaturity: "OUTBOUND_ACTIVE",
+    maturityRationale: `Campaign-specific research for ${offerName}; outbound-maturity taxonomy not applicable.`,
+    recommendedAngle: "CAMPAIGN_VALUE_ANGLE",
+    humanObservation,
+    frictionPoke,
+    customAssetDeliverable,
+    lowFrictionCta,
+    suggestedSubject: friction.subject,
+    contextualPromptNote: `CAMPAIGN-SPECIFIC RESEARCH:
+- Prospect: ${companyName} (${businessInfo.category}, ${location})
+- Role: ${role}
+- Offer owner: ${offerName}
+- Value proposition: ${valueProposition}
+- Angle: ${context.angle || "direct value"}
+- Chosen pain: ${chosenPain}
+- Grounded observation: "${humanObservation}"
+- Suggested asset: "${customAssetDeliverable}"
+CRITICAL: Write about the prospect's world and the offer above. Never mention DNS, mailboxes, domains, or inbox warmup unless the offer explicitly does.`,
+  };
+}
+
+function hashString(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash << 5) - hash + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash;
+}
+
+function roleFriction(role: string, industry: string): { area: string; subject: string; poke: string } {
+  const r = `${role} ${industry}`.toLowerCase();
+
+  if (/(revenue|sales|growth|sdr|bdr|pipeline|demand gen|commercial)/.test(r)) {
+    return {
+      area: "pipeline coverage",
+      subject: "pipeline coverage",
+      poke: "Pipeline targets usually depend on more activity, not a better conversion path",
+    };
+  }
+  if (/(engineer|technical|cto|developer|platform|infrastructure|data|security)/.test(r)) {
+    return {
+      area: "integration and delivery speed",
+      subject: "integration debt",
+      poke: "Every new tool adds another surface the team has to secure and maintain",
+    };
+  }
+  if (/(operat|coo|supply|logistics|service delivery)/.test(r)) {
+    return {
+      area: "manual handoffs and operating cost",
+      subject: "manual handoffs",
+      poke: "The process works until volume exposes every manual step",
+    };
+  }
+  if (/(finance|cfo|controller|accounting|procurement)/.test(r)) {
+    return {
+      area: "cost per outcome and forecast accuracy",
+      subject: "cost per outcome",
+      poke: "Spend is visible, but the cost of the underlying workflow usually is not",
+    };
+  }
+  if (/(marketing|brand|content|communications)/.test(r)) {
+    return {
+      area: "qualified demand and attribution",
+      subject: "qualified demand",
+      poke: "More channels rarely fix a conversion path that leaks",
+    };
+  }
+  if (/(product|design|ux|research)/.test(r)) {
+    return {
+      area: "activation and retention",
+      subject: "activation drop-off",
+      poke: "Most teams can see the drop-off but cannot isolate the cause",
+    };
+  }
+  if (/(people|talent|hr|recruit)/.test(r)) {
+    return {
+      area: "time-to-hire and candidate quality",
+      subject: "time to hire",
+      poke: "Sourcing volume masks the cost of a slow, manual screen",
+    };
+  }
+  return {
+    area: "throughput and cost of the current workflow",
+    subject: "workflow cost",
+    poke: "The current process works, but it does not scale without more people",
   };
 }

@@ -1,6 +1,8 @@
 import fs from "fs";
+import os from "os";
 import path from "path";
 import zlib from "zlib";
+import { spawnSync } from "child_process";
 import { DatabaseSync } from "node:sqlite";
 
 export interface DirectoryLead {
@@ -76,6 +78,62 @@ export interface DirectorySearchResult {
 
 let cachedDb: DatabaseSync | null = null;
 let cachedFacets: DirectoryFacets | null = null;
+let cachedFacetsAt = 0;
+let cachedFtsReady: boolean | null = null;
+const FACET_CACHE_TTL_MS = 5 * 60_000;
+const COUNT_CACHE_TTL_MS = 30_000;
+const countCache = new Map<string, { total: number; at: number }>();
+const statementCache = new Map<string, ReturnType<DatabaseSync["prepare"]>>();
+
+/**
+ * Stream a .gz file to disk without buffering the whole database in RAM.
+ * Linux production uses the system gunzip; Windows/dev falls back to zlib
+ * (the checked-in sample DB is small enough for that path).
+ */
+function decompressGzipToFile(gzPath: string, targetPath: string): void {
+  const targetDir = path.dirname(targetPath);
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
+  }
+  const tempPath = `${targetPath}.tmp-${process.pid}`;
+  if (fs.existsSync(tempPath)) {
+    try {
+      fs.unlinkSync(tempPath);
+    } catch {}
+  }
+
+  try {
+    const fd = fs.openSync(tempPath, "w");
+    try {
+      const result = spawnSync("gunzip", ["-c", gzPath], {
+        stdio: ["ignore", fd, "ignore"],
+      });
+      if (result.error || result.status !== 0) {
+        throw result.error || new Error(`gunzip exited with ${result.status}`);
+      }
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch (err) {
+    // Fallback: in-process decompression. Avoid on multi-GB production DBs.
+    try {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    } catch {}
+    console.log("[leads-directory] System gunzip unavailable; using in-memory fallback.");
+    const unzipped = zlib.gunzipSync(fs.readFileSync(gzPath));
+    fs.writeFileSync(tempPath, unzipped);
+  }
+
+  try {
+    if (fs.existsSync(targetPath)) fs.unlinkSync(targetPath);
+    fs.renameSync(tempPath, targetPath);
+  } catch (err) {
+    try {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    } catch {}
+    throw err;
+  }
+}
 
 function resolveDbPath(): string {
   // 1. Direct workspace data/leads.db
@@ -96,22 +154,27 @@ function resolveDbPath(): string {
     : path.resolve(process.cwd(), "..", "..", "data", "leads.db.gz");
 
   if (fs.existsSync(gzPath)) {
-    const targetDir = process.env.VERCEL ? "/tmp" : path.dirname(gzPath);
+    const onServerless = process.env.VERCEL === "1" || process.env.VERCEL === "true";
+    const targetDir = onServerless
+      ? path.join(os.tmpdir(), "autogtm")
+      : path.dirname(gzPath);
     const targetPath = path.join(targetDir, "leads.db");
 
     if (!fs.existsSync(targetPath)) {
       console.log(`[leads-directory] Decompressing ${gzPath} -> ${targetPath}...`);
-      const gzBuffer = fs.readFileSync(gzPath);
-      const unzipped = zlib.gunzipSync(gzBuffer);
-      fs.writeFileSync(targetPath, unzipped);
-      console.log(`[leads-directory] Extracted leads.db (${(unzipped.length / 1024 / 1024).toFixed(1)} MB)`);
+      decompressGzipToFile(gzPath, targetPath);
+      console.log(
+        `[leads-directory] Extracted leads.db (${(fs.statSync(targetPath).size / 1024 / 1024).toFixed(1)} MB)`
+      );
     }
     return targetPath;
   }
 
   // 4. Temporary / fallback database
-  const fallbackPath = path.join(process.env.VERCEL ? "/tmp" : "data", "leads.db");
-  return fallbackPath;
+  return path.join(
+    process.env.VERCEL === "1" || process.env.VERCEL === "true" ? os.tmpdir() : "data",
+    "leads.db"
+  );
 }
 
 export function getDirectoryDb(): DatabaseSync {
@@ -129,7 +192,9 @@ export function getDirectoryDb(): DatabaseSync {
   db.exec(`
     PRAGMA journal_mode = WAL;
     PRAGMA synchronous = NORMAL;
-    PRAGMA cache_size = -64000;
+    PRAGMA cache_size = -128000;
+    PRAGMA mmap_size = 268435456;
+    PRAGMA temp_store = MEMORY;
 
     CREATE TABLE IF NOT EXISTS leads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -159,6 +224,11 @@ export function getDirectoryDb(): DatabaseSync {
       personal_email TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS directory_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL DEFAULT ''
+    );
+
     CREATE INDEX IF NOT EXISTS idx_leads_industry ON leads(industry);
     CREATE INDEX IF NOT EXISTS idx_leads_country ON leads(country);
     CREATE INDEX IF NOT EXISTS idx_leads_company ON leads(company_name);
@@ -185,12 +255,148 @@ export function getDirectoryDb(): DatabaseSync {
   return db;
 }
 
+function prepare(db: DatabaseSync, sql: string): ReturnType<DatabaseSync["prepare"]> {
+  let stmt = statementCache.get(sql);
+  if (!stmt) {
+    stmt = db.prepare(sql);
+    statementCache.set(sql, stmt);
+  }
+  return stmt;
+}
+
+/**
+ * Convert a user query into a safe FTS5 prefix expression.
+ * "VP of Sales" → `"vp"* AND "of"* AND "sales"*`
+ */
+export function toFtsMatchExpression(query: string): string {
+  const stopWords = new Set([
+    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "in",
+    "is", "it", "of", "on", "or", "the", "to", "with",
+  ]);
+  const tokens = (query.toLowerCase().match(/[a-z0-9][a-z0-9.+-]*/g) || []).filter(
+    (token) => token.length > 1 && !stopWords.has(token)
+  );
+  if (tokens.length === 0) return '""';
+  return tokens
+    .map((token) => `"${token.replace(/"/g, '""')}"*`)
+    .join(" AND ");
+}
+
+/**
+ * Create the FTS5 table and sync triggers. This is cheap; it does not backfill.
+ * Search only uses FTS after `rebuildDirectoryFts()` marks the index as built.
+ */
+export function ensureDirectoryFts(db: DatabaseSync = getDirectoryDb()): void {
+  db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS leads_fts USING fts5(
+      full_name,
+      job_title,
+      company_name,
+      email,
+      industry,
+      content='leads',
+      content_rowid='id',
+      tokenize='unicode61 remove_diacritics 2'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS leads_fts_ai AFTER INSERT ON leads BEGIN
+      INSERT INTO leads_fts(rowid, full_name, job_title, company_name, email, industry)
+      VALUES (new.id, new.full_name, new.job_title, new.company_name, new.email, new.industry);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS leads_fts_ad AFTER DELETE ON leads BEGIN
+      INSERT INTO leads_fts(leads_fts, rowid, full_name, job_title, company_name, email, industry)
+      VALUES ('delete', old.id, old.full_name, old.job_title, old.company_name, old.email, old.industry);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS leads_fts_au AFTER UPDATE ON leads BEGIN
+      INSERT INTO leads_fts(leads_fts, rowid, full_name, job_title, company_name, email, industry)
+      VALUES ('delete', old.id, old.full_name, old.job_title, old.company_name, old.email, old.industry);
+      INSERT INTO leads_fts(rowid, full_name, job_title, company_name, email, industry)
+      VALUES (new.id, new.full_name, new.job_title, new.company_name, new.email, new.industry);
+    END;
+  `);
+}
+
+export function isDirectoryFtsReady(db: DatabaseSync = getDirectoryDb()): boolean {
+  if (cachedFtsReady !== null) return cachedFtsReady;
+  try {
+    const row = prepare(
+      db,
+      "SELECT value FROM directory_meta WHERE key = 'fts_built' LIMIT 1"
+    ).get() as { value?: string } | undefined;
+    cachedFtsReady = Boolean(row?.value);
+  } catch {
+    cachedFtsReady = false;
+  }
+  return cachedFtsReady;
+}
+
+/**
+ * One-time (or post-import) FTS backfill. On a 10M-row directory this takes
+ * minutes but runs inside SQLite; readers stay available under WAL.
+ */
+export function rebuildDirectoryFts(): { rows: number; elapsedMs: number } {
+  const db = getDirectoryDb();
+  const started = Date.now();
+  ensureDirectoryFts(db);
+  db.exec("INSERT INTO leads_fts(leads_fts) VALUES('rebuild');");
+  db.prepare(
+    "INSERT INTO directory_meta(key, value) VALUES('fts_built', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+  ).run(new Date().toISOString());
+  cachedFtsReady = true;
+  const total = prepare(db, "SELECT COUNT(*) as cnt FROM leads").get() as { cnt: number };
+  return { rows: total?.cnt || 0, elapsedMs: Date.now() - started };
+}
+
+/** Build or refresh the aggregate facet cache table used by the directory UI. */
+export function rebuildDirectoryFacetsCache(): { industries: number; countries: number } {
+  const db = getDirectoryDb();
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS directory_facets_cache (
+      facet_type TEXT NOT NULL,
+      facet_value TEXT NOT NULL,
+      facet_count INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (facet_type, facet_value)
+    );
+    DELETE FROM directory_facets_cache;
+    INSERT INTO directory_facets_cache (facet_type, facet_value, facet_count)
+      SELECT 'industry', industry, COUNT(*) FROM leads
+      WHERE industry IS NOT NULL AND industry != ''
+      GROUP BY industry ORDER BY COUNT(*) DESC LIMIT 200;
+    INSERT INTO directory_facets_cache (facet_type, facet_value, facet_count)
+      SELECT 'country', country, COUNT(*) FROM leads
+      WHERE country IS NOT NULL AND country != ''
+      GROUP BY country ORDER BY COUNT(*) DESC LIMIT 100;
+    INSERT INTO directory_facets_cache (facet_type, facet_value, facet_count)
+      SELECT 'revenue_range', revenue_range, COUNT(*) FROM leads
+      WHERE revenue_range IS NOT NULL AND revenue_range != ''
+      GROUP BY revenue_range ORDER BY COUNT(*) DESC LIMIT 50;
+    INSERT INTO directory_facets_cache (facet_type, facet_value, facet_count)
+      SELECT 'team_size', team_size, COUNT(*) FROM leads
+      WHERE team_size IS NOT NULL AND team_size != ''
+      GROUP BY team_size ORDER BY COUNT(*) DESC LIMIT 50;
+  `);
+  cachedFacets = null;
+  const row = prepare(
+    db,
+    "SELECT COUNT(*) as cnt FROM directory_facets_cache WHERE facet_type = 'industry'"
+  ).get() as { cnt: number };
+  const countries = prepare(
+    db,
+    "SELECT COUNT(*) as cnt FROM directory_facets_cache WHERE facet_type = 'country'"
+  ).get() as { cnt: number };
+  return { industries: row?.cnt || 0, countries: countries?.cnt || 0 };
+}
+
 /**
  * Get aggregated filter facets (industries, countries, revenue, sizes)
  * with real count badges.
  */
 export function getDirectoryFacets(): DirectoryFacets {
-  if (cachedFacets) return cachedFacets;
+  if (cachedFacets && Date.now() - cachedFacetsAt < FACET_CACHE_TTL_MS) {
+    return cachedFacets;
+  }
 
   try {
     const db = getDirectoryDb();
@@ -280,6 +486,7 @@ export function getDirectoryFacets(): DirectoryFacets {
       revenueRanges,
       teamSizes,
     };
+    cachedFacetsAt = Date.now();
 
     return cachedFacets;
   } catch (err) {
@@ -303,21 +510,31 @@ export function buildDirectoryWhereClause(params: DirectorySearchParams): { wher
 
   // General text search
   if (params.query && params.query.trim()) {
-    const q = `%${params.query.trim().toLowerCase()}%`;
-    whereClauses.push(`(
-      LOWER(full_name) LIKE ? OR 
-      LOWER(job_title) LIKE ? OR 
-      LOWER(company_name) LIKE ? OR 
-      LOWER(email) LIKE ? OR 
-      LOWER(location) LIKE ?
-    )`);
-    bindings.push(q, q, q, q, q);
+    if (isDirectoryFtsReady()) {
+      whereClauses.push(`leads.id IN (SELECT rowid FROM leads_fts WHERE leads_fts MATCH ?)`);
+      bindings.push(toFtsMatchExpression(params.query.trim()));
+    } else {
+      const q = `%${params.query.trim().toLowerCase()}%`;
+      whereClauses.push(`(
+        LOWER(full_name) LIKE ? OR
+        LOWER(job_title) LIKE ? OR
+        LOWER(company_name) LIKE ? OR
+        LOWER(email) LIKE ? OR
+        LOWER(location) LIKE ?
+      )`);
+      bindings.push(q, q, q, q, q);
+    }
   }
 
   // Company name filter
   if (params.companyName && params.companyName.trim()) {
-    whereClauses.push(`LOWER(company_name) LIKE ?`);
-    bindings.push(`%${params.companyName.trim().toLowerCase()}%`);
+    if (isDirectoryFtsReady()) {
+      whereClauses.push(`leads.id IN (SELECT rowid FROM leads_fts WHERE leads_fts MATCH ?)`);
+      bindings.push(`company_name : (${toFtsMatchExpression(params.companyName.trim())})`);
+    } else {
+      whereClauses.push(`LOWER(company_name) LIKE ?`);
+      bindings.push(`%${params.companyName.trim().toLowerCase()}%`);
+    }
   }
 
   // Industries filter
@@ -336,9 +553,17 @@ export function buildDirectoryWhereClause(params: DirectorySearchParams): { wher
 
   // Job Titles filter
   if (params.jobTitles && params.jobTitles.length > 0) {
-    const titleClauses = params.jobTitles.map(() => `LOWER(job_title) LIKE ?`).join(" OR ");
-    whereClauses.push(`(${titleClauses})`);
-    params.jobTitles.forEach((t) => bindings.push(`%${t.trim().toLowerCase()}%`));
+    if (isDirectoryFtsReady()) {
+      const expression = params.jobTitles
+        .map((title) => `job_title : (${toFtsMatchExpression(title)})`)
+        .join(" OR ");
+      whereClauses.push(`leads.id IN (SELECT rowid FROM leads_fts WHERE leads_fts MATCH ?)`);
+      bindings.push(expression);
+    } else {
+      const titleClauses = params.jobTitles.map(() => `LOWER(job_title) LIKE ?`).join(" OR ");
+      whereClauses.push(`(${titleClauses})`);
+      params.jobTitles.forEach((t) => bindings.push(`%${t.trim().toLowerCase()}%`));
+    }
   }
 
   // Team sizes filter
@@ -388,10 +613,24 @@ export function searchLeadsDirectory(params: DirectorySearchParams): DirectorySe
 
     const { whereSql, bindings } = buildDirectoryWhereClause(params);
 
-    // Count query
-    const countSql = `SELECT COUNT(*) as total FROM leads ${whereSql}`;
-    const countRow = db.prepare(countSql).get(...bindings) as { total: number };
-    const total = countRow?.total || 0;
+    // Count query (cached briefly: count(*) over millions of rows is the
+    // single most expensive part of pagination).
+    const countKey = `${whereSql}::${JSON.stringify(bindings)}`;
+    const cachedCount = countCache.get(countKey);
+    let total: number;
+    if (cachedCount && Date.now() - cachedCount.at < COUNT_CACHE_TTL_MS) {
+      total = cachedCount.total;
+    } else {
+      const countRow = prepare(db, `SELECT COUNT(*) as total FROM leads ${whereSql}`).get(
+        ...bindings
+      ) as { total: number };
+      total = countRow?.total || 0;
+      countCache.set(countKey, { total, at: Date.now() });
+      if (countCache.size > 200) {
+        const oldest = countCache.keys().next().value;
+        if (oldest) countCache.delete(oldest);
+      }
+    }
 
     // Sorting
     let orderSql = "ORDER BY id ASC";
@@ -411,7 +650,7 @@ export function searchLeadsDirectory(params: DirectorySearchParams): DirectorySe
       LIMIT ? OFFSET ?
     `;
 
-    const rawRows = db.prepare(dataSql).all(...bindings, pageSize, offset) as any[];
+    const rawRows = prepare(db, dataSql).all(...bindings, pageSize, offset) as any[];
 
     const leads: DirectoryLead[] = rawRows.map((r) => {
       let rawAttrs: Record<string, string> = {};
@@ -476,13 +715,23 @@ export function searchLeadsDirectory(params: DirectorySearchParams): DirectorySe
 /**
  * Fetch all matching leads from directory for bulk operations (like CSV export).
  * Default cap at 25,000 to maintain optimal memory and response time.
+ * `offset` lets callers rotate through the directory instead of re-picking the
+ * same first N rows on every campaign launch.
  */
-export function getMatchingDirectoryLeadsForExport(params: DirectorySearchParams, maxRows = 25000): DirectoryLead[] {
+export function getMatchingDirectoryLeadsForExport(
+  params: DirectorySearchParams,
+  maxRows = 25000,
+  offset = 0
+): DirectoryLead[] {
   try {
     const db = getDirectoryDb();
     const { whereSql, bindings } = buildDirectoryWhereClause(params);
-    const dataSql = `SELECT * FROM leads ${whereSql} ORDER BY id ASC LIMIT ?`;
-    const rawRows = db.prepare(dataSql).all(...bindings, maxRows) as any[];
+    const dataSql = `SELECT * FROM leads ${whereSql} ORDER BY id ASC LIMIT ? OFFSET ?`;
+    const rawRows = prepare(db, dataSql).all(
+      ...bindings,
+      maxRows,
+      Math.max(0, Math.floor(offset))
+    ) as any[];
 
     return rawRows.map((r) => {
       let rawAttrs: Record<string, string> = {};
@@ -580,7 +829,13 @@ export async function ingestCsvContent(
   const idIdx = findCol("lead_id", "id");
   const firstIdx = findCol("first_name", "firstname", "first", "fname");
   const lastIdx = findCol("last_name", "lastname", "last", "lname");
-  const fullIdx = findCol("full_name", "fullname", "name", "contact_name");
+  const fullIdxExact = findCol("full_name", "fullname", "contact_name");
+  const fullIdx =
+    fullIdxExact >= 0
+      ? fullIdxExact
+      : firstIdx < 0 && lastIdx < 0
+        ? findCol("name")
+        : -1;
   const titleIdx = findCol("job_title", "jobtitle", "title", "position", "role");
   const compIdx = findCol("company_name", "company", "organization", "account");
   const webIdx = findCol("company_website", "website", "domain", "url");
@@ -596,7 +851,7 @@ export async function ingestCsvContent(
   const emailStatusIdx = findCol("email_verification_status", "email_status", "status");
   const phoneIdx = findCol("phone_1", "phone", "mobile", "direct_phone", "telephone");
 
-  const insertStmt = db.prepare(`
+  const insertStmt = prepare(db, `
     INSERT INTO leads (
       lead_id, first_name, last_name, full_name, job_title,
       company_name, company_website, linkedin_url, location,
@@ -610,10 +865,16 @@ export async function ingestCsvContent(
     )
   `);
 
-  db.exec("BEGIN TRANSACTION;");
+  const CHUNK_ROWS = 2500;
+  let inTransaction = false;
   let inserted = 0;
 
+  try {
   for (let r = 1; r < lines.length; r++) {
+    if (!inTransaction) {
+      db.exec("BEGIN TRANSACTION;");
+      inTransaction = true;
+    }
     const cols = parseCsvLine(lines[r]);
     if (!cols.some((c) => c.length > 0)) continue;
 
@@ -676,12 +937,28 @@ export async function ingestCsvContent(
     );
 
     inserted++;
+    if (inserted % CHUNK_ROWS === 0 && inTransaction) {
+      db.exec("COMMIT;");
+      inTransaction = false;
+    }
   }
-
-  db.exec("COMMIT;");
+  if (inTransaction) {
+    db.exec("COMMIT;");
+    inTransaction = false;
+  }
+  } catch (err) {
+    if (inTransaction) {
+      try {
+        db.exec("ROLLBACK;");
+      } catch {}
+    }
+    throw err;
+  }
 
   // Invalidate facet cache so new industries/countries immediately show up
   cachedFacets = null;
+  cachedFacetsAt = 0;
+  countCache.clear();
 
   const totalRow = db.prepare("SELECT COUNT(*) as cnt FROM leads").get() as { cnt: number };
   return {
@@ -695,6 +972,9 @@ export async function ingestCsvContent(
  */
 export function invalidateDirectoryFacetsCache(): void {
   cachedFacets = null;
+  cachedFacetsAt = 0;
+  countCache.clear();
+  cachedFtsReady = null;
 }
 
 export interface IngestionResult {
@@ -718,8 +998,8 @@ export async function importDirectoryLeadsFromCsv(
   let duplicatesSkipped = 0;
   let invalidRows = 0;
 
-  const checkEmailStmt = db.prepare("SELECT 1 FROM leads WHERE LOWER(email) = ? LIMIT 1");
-  const insertStmt = db.prepare(`
+  const checkEmailStmt = prepare(db, "SELECT 1 FROM leads WHERE email = ? LIMIT 1");
+  const insertStmt = prepare(db, `
     INSERT INTO leads (
       lead_id, first_name, last_name, full_name, job_title,
       company_name, company_website, linkedin_url, location,
@@ -777,7 +1057,10 @@ export async function importDirectoryLeadsFromCsv(
 
         const firstName = getVal("first_name", "firstname", "first", "fname");
         const lastName = getVal("last_name", "lastname", "last", "lname");
-        const fullName = getVal("full_name", "fullname", "name", "contact_name") || `${firstName} ${lastName}`.trim();
+        const fullName =
+          getVal("full_name", "fullname", "contact_name") ||
+          (!firstName && !lastName ? getVal("name") : "") ||
+          `${firstName} ${lastName}`.trim();
         const jobTitle = getVal("job_title", "title", "position", "role");
         const companyName = getVal("company_name", "company", "account_name", "organization");
         const companyWebsite = getVal("company_website", "website", "domain", "url");
@@ -829,6 +1112,8 @@ export async function importDirectoryLeadsFromCsv(
 
   // Invalidate facet cache immediately so counts refresh
   cachedFacets = null;
+  cachedFacetsAt = 0;
+  countCache.clear();
 
   const totalRow = db.prepare("SELECT COUNT(*) as cnt FROM leads").get() as { cnt: number };
   return {

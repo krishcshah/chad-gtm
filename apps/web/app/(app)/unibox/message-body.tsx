@@ -35,7 +35,7 @@ export function EmailBody({
 
   if (showHtml && htmlView) {
     return (
-      <div className="email-sheet rounded-2xl px-3.5 py-3 text-[14px] leading-relaxed shadow-sm">
+      <div className="email-sheet rounded-none px-3.5 py-3 text-[14px] leading-relaxed shadow-sm">
         {htmlView.main.trim() ? (
           <div className="email-sheet-html" dangerouslySetInnerHTML={{ __html: htmlView.main }} />
         ) : (
@@ -86,7 +86,7 @@ function QuotedBlock({ children, tone }: { children: React.ReactNode; tone: "she
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className={`inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-[13px] font-medium ${button}`}
+        className={`inline-flex items-center gap-1 rounded-none px-1 py-0.5 text-[13px] font-medium ${button}`}
       >
         <ChevronRight className={`size-3.5 shrink-0 transition-transform ${open ? "rotate-90" : ""}`} aria-hidden />
         {open ? "Hide quoted text" : "Show quoted text"}

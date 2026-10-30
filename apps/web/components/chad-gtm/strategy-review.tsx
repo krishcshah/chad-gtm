@@ -50,7 +50,7 @@ export function StrategyReviewBoard({
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="rounded-full border border-zinc-700/80 bg-zinc-900/80 px-2.5 py-0.5 text-[10px] font-semibold text-zinc-300">
+            <span className="rounded-none border border-zinc-700/80 bg-zinc-900/80 px-2.5 py-0.5 text-[10px] font-semibold text-zinc-300">
               Stage 02 // Strategy
             </span>
             <span className="text-[10px] uppercase tracking-wider text-zinc-500">Collaborative Board</span>
@@ -81,7 +81,7 @@ export function StrategyReviewBoard({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Card 1: Business Overview */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-4 flex flex-col justify-between card-shine shadow-xs">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-4 flex flex-col justify-between card-shine shadow-xs">
           <div className="space-y-3.5">
             <div className="flex items-center justify-between border-b border-zinc-800/60 pb-2.5">
               <div className="flex items-center gap-2">
@@ -142,13 +142,13 @@ export function StrategyReviewBoard({
         </div>
 
         {/* Card 2: Ideal Customer Profile (ICP) */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-4 card-shine shadow-xs">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-4 card-shine shadow-xs">
           <div className="flex items-center justify-between border-b border-zinc-800/60 pb-2.5">
             <div className="flex items-center gap-2">
               <Target className="size-4 text-zinc-300" />
               <h3 className="text-xs font-semibold text-white tracking-tight">Target Persona (ICP)</h3>
             </div>
-            <span className="text-[10px] font-semibold text-emerald-400 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5">
+            <span className="text-[10px] font-semibold text-emerald-400 rounded-none border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5">
               High Intent
             </span>
           </div>
@@ -162,7 +162,7 @@ export function StrategyReviewBoard({
                 {icp.targetTitles.map((title, i) => (
                   <span
                     key={i}
-                    className="rounded-full bg-zinc-900/70 border border-zinc-800 px-2.5 py-0.5 text-[11px] text-zinc-300"
+                    className="rounded-none bg-zinc-900/70 border border-zinc-800 px-2.5 py-0.5 text-[11px] text-zinc-300"
                   >
                     {title}
                   </span>
@@ -178,7 +178,7 @@ export function StrategyReviewBoard({
                 {icp.companySizes.map((size, i) => (
                   <span
                     key={i}
-                    className="rounded-full bg-zinc-900/70 border border-zinc-800 px-2.5 py-0.5 text-[11px] text-zinc-400"
+                    className="rounded-none bg-zinc-900/70 border border-zinc-800 px-2.5 py-0.5 text-[11px] text-zinc-400"
                   >
                     {size} employees
                   </span>
@@ -193,7 +193,7 @@ export function StrategyReviewBoard({
               <ul className="space-y-1.5">
                 {icp.painPoints.map((pain, i) => (
                   <li key={i} className="flex items-start gap-2 text-xs text-zinc-300">
-                    <span className="size-1.5 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
+                    <span className="size-1.5 rounded-none bg-emerald-400 mt-1.5 shrink-0" />
                     <span>{pain}</span>
                   </li>
                 ))}
@@ -203,7 +203,7 @@ export function StrategyReviewBoard({
         </div>
 
         {/* Card 3: Value Offers & Angles */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-4 flex flex-col justify-between card-shine shadow-xs">
+        <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-4 flex flex-col justify-between card-shine shadow-xs">
           <div className="space-y-3.5">
             <div className="flex items-center justify-between border-b border-zinc-800/60 pb-2.5">
               <div className="flex items-center gap-2">
@@ -216,7 +216,7 @@ export function StrategyReviewBoard({
             </div>
 
             {/* Offer Tabs */}
-            <div className="grid grid-cols-3 gap-1 rounded-lg bg-zinc-900/60 p-1 border border-zinc-800/80">
+            <div className="grid grid-cols-3 gap-1 rounded-none bg-zinc-900/60 p-1 border border-zinc-800/80">
               {offers.map((offer, idx) => (
                 <button
                   key={idx}
@@ -226,7 +226,7 @@ export function StrategyReviewBoard({
                     setActiveTab(idx);
                     setSelectedOfferIndex(idx);
                   }}
-                  className={`rounded-md py-1.5 px-1 text-[11px] font-medium transition-all truncate text-center ${
+                  className={`rounded-none py-1.5 px-1 text-[11px] font-medium transition-all truncate text-center ${
                     activeTab === idx
                       ? "bg-zinc-800 text-white font-semibold shadow-xs"
                       : "text-zinc-400 hover:text-white"
@@ -259,13 +259,13 @@ export function StrategyReviewBoard({
                   type="text"
                   value={offers[activeTab]?.cta || ""}
                   onChange={(e) => handleUpdateOffer(activeTab, "cta", e.target.value)}
-                  className="w-full rounded-md border border-zinc-800 bg-black/60 px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-white"
+                  className="w-full rounded-none border border-zinc-800 bg-black/60 px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-white"
                 />
               </div>
             </div>
           </div>
 
-          <div className="rounded-lg bg-zinc-900/40 border border-zinc-800/80 px-3 py-2 flex items-center justify-between text-xs text-zinc-300">
+          <div className="rounded-none bg-zinc-900/40 border border-zinc-800/80 px-3 py-2 flex items-center justify-between text-xs text-zinc-300">
             <span className="text-[11px] text-zinc-500">Selected Angle:</span>
             <span className="font-semibold text-white">{offers[selectedOfferIndex]?.angle}</span>
           </div>

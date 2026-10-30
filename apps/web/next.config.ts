@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
   serverExternalPackages: [
     "nodemailer",
     "imapflow",
+    "puppeteer-core",
     "@neondatabase/serverless",
     "drizzle-orm",
     "@smartreach/database",

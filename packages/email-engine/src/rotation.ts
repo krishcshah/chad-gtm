@@ -56,6 +56,12 @@ export async function loadDailyUsage(
 }
 
 /**
+ * Absolute ceiling for any single mailbox, regardless of campaign settings.
+ * Shared-pool deliverability depends on this being non-negotiable.
+ */
+export const HARD_MAX_PER_SENDER_PER_DAY = 30;
+
+/**
  * Pick the next usable sender starting after `lastSenderIdx` (round-robin).
  * Returns the sender + its index, or null when every sender is exhausted.
  */
@@ -72,7 +78,11 @@ export function pickSenderIndex(
     const s = senders[index]!;
     if (s.status !== "active") continue;
     const usedToday = daily.get(s.id) ?? 0;
-    const cap = Math.min(s.dailyLimit, perCampaignSenderDailyCap);
+    const cap = Math.min(
+      s.dailyLimit,
+      perCampaignSenderDailyCap,
+      HARD_MAX_PER_SENDER_PER_DAY,
+    );
     if (usedToday >= cap) continue;
     const usedHour = hourly.get(s.id) ?? 0;
     if (usedHour >= s.hourlyLimit) continue;
@@ -81,13 +91,38 @@ export function pickSenderIndex(
   return null;
 }
 
-/** Record one send against today's counter (select-then-upsert, race tolerant). */
+/**
+ * Atomic increment via the unique (entity_type, entity_id, date) index.
+ * Read-then-write would let overlapping workers both observe 29 and send #31.
+ */
 export async function recordSend(
   db: EngineDb,
   opts: { userId: string; entityType: "sender" | "campaign"; entityId: string; date?: string },
 ): Promise<number> {
   const date = opts.date ?? todayKey();
-  for (let attempt = 0; attempt < 3; attempt++) {
+  try {
+    const rows: { count: number }[] = await db
+      .insert(schema.usageCounters)
+      .values({
+        id: crypto.randomUUID(),
+        userId: opts.userId,
+        entityType: opts.entityType,
+        entityId: opts.entityId,
+        date,
+        count: 1,
+      })
+      .onConflictDoUpdate({
+        target: [
+          schema.usageCounters.entityType,
+          schema.usageCounters.entityId,
+          schema.usageCounters.date,
+        ],
+        set: { count: sql`${schema.usageCounters.count} + 1` },
+      })
+      .returning({ count: schema.usageCounters.count });
+    return Number(rows[0]?.count ?? 1);
+  } catch {
+    // Fallback for drivers that do not support RETURNING on upsert.
     const existing: { id: string; count: number }[] = await db
       .select({ id: schema.usageCounters.id, count: schema.usageCounters.count })
       .from(schema.usageCounters)
@@ -107,21 +142,106 @@ export async function recordSend(
         .where(eq(schema.usageCounters.id, existing[0]!.id));
       return next;
     }
-    try {
-      await db.insert(schema.usageCounters).values({
+    return 0;
+  }
+}
+
+/**
+ * Atomically reserve one send slot for a sender and its campaign.
+ *
+ * The unique (entity_type, entity_id, date) index plus a conditional upsert
+ * makes this safe across overlapping workers: the update only increments while
+ * the stored count is below the cap, and returns no row otherwise.
+ */
+export async function reserveSendSlot(
+  db: EngineDb,
+  opts: {
+    userId: string;
+    senderId: string;
+    campaignId: string;
+    senderCap: number;
+    campaignCap: number;
+    date?: string;
+  },
+): Promise<{ ok: true } | { ok: false; reason: "sender-cap" | "campaign-cap" }> {
+  const date = opts.date ?? todayKey();
+
+  const reserve = async (entityType: "sender" | "campaign", entityId: string, cap: number) => {
+    const rows: { count: number }[] = await db
+      .insert(schema.usageCounters)
+      .values({
         id: crypto.randomUUID(),
         userId: opts.userId,
-        entityType: opts.entityType,
-        entityId: opts.entityId,
+        entityType,
+        entityId,
         date,
         count: 1,
-      });
-      return 1;
-    } catch {
-      // unique race — retry loop re-selects and increments
-    }
+      })
+      .onConflictDoUpdate({
+        target: [
+          schema.usageCounters.entityType,
+          schema.usageCounters.entityId,
+          schema.usageCounters.date,
+        ],
+        set: { count: sql`${schema.usageCounters.count} + 1` },
+        setWhere: sql`${schema.usageCounters.count} < ${cap}`,
+      })
+      .returning({ count: schema.usageCounters.count });
+    return rows.length > 0;
+  };
+
+  const senderOk = await reserve("sender", opts.senderId, opts.senderCap);
+  if (!senderOk) return { ok: false, reason: "sender-cap" };
+
+  let campaignOk = false;
+  try {
+    campaignOk = await reserve("campaign", opts.campaignId, opts.campaignCap);
+  } catch (err) {
+    await releaseSendSlot(db, {
+      userId: opts.userId,
+      senderId: opts.senderId,
+      date,
+    });
+    throw err;
   }
-  return 0;
+  if (!campaignOk) {
+    await releaseSendSlot(db, {
+      userId: opts.userId,
+      senderId: opts.senderId,
+      campaignId: undefined,
+      date,
+    });
+    return { ok: false, reason: "campaign-cap" };
+  }
+
+  return { ok: true };
+}
+
+/** Release a reservation after a failed send (never goes below zero). */
+export async function releaseSendSlot(
+  db: EngineDb,
+  opts: {
+    userId: string;
+    senderId?: string;
+    campaignId?: string;
+    date?: string;
+  },
+): Promise<void> {
+  const date = opts.date ?? todayKey();
+  const decrement = async (entityType: "sender" | "campaign", entityId: string) => {
+    await db
+      .update(schema.usageCounters)
+      .set({ count: sql`GREATEST(${schema.usageCounters.count} - 1, 0)` })
+      .where(
+        and(
+          eq(schema.usageCounters.entityType, entityType),
+          eq(schema.usageCounters.entityId, entityId),
+          eq(schema.usageCounters.date, date),
+        ),
+      );
+  };
+  if (opts.senderId) await decrement("sender", opts.senderId);
+  if (opts.campaignId) await decrement("campaign", opts.campaignId);
 }
 
 /** How many sends has this campaign done today? */

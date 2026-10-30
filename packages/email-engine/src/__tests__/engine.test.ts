@@ -65,6 +65,12 @@ describe("sender rotation", () => {
     expect(pickSenderIndex(senders, d, hourly, 0, 20)).toBeNull(); // campaign cap 20 reached
     expect(pickSenderIndex(senders, d, hourly, 0, 30)).not.toBeNull();
   });
+  it("enforces the absolute 30/day shared-mailbox ceiling", () => {
+    const senders = [sender({ id: "a", dailyLimit: 100 })];
+    const d = new Map([["a", 30]]);
+    expect(pickSenderIndex(senders, d, hourly, 0, 100)).toBeNull();
+    expect(pickSenderIndex(senders, new Map([["a", 29]]), hourly, 0, 100)).not.toBeNull();
+  });
   it("returns null when everything is exhausted", () => {
     const senders = [sender({ id: "a", status: "paused" }), sender({ id: "b", status: "failed" })];
     expect(pickSenderIndex(senders, daily, hourly, 0, 50)).toBeNull();
