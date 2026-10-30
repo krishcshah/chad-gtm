@@ -140,7 +140,7 @@ export default async function LandingPage() {
   const isLoggedIn = Boolean(session?.user);
 
   let totalLeads = FALLBACK_TOTAL_LEADS;
-  let distinctIndustries = 2_493;
+  let distinctIndustries = 200;
   let distinctCountries = 716;
   let topIndustries: Array<{ value: string; label: string; count: number }> = [];
   let activeMailboxes = 11;
@@ -263,7 +263,7 @@ export default async function LandingPage() {
               },
               {
                 value: formatNumber(distinctIndustries),
-                label: "industries indexed",
+                label: "curated industry facets",
               },
               {
                 value: String(activeMailboxes),
@@ -462,7 +462,7 @@ export default async function LandingPage() {
 
             <div className="mt-10 grid gap-3 sm:grid-cols-3">
               <Stat value={formatNumber(totalLeads)} label="contacts" detail="Indexed and searchable" />
-              <Stat value={formatNumber(distinctIndustries)} label="industries" detail="Real directory facets" />
+              <Stat value={formatNumber(distinctIndustries)} label="industry facets" detail="Curated directory facets" />
               <Stat value={formatNumber(distinctCountries)} label="countries" detail="Location-aware filters" />
             </div>
 

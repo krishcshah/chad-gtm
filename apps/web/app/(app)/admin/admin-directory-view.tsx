@@ -137,7 +137,7 @@ export function AdminDirectoryView({
         {/* Distinct Industries */}
         <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-2 card-shine shadow-xs">
           <div className="flex items-center justify-between text-zinc-400 text-xs">
-            <span className="font-medium text-xs text-zinc-400">Distinct Industries</span>
+            <span className="font-medium text-xs text-zinc-400">Curated Industry Facets</span>
             <div className="p-2 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-300">
               <Building className="size-3.5" />
             </div>
@@ -151,7 +151,7 @@ export function AdminDirectoryView({
         {/* Verified Email Pct */}
         <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-2 card-shine shadow-xs">
           <div className="flex items-center justify-between text-zinc-400 text-xs">
-            <span className="font-medium text-xs text-zinc-400">Verified Deliverability</span>
+            <span className="font-medium text-xs text-zinc-400">Email Coverage</span>
             <div className="p-2 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-300">
               <Mail className="size-3.5" />
             </div>

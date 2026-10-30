@@ -98,6 +98,32 @@ db.exec(`
 `);
 console.log(`[index] facets ready in ${((Date.now() - facetsStarted) / 1000).toFixed(1)}s`);
 
+const statsStarted = Date.now();
+console.log("[index] updating directory stats metadata...");
+db.exec(`
+  CREATE TABLE IF NOT EXISTS directory_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '');
+  INSERT INTO directory_meta(key, value)
+    VALUES ('stats_total_leads', (SELECT COUNT(*) FROM leads))
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+  INSERT INTO directory_meta(key, value)
+    VALUES ('stats_distinct_industries', (
+      SELECT COUNT(*) FROM directory_facets_cache WHERE facet_type = 'industry'
+    ))
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+  INSERT INTO directory_meta(key, value)
+    VALUES ('stats_distinct_countries', (
+      SELECT COUNT(DISTINCT country) FROM leads
+      WHERE country IS NOT NULL AND country != ''
+    ))
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+  INSERT INTO directory_meta(key, value)
+    VALUES ('stats_verified_email_count', (
+      SELECT COUNT(*) FROM leads WHERE email IS NOT NULL AND email != ''
+    ))
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+`);
+console.log(`[index] stats ready in ${((Date.now() - statsStarted) / 1000).toFixed(1)}s`);
+
 const size = fs.statSync(dbPath).size;
 console.log(`[index] done. file size: ${(size / 1024 / 1024 / 1024).toFixed(2)} GB`);
 db.close();

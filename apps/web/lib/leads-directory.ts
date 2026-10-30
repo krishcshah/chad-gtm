@@ -1143,8 +1143,43 @@ export async function importDirectoryLeadsFromCsv(
   };
 }
 
+function readDirectoryStatsFromMeta(db: DatabaseSync): DirectoryStats | null {
+  try {
+    const rows = db
+      .prepare(
+        "SELECT key, value FROM directory_meta WHERE key IN ('stats_total_leads','stats_distinct_industries','stats_distinct_countries','stats_verified_email_count')"
+      )
+      .all() as Array<{ key: string; value: string }>;
+    const map = new Map(rows.map((row) => [row.key, row.value]));
+    const totalLeads = Number(map.get("stats_total_leads") ?? 0);
+    if (!totalLeads) return null;
+
+    const verifiedEmailCount = Number(map.get("stats_verified_email_count") ?? 0);
+    const dbPath = resolveDbPath();
+    let fileSizeBytes = 0;
+    try {
+      if (fs.existsSync(dbPath)) fileSizeBytes = fs.statSync(dbPath).size;
+    } catch {}
+
+    return {
+      totalLeads,
+      distinctIndustries: Number(map.get("stats_distinct_industries") ?? 0),
+      distinctCountries: Number(map.get("stats_distinct_countries") ?? 0),
+      verifiedEmailCount,
+      verifiedEmailPct:
+        totalLeads > 0 ? Math.round((verifiedEmailCount / totalLeads) * 100) : 0,
+      fileSizeBytes,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Get live database metrics for the admin telemetry view.
+ *
+ * Prefer the aggregates written by `scripts/build-leads-indexes.mjs`; the
+ * fallback full scans are only for a fresh database that has not been indexed.
  */
 export function getDirectoryStats(): DirectoryStats {
   if (cachedStats && Date.now() - cachedStatsAt < STATS_CACHE_TTL_MS) {
@@ -1152,10 +1187,22 @@ export function getDirectoryStats(): DirectoryStats {
   }
   try {
     const db = getDirectoryDb();
+    const metaStats = readDirectoryStatsFromMeta(db);
+    if (metaStats) {
+      cachedStats = metaStats;
+      cachedStatsAt = Date.now();
+      return metaStats;
+    }
     const totalRow = db.prepare("SELECT COUNT(*) as cnt FROM leads").get() as { cnt: number };
     const totalLeads = totalRow?.cnt || 0;
 
-    const indRow = db.prepare("SELECT COUNT(DISTINCT industry) as cnt FROM leads WHERE industry IS NOT NULL AND industry != ''").get() as { cnt: number };
+    // Curated facets, not raw DISTINCT(industry): the raw column contains job
+    // titles and other source noise on some dumps.
+    const indRow = db
+      .prepare(
+        "SELECT COUNT(*) as cnt FROM directory_facets_cache WHERE facet_type = 'industry'"
+      )
+      .get() as { cnt: number };
     const countryRow = db.prepare("SELECT COUNT(DISTINCT country) as cnt FROM leads WHERE country IS NOT NULL AND country != ''").get() as { cnt: number };
     const emailRow = db.prepare("SELECT COUNT(*) as cnt FROM leads WHERE email IS NOT NULL AND email != ''").get() as { cnt: number };
 
