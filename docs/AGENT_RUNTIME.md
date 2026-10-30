@@ -97,6 +97,20 @@ Route: `/chad-gtm/[id]/trace`
 - The existing wizard still uses the legacy human gates; the runtime records the
   analysis but does not yet drive strategy/copy/launch approvals.
 
+## Migration note
+
+The runtime self-heals its tables as the application DB role. If you apply
+`apps/web/drizzle/0011_agent_runtime.sql` manually as a superuser, transfer
+ownership to the app role before starting the web process:
+
+```sql
+ALTER TABLE agent_runs OWNER TO smartreach_user;
+ALTER TABLE agent_steps OWNER TO smartreach_user;
+ALTER TABLE ai_generations OWNER TO smartreach_user;
+GRANT ALL PRIVILEGES ON agent_runs, agent_steps, ai_generations TO smartreach_user;
+```
+
+
 ## Tests
 
 ```bash
