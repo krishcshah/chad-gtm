@@ -1,8 +1,9 @@
 const { Pool } = require('pg');
 
+/* Set DATABASE_URL in the environment; credentials never live in the repo. */
 const DATABASE_URL =
   process.env.DATABASE_URL ||
-  'postgresql://smartreach_user:17e808d5ab8c28f4875c2c4d8f6ee0c562592646ccb73e0c@127.0.0.1:5432/smartreach';
+  '';
 
 const pool = new Pool({ connectionString: DATABASE_URL });
 

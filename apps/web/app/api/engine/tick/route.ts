@@ -8,6 +8,11 @@ export async function GET(req: Request) {
   // Optional secret auth for external callers / cron triggers
   const authHeader = req.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;
+  // In production this endpoint sends real email and replies to leads; never
+  // leave it open. Set CRON_SECRET (the PM2 worker does not need this route).
+  if (!cronSecret && process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Engine tick is disabled: set CRON_SECRET" }, { status: 401 });
+  }
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
     // If CRON_SECRET is configured, enforce it (Vercel automatically sets Bearer token for cron jobs)
     const isVercelCron = req.headers.get("user-agent")?.includes("vercel-cron");

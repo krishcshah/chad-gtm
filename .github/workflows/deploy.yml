@@ -28,6 +28,9 @@ jobs:
             echo "📦 Installing workspace dependencies..."
             npm install --no-audit
 
+            echo "🗄️ Applying database migrations (idempotent)..."
+            npm run db:migrate
+
             echo "🏗️ Building Next.js web application..."
             npm run build --workspace=@smartreach/web
 
