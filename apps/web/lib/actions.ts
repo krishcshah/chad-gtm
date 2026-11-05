@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import {
   schema,
   encryptSecret,
@@ -1285,10 +1285,17 @@ export async function sendUniboxReply(input: {
       .limit(1);
     if (!reply) return { ok: false, error: "Reply not found" };
 
+    // The reply is already scoped to this user. Its mailbox is either theirs or
+    // a shared-pool mailbox the platform sent from on their behalf.
     const [sender] = await db
       .select()
       .from(schema.senderAccounts)
-      .where(and(eq(schema.senderAccounts.id, reply.senderId), eq(schema.senderAccounts.userId, user.id)))
+      .where(
+        and(
+          eq(schema.senderAccounts.id, reply.senderId),
+          or(eq(schema.senderAccounts.userId, user.id), eq(schema.senderAccounts.isSystemPool, true)),
+        ),
+      )
       .limit(1);
     if (!sender) return { ok: false, error: "Sender account not found" };
 
@@ -1354,8 +1361,18 @@ export async function sendUniboxReply(input: {
 
     await db
       .update(schema.replies)
-      .set({ readAt: nowIso() })
+      .set({
+        readAt: nowIso(),
+        // A human answered — the agent must not also reply to this message.
+        ...(reply.agentStatus && reply.agentStatus !== "replied"
+          ? { agentStatus: "replied" as const, agentHandledAt: nowIso() }
+          : {}),
+      })
       .where(eq(schema.replies.id, reply.id));
+    await db
+      .update(schema.agentRequests)
+      .set({ status: "resolved", resolution: "Answered manually from the UniBox", resolvedAt: nowIso(), updatedAt: nowIso() })
+      .where(and(eq(schema.agentRequests.replyId, reply.id), eq(schema.agentRequests.status, "open")));
     await logActivity(user.id, "unibox.replied", `Replied to ${reply.fromEmail}`, reply.campaignId, {
       replyId: reply.id,
       uniboxMessageId: rowId,

@@ -2,7 +2,7 @@
  * F11c Unibox chat transcript — Prism contract shapes + assemblers.
  *
  * direction: "campaign" | "inbound" | "operator"
- * fromRole:  "automation" | "lead" | "operator"
+ * fromRole:  "automation" | "lead" | "operator" | "agent" (reply agent)
  * UI: campaign + inbound LEFT, operator RIGHT.
  */
 import { and, eq, isNotNull, or, sql } from "drizzle-orm";
@@ -11,7 +11,7 @@ import type { UniboxReplyTag } from "@smartreach/shared";
 import type { getDb } from "./db";
 
 export type UniboxDirection = "campaign" | "inbound" | "operator";
-export type UniboxFromRole = "automation" | "lead" | "operator";
+export type UniboxFromRole = "automation" | "lead" | "operator" | "agent";
 export type { UniboxReplyTag };
 
 /** Prism thread message shape — keep in sync with Unibox UI + sendUniboxReply. */
@@ -235,6 +235,7 @@ export async function loadUniboxThreadMessages(
         leadId: schema.uniboxMessages.leadId,
         campaignId: schema.uniboxMessages.campaignId,
         replyId: schema.uniboxMessages.replyId,
+        fromRole: schema.uniboxMessages.fromRole,
       })
       .from(schema.uniboxMessages)
       .where(and(...opConds));
@@ -251,7 +252,7 @@ export async function loadUniboxThreadMessages(
       out.push({
         id: m.id.startsWith("operator:") ? m.id : `operator:${m.id}`,
         direction: "operator",
-        fromRole: "operator",
+        fromRole: m.fromRole === "agent" ? "agent" : "operator",
         fromName: m.fromName || "",
         fromEmail: m.fromEmail || "",
         subject: m.subject,

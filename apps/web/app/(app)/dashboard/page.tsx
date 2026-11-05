@@ -25,7 +25,7 @@ import { PerformanceBreakdown } from "./performance-breakdown";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Overview · Autonomous Outbound Command · AutoGTM" };
+export const metadata = { title: "Overview" };
 
 function formatRelativeTime(dateInput: string | Date | null | undefined): string {
   if (!dateInput) return "Recently";
@@ -48,6 +48,8 @@ function formatRelativeTime(dateInput: string | Date | null | undefined): string
 
 export default async function DashboardPage() {
   const { user, workspace } = await requireWorkspace();
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
   const db = getDb();
   await ensureChadGtmTables(db);
@@ -96,49 +98,32 @@ export default async function DashboardPage() {
           1. TOP: Statistics & Outbound Delivery Graphs
       ────────────────────────────────────────────────────────────────────────── */}
       <div className="space-y-4">
-        {/* Executive Command Banner */}
-        <div className="relative overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-950/80 p-5 sm:p-6 backdrop-blur-sm card-shine shadow-sm">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-zinc-700/80 bg-zinc-900/90 px-2.5 py-0.5 text-[10px] font-medium text-zinc-200 tracking-tight">
-                  AutoGTM Engine // Autonomous Outbound
-                </span>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-medium text-emerald-400 tracking-tight">
-                  <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-                  AutoGTM Neural Core Active
-                </span>
-                <span className="rounded-full border border-zinc-800 bg-zinc-900/90 px-2.5 py-0.5 text-[10px] font-medium text-zinc-300 tracking-tight">
-                  Managed 5¢ Pool
-                </span>
-              </div>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-                Executive Overview
-              </h1>
-              <p className="text-xs sm:text-sm text-zinc-400 font-normal max-w-2xl leading-relaxed">
-                Autonomous Go-To-Market pipeline. Outreach is paced through a managed platform pool of
-                pre-warmed mailboxes with verified leads from our 100M+ global directory.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button
-                asChild
-                size="lg"
-                className="rounded-none bg-white hover:bg-zinc-200 text-black font-semibold text-xs border border-white gap-2 w-full sm:w-auto h-10 px-5 shadow-sm"
-              >
-                <Link href="/chad-gtm">
-                  <Sparkles className="size-3.5" />
-                  Launch New GTM Run
-                </Link>
-              </Button>
-            </div>
+        {/* Header */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-brand-400/90">Overview</div>
+            <h1 className="text-2xl font-semibold tracking-tight text-zinc-50 sm:text-[28px]">
+              {greeting}, {(user.name || "there").split(" ")[0]}
+            </h1>
+            <p className="mt-1 max-w-2xl text-sm text-zinc-400">
+              Everything your outbound did, in one place. The agent handles replies; anything that needs you shows up under{" "}
+              <Link href="/requests" className="text-zinc-200 underline decoration-zinc-700 underline-offset-4 hover:decoration-zinc-400">
+                Needs you
+              </Link>
+              .
+            </p>
           </div>
+          <Button asChild variant="brand" size="lg" className="h-10 px-5">
+            <Link href="/chad-gtm">
+              <Sparkles className="size-3.5" />
+              New autopilot campaign
+            </Link>
+          </Button>
         </div>
 
         {/* 4 Core Modern KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-          <div className="rounded-none border border-zinc-800/80 bg-zinc-950/80 p-5 space-y-2 card-shine shadow-xs hover:border-zinc-700/80 transition-all">
+          <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/80 p-5 space-y-2 card-shine shadow-xs hover:border-zinc-700/80 transition-all">
             <div className="flex items-center justify-between text-xs text-zinc-400 font-medium">
               <span>Emails Dispatched</span>
               <div className="flex size-7 items-center justify-center rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200">
@@ -151,7 +136,7 @@ export default async function DashboardPage() {
               </span>
             </div>
             <p className="text-[11px] text-zinc-500 font-normal">
-              Managed @ 5¢/email pool
+              Across all campaigns
             </p>
           </div>
 
@@ -191,7 +176,7 @@ export default async function DashboardPage() {
               </span>
             </div>
             <p className="text-[11px] text-zinc-500 font-normal">
-              AI Classified in UniBox
+              Triaged by the reply agent
             </p>
           </div>
 
@@ -253,7 +238,7 @@ export default async function DashboardPage() {
         </div>
 
         {recentReplies.length === 0 ? (
-          <div className="rounded-none border border-dashed border-zinc-800 bg-zinc-950/40 p-8 sm:p-10 text-center space-y-3 card-shine">
+          <div className="rounded-lg border border-dashed border-zinc-800 bg-zinc-950/40 p-8 sm:p-10 text-center space-y-3 card-shine">
             <div className="mx-auto flex size-10 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-300 shadow-2xs">
               <MessageSquare className="size-5" />
             </div>
@@ -262,7 +247,7 @@ export default async function DashboardPage() {
                 No Inbound Replies Yet
               </h3>
               <p className="text-xs text-zinc-400 font-normal max-w-md mx-auto mt-1 leading-relaxed">
-                The autonomous engine is pacing outreach across the platform's pre-warmed mailbox pool.
+                Outreach is paced 45–120 seconds apart across the shared mailbox pool, 30 sends per mailbox per day.
                 Incoming prospect responses will stream into this feed live with AI sentiment classification.
               </p>
             </div>
@@ -270,7 +255,7 @@ export default async function DashboardPage() {
               asChild
               size="sm"
               variant="outline"
-              className="rounded-none border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:bg-zinc-800 hover:text-white text-xs font-medium"
+              className="rounded-lg border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:bg-zinc-800 hover:text-white text-xs font-medium"
             >
               <Link href="/campaigns">View Active Campaigns</Link>
             </Button>
@@ -284,7 +269,7 @@ export default async function DashboardPage() {
               return (
                 <div
                   key={reply.id}
-                  className="rounded-none border border-zinc-800/80 bg-zinc-950/80 p-4.5 flex flex-col justify-between hover:border-zinc-700/80 transition-all card-shine shadow-xs"
+                  className="rounded-lg border border-zinc-800/80 bg-zinc-950/80 p-4.5 flex flex-col justify-between hover:border-zinc-700/80 transition-all card-shine shadow-xs"
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
@@ -319,7 +304,7 @@ export default async function DashboardPage() {
                       asChild
                       size="sm"
                       variant="ghost"
-                      className="h-7 text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-900 gap-1 px-2.5 rounded-none"
+                      className="h-7 text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-900 gap-1 px-2.5 rounded-lg"
                     >
                       <Link href={`/unibox`}>
                         View Thread <ArrowRight className="size-3" />
@@ -339,7 +324,7 @@ export default async function DashboardPage() {
       <div className="space-y-3.5">
         <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
           <div className="flex items-center gap-2.5">
-            <div className="flex size-6 items-center justify-center rounded-none bg-zinc-900 border border-zinc-800 text-zinc-300">
+            <div className="flex size-6 items-center justify-center rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300">
               <Sparkles className="size-3.5" />
             </div>
             <h2 className="text-sm font-semibold tracking-tight text-white">
@@ -364,7 +349,7 @@ export default async function DashboardPage() {
         </div>
 
         {!activeRun ? (
-          <div className="rounded-none border border-dashed border-zinc-800 bg-zinc-950/40 p-8 sm:p-10 text-center space-y-3 card-shine">
+          <div className="rounded-lg border border-dashed border-zinc-800 bg-zinc-950/40 p-8 sm:p-10 text-center space-y-3 card-shine">
             <div className="mx-auto flex size-10 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-300 shadow-2xs">
               <Rocket className="size-5" />
             </div>
@@ -373,24 +358,24 @@ export default async function DashboardPage() {
                 No GTM Strategy Configured Yet
               </h3>
               <p className="text-xs text-zinc-400 font-normal max-w-sm mx-auto mt-1 leading-relaxed">
-                Enter your company website to let our proprietary AutoGTM Neural Core synthesize your ICP, calibrate
-                high-converting cold email angles, and launch verified B2B outreach in 60 seconds.
+                Paste your website and AutoGTM researches your market, picks verified buyers, and starts sending from
+                warmed mailboxes. The reply agent answers and sends leads to your calendar.
               </p>
             </div>
             <Button
               asChild
               size="sm"
-              className="rounded-none bg-white text-black font-semibold text-xs hover:bg-zinc-200 border border-white gap-1.5 shadow-sm"
+              className="rounded-lg bg-white text-black font-semibold text-xs hover:bg-zinc-200 border border-white gap-1.5 shadow-sm"
             >
               <Link href="/chad-gtm">
-                <Sparkles className="size-3" /> Launch First GTM Run (60s)
+                <Sparkles className="size-3" /> Start autopilot
               </Link>
             </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Bento 1: Company Profile & Value Propositions */}
-            <div className="rounded-none border border-zinc-800/80 bg-zinc-950/80 p-5 space-y-3 card-shine shadow-xs">
+            <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/80 p-5 space-y-3 card-shine shadow-xs">
               <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2.5">
                 <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-semibold">
                   Company Identity
@@ -531,7 +516,7 @@ export default async function DashboardPage() {
                       Mailbox Tier:
                     </span>
                     <span className="text-zinc-300 font-medium">
-                      Managed Shared Pool (5¢/email)
+                      Managed shared pool
                     </span>
                   </div>
                 </div>
@@ -541,7 +526,7 @@ export default async function DashboardPage() {
                 <Button
                   asChild
                   size="sm"
-                  className="w-full rounded-none bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-700 text-xs font-medium justify-between shadow-xs"
+                  className="w-full rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-700 text-xs font-medium justify-between shadow-xs"
                 >
                   <Link href={`/chad-gtm/${activeRun.id}`}>
                     <span>Launch Mission Control</span>

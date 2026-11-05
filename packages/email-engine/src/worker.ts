@@ -8,6 +8,7 @@
 import { schedulerTick, startDueCampaigns } from "./scheduler";
 import { processTick } from "./processor";
 import { syncTick } from "./sync-replies";
+import { replyAgentTick } from "./reply-agent";
 import type { EngineDb } from "./db-port";
 
 export interface EngineTickOptions {
@@ -19,7 +20,13 @@ export async function engineTick(db: EngineDb, opts: EngineTickOptions = {}) {
   const sched = await schedulerTick(db);
   const proc = await processTick(db);
   const sync = opts.withSync ? await syncTick(db) : null;
-  return { startedAt, sched, proc, sync };
+  // Reply agent runs every tick: it is a cheap indexed lookup when idle and
+  // keeps response time to a new reply within one engine interval.
+  const agent = await replyAgentTick(db).catch((err) => {
+    console.error("[worker] reply agent tick failed:", err);
+    return null;
+  });
+  return { startedAt, sched, proc, sync, agent };
 }
 
 export interface WorkerLoopOptions {

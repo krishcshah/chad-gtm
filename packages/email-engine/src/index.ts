@@ -13,3 +13,5 @@ export * from "./queue-mode";
 export * from "./sequence";
 export * from "./ai";
 export * from "./lead-investigation";
+export * from "./reply-agent";
+export * from "./ai-options";

@@ -26,6 +26,8 @@ export interface ScrapedCompanyData {
   fetchFailed: boolean;
   failureReason?: string;
   usedHeadlessFallback?: boolean;
+  /** Scheduling link found on the site (Calendly, Cal.com, HubSpot...). */
+  bookingUrl?: string | null;
 }
 
 export interface BusinessOverview {
@@ -117,6 +119,7 @@ export async function scrapeCompanyWebsite(rawUrl: string): Promise<ScrapedCompa
     fetchFailed: profile.fetchFailed,
     failureReason: profile.failureReason,
     usedHeadlessFallback: profile.usedHeadlessFallback,
+    bookingUrl: profile.bookingUrl ?? null,
   };
 }
 

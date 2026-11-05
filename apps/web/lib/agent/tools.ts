@@ -76,16 +76,21 @@ export const synthesizeStrategyTool: ToolDefinition<
 };
 
 export const persistGtmRunTool: ToolDefinition<
-  { url: string; notes?: string },
+  { url: string; notes?: string; autopilot?: boolean; bookingUrl?: string | null },
   { chadGtmRunId: string }
 > = {
   name: "persist_gtm_run",
   description:
     "Persist the synthesized strategy as a chad_gtm_runs row so the wizard and mission control can use it.",
-  inputSchema: z.object({ url: z.string().min(3), notes: z.string().optional() }),
+  inputSchema: z.object({
+    url: z.string().min(3),
+    notes: z.string().optional(),
+    autopilot: z.boolean().optional(),
+    bookingUrl: z.string().nullable().optional(),
+  }),
   outputSchema: z.object({ chadGtmRunId: z.string() }),
   timeoutMs: 30_000,
-  async run(_input, ctx) {
+  async run(input, ctx) {
     const strategy = ctx.state.strategy as SynthesizedGtmStrategy | undefined;
     if (!strategy) {
       throw new Error("synthesize_strategy must complete before persist_gtm_run");
@@ -107,6 +112,8 @@ export const persistGtmRunTool: ToolDefinition<
       dailyEmailLimit: 30,
       approvedEmailSamples: [],
       agentRunId: ctx.run.id,
+      bookingUrl: input.bookingUrl || strategy.scrapedData.bookingUrl || null,
+      autopilot: Boolean(input.autopilot),
     });
 
     return { chadGtmRunId: runId };
@@ -266,11 +273,11 @@ export const getCampaignStatsTool: ToolDefinition<
       .where(eq(schema.campaignLeads.campaignId, input.campaignId));
     const [sentCount] = await ctx.db
       .select({ count: sql<number>`count(*)` })
-      .from(schema.campaignLeads)
+      .from(schema.emailJobs)
       .where(
         and(
-          eq(schema.campaignLeads.campaignId, input.campaignId),
-          eq(schema.campaignLeads.status, "sent")
+          eq(schema.emailJobs.campaignId, input.campaignId),
+          eq(schema.emailJobs.status, "sent")
         )
       );
     const [opensCount] = await ctx.db

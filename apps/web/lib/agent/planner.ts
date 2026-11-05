@@ -44,6 +44,8 @@ export class GtmAnalysisPlanner implements Planner {
         input: {
           url: run.input?.url || run.goal || "",
           notes: run.input?.notes ?? "",
+          autopilot: Boolean(run.input?.autopilot),
+          bookingUrl: run.input?.bookingUrl ?? null,
         },
         stateKey: "persistence",
         nextPhase: "strategy_review",

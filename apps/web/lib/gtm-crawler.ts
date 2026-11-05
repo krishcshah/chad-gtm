@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import * as cheerio from "cheerio";
+import { extractBookingLinks, pickBestBookingUrl } from "./booking-links";
 
 export interface PricingTier {
   name: string;
@@ -19,6 +20,8 @@ export interface CrawledPageContent {
   featuresAndBullets: string[];
   caseStudySignals: string[];
   competitorSignals: string[];
+  /** Scheduling links (Calendly, Cal.com, HubSpot Meetings...) found on the page. */
+  bookingLinks: string[];
   wordCount: number;
   renderedWith: "static" | "headless";
 }
@@ -33,6 +36,8 @@ export interface CrawledCompanyProfile {
   fetchFailed: boolean;
   failureReason?: string;
   usedHeadlessFallback: boolean;
+  /** Best guess at the company's own booking page, if the site links one. */
+  bookingUrl?: string | null;
 }
 
 const BROWSER_HEADERS: Record<string, string> = {
@@ -157,6 +162,8 @@ export function distillHtml(
   pageUrl: string,
   renderedWith: "static" | "headless" = "static"
 ): CrawledPageContent {
+  // Scan for scheduling links before boilerplate (nav/header CTAs) is removed.
+  const bookingLinks = extractBookingLinks(html, pageUrl);
   const $ = cheerio.load(html);
 
   const title =
@@ -266,6 +273,7 @@ export function distillHtml(
     featuresAndBullets: featuresAndBullets.slice(0, 15),
     caseStudySignals: caseStudySignals.slice(0, 10),
     competitorSignals: competitorSignals.slice(0, 8),
+    bookingLinks: bookingLinks.slice(0, 5),
     wordCount,
     renderedWith,
   };
@@ -285,6 +293,7 @@ function discoverSubpageLinks(html: string, rootUrl: string, rootDomain: string)
     [/about|company|team|story/, 80],
     [/solutions?|use-cases?|industries/, 70],
     [/product|platform|features|how-it-works/, 60],
+    [/demo|book|schedule|contact|talk-to|get-started/, 55],
     [/compare|vs\b|alternatives?/, 50],
   ];
 
@@ -488,6 +497,7 @@ export async function crawlCompanyDomain(rawUrl: string): Promise<CrawledCompany
       featuresAndBullets: [],
       caseStudySignals: [],
       competitorSignals: [],
+      bookingLinks: [],
       wordCount: 0,
       renderedWith: "static",
     },
@@ -603,8 +613,13 @@ export async function crawlCompanyDomain(rawUrl: string): Promise<CrawledCompany
 }
 
 function finalizeProfile(profile: CrawledCompanyProfile): CrawledCompanyProfile {
+  const bookingCandidates = [
+    ...(profile.rootPage.bookingLinks || []),
+    ...profile.subpages.flatMap((p) => p.bookingLinks || []),
+  ];
   return {
     ...profile,
+    bookingUrl: pickBestBookingUrl(Array.from(new Set(bookingCandidates))),
     combinedCorpus: profile.combinedCorpus.slice(0, MAX_CORPUS_CHARS),
   };
 }

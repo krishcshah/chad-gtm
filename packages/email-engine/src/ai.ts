@@ -69,6 +69,13 @@ export interface GenerateOnTheFlyOptions extends AiEngineOptions {
   negativeConstraints?: string[];
   /** Ask the model for `{Hi|Hey|Hello}`-style variants in the body. */
   requireSpintax?: boolean;
+  /**
+   * What to do when no API key is configured or the model call fails.
+   *  simulate — return the heuristic draft (previews / calibration decks only)
+   *  throw    — fail closed so the caller sends its approved baseline copy
+   *             instead of heuristic text that may contain invented claims
+   */
+  onFailure?: "simulate" | "throw";
 }
 
 export interface ImproveCopyOptions extends AiEngineOptions {
@@ -604,6 +611,7 @@ async function callOpenAi(
   apiKey: string,
   model = "gpt-5-mini",
   timeoutMs = 30000,
+  systemPrompt = "You are an elite B2B cold outreach copywriter. You must always return valid JSON with keys: subject, bodyText, bodyHtml, personalizationReason.",
 ): Promise<string> {
   const url = "https://api.openai.com/v1/chat/completions";
   const controller = new AbortController();
@@ -619,10 +627,7 @@ async function callOpenAi(
       body: JSON.stringify({
         model,
         messages: [
-          {
-            role: "system",
-            content: "You are an elite B2B cold outreach copywriter. You must always return valid JSON with keys: subject, bodyText, bodyHtml, personalizationReason.",
-          },
+          { role: "system", content: systemPrompt },
           { role: "user", content: prompt },
         ],
         response_format: { type: "json_object" },
@@ -634,7 +639,7 @@ async function callOpenAi(
 
     if (!res.ok) {
       if ((res.status === 404 || res.status === 400) && model !== "gpt-4o-mini") {
-        return callOpenAi(prompt, apiKey, "gpt-4o-mini", timeoutMs);
+        return callOpenAi(prompt, apiKey, "gpt-4o-mini", timeoutMs, systemPrompt);
       }
       const errText = await res.text().catch(() => "");
       throw new Error(`OpenAI API error (${res.status}): ${errText.slice(0, 300)}`);
@@ -665,7 +670,10 @@ export async function generateEmailScriptOnTheFly(
   const apiKey = resolveApiKey(provider, options.apiKey);
 
   if (!apiKey) {
-    // If no API key configured, use high-fidelity simulation engine
+    if (options.onFailure === "throw") {
+      throw new Error("No AI API key configured for on-the-fly generation");
+    }
+    // Previews without an API key use the heuristic simulation engine.
     return simulatePersonalizedScript(optionsWithDossier);
   }
 
@@ -794,8 +802,41 @@ Return ONLY valid JSON:
 
     return { subject, bodyText, bodyHtml, personalizationReason };
   } catch (err) {
+    if (options.onFailure === "throw") throw err;
     console.warn("[ai-engine] Generation API failed, falling back to simulated script:", err);
     return simulatePersonalizedScript(optionsWithDossier);
+  }
+}
+
+export interface LlmJsonOptions extends AiEngineOptions {
+  /** System instruction (OpenAI) / preamble (Gemini). */
+  system?: string;
+}
+
+/**
+ * Provider-agnostic "prompt in, JSON object out" call used by the reply agent.
+ * Returns null when no key is configured so callers can use deterministic
+ * fallbacks; throws on transport/parse errors.
+ */
+export async function callLlmJson<T = any>(
+  prompt: string,
+  options: LlmJsonOptions = {},
+): Promise<T | null> {
+  const provider = (options.provider || "google").toLowerCase();
+  const apiKey = resolveApiKey(provider, options.apiKey);
+  if (!apiKey) return null;
+  const system = options.system || "You are a precise assistant. Always return one valid JSON object.";
+  const raw =
+    provider === "openai"
+      ? await callOpenAi(prompt, apiKey, options.model || "gpt-5-mini", options.timeoutMs, system)
+      : await callGemini(`${system}\n\n${prompt}`, apiKey, options.model || "gemini-3.8-flash", options.timeoutMs);
+  const trimmed = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  try {
+    return JSON.parse(trimmed) as T;
+  } catch {
+    const match = trimmed.match(/\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]) as T;
+    throw new Error("LLM returned non-JSON output");
   }
 }
 

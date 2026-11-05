@@ -53,6 +53,12 @@ const stop = startWorkerLoop(db, {
           (s.skipped.length ? ` skipped=[${s.skipped.join(", ")}]` : ""),
       );
     }
+    const a = r.agent;
+    if (a && a.processed > 0) {
+      console.log(
+        `[engine] reply-agent processed=${a.processed} replied=${a.replied} escalated=${a.escalated} skipped=${a.skipped} failed=${a.failed}`,
+      );
+    }
   },
 });
 

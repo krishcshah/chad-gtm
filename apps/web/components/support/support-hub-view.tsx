@@ -66,10 +66,10 @@ export function SupportHubView({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-5">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="rounded-none border border-zinc-800 bg-black px-2 py-0.5 text-[9px] uppercase tracking-widest text-zinc-400">
+            <span className="rounded-lg border border-zinc-800 bg-black px-2 py-0.5 text-[9px] uppercase tracking-widest text-zinc-400">
               Support &amp; Feedback Center
             </span>
-            <span className="rounded-none border border-zinc-800 bg-black px-2 py-0.5 text-[9px] uppercase tracking-widest text-zinc-400">
+            <span className="rounded-lg border border-zinc-800 bg-black px-2 py-0.5 text-[9px] uppercase tracking-widest text-zinc-400">
               Direct Engineering Line
             </span>
           </div>
@@ -87,7 +87,7 @@ export function SupportHubView({
               asChild
               variant="outline"
               size="sm"
-              className="rounded-none border-zinc-800 bg-black text-xs font-mono uppercase tracking-wider text-zinc-300 hover:bg-zinc-900 hover:text-white h-10 px-3.5 gap-1.5"
+              className="rounded-lg border-zinc-800 bg-black text-xs font-mono uppercase tracking-wider text-zinc-300 hover:bg-zinc-900 hover:text-white h-10 px-3.5 gap-1.5"
             >
               <Link href="/admin">
                 <ShieldCheck className="size-3.5" /> Universal Admin View
@@ -97,7 +97,7 @@ export function SupportHubView({
 
           <Button
             onClick={() => setCreateModalOpen(true)}
-            className="rounded-none bg-white hover:bg-zinc-200 text-black font-semibold text-xs uppercase tracking-wider h-10 px-4 gap-2"
+            className="rounded-lg bg-white hover:bg-zinc-200 text-black font-semibold text-xs uppercase tracking-wider h-10 px-4 gap-2"
           >
             <Plus className="size-3.5" /> Create New Ticket
           </Button>
@@ -106,19 +106,19 @@ export function SupportHubView({
 
       {/* Metrics Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-3.5 space-y-1">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3.5 space-y-1">
           <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Total Tickets</span>
           <div className="text-xl font-bold text-white tabular-nums">{tickets.length}</div>
         </div>
-        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-3.5 space-y-1">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3.5 space-y-1">
           <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Open</span>
           <div className="text-xl font-bold text-white tabular-nums">{openCount}</div>
         </div>
-        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-3.5 space-y-1">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3.5 space-y-1">
           <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Ongoing</span>
           <div className="text-xl font-bold text-zinc-300 tabular-nums">{inProgressCount}</div>
         </div>
-        <div className="rounded-none border border-zinc-800 bg-zinc-950 p-3.5 space-y-1">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3.5 space-y-1">
           <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Resolved</span>
           <div className="text-xl font-bold text-emerald-400 tabular-nums">{resolvedCount}</div>
         </div>
@@ -134,7 +134,7 @@ export function SupportHubView({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search tickets by subject, description, or author..."
-              className="rounded-none border-zinc-800 bg-black pl-9 text-xs text-white placeholder:text-zinc-600 focus:border-white h-9 font-mono"
+              className="rounded-lg border-zinc-800 bg-black pl-9 text-xs text-white placeholder:text-zinc-600 focus:border-white h-9 font-mono"
             />
           </div>
 
@@ -145,7 +145,7 @@ export function SupportHubView({
                 key={st}
                 type="button"
                 onClick={() => setSelectedStatus(st)}
-                className={`rounded-none border px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider transition-colors ${
+                className={`rounded-lg border px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider transition-colors ${
                   selectedStatus === st
                     ? "border-white bg-zinc-900 text-white font-bold"
                     : "border-zinc-800 bg-black text-zinc-500 hover:text-zinc-300 hover:border-zinc-700"
@@ -162,7 +162,7 @@ export function SupportHubView({
           <button
             type="button"
             onClick={() => setSelectedCategory("all")}
-            className={`rounded-none border px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider transition-colors ${
+            className={`rounded-lg border px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider transition-colors ${
               selectedCategory === "all"
                 ? "border-zinc-600 bg-zinc-900 text-white font-bold"
                 : "border-zinc-900 bg-black text-zinc-500 hover:text-zinc-300"
@@ -175,7 +175,7 @@ export function SupportHubView({
               key={cat.id}
               type="button"
               onClick={() => setSelectedCategory(cat.id)}
-              className={`rounded-none border px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider transition-colors ${
+              className={`rounded-lg border px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider transition-colors ${
                 selectedCategory === cat.id
                   ? "border-zinc-600 bg-zinc-900 text-white font-bold"
                   : "border-zinc-900 bg-black text-zinc-500 hover:text-zinc-300"
@@ -189,8 +189,8 @@ export function SupportHubView({
 
       {/* Tickets List */}
       {filteredTickets.length === 0 ? (
-        <div className="rounded-none border border-dashed border-zinc-800 bg-black p-12 text-center space-y-4">
-          <div className="mx-auto flex size-12 items-center justify-center rounded-none border border-zinc-800 bg-zinc-950 text-white">
+        <div className="rounded-lg border border-dashed border-zinc-800 bg-black p-12 text-center space-y-4">
+          <div className="mx-auto flex size-12 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950 text-white">
             <LifeBuoy className="size-6" />
           </div>
           <div className="space-y-1">
@@ -205,13 +205,13 @@ export function SupportHubView({
           </div>
           <Button
             onClick={() => setCreateModalOpen(true)}
-            className="rounded-none bg-white hover:bg-zinc-200 text-black font-semibold text-xs font-mono uppercase tracking-wider border border-white h-9 px-4 gap-2"
+            className="rounded-lg bg-white hover:bg-zinc-200 text-black font-semibold text-xs font-mono uppercase tracking-wider border border-white h-9 px-4 gap-2"
           >
             <Plus className="size-3.5" /> Submit First Ticket
           </Button>
         </div>
       ) : (
-        <div className="rounded-none border border-zinc-800 bg-zinc-950 divide-y divide-zinc-900">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950 divide-y divide-zinc-900">
           {filteredTickets.map((t) => (
             <Link
               key={t.id}
@@ -242,7 +242,7 @@ export function SupportHubView({
               </div>
 
               <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
-                <div className="flex items-center gap-1 rounded-none border border-zinc-800 bg-black px-2 py-1 text-[10px] text-zinc-400">
+                <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-black px-2 py-1 text-[10px] text-zinc-400">
                   <MessageSquare className="size-3 text-zinc-500" />
                   <span className="tabular-nums font-bold text-white">{t.messageCount || 1}</span>
                   <span className="text-[9px] uppercase tracking-wider text-zinc-500 hidden sm:inline">
@@ -250,7 +250,7 @@ export function SupportHubView({
                   </span>
                 </div>
 
-                <div className="flex size-7 items-center justify-center rounded-none border border-zinc-800 bg-black text-zinc-400 group-hover:border-zinc-600 group-hover:text-white transition-colors">
+                <div className="flex size-7 items-center justify-center rounded-lg border border-zinc-800 bg-black text-zinc-400 group-hover:border-zinc-600 group-hover:text-white transition-colors">
                   <ChevronRight className="size-3.5" />
                 </div>
               </div>
@@ -261,7 +261,7 @@ export function SupportHubView({
 
       {/* Create Ticket Modal */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-        <DialogContent className="rounded-none border border-zinc-800 bg-zinc-950 font-mono text-zinc-100 max-w-2xl p-6">
+        <DialogContent className="rounded-lg border border-zinc-800 bg-zinc-950 font-mono text-zinc-100 max-w-2xl p-6">
           <DialogHeader className="space-y-1.5 text-left border-b border-zinc-800 pb-3">
             <DialogTitle className="text-base font-bold uppercase tracking-wider text-white flex items-center gap-2">
               <LifeBuoy className="size-4" /> Create Support Ticket

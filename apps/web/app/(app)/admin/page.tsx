@@ -23,7 +23,7 @@ export default async function AdminPage() {
   if (!isAdmin(user)) {
     return (
       <div className="mx-auto max-w-2xl py-16 px-4 font-mono">
-        <div className="rounded-none border border-red-900/60 bg-red-950/20 p-6 text-center space-y-3">
+        <div className="rounded-lg border border-red-900/60 bg-red-950/20 p-6 text-center space-y-3">
           <ShieldAlert className="mx-auto size-10 text-red-400" />
           <h2 className="text-lg font-bold text-white uppercase tracking-wider">Access Restricted</h2>
           <p className="text-xs text-zinc-400 max-w-md mx-auto leading-relaxed font-sans">
@@ -49,7 +49,7 @@ export default async function AdminPage() {
       {/* Admin Header */}
       <div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1 rounded-none bg-black border border-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
+          <span className="inline-flex items-center gap-1 rounded-lg bg-black border border-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
             <ShieldCheck className="size-3" />
             System Administrator
           </span>
@@ -61,7 +61,7 @@ export default async function AdminPage() {
           Admin Command Center
         </h1>
         <p className="mt-1 text-xs text-zinc-500 font-sans max-w-2xl">
-          Universal management of shared mailbox fleets, 100M+ lead directory, user analytics, support tickets, and GDPR compliance requests.
+          Universal management of shared mailbox fleets, lead directory, user analytics, support tickets, and GDPR compliance requests.
         </p>
       </div>
 

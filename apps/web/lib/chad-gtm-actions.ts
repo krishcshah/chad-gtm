@@ -30,6 +30,13 @@ import { ToolRegistry } from "./agent/registry";
 import { GtmAnalysisPlanner } from "./agent/planner";
 import { AgentRuntime } from "./agent/runtime";
 import { PHASE_1_TOOLS } from "./agent/tools";
+import {
+  buildCampaignContext,
+  compactCustomFields,
+  fetchTargetedLeads,
+  getTargetTitles,
+  launchRunCampaign,
+} from "./gtm-launch";
 
 export interface CalibrationFeedbackItem {
   id?: string;
@@ -106,108 +113,6 @@ function buildStyleGuidance(feedback?: CalibrationFeedbackItem[]): {
   return { examples, negatives: Array.from(negatives) };
 }
 
-function buildCampaignContext(
-  run: typeof schema.chadGtmRuns.$inferSelect,
-  activeOffer: { title?: string; angle?: string; valueProp?: string; cta?: string }
-): CampaignResearchContext {
-  const overview = (run.businessOverview as any) || {};
-  const icp = (run.icpProfile as any) || {};
-  const isOwnOffer = /autogtm|chadgtm|smartreach/i.test(
-    `${run.url || ""} ${run.companyName || ""}`
-  );
-
-  return {
-    companyName: run.companyName || "our company",
-    companySummary: overview.summary,
-    valueProposition: activeOffer.valueProp,
-    angle: activeOffer.angle,
-    cta: activeOffer.cta,
-    offerTitle: activeOffer.title,
-    painPoints: Array.isArray(icp.painPoints) ? icp.painPoints : [],
-    targetTitles: Array.isArray(icp.targetTitles) ? icp.targetTitles : [],
-    isOutboundInfrastructure: isOwnOffer,
-  };
-}
-
-function stableHash(value: string): number {
-  let hash = 0;
-  for (let i = 0; i < value.length; i++) {
-    hash = (hash << 5) - hash + value.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash);
-}
-
-function getTargetTitles(run: typeof schema.chadGtmRuns.$inferSelect): string[] {
-  const icp = (run.icpProfile as any) || {};
-  const flat = Array.isArray(icp.targetTitles) ? icp.targetTitles : [];
-  const personaTitles = Array.isArray(icp.personas)
-    ? icp.personas.flatMap((p: any) => (Array.isArray(p?.titles) ? p.titles : []))
-    : [];
-  return Array.from(
-    new Set(
-      [...flat, ...personaTitles]
-        .map((t) => String(t || "").trim())
-        .filter((t) => t.length >= 2)
-    )
-  ).slice(0, 8);
-}
-
-/**
- * Prefer leads whose titles match the ICP, then top up with industry-only
- * matches. Prevents a campaign from starving when title formats vary wildly.
- */
-function fetchTargetedLeads(
-  industries: string[],
-  targetTitles: string[],
-  desired: number,
-  offset: number
-) {
-  const base = {
-    industries: industries.length > 0 ? industries : undefined,
-    hasEmail: true,
-  };
-  if (targetTitles.length === 0) {
-    return getMatchingDirectoryLeadsForExport(base, desired, offset);
-  }
-
-  const targeted = getMatchingDirectoryLeadsForExport(
-    { ...base, jobTitles: targetTitles },
-    desired,
-    offset
-  );
-  if (targeted.length >= desired) return targeted;
-
-  const seen = new Set(targeted.map((lead) => lead.email.toLowerCase()));
-  let fallback = getMatchingDirectoryLeadsForExport(base, desired * 3, offset);
-  if (fallback.length === 0 && offset > 0) {
-    // Niche industries can have fewer rows than the rotation offset.
-    fallback = getMatchingDirectoryLeadsForExport(base, desired * 3, 0);
-  }
-  for (const lead of fallback) {
-    if (targeted.length >= desired) break;
-    const key = lead.email.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    targeted.push(lead);
-  }
-  return targeted;
-}
-
-function compactCustomFields(raw: Record<string, string> | undefined): Record<string, string> {
-  if (!raw) return {};
-  const skip = /^(email|first|last|full|name|job|title|company|industry|location|city|state|country|phone|website|linkedin)/i;
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(raw)) {
-    if (Object.keys(out).length >= 12) break;
-    if (skip.test(key)) continue;
-    const text = String(value ?? "").trim();
-    if (!text) continue;
-    out[key] = text.slice(0, 200);
-  }
-  return out;
-}
-
 async function mapWithConcurrency<T, R>(
   items: T[],
   limit: number,
@@ -232,7 +137,8 @@ async function mapWithConcurrency<T, R>(
 
 export async function analyzeWebsiteAction(
   rawUrl: string,
-  optionalNotes?: string
+  optionalNotes?: string,
+  options: { autopilot?: boolean; bookingUrl?: string | null } = {}
 ): Promise<{
   ok: boolean;
   runId?: string;
@@ -265,7 +171,12 @@ export async function analyzeWebsiteAction(
           workspaceId: workspace.id,
           kind: "gtm_analysis",
           goal: rawUrl,
-          input: { url: rawUrl, notes: optionalNotes ?? "" },
+          input: {
+            url: rawUrl,
+            notes: optionalNotes ?? "",
+            autopilot: Boolean(options.autopilot),
+            bookingUrl: options.bookingUrl ?? null,
+          },
           budgetCents: 200,
         });
         const result = await runtime.runUntilPause(agentRun.id);
@@ -309,6 +220,8 @@ export async function analyzeWebsiteAction(
       selectedIndustries: strategy.icpProfile.industries || [],
       dailyEmailLimit: 30,
       approvedEmailSamples: [],
+      bookingUrl: options.bookingUrl || scraped.bookingUrl || null,
+      autopilot: Boolean(options.autopilot),
     });
 
     return { ok: true, runId, strategy };
@@ -868,280 +781,19 @@ export async function launchChadGtmCampaignAction(
       .limit(1);
 
     if (!run) throw new Error("AutoGTM run not found.");
+    if (run.campaignId) {
+      // Idempotent: a double-click must not create two campaigns.
+      return { ok: true, campaignId: run.campaignId };
+    }
 
-    const industries = (run.selectedIndustries as string[]) || [];
-    const dateStr = new Date().toISOString().slice(0, 10);
-    const companyName = run.companyName || "Autonomous GTM";
-    const calibratedProfile = (run.calibrationProfile as any) || {};
-
-    // 1. Create a dedicated lead list in PostgreSQL
-    const listId = crypto.randomUUID();
-    await db.insert(schema.leadLists).values({
-      id: listId,
+    const { campaignId } = await launchRunCampaign(db, {
+      run,
       userId: user.id,
       workspaceId: workspace.id,
-      name: `${companyName} AutoGTM Leads (${dateStr})`,
+      dailyLimit,
+      approvedSamples,
+      selectedOfferIndex,
     });
-
-    // 2. Fetch matched verified leads from SQLite directory. Rotate the offset
-    // by run id so consecutive campaigns do not target the same first 500 rows.
-    const leadOffset = stableHash(runId) % 5000;
-    const matchingDirectoryLeads = fetchTargetedLeads(
-      industries,
-      getTargetTitles(run),
-      500,
-      leadOffset
-    );
-
-    if (matchingDirectoryLeads.length === 0) {
-      throw new Error(
-        "No verified leads match the selected industries. Refine the ICP or pick another industry facet."
-      );
-    }
-
-    const CHUNK = 100;
-    for (let i = 0; i < matchingDirectoryLeads.length; i += CHUNK) {
-      const batch = matchingDirectoryLeads.slice(i, i + CHUNK);
-      await db
-        .insert(schema.leads)
-        .values(
-          batch.map((dl) => ({
-            id: crypto.randomUUID(),
-            userId: user.id,
-            workspaceId: workspace.id,
-            listId,
-            email: dl.email,
-            firstName: dl.firstName,
-            lastName: dl.lastName,
-            company: dl.companyName,
-            website: dl.companyWebsite,
-            linkedin: dl.linkedinUrl,
-            jobTitle: dl.jobTitle,
-            location: dl.location,
-            phone: dl.phone,
-            industry: dl.industry,
-            status: "new" as const,
-            customFields: compactCustomFields(dl.rawAttributes),
-            tags: ["autogtm", "b2b-verified"],
-          }))
-        )
-        .onConflictDoNothing();
-    }
-
-    // 3. Create calibrated Email Template in PostgreSQL.
-    // The user explicitly approved these samples, so prefer them over a
-    // synthesized template. Spintax is added deterministically at this layer.
-    const primarySample = approvedSamples[0] || {
-      subject: calibratedProfile.calibratedSubjectTemplate || `Accelerating growth for {{company}}`,
-      bodyText:
-        calibratedProfile.calibratedBodyTemplate ||
-        `Hi {{first_name}},\n\nWould love to share how our team helps companies in your space scale operations.\n\nBest,\n{{sender_name}}`,
-      bodyHtml: `<p>Hi {{first_name}},</p><p>Would love to share how our team helps companies in your space scale operations.</p><p>Best,<br/>{{sender_name}}</p>`,
-    };
-
-    const finalSubject = primarySample.subject || calibratedProfile.calibratedSubjectTemplate;
-    const finalBodyText = ensureOutreachSpintax(
-      primarySample.bodyText || calibratedProfile.calibratedBodyTemplate
-    );
-    const finalBodyHtml = ensureOutreachSpintax(
-      primarySample.bodyHtml || `<p>${finalBodyText.replace(/\n/g, "<br/>")}</p>`
-    );
-
-    const templateId = crypto.randomUUID();
-    await db.insert(schema.emailTemplates).values({
-      id: templateId,
-      userId: user.id,
-      name: `${companyName} Calibrated Template`,
-      subject: finalSubject,
-      bodyText: finalBodyText,
-      bodyHtml: finalBodyHtml,
-      format: "text",
-    });
-
-    // 4. Create running Campaign
-    const campaignId = crypto.randomUUID();
-    await db.insert(schema.campaigns).values({
-      id: campaignId,
-      userId: user.id,
-      workspaceId: workspace.id,
-      name: `AutoGTM: ${companyName}`,
-      status: "running",
-      leadListId: listId,
-      templateId,
-      dailyLimit: Math.min(500, Math.max(30, dailyLimit)),
-      minDelaySec: 45,
-      maxDelaySec: 120,
-      maxEmailsPerSenderPerDay: 30, // hard per-mailbox ceiling
-      stopOnReply: true,
-      retryFailed: true,
-      trackOpens: true,
-      startedAt: nowIso(),
-    });
-
-    const offers = (run.offers as any[]) || [];
-    const activeOffer = offers[selectedOfferIndex] || offers[0] || {
-      title: "Direct Value Offer",
-      angle: "Direct ROI",
-      valueProp: "Accelerate your team's workflow and output.",
-      cta: "Open to a brief 4-minute demo this Thursday?",
-    };
-
-    // 4b. Create 3-touch sequence: Step 1 (Opener), Step 2 (Follow-Up 1, +3d), Step 3 (Follow-Up 2, +4d)
-    // Step 1: Main Opener (Day 0)
-    const step1Id = crypto.randomUUID();
-    await db.insert(schema.sequenceSteps).values({
-      id: step1Id,
-      campaignId,
-      position: 1,
-      delayDays: 0,
-    });
-
-    const styleExemplars: Array<{ subject: string; bodyText: string; recipientTitle?: string }> =
-      Array.isArray(calibratedProfile.styleExemplars) && calibratedProfile.styleExemplars.length > 0
-        ? calibratedProfile.styleExemplars
-        : (approvedSamples || [])
-            .filter((s) => s && s.approved !== false)
-            .slice(0, 3)
-            .map((s) => ({
-              subject: s.subject || "",
-              bodyText: s.bodyText || "",
-              recipientTitle: s.recipientTitle,
-            }));
-
-    const aiPromptStep1 = [
-      calibratedProfile.customAiInstruction ||
-        `Company: ${companyName}. Value offer: ${activeOffer.valueProp}. Angle: ${activeOffer.angle}. Call to action: ${activeOffer.cta}. Write a first-touch cold email in 35-70 words. No pleasantries, no self-intro, no feature dump. One specific observation, one friction, one low-friction permission question.`,
-      `SPINTAX: include {Hi|Hey|Hello} and at least one other {a|b} variant group. Never spin names, companies, numbers, or factual claims.`,
-      `Do not mention DNS, mailboxes, inbox warmup, or deliverability unless the campaign explicitly asks for it.`,
-    ].join("\n\n");
-
-    // Structured envelope: carries the user's offer, approved exemplars, and
-    // rejection constraints to the send-time generator through the DB.
-    const sendContext = buildCampaignContext(run, activeOffer);
-    const stepPrompt = (instruction: string) =>
-      JSON.stringify({
-        instruction,
-        context: sendContext,
-        styleExamples: styleExemplars,
-        negativeConstraints: calibratedProfile.rejectionConstraints || [],
-        requireSpintax: true,
-      });
-
-    await db.insert(schema.sequenceStepVariants).values({
-      id: crypto.randomUUID(),
-      stepId: step1Id,
-      label: "A",
-      subject: finalSubject,
-      bodyText: finalBodyText,
-      bodyHtml: finalBodyHtml,
-      aiGenerateOnTheFly: true,
-      aiPrompt: stepPrompt(aiPromptStep1),
-    });
-
-    // Step 2: Follow-Up #1 (Day 3, +3 days delay) - Value & Asset Drop (NO "just checking in")
-    const step2Id = crypto.randomUUID();
-    await db.insert(schema.sequenceSteps).values({
-      id: step2Id,
-      campaignId,
-      position: 2,
-      delayDays: 3,
-    });
-
-    const step2Subject = finalSubject.toLowerCase().startsWith("re:")
-      ? finalSubject
-      : `re: ${finalSubject}`;
-    const step2BodyText = ensureOutreachSpintax(
-      `Hi {{first_name}},\n\nPut together a short breakdown of where {{company}} is likely losing time in this workflow.\n\nWould you prefer I share the link here or send it to another email?\n\nBest,\n{{sender_name}}`
-    );
-    const step2BodyHtml = ensureOutreachSpintax(
-      `<p>Hi {{first_name}},</p><p>Put together a short breakdown of where {{company}} is likely losing time in this workflow.</p><p>Would you prefer I share the link here or send it to another email?</p><p>Best,<br/>{{sender_name}}</p>`
-    );
-    const aiPromptStep2 = `Write follow-up #1 (sent 3 days after initial message) for ${companyName}. Recipient is {{job_title}} at {{company}}. Never say "just checking in" or "following up". Offer a 60-second asset or micro-audit tailored to ${activeOffer.valueProp}. Strictly under 35 words. Low-friction permission CTA.`;
-
-    await db.insert(schema.sequenceStepVariants).values({
-      id: crypto.randomUUID(),
-      stepId: step2Id,
-      label: "A",
-      subject: step2Subject,
-      bodyText: step2BodyText,
-      bodyHtml: step2BodyHtml,
-      aiGenerateOnTheFly: true,
-      aiPrompt: stepPrompt(aiPromptStep2),
-    });
-
-    // Step 3: Follow-Up #2 (Day 7, +4 days delay) - 9-Word Permission Breakup
-    const step3Id = crypto.randomUUID();
-    await db.insert(schema.sequenceSteps).values({
-      id: step3Id,
-      campaignId,
-      position: 3,
-      delayDays: 4,
-    });
-
-    const step3Subject = finalSubject.toLowerCase().startsWith("re:")
-      ? finalSubject
-      : `re: ${finalSubject}`;
-    const step3BodyText = ensureOutreachSpintax(
-      `Hi {{first_name}},\n\nAssuming you're heads-down scaling {{company}} right now and this isn't a priority.\n\nShould I close your file for now, or check back with you next quarter?\n\nBest,\n{{sender_name}}`
-    );
-    const step3BodyHtml = ensureOutreachSpintax(
-      `<p>Hi {{first_name}},</p><p>Assuming you're heads-down scaling {{company}} right now and this isn't a priority.</p><p>Should I close your file for now, or check back with you next quarter?</p><p>Best,<br/>{{sender_name}}</p>`
-    );
-    const aiPromptStep3 = `Write follow-up #2 (final breakup email, sent 7 days after initial outreach) for ${companyName}. Recipient is {{job_title}} at {{company}}. Zero guilt, polite permission close. Under 25 words. Ask if we should close the file or check back next quarter.`;
-
-    await db.insert(schema.sequenceStepVariants).values({
-      id: crypto.randomUUID(),
-      stepId: step3Id,
-      label: "A",
-      subject: step3Subject,
-      bodyText: step3BodyText,
-      bodyHtml: step3BodyHtml,
-      aiGenerateOnTheFly: true,
-      aiPrompt: stepPrompt(aiPromptStep3),
-    });
-
-    // 5. Bind Active System Pool Mailboxes to campaign_senders
-    const systemSenders = await db
-      .select({ id: schema.senderAccounts.id })
-      .from(schema.senderAccounts)
-      .where(
-        and(
-          eq(schema.senderAccounts.isSystemPool, true),
-          eq(schema.senderAccounts.status, "active"),
-          isNull(schema.senderAccounts.deletedAt)
-        )
-      );
-
-    if (systemSenders.length === 0) {
-      throw new Error(
-        "No active shared mailboxes are available. Ask an admin to add or reactivate a system-pool sender before launching."
-      );
-    }
-
-    await db
-      .insert(schema.campaignSenders)
-      .values(
-        systemSenders.map((s) => ({
-          campaignId,
-          senderId: s.id,
-        }))
-      )
-      .onConflictDoNothing();
-
-    // 6. Snapshot Leads into campaignLeads
-    await ensureCampaignLeadSnapshot(db, campaignId, listId);
-
-    // 7. Update ChadGTM Run to active
-    await db
-      .update(schema.chadGtmRuns)
-      .set({
-        status: "active",
-        campaignId,
-        dailyEmailLimit: dailyLimit,
-        approvedEmailSamples: approvedSamples,
-        updatedAt: nowIso(),
-      })
-      .where(eq(schema.chadGtmRuns.id, runId));
 
     revalidatePath("/chad-gtm");
     revalidatePath(`/chad-gtm/${runId}`);
@@ -1181,10 +833,13 @@ export async function getChadGtmRunAction(runId: string) {
       repliesCount: 0,
       replyRate: 0,
       positiveSentimentCount: 0,
+      agentReplies: 0,
+      openRequests: 0,
+      meetingsBooked: 0,
     };
     let recentActivity: Array<{
       id: string;
-      type: "send" | "reply" | "open";
+      type: "send" | "reply" | "open" | "agent";
       recipient: string;
       timestamp: string;
       detail?: string;
@@ -1220,13 +875,15 @@ export async function getChadGtmRunAction(runId: string) {
       kpis.sentToday = Number(sentTodayRow?.count || 0);
 
       // Sent Lifetime
+      // Count delivered jobs, not campaign_leads.status: a lead moves on to
+      // "active"/"replied" after its first send, which hid real volume.
       const [sentLifetimeRow] = await db
         .select({ count: sql<number>`count(*)` })
-        .from(schema.campaignLeads)
+        .from(schema.emailJobs)
         .where(
           and(
-            eq(schema.campaignLeads.campaignId, run.campaignId),
-            eq(schema.campaignLeads.status, "sent")
+            eq(schema.emailJobs.campaignId, run.campaignId),
+            eq(schema.emailJobs.status, "sent")
           )
         );
       kpis.sentLifetime = Number(sentLifetimeRow?.count || 0);
@@ -1251,12 +908,22 @@ export async function getChadGtmRunAction(runId: string) {
         .from(schema.replies)
         .where(eq(schema.replies.campaignId, run.campaignId));
       kpis.repliesCount = replyRows.length;
+      // Rate = share of contacted leads who replied at all (follow-up replies
+      // in the same thread must not push this above 100%).
+      const repliedLeads = new Set(replyRows.map((r) => r.leadId || r.fromEmail)).size;
       kpis.replyRate =
-        kpis.sentLifetime > 0 ? Math.round((kpis.repliesCount / kpis.sentLifetime) * 100) : 0;
+        kpis.sentLifetime > 0 ? Math.min(100, Math.round((repliedLeads / kpis.sentLifetime) * 100)) : 0;
 
       kpis.positiveSentimentCount = replyRows.filter(
         (r) => r.tag === "interested" || r.tag === "meeting_booked"
       ).length;
+      kpis.agentReplies = replyRows.filter((r) => r.agentStatus === "replied").length;
+      kpis.meetingsBooked = replyRows.filter((r) => r.tag === "meeting_booked").length;
+      const [openReqRow] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.agentRequests)
+        .where(and(eq(schema.agentRequests.runId, run.id), eq(schema.agentRequests.status, "open")));
+      kpis.openRequests = Number(openReqRow?.count || 0);
 
       // Recent Activity Stream
       const latestSends = await db
@@ -1286,17 +953,28 @@ export async function getChadGtmRunAction(runId: string) {
         });
       }
 
-      for (const r of replyRows.slice(0, 5)) {
+      const latestReplies = [...replyRows].sort((a, b) => (b.receivedAt > a.receivedAt ? 1 : -1)).slice(0, 10);
+      for (const r of latestReplies) {
         recentActivity.push({
           id: r.id,
           type: "reply",
           recipient: r.fromEmail,
           timestamp: r.receivedAt,
-          detail: r.tag ? `Disposition: ${r.tag.replace(/_/g, " ")}` : r.snippet,
+          detail: r.snippet || (r.tag ? r.tag.replace(/_/g, " ") : ""),
         });
+        if (r.agentStatus && r.agentHandledAt && r.agentStatus !== "pending" && r.agentStatus !== "processing") {
+          recentActivity.push({
+            id: `${r.id}:agent`,
+            type: "agent",
+            recipient: r.fromEmail,
+            timestamp: r.agentHandledAt,
+            detail: r.agentSummary || r.agentStatus,
+          });
+        }
       }
 
       recentActivity.sort((a, b) => (b.timestamp > a.timestamp ? 1 : -1));
+      recentActivity = recentActivity.slice(0, 20);
     }
 
     return {
@@ -1330,13 +1008,14 @@ export async function toggleChadGtmStatusAction(
         )
       )
       .limit(1);
+    if (!run) return { ok: false, error: "Run not found." };
 
     await db
       .update(schema.chadGtmRuns)
       .set({ status: newStatus, updatedAt: nowIso() })
-      .where(eq(schema.chadGtmRuns.id, runId));
+      .where(and(eq(schema.chadGtmRuns.id, runId), eq(schema.chadGtmRuns.userId, user.id)));
 
-    if (run?.campaignId) {
+    if (run.campaignId) {
       await db
         .update(schema.campaigns)
         .set({
@@ -1372,16 +1051,18 @@ export async function updateChadGtmVelocityAction(
         )
       )
       .limit(1);
+    if (!run) return { ok: false, error: "Run not found." };
+    const safeLimit = Math.min(500, Math.max(30, Math.round(Number(dailyLimit) || 30)));
 
     await db
       .update(schema.chadGtmRuns)
-      .set({ dailyEmailLimit: dailyLimit, updatedAt: nowIso() })
-      .where(eq(schema.chadGtmRuns.id, runId));
+      .set({ dailyEmailLimit: safeLimit, updatedAt: nowIso() })
+      .where(and(eq(schema.chadGtmRuns.id, runId), eq(schema.chadGtmRuns.userId, user.id)));
 
-    if (run?.campaignId) {
+    if (run.campaignId) {
       await db
         .update(schema.campaigns)
-        .set({ dailyLimit, updatedAt: nowIso() })
+        .set({ dailyLimit: safeLimit, updatedAt: nowIso() })
         .where(eq(schema.campaigns.id, run.campaignId));
     }
 

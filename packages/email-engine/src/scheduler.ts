@@ -12,6 +12,7 @@
  * stuck-job recovery) picks them up. Emails are NEVER sent from HTTP
  * requests; they only flow through email_jobs → processor.
  */
+import { loadEngineAiOptions } from "./ai-options";
 import {
   buildUnsubscribeUrl,
   createUnsubscribeToken,
@@ -330,6 +331,7 @@ export async function scheduleCampaign(
       steps: sequenceSteps,
       lead,
       senderName: senderFirstName,
+      aiOptions: await loadEngineAiOptions(db, campaign.userId),
     });
     if ("error" in content) {
       await db

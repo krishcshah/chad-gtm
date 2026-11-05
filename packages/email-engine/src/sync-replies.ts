@@ -280,13 +280,26 @@ function getRawPart(msg: any, ...keys: string[]): string {
   return "";
 }
 
+/**
+ * QP soft line breaks: an "=" at the end of a line that is at the encoder's
+ * wrap width (75/76 chars). Plain text rarely ends a long line with "=".
+ */
+export function hasQpSoftBreaks(s: string): boolean {
+  const lines = s.replace(/\r\n/g, "\n").split("\n");
+  let hits = 0;
+  for (const line of lines) {
+    if (line.endsWith("=") && line.length >= 70 && line.length <= 77) hits++;
+  }
+  return hits > 0;
+}
+
 function classifyPart(raw: string): { kind: "html" | "text" | "empty"; content: string } {
   if (!raw || !raw.trim()) return { kind: "empty", content: "" };
   let s = stripMimeNoise(raw);
   // Detect CTE before decoding if header leaked
   const cteMatch = raw.match(/content-transfer-encoding:\s*([^\r\n]+)/i);
   const cte = (cteMatch?.[1] ?? "").trim().toLowerCase();
-  if (cte.includes("quoted-printable") || /=[0-9A-Fa-f]{2}/.test(s)) {
+  if (cte.includes("quoted-printable") || /=[0-9A-Fa-f]{2}/.test(s) || hasQpSoftBreaks(s)) {
     s = decodeQuotedPrintable(s);
   } else if (cte.includes("base64")) {
     try {
@@ -419,6 +432,29 @@ function absorbMime(raw: string, into: { text: string; html: string }, depth: nu
  */
 export function extractTextAndHtml(msg: any): { text: string; html: string } {
   const into = { text: "", html: "" };
+
+  // Single-part messages: BODY[TEXT] has no MIME headers, so the transfer
+  // encoding only exists in the BODYSTRUCTURE. Decode with it when present.
+  const bs = msg.bodyStructure;
+  if (bs && !Array.isArray(bs.childNodes) && typeof bs.type === "string" && bs.type.startsWith("text/")) {
+    const raw = getRawPart(msg, "text", "1");
+    if (raw) {
+      const enc = String(bs.encoding || "").toLowerCase();
+      let body = raw;
+      if (enc === "quoted-printable") body = decodeQuotedPrintable(raw);
+      else if (enc === "base64") {
+        try {
+          body = Buffer.from(raw.replace(/\s+/g, ""), "base64").toString("utf8");
+        } catch {
+          body = raw;
+        }
+      }
+      if (bs.type === "text/html") into.html = body.trim();
+      else into.text = decodeHtmlEntities(body).trim();
+      if (into.text || into.html) return into;
+    }
+  }
+
   // Numbered leaves before "text" (BODY[TEXT]), which is the raw multipart body.
   for (const key of ["1.1", "1.2", "1.1.1", "1.1.2", "2.1", "2.2", "1", "2", "text"]) {
     const raw = getRawPart(msg, key);
@@ -475,7 +511,7 @@ export async function syncSenderReplies(db: EngineDb, sender: SenderRow): Promis
       for await (const msg of client.fetch(
         list,
         // Fetch text + common multipart part numbers for text/html split
-        { uid: true, envelope: true, bodyParts: ["text", "1", "1.1", "1.2", "2", "2.1", "2.2"] },
+        { uid: true, envelope: true, bodyStructure: true, bodyParts: ["text", "1", "1.1", "1.2", "2", "2.1", "2.2"] },
         { uid: true },
       )) {
         try {
@@ -636,10 +672,32 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any): Prom
   const replyId = crypto.randomUUID();
   const classifiedTag = classifyReplyTag(env.subject ?? "", bodyText);
 
+  // Shared-pool mailboxes are owned by the platform admin, but the reply
+  // belongs to whoever owns the lead/campaign. Attribute everything to the
+  // lead owner so the client sees it in their UniBox (not the admin).
+  const ownerId: string = (lead as any)?.userId || sender.userId;
+  const ownerWorkspaceId: string | null =
+    (lead as any)?.workspaceId || (sender as any).workspaceId || null;
+
+  // Autopilot campaigns hand every inbound reply to the reply agent.
+  let agentStatus: "pending" | null = null;
+  if (campaignId) {
+    try {
+      const runs: any[] = await db
+        .select({ mode: schema.chadGtmRuns.replyAgentMode })
+        .from(schema.chadGtmRuns)
+        .where(eq(schema.chadGtmRuns.campaignId, campaignId))
+        .limit(1);
+      if (runs[0] && runs[0].mode !== "off") agentStatus = "pending";
+    } catch {
+      agentStatus = null;
+    }
+  }
+
   try {
     await db.insert(schema.replies).values({
       id: replyId,
-      userId: sender.userId,
+      userId: ownerId,
       senderId: sender.id,
       leadId: lead.id,
       campaignId,
@@ -652,6 +710,7 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any): Prom
       messageId,
       receivedAt,
       tag: classifiedTag,
+      agentStatus,
     });
   } catch {
     return false; // unique constraint — already recorded concurrently
@@ -661,8 +720,8 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any): Prom
   try {
     await db.insert(schema.uniboxMessages).values({
       id: crypto.randomUUID(),
-      userId: sender.userId,
-      workspaceId: (sender as any).workspaceId || (lead as any)?.workspaceId || null,
+      userId: ownerId,
+      workspaceId: ownerWorkspaceId,
       replyId,
       leadId: lead.id,
       campaignId,
@@ -684,7 +743,7 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any): Prom
   if (classifiedTag === "out_of_office") {
     await db.insert(schema.activityLogs).values({
       id: crypto.randomUUID(),
-      userId: sender.userId,
+      userId: ownerId,
       type: "out_of_office_received",
       message: `${fromEmail} sent out-of-office auto-reply (sequence kept active)`,
       campaignId,
@@ -699,8 +758,8 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any): Prom
         .insert(schema.suppressions)
         .values({
           id: crypto.randomUUID(),
-          userId: sender.userId,
-          workspaceId: (sender as any).workspaceId || (lead as any)?.workspaceId || null,
+          userId: ownerId,
+          workspaceId: ownerWorkspaceId,
           value: fromEmail,
           kind: "email",
           reason: "Negative reply / opt-out",
@@ -731,7 +790,7 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any): Prom
     .where(eq(schema.senderAccounts.id, sender.id));
   await db.insert(schema.activityLogs).values({
     id: crypto.randomUUID(),
-    userId: sender.userId,
+    userId: ownerId,
     type: "reply_received",
     message: `${fromEmail} replied via ${sender.email}`,
     campaignId,

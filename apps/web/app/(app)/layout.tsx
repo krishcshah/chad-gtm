@@ -9,6 +9,7 @@ import { getActiveWorkspace, getFallbackWorkspace, listUserWorkspaces, type Work
 import { SidebarProvider } from "@/components/layout/sidebar-context";
 import { AppShell, AppMainContent } from "@/components/layout/app-shell";
 import { PageTracker } from "@/components/page-tracker";
+import { countOpenAgentRequests } from "@/lib/autopilot-actions";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
@@ -33,6 +34,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     console.error("[AppLayout] Failed to list workspaces:", err);
   }
 
+  const openRequests = await countOpenAgentRequests();
+
   return (
     <SidebarProvider>
       <ImportJobProvider>
@@ -43,6 +46,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             user={user}
             workspaces={workspaces}
             activeWorkspace={workspace}
+            openRequests={openRequests}
           />
           <AppMainContent>{children}</AppMainContent>
           <CommandPalette />

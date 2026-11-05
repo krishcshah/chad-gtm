@@ -30,25 +30,23 @@ export default function LoginPage() {
   });
 
   return (
-    <div className="w-full max-w-md rounded-none border border-zinc-800 bg-zinc-950 p-6 sm:p-8 font-sans shadow-2xl card-shine">
+    <div className="hairline-top w-full max-w-md rounded-2xl border border-zinc-800/80 bg-zinc-950/80 p-6 sm:p-8 shadow-[0_30px_80px_-40px_rgba(0,0,0,0.9)] backdrop-blur-xl">
       <div className="mb-6 space-y-1.5 text-center">
-        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">Sign In</h1>
-        <p className="text-xs text-zinc-400 font-sans">
-          AutoGTM Autonomous Outbound Engine
-        </p>
+        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-zinc-50">Welcome back</h1>
+        <p className="text-sm text-zinc-400">Sign in to see what your outbound did today.</p>
       </div>
 
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         <div className="space-y-1.5">
           <Label htmlFor="email" className="text-xs font-medium text-zinc-300">
-            Work Email
+            Work email
           </Label>
           <Input
             id="email"
             type="email"
             placeholder="you@company.com"
             autoComplete="email"
-            className="rounded-none border-zinc-800 bg-black/60 text-xs text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-white font-sans"
+            className="h-10 rounded-lg text-sm placeholder:text-zinc-600"
             {...register("email")}
           />
           {formState.errors.email && (
@@ -66,7 +64,7 @@ export default function LoginPage() {
             id="password"
             type="password"
             autoComplete="current-password"
-            className="rounded-none border-zinc-800 bg-black/60 text-xs text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-white font-sans"
+            className="h-10 rounded-lg text-sm placeholder:text-zinc-600"
             {...register("password")}
           />
           {formState.errors.password && (
@@ -75,24 +73,25 @@ export default function LoginPage() {
         </div>
 
         {error && (
-          <Alert variant="destructive" className="rounded-none border-rose-500/30 bg-rose-500/10 text-rose-200">
+          <Alert variant="destructive" className="rounded-lg border-rose-500/30 bg-rose-500/10 text-rose-200">
             <AlertDescription className="text-xs">{error}</AlertDescription>
           </Alert>
         )}
 
         <Button
           type="submit"
-          className="w-full rounded-none bg-white font-semibold text-black hover:bg-zinc-200 text-xs tracking-tight h-10 transition-all active:scale-[0.98] cursor-pointer"
+          variant="brand"
+          className="w-full h-10 text-sm"
           disabled={formState.isSubmitting}
         >
-          {formState.isSubmitting ? "Authenticating..." : "Sign In to Mission Control"}
+          {formState.isSubmitting ? "Signing in…" : "Sign in"}
         </Button>
       </form>
 
       <div className="mt-6 border-t border-zinc-800/80 pt-4 text-center text-xs text-zinc-400">
         New to AutoGTM?{" "}
-        <Link href="/signup" className="text-white hover:underline transition-colors font-medium">
-          Create Account ($0/mo)
+        <Link href="/signup" className="text-zinc-100 hover:underline transition-colors font-medium">
+          Create an account
         </Link>
       </div>
     </div>

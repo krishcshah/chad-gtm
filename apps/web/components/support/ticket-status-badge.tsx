@@ -28,9 +28,9 @@ export function TicketStatusBadge({ status }: { status: TicketStatus }) {
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-none border px-2 py-0.5 text-[9px] font-mono uppercase tracking-widest font-bold ${conf.className}`}
+      className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[9px] font-mono uppercase tracking-widest font-bold ${conf.className}`}
     >
-      <span className={`size-1 rounded-none ${conf.dotClass}`} />
+      <span className={`size-1 rounded-lg ${conf.dotClass}`} />
       <span>{conf.label}</span>
     </span>
   );

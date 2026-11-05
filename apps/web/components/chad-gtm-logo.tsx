@@ -31,14 +31,20 @@ export function AutoGtmLogo({
           className="w-full h-full"
         >
           {/* Clean minimal squircle housing */}
+          <defs>
+            <linearGradient id="agtm-needle" x1="14" y1="6" x2="26" y2="20" gradientUnits="userSpaceOnUse">
+              <stop stopColor="#6ee7c1" />
+              <stop offset="1" stopColor="#38bdf8" />
+            </linearGradient>
+          </defs>
           <rect
             width="40"
             height="40"
-            rx="10"
-            fill="#121214"
-            stroke="#27272a"
+            rx="11"
+            fill="#10131c"
+            stroke="#262b3b"
             strokeWidth="1.2"
-            className="group-hover:stroke-zinc-500 transition-colors"
+            className="group-hover:stroke-[#34d3a6]/60 transition-colors"
           />
 
           {/* Minimal subtle dial ring */}
@@ -54,15 +60,15 @@ export function AutoGtmLogo({
           {/* Elegant dual-tone compass needle (rotates smoothly on hover) */}
           <g className="transition-transform duration-500 ease-out group-hover:rotate-45 origin-[20px_20px]">
             {/* North pointer (Pure white & polished silver) */}
-            <polygon points="20,6 20,20 14,20" fill="#ffffff" />
-            <polygon points="20,6 26,20 20,20" fill="#a1a1aa" />
+            <polygon points="20,6 20,20 14,20" fill="url(#agtm-needle)" />
+            <polygon points="20,6 26,20 20,20" fill="#12b98d" />
 
             {/* South pointer (Subtle deep zinc facets) */}
-            <polygon points="20,34 20,20 14,20" fill="#52525b" />
-            <polygon points="20,34 26,20 20,20" fill="#27272a" />
+            <polygon points="20,34 20,20 14,20" fill="#4b5162" />
+            <polygon points="20,34 26,20 20,20" fill="#2a2f3f" />
 
             {/* Center jewel hub */}
-            <circle cx="20" cy="20" r="2.8" fill="#121214" stroke="#ffffff" strokeWidth="1.4" />
+            <circle cx="20" cy="20" r="2.8" fill="#10131c" stroke="#ffffff" strokeWidth="1.4" />
             <circle cx="20" cy="20" r="1" fill="#ffffff" />
           </g>
         </svg>
@@ -70,16 +76,11 @@ export function AutoGtmLogo({
 
       {!compact && (
         <div className="flex flex-col">
-          <div className="flex items-center gap-2 leading-none">
-            <span className="text-sm sm:text-base font-bold tracking-tight text-white font-mono uppercase">
-              Auto<span className="text-zinc-400">GTM</span>
-            </span>
-            <span className="rounded border border-zinc-700 bg-zinc-900/90 px-1.5 py-0.5 text-[9px] font-mono font-medium tracking-wider text-zinc-300 uppercase">
-              v2.0
-            </span>
-          </div>
-          <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-400 mt-1 font-medium hidden sm:block">
-            Autonomous Engine
+          <span className="text-[15px] sm:text-base font-semibold tracking-tight text-white leading-none">
+            Auto<span className="text-brand-gradient">GTM</span>
+          </span>
+          <span className="text-[11px] text-zinc-500 mt-1 font-medium hidden sm:block leading-none">
+            Outbound on autopilot
           </span>
         </div>
       )}
