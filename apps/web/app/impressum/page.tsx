@@ -3,7 +3,7 @@ import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { ChadGtmLogo } from "@/components/chad-gtm-logo";
 
 export const metadata = {
-  title: "Impressum (Legal Notice) · AutoGTM",
+  title: "Impressum (Legal Notice)",
   description: "Angaben gemäß § 5 DDG (Digitale-Dienste-Gesetz) für AutoGTM.",
 };
 

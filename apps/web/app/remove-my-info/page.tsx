@@ -4,7 +4,7 @@ import { ChadGtmLogo } from "@/components/chad-gtm-logo";
 import { PublicRemoveMyInfoForm } from "./public-remove-form";
 
 export const metadata = {
-  title: "Remove My Info · Data Erasure Request · AutoGTM",
+  title: "Remove My Info · Data Erasure Request",
   description: "Request the removal of your personal or business email from the AutoGTM database under GDPR Art. 17.",
 };
 

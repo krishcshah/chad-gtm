@@ -3,7 +3,7 @@ import { ArrowLeft, ShieldCheck, Lock, UserX, FileText } from "lucide-react";
 import { ChadGtmLogo } from "@/components/chad-gtm-logo";
 
 export const metadata = {
-  title: "Privacy Policy · AutoGTM",
+  title: "Privacy Policy",
   description: "Privacy policy and GDPR data processing notice for AutoGTM.",
 };
 

@@ -1,8 +1,18 @@
 import { verifyUnsubscribeToken } from "@smartreach/database";
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { UNSUBSCRIBE_CONFIRM_FIELD } from "@/lib/unsubscribe-flow";
 
 export const dynamic = "force-dynamic";
+
+// Recipients of a client's campaign land here: no platform title or
+// description, and keep it out of search results. (The favicon comes from the
+// app/ icon files and applies to every route.)
+export const metadata: Metadata = {
+  title: { absolute: "Unsubscribe" },
+  description: "Unsubscribe from these emails.",
+  robots: { index: false, follow: false },
+};
 
 /**
  * Confirm page. Loading it (GET) never unsubscribes: link scanners fetch every
