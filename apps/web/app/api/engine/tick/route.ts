@@ -1,34 +1,28 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { authorizeCronRequest, summarizeCounts } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60; // Allow full 60s timeout on Vercel
+export const maxDuration = 60;
 
 export async function GET(req: Request) {
-  // Optional secret auth for external callers / cron triggers
-  const authHeader = req.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-  // In production this endpoint sends real email and replies to leads; never
-  // leave it open. Set CRON_SECRET (the PM2 worker does not need this route).
-  if (!cronSecret && process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "Engine tick is disabled: set CRON_SECRET" }, { status: 401 });
-  }
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    // If CRON_SECRET is configured, enforce it (Vercel automatically sets Bearer token for cron jobs)
-    const isVercelCron = req.headers.get("user-agent")?.includes("vercel-cron");
-    if (!isVercelCron) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  // This endpoint sends real email and replies to leads. Only a caller holding
+  // CRON_SECRET may trigger it; in production it is disabled when the secret
+  // is unset. The PM2 worker does not use this route.
+  const auth = authorizeCronRequest(req.headers.get("authorization"));
+  if (!auth.ok) {
+    return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
   }
 
   try {
     const { engineTick } = await import("@smartreach/email-engine");
     const db = getDb();
     const result = await engineTick(db as any, { withSync: true });
-    return NextResponse.json({ ok: true, data: result });
-  } catch (err: any) {
+    // Counts only: never echo mailbox addresses, error text or campaign names.
+    return NextResponse.json({ ok: true, data: summarizeCounts(result) });
+  } catch (err) {
     console.error("[engine-tick-api] Execution failed:", err);
-    return NextResponse.json({ ok: false, error: err?.message || "Engine tick failed" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "Engine tick failed" }, { status: 500 });
   }
 }
 

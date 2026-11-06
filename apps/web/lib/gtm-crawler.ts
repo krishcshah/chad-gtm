@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import * as cheerio from "cheerio";
 import { extractBookingLinks, pickBestBookingUrl } from "./booking-links";
+import { checkUrlSyntax, isPublicUrl, safeFetchText } from "./url-guard";
 
 export interface PricingTier {
   name: string;
@@ -86,54 +87,13 @@ export function normalizeTargetUrl(rawUrl: string): { normalizedUrl: string; dom
 }
 
 /**
- * Reject loopback, link-local and RFC1918 targets before fetching. The crawler
- * accepts user-supplied URLs, so this closes the obvious SSRF surface without
- * requiring a DNS resolver round-trip on every page load.
+ * Synchronous pre-check (no DNS): http(s) only, no credentials, and no
+ * loopback/private/link-local/CGNAT/multicast IP literal or internal hostname
+ * (decimal/octal/hex and IPv4-mapped IPv6 forms included). Hostnames are
+ * resolved and re-checked on every request by ./url-guard.
  */
 export function isPublicHttpUrl(rawUrl: string): boolean {
-  let parsed: URL;
-  try {
-    parsed = new URL(rawUrl);
-  } catch {
-    return false;
-  }
-  if (!["http:", "https:"].includes(parsed.protocol)) return false;
-
-  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (
-    !hostname ||
-    hostname === "localhost" ||
-    hostname.endsWith(".localhost") ||
-    hostname.endsWith(".local") ||
-    hostname.endsWith(".internal") ||
-    hostname === "metadata.google.internal"
-  ) {
-    return false;
-  }
-
-  const ipv4 = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (ipv4) {
-    const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
-    if (a === 10 || a === 127 || a === 0) return false;
-    if (a === 169 && b === 254) return false;
-    if (a === 172 && b >= 16 && b <= 31) return false;
-    if (a === 192 && b === 168) return false;
-    if (a >= 224) return false;
-  }
-
-  if (hostname.includes(":")) {
-    if (
-      hostname === "::1" ||
-      hostname === "::" ||
-      hostname.startsWith("fc") ||
-      hostname.startsWith("fd") ||
-      hostname.startsWith("fe80")
-    ) {
-      return false;
-    }
-  }
-
-  return true;
+  return checkUrlSyntax(rawUrl).ok;
 }
 
 function normalizeWhitespace(text: string): string {
@@ -428,6 +388,7 @@ class HeadlessRenderer {
     try {
       const page = await browser.newPage();
       try {
+        await guardHeadlessPage(page);
         await page.setUserAgent(BROWSER_HEADERS["User-Agent"]);
         await page.setExtraHTTPHeaders({ "Accept-Language": BROWSER_HEADERS["Accept-Language"] });
         await page.goto(url, { waitUntil: "networkidle2", timeout: HEADLESS_TIMEOUT_MS });
@@ -454,25 +415,43 @@ class HeadlessRenderer {
   }
 }
 
+/**
+ * Lock a headless page down to public http(s) targets: every request
+ * (navigation, each redirect hop, subresources, XHR/fetch) is checked against
+ * the SSRF guard before Chromium may send it. Service workers are bypassed so
+ * every request is visible here, and WebSocket/WebRTC/WebTransport (which
+ * request interception does not see) are removed from the page.
+ */
+async function guardHeadlessPage(page: any): Promise<void> {
+  await page.setBypassServiceWorker?.(true);
+  await page.evaluateOnNewDocument(() => {
+    for (const name of ["WebSocket", "WebTransport", "RTCPeerConnection", "webkitRTCPeerConnection"]) {
+      try {
+        Object.defineProperty(window, name, { value: undefined, configurable: false, writable: false });
+      } catch {
+        // Ignore: property may be non-configurable in some builds.
+      }
+    }
+  });
+  await page.setRequestInterception(true);
+  page.on("request", (request: any) => {
+    if (request.isInterceptResolutionHandled?.()) return;
+    const target = String(request.url());
+    // data:/blob: never touch the network.
+    if (target.startsWith("data:") || target.startsWith("blob:")) {
+      request.continue().catch(() => undefined);
+      return;
+    }
+    isPublicUrl(target)
+      .then((ok) => (ok ? request.continue() : request.abort("blockedbyclient")))
+      .catch(() => request.abort("blockedbyclient").catch(() => undefined));
+  });
+}
+
 async function fetchStatic(url: string, timeoutMs: number): Promise<string | null> {
-  if (!isPublicHttpUrl(url)) return null;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, {
-      headers: BROWSER_HEADERS,
-      signal: controller.signal,
-      redirect: "follow",
-    });
-    if (!res.ok) return null;
-    const finalUrl = res.url || url;
-    if (!isPublicHttpUrl(finalUrl)) return null;
-    return await res.text();
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
+  // Checks the URL and every redirect hop, and only connects to public IPs.
+  const res = await safeFetchText(url, { headers: BROWSER_HEADERS, timeoutMs });
+  return res ? res.body : null;
 }
 
 /**
@@ -507,7 +486,7 @@ export async function crawlCompanyDomain(rawUrl: string): Promise<CrawledCompany
     usedHeadlessFallback: false,
   };
 
-  if (!isPublicHttpUrl(normalizedUrl)) {
+  if (!(await isPublicUrl(normalizedUrl))) {
     return {
       ...fallbackProfile,
       fetchFailed: true,
