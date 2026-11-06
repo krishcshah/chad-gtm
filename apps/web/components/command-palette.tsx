@@ -19,10 +19,8 @@ export function openCommandMenu() {
 const createCommands: Command[] = [
   { id: "new-autopilot", label: "Start an autopilot run", href: "/chad-gtm", icon: Plus, group: "Create" },
   { id: "new-campaign", label: "New campaign", href: "/campaigns/new", icon: Plus, group: "Create" },
+  { id: "new-lead-list", label: "New lead list", href: "/leads/new", icon: UserPlus, group: "Create" },
   { id: "import-leads", label: "Import leads from CSV", href: "/leads/import", icon: Upload, group: "Create" },
-  { id: "new-lead", label: "Add a lead", href: "/leads/new", icon: UserPlus, group: "Create" },
-  { id: "new-sender", label: "Connect a mailbox", href: "/senders/new", icon: Plus, group: "Create" },
-  { id: "new-template", label: "New template", href: "/templates/new", icon: Plus, group: "Create" },
 ];
 
 function buildCommands(includeAdmin: boolean): Command[] {

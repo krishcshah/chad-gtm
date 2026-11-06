@@ -18,7 +18,7 @@ import { PRESET_SEQUENCES, parseSequenceTemplate } from "@/lib/sequence-template
 import { SequenceBuilder } from "./sequence-builder";
 import { StepLeads } from "./step-leads";
 import { StepName } from "./step-name";
-import { Sentence, StepReview } from "./step-review";
+import { StepReview } from "./step-review";
 import { StepSchedule } from "./step-schedule";
 import { StepSenders } from "./step-senders";
 import { WizardStepper } from "./wizard-stepper";
@@ -574,7 +574,7 @@ export function CampaignWizard({
             loading={pendingKind === "draft"}
             className="px-2.5 sm:px-3.5"
           >
-            <Sentence>Save as Draft</Sentence>
+            Save as draft
           </Button>
           <div className="flex items-center justify-end gap-2">
             {step > 1 && (
@@ -597,7 +597,7 @@ export function CampaignWizard({
                 loading={pendingKind === "publish"}
               >
                 {pendingKind !== "publish" && <Rocket aria-hidden className="max-sm:hidden" />}
-                {settings.startMode === "now" ? "Start campaign" : <Sentence>Publish Campaign</Sentence>}
+                {settings.startMode === "now" ? "Start campaign" : "Publish campaign"}
               </Button>
             )}
           </div>

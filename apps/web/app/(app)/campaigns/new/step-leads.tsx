@@ -36,7 +36,7 @@ export function StepLeads({
         description="Add leads to a list first. Your progress here is kept if you save a draft."
         action={
           <Button size="sm" variant="outline" asChild>
-            <Link href="/leads">Go to lead lists</Link>
+            <Link href="/leads/new">Create a lead list</Link>
           </Button>
         }
       />
@@ -136,10 +136,10 @@ export function StepLeads({
       <p className="text-[13px] text-muted-foreground">
         Need a different audience?{" "}
         <Link
-          href="/leads"
+          href="/leads/new"
           className="font-medium text-foreground underline decoration-border-strong underline-offset-4 hover:decoration-foreground"
         >
-          Manage lead lists
+          Create a new lead list
         </Link>
       </p>
     </div>

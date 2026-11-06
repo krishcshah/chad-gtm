@@ -27,8 +27,8 @@ export function statusCommand(status: string): {
   if (status === "draft") return { kind: "draft", label: "Continue setup" };
   if (status === "running") return { kind: "command", command: "pause", label: "Pause" };
   if (status === "paused") return { kind: "command", command: "resume", label: "Resume" };
-  if (status === "scheduled") return { kind: "command", command: "start", label: "Start now" };
-  return { kind: "command", command: "start", label: "Start again" };
+  if (status === "scheduled") return { kind: "command", command: "resume", label: "Start now" };
+  return { kind: "command", command: "resume", label: "Start again" };
 }
 
 function useCampaignCommands(id: string) {

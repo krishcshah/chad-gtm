@@ -23,11 +23,11 @@ export function StepSenders({
     return (
       <EmptyState
         icon={Mail}
-        title="No mailboxes connected"
-        description="Connect at least one mailbox to send from. Save a draft first to keep what you have so far."
+        title="No mailboxes available"
+        description="Sending mailboxes are set up by the AutoGTM team. Save a draft to keep your progress, then ask support to assign one."
         action={
           <Button size="sm" variant="outline" asChild>
-            <Link href="/senders/new">Connect a mailbox</Link>
+            <Link href="/support">Contact support</Link>
           </Button>
         }
       />

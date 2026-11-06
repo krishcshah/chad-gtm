@@ -303,9 +303,9 @@ export function LeadTable({
     <>
       <PageHeader
         eyebrow={
-          <Link href="/leads" className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground">
+          <Link href="/campaigns" className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground">
             <ArrowLeft className="size-4" aria-hidden />
-            Leads
+            Campaigns & leads
           </Link>
         }
         title={title}
@@ -482,7 +482,7 @@ export function LeadTable({
           onOpenChange={setDeleteListOpen}
           onDeleted={() => {
             toast.success(`Deleted "${title}"`);
-            router.push("/leads");
+            router.push("/campaigns");
             router.refresh();
           }}
         />

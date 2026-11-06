@@ -49,7 +49,7 @@ export function groupActivity(activities: ActivityItem[]): FeedItem[] {
       category: "imports",
       title: `Imported ${batch.count.toLocaleString()} leads`,
       subtitle: batch.batches > 1 ? `In ${batch.batches} batches` : undefined,
-      link: "/leads",
+      link: "/campaigns",
       timestamp: batch.first,
       tone: "info",
       icon: Users,
@@ -92,9 +92,9 @@ export function groupActivity(activities: ActivityItem[]): FeedItem[] {
         icon: Rocket,
       });
     } else if (type.includes("bounce") || msg.includes("bounce") || msg.includes("failed")) {
-      list.push({ id: act.id, category: "system", title: "Delivery problem", subtitle: act.message, link: "/analytics", timestamp: at, tone: "destructive", icon: AlertTriangle });
+      list.push({ id: act.id, category: "system", title: "Delivery problem", subtitle: act.message, link: "/campaigns", timestamp: at, tone: "destructive", icon: AlertTriangle });
     } else if (type.includes("sender") || msg.includes("sender")) {
-      list.push({ id: act.id, category: "system", title: "Mailbox activity", subtitle: act.message, link: "/senders", timestamp: at, tone: "neutral", icon: Mail });
+      list.push({ id: act.id, category: "system", title: "Mailbox activity", subtitle: act.message, timestamp: at, tone: "neutral", icon: Mail });
     } else {
       list.push({ id: act.id, category: "system", title: act.message, timestamp: at, tone: "neutral", icon: Activity });
     }

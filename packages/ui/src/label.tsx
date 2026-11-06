@@ -43,7 +43,11 @@ export function Field({
   /** Small element on the right of the label row, e.g. a "Generate" link. */
   action?: React.ReactNode;
 }) {
-  const id = React.useId();
+  const generatedId = React.useId();
+  const childId = React.isValidElement(children)
+    ? ((children as React.ReactElement<any>).props.id as string | undefined)
+    : undefined;
+  const id = childId ?? generatedId;
   const hintId = `${id}-hint`;
   const describedBy = error || hint ? hintId : undefined;
   return (
@@ -62,7 +66,7 @@ export function Field({
       </div>
       {React.isValidElement(children)
         ? React.cloneElement(children as React.ReactElement<any>, {
-            id: (children as React.ReactElement<any>).props.id ?? id,
+            id,
             "aria-invalid": error ? true : undefined,
             "aria-describedby": describedBy,
           })

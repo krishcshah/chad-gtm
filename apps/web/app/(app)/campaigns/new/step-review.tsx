@@ -13,15 +13,6 @@ import {
   stepTitle,
 } from "./wizard-utils";
 
-/**
- * Shows Title Case source text in sentence case. Some labels here are asserted
- * verbatim by lib/__tests__/campaign-wizard.test.tsx; this keeps that text in
- * the DOM while the screen follows the sentence-case rule in docs/DESIGN.md.
- */
-export function Sentence({ children }: { children: string }) {
-  return <span className="inline-block lowercase first-letter:uppercase">{children}</span>;
-}
-
 const noopSubscribe = () => () => {};
 
 /** False during server render and hydration, true after; keeps local-time text out of the server HTML. */
@@ -93,9 +84,9 @@ export function StepReview({
       ) : null}
 
       <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border lg:grid-cols-4 [&>div]:bg-card">
-        <Tile label={<Sentence>Target Leads</Sentence>} value={leadCount.toLocaleString()} hint={list?.name ?? "No list"} />
+        <Tile label="Target leads" value={leadCount.toLocaleString()} hint={list?.name ?? "No list"} />
         <Tile
-          label={<Sentence>Connected Senders</Sentence>}
+          label="Connected senders"
           value={senders.length.toLocaleString()}
           hint={senders.length === 1 ? "mailbox" : "mailboxes"}
         />
@@ -112,7 +103,7 @@ export function StepReview({
       </dl>
 
       <div className="grid gap-8 md:grid-cols-2">
-        <ReviewSection title={<Sentence>Audience & Senders</Sentence>} editLabel="Edit leads and mailboxes" onEdit={() => onEdit(2)}>
+        <ReviewSection title="Audience & senders" editLabel="Edit leads and mailboxes" onEdit={() => onEdit(2)}>
           <DataList
             items={[
               { label: "Lead list", value: list ? `${list.name} (${plural(leadCount, "lead")})` : "None selected" },
@@ -152,7 +143,7 @@ export function StepReview({
       </div>
 
       <ReviewSection
-        title={<Sentence>Sequence Steps</Sentence>}
+        title="Sequence steps"
         editLabel="Edit emails"
         onEdit={() => onEdit(4)}
         extra={

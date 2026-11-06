@@ -266,9 +266,9 @@ export function ApolloLeadsView({
           actions={
             <>
               <Button asChild variant="ghost" size="sm">
-                <Link href="/leads">
+                <Link href="/campaigns">
                   <ListChecks />
-                  Your lead lists
+                  Campaigns & leads
                 </Link>
               </Button>
               <Button asChild variant="outline" size="sm">

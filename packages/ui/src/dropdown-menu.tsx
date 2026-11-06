@@ -38,8 +38,9 @@ export const DropdownMenuItem = React.forwardRef<
     destructive?: boolean;
     shortcut?: string;
   }
->(({ className, inset, destructive, shortcut, children, ...props }, ref) => (
+>(({ className, inset, destructive, shortcut, children, asChild, ...props }, ref) => (
   <DropdownMenuPrimitive.Item
+    asChild={asChild}
     ref={ref}
     className={cn(
       menuItemClasses,
@@ -49,8 +50,14 @@ export const DropdownMenuItem = React.forwardRef<
     )}
     {...props}
   >
-    {children}
-    {shortcut ? <span className="ml-auto pl-4 text-xs text-subtle-foreground">{shortcut}</span> : null}
+    {asChild ? (
+      children
+    ) : (
+      <>
+        {children}
+        {shortcut ? <span className="ml-auto pl-4 text-xs text-subtle-foreground">{shortcut}</span> : null}
+      </>
+    )}
   </DropdownMenuPrimitive.Item>
 ));
 DropdownMenuItem.displayName = "DropdownMenuItem";
