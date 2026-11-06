@@ -1174,7 +1174,7 @@ export async function sendAgentReply(
   return { uniboxMessageId, messageId: info.messageId };
 }
 
-async function notifyClientOfRequest(
+export async function notifyClientOfRequest(
   db: EngineDb,
   sender: SenderRow,
   ownerId: string,
@@ -1193,15 +1193,31 @@ async function notifyClientOfRequest(
   const link = appUrl ? `${appUrl}/requests` : "your AutoGTM requests page";
   const firstName = String(owner.name || "").split(/\s+/)[0] || "there";
   const body = `Hi ${firstName},\n\nYour outreach agent needs a hand with a lead (${leadEmail}).\n\n${title}\n"${question}"\n\nAnswer it here and the agent will pick the conversation back up: ${link}\n\nAnything you share is saved, so the agent won't ask twice.\n\n— AutoGTM`;
-  const send = deps.sendMail ?? realSendMail;
-  await send(sender, {
+  const message = {
     to: owner.email,
     subject: `Your agent needs you: ${title}`,
     text: body,
     html: textToHtml(body),
-  });
+  };
+  // Prefer the dedicated system sender (neutral "AutoGTM" From, outside the
+  // cold-outreach pool). Fall back to the pool mailbox that received the
+  // reply only when no system mailer is configured. Any send failure throws,
+  // so notified_at is only set after a successful send.
+  const { isSystemMailerConfigured, sendSystemEmail } = await import("./system-mailer");
+  if (isSystemMailerConfigured()) {
+    await sendSystemEmail(message);
+  } else {
+    const send = deps.sendMail ?? realSendMail;
+    await send(sender, message);
+  }
   await db
     .update(schema.agentRequests)
     .set({ notifiedAt: (deps.now?.() ?? new Date()).toISOString() })
-    .where(and(eq(schema.agentRequests.userId, ownerId), eq(schema.agentRequests.leadEmail, leadEmail)));
+    .where(
+      and(
+        eq(schema.agentRequests.userId, ownerId),
+        eq(schema.agentRequests.leadEmail, leadEmail),
+        sql`${schema.agentRequests.notifiedAt} is null`,
+      ),
+    );
 }

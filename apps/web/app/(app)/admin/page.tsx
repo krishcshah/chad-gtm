@@ -6,7 +6,9 @@ import { listAllDataRemovalRequestsForAdmin } from "@/lib/data-removal";
 import { getAdminUserAnalytics } from "@/lib/admin-analytics";
 import { getSystemMailboxPoolStats } from "@/lib/admin-gtm-actions";
 import { getDirectoryStats } from "@/lib/leads-directory";
+import { listAccountApprovalsAction } from "@/lib/admin-actions";
 import { AdminConsoleView } from "./admin-console-view";
+import { AdminApprovalsView } from "./admin-approvals-view";
 import { ShieldCheck, ShieldAlert } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -35,11 +37,15 @@ export default async function AdminPage() {
     );
   }
 
-  const [analytics, supportTickets, removalRequests, poolStats] = await Promise.all([
+  const [analytics, supportTickets, removalRequests, poolStats, approvals] = await Promise.all([
     getAdminUserAnalytics(user),
     listAllTicketsForAdmin(user),
     listAllDataRemovalRequestsForAdmin(user),
     getSystemMailboxPoolStats(),
+    listAccountApprovalsAction().catch((err) => {
+      console.error("[AdminPage] Failed to load account approvals:", err);
+      return { pending: [], recentlyApproved: [], emailOnApprove: false };
+    }),
   ]);
 
   const directoryStats = getDirectoryStats();
@@ -64,6 +70,8 @@ export default async function AdminPage() {
           Universal management of shared mailbox fleets, lead directory, user analytics, support tickets, and GDPR compliance requests.
         </p>
       </div>
+
+      <AdminApprovalsView initial={approvals} />
 
       <AdminConsoleView
         initialAnalytics={analytics}

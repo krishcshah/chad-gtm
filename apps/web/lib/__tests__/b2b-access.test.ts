@@ -1,15 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { ADMIN_EMAIL, isAdminEmail } from "../admin";
+import { isAdminEmail } from "../admin";
 import { getB2BCheckoutUrl, STRIPE_B2B_CHECKOUT_BASE } from "../b2b-access";
 
 describe("B2B Database Access & Paywall Configuration", () => {
-  it("enforces admin email matching for de.krish.shah@gmail.com", () => {
-    expect(isAdminEmail(ADMIN_EMAIL)).toBe(true);
-    expect(isAdminEmail("DE.KRISH.SHAH@GMAIL.COM")).toBe(true);
-    expect(isAdminEmail("de.krish.shah@gmail.com ")).toBe(true);
-    expect(isAdminEmail("regular-user@gmail.com")).toBe(false);
-    expect(isAdminEmail("")).toBe(false);
-    expect(isAdminEmail(undefined)).toBe(false);
+  it("matches admin emails only from ADMIN_EMAILS, case- and space-insensitively", () => {
+    const env = { ADMIN_EMAILS: "ops@example.com" };
+    expect(isAdminEmail("ops@example.com", env)).toBe(true);
+    expect(isAdminEmail("OPS@EXAMPLE.COM", env)).toBe(true);
+    expect(isAdminEmail("ops@example.com ", env)).toBe(true);
+    expect(isAdminEmail("regular-user@gmail.com", env)).toBe(false);
+    expect(isAdminEmail("ops@example.com", {})).toBe(false);
+    expect(isAdminEmail("", env)).toBe(false);
+    expect(isAdminEmail(undefined, env)).toBe(false);
   });
 
   it("constructs correct Stripe checkout link prefilled with $99.00 USD and user metadata", () => {

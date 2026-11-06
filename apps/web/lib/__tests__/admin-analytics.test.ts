@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { ADMIN_EMAIL, isAdmin } from "../admin";
+import { isAdmin } from "../admin";
 import type { AdminAnalyticsKPIs, UserAnalyticsSummary } from "../admin-analytics";
 
 describe("Admin Analytics Suite", () => {
   it("enforces admin authorization for analytics dashboard", () => {
-    expect(isAdmin({ email: ADMIN_EMAIL })).toBe(true);
-    expect(isAdmin({ email: "user@example.com" })).toBe(false);
+    expect(isAdmin({ email: "user@example.com", role: "admin" })).toBe(true);
+    expect(isAdmin({ email: "user@example.com", role: "user", emailVerified: true })).toBe(false);
     expect(isAdmin(null)).toBe(false);
     expect(isAdmin(undefined)).toBe(false);
   });

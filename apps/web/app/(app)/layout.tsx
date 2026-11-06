@@ -10,6 +10,8 @@ import { SidebarProvider } from "@/components/layout/sidebar-context";
 import { AppShell, AppMainContent } from "@/components/layout/app-shell";
 import { PageTracker } from "@/components/page-tracker";
 import { countOpenAgentRequests } from "@/lib/autopilot-actions";
+import { approvalRequired, isApprovedToSend } from "@/lib/approval";
+import { ApprovalBanner } from "./approval-banner";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
@@ -36,6 +38,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const openRequests = await countOpenAgentRequests();
 
+  let showApprovalBanner = false;
+  if (approvalRequired()) {
+    try {
+      showApprovalBanner = !(await isApprovedToSend(user.id));
+    } catch (err) {
+      console.error("[AppLayout] Failed to check approval:", err);
+    }
+  }
+
   return (
     <SidebarProvider>
       <ImportJobProvider>
@@ -48,7 +59,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             activeWorkspace={workspace}
             openRequests={openRequests}
           />
-          <AppMainContent>{children}</AppMainContent>
+          <AppMainContent>
+            {showApprovalBanner && <ApprovalBanner />}
+            {children}
+          </AppMainContent>
           <CommandPalette />
         </AppShell>
       </ImportJobProvider>
