@@ -1,43 +1,48 @@
-import { redirect } from "next/navigation";
+import Link from "next/link";
+import { Button, PageHeader, StatePanel } from "@smartreach/ui";
 import { requireUser } from "@/lib/session";
 import { isAdmin } from "@/lib/admin";
 import { listAllTicketsForAdmin } from "@/lib/support";
 import { listAllDataRemovalRequestsForAdmin } from "@/lib/data-removal";
+import { listAllBugReportsForAdmin } from "@/lib/bug-reports";
 import { getAdminUserAnalytics } from "@/lib/admin-analytics";
 import { getSystemMailboxPoolStats } from "@/lib/admin-gtm-actions";
 import { getDirectoryStats } from "@/lib/leads-directory";
 import { listAccountApprovalsAction } from "@/lib/admin-actions";
+import { Page } from "@/components/layout/page";
 import { AdminConsoleView } from "./admin-console-view";
-import { AdminApprovalsView } from "./admin-approvals-view";
-import { ShieldCheck, ShieldAlert } from "lucide-react";
+import { parseAdminTab } from "./admin-tabs";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Admin Console · Mailbox Pool & Lead Directory · AutoGTM",
-  description:
-    "Administrative oversight of shared mailbox infrastructure, Apollo B2B directory, registered users, page view analytics, support tickets, and GDPR data requests.",
+  title: "Admin",
+  description: "Approve accounts, run the shared mailbox pool and lead directory, and handle support and data requests.",
 };
 
-export default async function AdminPage() {
+export default async function AdminPage({ searchParams }: { searchParams: Promise<{ tab?: string | string[] }> }) {
   const user = await requireUser();
 
   if (!isAdmin(user)) {
     return (
-      <div className="mx-auto max-w-2xl py-16 px-4 font-mono">
-        <div className="rounded-lg border border-red-900/60 bg-red-950/20 p-6 text-center space-y-3">
-          <ShieldAlert className="mx-auto size-10 text-red-400" />
-          <h2 className="text-lg font-bold text-white uppercase tracking-wider">Access Restricted</h2>
-          <p className="text-xs text-zinc-400 max-w-md mx-auto leading-relaxed font-sans">
-            This administration console is only accessible to authorized system administrators.
-            If you need help or have feedback, please visit the Support page.
-          </p>
-        </div>
-      </div>
+      <Page width="narrow">
+        <StatePanel
+          kind="permission"
+          title="Admins only"
+          description="This page is for AutoGTM administrators. If you need help, open a support ticket and we will get back to you."
+          action={
+            <Button asChild variant="outline" size="sm">
+              <Link href="/support">Go to support</Link>
+            </Button>
+          }
+        />
+      </Page>
     );
   }
 
-  const [analytics, supportTickets, removalRequests, poolStats, approvals] = await Promise.all([
+  const { tab } = await searchParams;
+
+  const [analytics, supportTickets, removalRequests, poolStats, approvals, bugReports] = await Promise.all([
     getAdminUserAnalytics(user),
     listAllTicketsForAdmin(user),
     listAllDataRemovalRequestsForAdmin(user),
@@ -46,40 +51,32 @@ export default async function AdminPage() {
       console.error("[AdminPage] Failed to load account approvals:", err);
       return { pending: [], recentlyApproved: [], emailOnApprove: false };
     }),
+    listAllBugReportsForAdmin(user).catch((err) => {
+      console.error("[AdminPage] Failed to load bug reports:", err);
+      return null;
+    }),
   ]);
 
   const directoryStats = getDirectoryStats();
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8 font-mono">
-      {/* Admin Header */}
-      <div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1 rounded-lg bg-black border border-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
-            <ShieldCheck className="size-3" />
-            System Administrator
-          </span>
-          <span className="text-xs text-zinc-600">•</span>
-          <span className="text-xs text-zinc-400 font-mono">{user.email}</span>
-        </div>
-
-        <h1 className="mt-2 text-2xl font-bold uppercase tracking-wider text-white">
-          Admin Command Center
-        </h1>
-        <p className="mt-1 text-xs text-zinc-500 font-sans max-w-2xl">
-          Universal management of shared mailbox fleets, lead directory, user analytics, support tickets, and GDPR compliance requests.
-        </p>
-      </div>
-
-      <AdminApprovalsView initial={approvals} />
+    <Page width="wide">
+      <PageHeader
+        title="Admin"
+        description="Approve new accounts, run the shared mailbox pool and lead directory, and answer support and data requests."
+        meta={<span className="text-xs text-subtle-foreground">Signed in as {user.email}</span>}
+      />
 
       <AdminConsoleView
+        initialTab={parseAdminTab(Array.isArray(tab) ? tab[0] : tab)}
+        initialApprovals={approvals}
         initialAnalytics={analytics}
         initialSupportTickets={supportTickets}
+        initialBugReports={bugReports}
         initialDataRemovals={removalRequests}
         initialPoolStats={poolStats}
         initialDirectoryStats={directoryStats}
       />
-    </div>
+    </Page>
   );
 }

@@ -1,287 +1,300 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Bug, Download, ExternalLink } from "lucide-react";
+import { formatDateTime, timeAgo } from "@smartreach/shared";
 import {
-  Download,
-  Search,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
-  HelpCircle,
-  Filter,
-  User,
-  ExternalLink,
-  Loader2,
-  ShieldCheck,
-} from "lucide-react";
+  Badge,
+  Button,
+  Card,
+  DataList,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  EmptyState,
+  Field,
+  NativeSelect,
+  SegmentedControl,
+  Sheet,
+  SheetBody,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  toast,
+} from "@smartreach/ui";
 import type { BugReportDTO, BugReportStatus } from "@/lib/bug-reports";
 import { updateBugReportStatusAction } from "@/lib/bug-report-actions";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@smartreach/ui";
+  NoMatches,
+  RowActionsButton,
+  SearchField,
+  Toolbar,
+  WORK_STATUSES,
+  countBy,
+  downloadCsv,
+  safeExternalUrl,
+  todayStamp,
+  workStatusMeta,
+  withCount,
+} from "./admin-ui";
 
-export function AdminBugReportsView({ initialReports }: { initialReports: BugReportDTO[] }) {
+/** Bug reports from every user. Open one to read the full report and change its status. */
+export function AdminBugReportsView({
+  initialReports,
+  onOpenCountChange,
+}: {
+  initialReports: BugReportDTO[];
+  onOpenCountChange?: (count: number) => void;
+}) {
   const [reports, setReports] = useState<BugReportDTO[]>(initialReports);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [isUpdating, startTransition] = useTransition();
+  const [statusFilter, setStatusFilter] = useState<"all" | BugReportStatus>("all");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-
-  // Filtered reports
-  const filteredReports = reports.filter((r) => {
-    const matchesStatus = statusFilter === "all" || r.status === statusFilter;
-    const query = search.toLowerCase().trim();
-    if (!query) return matchesStatus;
-
-    const matchesSearch =
-      r.heading.toLowerCase().includes(query) ||
-      r.description.toLowerCase().includes(query) ||
-      r.userEmail.toLowerCase().includes(query) ||
-      (r.userName && r.userName.toLowerCase().includes(query));
-
-    return matchesStatus && matchesSearch;
-  });
-
-  // KPI stats
-  const totalCount = reports.length;
-  const openCount = reports.filter((r) => r.status === "open").length;
-  const investigatingCount = reports.filter((r) => r.status === "in_progress").length;
-  const resolvedCount = reports.filter((r) => r.status === "resolved").length;
-
-  // Handle status update
-  const handleStatusChange = (id: string, newStatus: BugReportStatus) => {
-    setUpdatingId(id);
-    startTransition(async () => {
-      try {
-        const res = await updateBugReportStatusAction(id, newStatus);
-        if (res.ok) {
-          setReports((prev) =>
-            prev.map((r) => (r.id === id ? { ...r, status: newStatus } : r))
-          );
-        }
-      } catch (err) {
-        console.error("Failed to update status:", err);
-      } finally {
-        setUpdatingId(null);
-      }
-    });
+  // The selected report stays set while the sheet animates closed.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const openReport = (id: string) => {
+    setSelectedId(id);
+    setSheetOpen(true);
   };
 
-  // CSV Export
-  const downloadCSV = () => {
-    const headers = [
-      "Report ID",
-      "Date (UTC)",
-      "User Name",
-      "User Email",
-      "Heading / Title",
-      "Description",
-      "Status",
-      "Page URL",
-    ];
+  const statusCounts = useMemo(() => countBy(reports, (r) => r.status), [reports]);
+  const openCount = statusCounts.open ?? 0;
+  const selected = reports.find((r) => r.id === selectedId) ?? null;
 
-    const escapeCsv = (str: string | null | undefined) => {
-      if (!str) return '""';
-      const clean = String(str).replace(/"/g, '""');
-      return `"${clean}"`;
-    };
+  useEffect(() => {
+    onOpenCountChange?.(openCount);
+  }, [openCount, onOpenCountChange]);
 
-    const rows = filteredReports.map((r) => [
-      escapeCsv(r.id),
-      escapeCsv(r.createdAt),
-      escapeCsv(r.userName || "N/A"),
-      escapeCsv(r.userEmail),
-      escapeCsv(r.heading),
-      escapeCsv(r.description),
-      escapeCsv(r.status),
-      escapeCsv(r.url || ""),
-    ]);
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return reports.filter((r) => {
+      if (statusFilter !== "all" && r.status !== statusFilter) return false;
+      if (!q) return true;
+      return (
+        r.heading.toLowerCase().includes(q) ||
+        r.description.toLowerCase().includes(q) ||
+        r.userEmail.toLowerCase().includes(q) ||
+        (r.userName ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [reports, statusFilter, search]);
 
-    const csvContent = [headers.join(","), ...rows.map((e) => e.join(","))].join("\r\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    const dateStr = new Date().toISOString().slice(0, 10);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `smartreach-bug-reports-${dateStr}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const changeStatus = async (report: BugReportDTO, status: BugReportStatus) => {
+    if (report.status === status) return;
+    setUpdatingId(report.id);
+    try {
+      const res = await updateBugReportStatusAction(report.id, status);
+      if (res.ok) {
+        setReports((prev) =>
+          prev.map((r) => (r.id === report.id ? { ...r, status, updatedAt: new Date().toISOString() } : r)),
+        );
+        toast.success(`Bug report marked as ${workStatusMeta(status).label.toLowerCase()}.`);
+      } else {
+        toast.error(res.error || "Could not update the bug report.");
+      }
+    } catch (err) {
+      console.error("Failed to update status:", err);
+      toast.error("Could not update the bug report. Try again.");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const exportCsv = () => {
+    downloadCsv(
+      `smartreach-bug-reports-${todayStamp()}.csv`,
+      ["Report ID", "Date (UTC)", "User Name", "User Email", "Heading / Title", "Description", "Status", "Page URL"],
+      filtered.map((r) => [r.id, r.createdAt, r.userName || "N/A", r.userEmail, r.heading, r.description, r.status, r.url || ""]),
+    );
   };
 
   return (
-    <div className="space-y-6">
-      {/* KPI Summary Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
-        <div className="rounded-lg border border-border/60 bg-card/60 p-4 backdrop-blur-xl">
-          <p className="text-xs font-medium text-muted-foreground">Total Bug Reports</p>
-          <p className="mt-1 text-2xl font-bold text-foreground">{totalCount}</p>
+    <div className="flex flex-col gap-4">
+      <Toolbar
+        actions={
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={filtered.length === 0}>
+            <Download />
+            Export CSV
+          </Button>
+        }
+      >
+        <SearchField value={search} onChange={setSearch} placeholder="Search title, details or reporter" label="Search bug reports" />
+        <div className="max-w-full overflow-x-auto">
+          <SegmentedControl
+            size="sm"
+            aria-label="Filter bug reports by status"
+            value={statusFilter}
+            onValueChange={setStatusFilter}
+            options={[
+              { value: "all", label: withCount("All", reports.length) },
+              ...WORK_STATUSES.map((s) => ({ value: s.value, label: withCount(s.label, statusCounts[s.value] ?? 0) })),
+            ]}
+          />
         </div>
+      </Toolbar>
 
-        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 backdrop-blur-xl">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-amber-400">Open / Action Needed</p>
-            <AlertCircle className="size-4 text-amber-400" />
-          </div>
-          <p className="mt-1 text-2xl font-bold text-amber-400">{openCount}</p>
-        </div>
-
-        <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 p-4 backdrop-blur-xl">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-sky-400">Investigating</p>
-            <Clock className="size-4 text-sky-400" />
-          </div>
-          <p className="mt-1 text-2xl font-bold text-sky-400">{investigatingCount}</p>
-        </div>
-
-        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4 backdrop-blur-xl">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-emerald-400">Resolved</p>
-            <CheckCircle2 className="size-4 text-emerald-400" />
-          </div>
-          <p className="mt-1 text-2xl font-bold text-emerald-400">{resolvedCount}</p>
-        </div>
-      </div>
-
-      {/* Toolbar: Search, Filter & CSV Download */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-1 items-center gap-2 max-w-md">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search reports by keyword, user email..."
-              className="w-full rounded-lg border border-border/60 bg-muted/30 pl-9 pr-3.5 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-          </div>
-
-          {/* Status filter dropdown */}
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[145px] h-9 rounded-lg border border-border/60 bg-muted/40 px-3 text-xs font-medium text-foreground focus:ring-1 focus:ring-primary">
-              <SelectValue placeholder="All Statuses" />
-            </SelectTrigger>
-            <SelectContent align="end">
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="open">Open</SelectItem>
-              <SelectItem value="in_progress">Ongoing</SelectItem>
-              <SelectItem value="resolved">Resolved</SelectItem>
-              <SelectItem value="closed">Closed</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Download CSV Button */}
-        <button
-          type="button"
-          onClick={downloadCSV}
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary/10 border border-primary/30 px-4 py-2 text-xs font-semibold text-primary hover:bg-primary/20 hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-all cursor-pointer shadow-xs"
-        >
-          <Download className="size-4" />
-          <span>Download as CSV ({filteredReports.length})</span>
-        </button>
-      </div>
-
-      {/* Bug Reports List */}
-      <div className="space-y-3">
-        {filteredReports.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border/60 p-12 text-center bg-card/30">
-            <CheckCircle2 className="mx-auto size-9 text-muted-foreground/40 mb-2" />
-            <p className="text-sm font-semibold text-muted-foreground">No bug reports match your filter</p>
-            <p className="text-xs text-muted-foreground/60 mt-1">
-              Try adjusting your search query or status filter.
-            </p>
-          </div>
+      <Card className="overflow-hidden">
+        {reports.length === 0 ? (
+          <EmptyState compact icon={Bug} title="No bug reports yet" description="Reports sent from the bug report page appear here." />
+        ) : filtered.length === 0 ? (
+          <NoMatches
+            what="bug reports"
+            onClear={() => {
+              setSearch("");
+              setStatusFilter("all");
+            }}
+          />
         ) : (
-          filteredReports.map((report) => {
-            const formattedDate = new Date(report.createdAt).toLocaleString(undefined, {
-              dateStyle: "medium",
-              timeStyle: "short",
-            });
+          <Table className="min-w-[760px]">
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-[48%]">Report</TableHead>
+                <TableHead>Reported by</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Received</TableHead>
+                <TableHead className="text-right">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((r) => {
+                const status = workStatusMeta(r.status);
+                return (
+                  <TableRow key={r.id}>
+                    <TableCell className="max-w-[460px]">
+                      <button
+                        type="button"
+                        onClick={() => openReport(r.id)}
+                        className="block max-w-full truncate text-left font-medium hover:underline"
+                      >
+                        {r.heading}
+                      </button>
+                      <p className="mt-0.5 line-clamp-2 text-muted-foreground">{r.description}</p>
+                    </TableCell>
+                    <TableCell className="max-w-[220px]">
+                      <span className="block truncate">{r.userName || r.userEmail}</span>
+                      {r.userName ? <span className="block truncate text-xs text-muted-foreground">{r.userEmail}</span> : null}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={status.variant} dot>
+                        {status.label}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      <time suppressHydrationWarning dateTime={r.createdAt} title={formatDateTime(r.createdAt)}>
+                        {timeAgo(r.createdAt)}
+                      </time>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu modal={false}>
+                        <DropdownMenuTrigger asChild>
+                          <RowActionsButton label={`Actions for ${r.heading}`} disabled={updatingId === r.id} />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => openReport(r.id)}>View report</DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuLabel>Status</DropdownMenuLabel>
+                          <DropdownMenuRadioGroup
+                            value={r.status}
+                            onValueChange={(v) => void changeStatus(r, v as BugReportStatus)}
+                          >
+                            {WORK_STATUSES.map((s) => (
+                              <DropdownMenuRadioItem key={s.value} value={s.value}>
+                                {s.label}
+                              </DropdownMenuRadioItem>
+                            ))}
+                          </DropdownMenuRadioGroup>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </Card>
 
-            return (
-              <div
-                key={report.id}
-                className="rounded-lg border border-border/60 bg-card/60 p-5 shadow-xs backdrop-blur-xl transition-all hover:border-border/90"
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  {/* Left: Info & Description */}
-                  <div className="space-y-2 flex-1 min-w-0 pr-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-bold text-foreground tracking-tight">
-                        {report.heading}
-                      </span>
-                      <span className="text-[11px] text-muted-foreground/70">•</span>
-                      <span className="text-[11px] text-muted-foreground">{formattedDate}</span>
-                    </div>
-
-                    <p className="text-xs text-foreground/90 whitespace-pre-wrap leading-relaxed bg-muted/20 p-3 rounded-lg border border-border/40 font-mono text-[12px]">
-                      {report.description}
-                    </p>
-
-                    <div className="flex flex-wrap items-center gap-4 pt-1 text-[11px] text-muted-foreground">
-                      <span className="inline-flex items-center gap-1.5 font-medium text-foreground/80">
-                        <User className="size-3 text-muted-foreground" />
-                        {report.userName ? `${report.userName} (${report.userEmail})` : report.userEmail}
-                      </span>
-
-                      {report.url && (
+      <Sheet open={sheetOpen && selected !== null} onOpenChange={setSheetOpen}>
+        <SheetContent>
+          {selected ? (
+            <>
+              <SheetHeader>
+                <SheetTitle>{selected.heading}</SheetTitle>
+                <SheetDescription>Received {formatDateTime(selected.createdAt)}</SheetDescription>
+              </SheetHeader>
+              <SheetBody className="flex flex-col gap-6">
+                <div>
+                  <h3 className="mb-2 text-[13px] font-medium">What happened</h3>
+                  <p className="whitespace-pre-wrap break-words rounded-lg bg-muted/60 p-4 text-sm leading-relaxed">
+                    {selected.description}
+                  </p>
+                </div>
+                <DataList
+                  items={[
+                    {
+                      label: "Reported by",
+                      value: selected.userName ? `${selected.userName} (${selected.userEmail})` : selected.userEmail,
+                    },
+                    {
+                      label: "Page",
+                      value: safeExternalUrl(selected.url) ? (
                         <a
-                          href={report.url}
+                          href={safeExternalUrl(selected.url)!}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-primary hover:underline"
+                          className="inline-flex max-w-full items-center gap-1 underline decoration-border-strong underline-offset-4 hover:decoration-foreground"
                         >
-                          <ExternalLink className="size-3" />
-                          <span>Reported Page</span>
+                          <span className="truncate">{selected.url}</span>
+                          <ExternalLink className="size-3.5 shrink-0" aria-hidden />
                         </a>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Right: Status Pill & Changer */}
-                  <div className="flex items-center gap-2 shrink-0 sm:pt-1">
-                    <Select
-                      value={report.status}
-                      disabled={isUpdating && updatingId === report.id}
-                      onValueChange={(val) => handleStatusChange(report.id, val as BugReportStatus)}
-                    >
-                      <SelectTrigger
-                        className={`h-7 w-[125px] text-xs font-semibold rounded-lg px-2.5 border transition-all ${
-                          report.status === "open"
-                            ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
-                            : report.status === "in_progress"
-                            ? "bg-sky-500/15 text-sky-400 border-sky-500/30"
-                            : report.status === "resolved"
-                            ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-                            : "bg-muted text-muted-foreground border-border/40"
-                        }`}
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent align="end">
-                        <SelectItem value="open">Open</SelectItem>
-                        <SelectItem value="in_progress">Ongoing</SelectItem>
-                        <SelectItem value="resolved">Resolved</SelectItem>
-                        <SelectItem value="closed">Closed</SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    {isUpdating && updatingId === report.id && (
-                      <Loader2 className="size-3.5 animate-spin text-primary" />
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+                      ) : (
+                        selected.url || "Not recorded"
+                      ),
+                    },
+                    { label: "Last updated", value: formatDateTime(selected.updatedAt) },
+                    { label: "Report ID", value: <span className="font-mono text-xs">{selected.id}</span> },
+                  ]}
+                />
+                <Field label="Status" hint="Ongoing means someone is working on it.">
+                  <NativeSelect
+                    value={selected.status}
+                    disabled={updatingId === selected.id}
+                    onChange={(e) => void changeStatus(selected, e.target.value as BugReportStatus)}
+                  >
+                    {WORK_STATUSES.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+              </SheetBody>
+              <SheetFooter>
+                <SheetClose asChild>
+                  <Button variant="outline">Close</Button>
+                </SheetClose>
+              </SheetFooter>
+            </>
+          ) : null}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

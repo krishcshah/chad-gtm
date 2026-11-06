@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, KeyRound, Loader2, Mail, Server, Shield, Sliders } from "lucide-react";
-import { toast } from "sonner";
+import { TIMEZONES } from "@smartreach/shared";
 import {
   Button,
   Dialog,
@@ -12,19 +11,18 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  Field,
   Input,
-  Label,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  NativeSelect,
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
+  toast,
 } from "@smartreach/ui";
 import { bulkUpdateSenders } from "@/lib/actions";
+import { PasswordInput } from "./password-input";
+import { SECURITY_OPTIONS, type SmtpSecurity } from "./sender-types";
 
 interface BulkEditDialogProps {
   open: boolean;
@@ -33,331 +31,281 @@ interface BulkEditDialogProps {
   onSuccess: () => void;
 }
 
-export function BulkEditDialog({
-  open,
-  onOpenChange,
-  selectedIds,
-  onSuccess,
-}: BulkEditDialogProps) {
+const KEEP = "keep";
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const EMPTY = {
+  status: KEEP as typeof KEEP | "active" | "paused",
+  dailyLimit: "",
+  hourlyLimit: "",
+  smtpHost: "",
+  smtpPort: "",
+  smtpPassword: "",
+  smtpSecurity: KEEP as typeof KEEP | SmtpSecurity,
+  imapHost: "",
+  imapPort: "",
+  imapPassword: "",
+  fromName: "",
+  replyTo: "",
+  timezone: "",
+};
+
+type Values = typeof EMPTY;
+type Updates = Parameters<typeof bulkUpdateSenders>[1];
+
+/** Only fields the user filled in become updates; everything else is left as it is. */
+function buildUpdates(v: Values): Updates {
+  const updates: Updates = {};
+  const num = (s: string) => (s.trim() && !isNaN(Number(s)) ? Number(s) : undefined);
+
+  if (v.status !== KEEP) updates.status = v.status;
+  const daily = num(v.dailyLimit);
+  if (daily !== undefined) updates.dailyLimit = Math.max(1, daily);
+  const hourly = num(v.hourlyLimit);
+  if (hourly !== undefined) updates.hourlyLimit = Math.max(1, hourly);
+
+  if (v.smtpHost.trim()) updates.smtpHost = v.smtpHost.trim();
+  const smtpPort = num(v.smtpPort);
+  if (smtpPort !== undefined) updates.smtpPort = smtpPort;
+  if (v.smtpPassword.trim()) updates.smtpPassword = v.smtpPassword.trim();
+  if (v.smtpSecurity !== KEEP) updates.smtpSecurity = v.smtpSecurity;
+
+  if (v.imapHost.trim()) updates.imapHost = v.imapHost.trim();
+  const imapPort = num(v.imapPort);
+  if (imapPort !== undefined) updates.imapPort = imapPort;
+  if (v.imapPassword.trim()) updates.imapPassword = v.imapPassword.trim();
+
+  if (v.fromName.trim()) updates.fromName = v.fromName.trim();
+  if (v.replyTo.trim()) updates.replyTo = v.replyTo.trim();
+  if (v.timezone.trim()) updates.timezone = v.timezone.trim();
+  return updates;
+}
+
+export function BulkEditDialog({ open, onOpenChange, selectedIds, onSuccess }: BulkEditDialogProps) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const [v, setV] = useState<Values>(EMPTY);
+  const [pending, setPending] = useState(false);
 
-  // Status & limits
-  const [statusAction, setStatusAction] = useState<"keep" | "active" | "paused">("keep");
-  const [dailyLimit, setDailyLimit] = useState<string>("");
-  const [hourlyLimit, setHourlyLimit] = useState<string>("");
+  const set = <K extends keyof Values>(key: K, value: Values[K]) => setV((prev) => ({ ...prev, [key]: value }));
+  const updates = buildUpdates(v);
+  const changeCount = Object.keys(updates).length;
+  // The server stores reply-to as typed, so check it here.
+  const replyToError =
+    v.replyTo.trim() && !EMAIL_RE.test(v.replyTo.trim()) ? "Enter a valid email address" : undefined;
+  const n = selectedIds.length;
+  const noun = n === 1 ? "mailbox" : "mailboxes";
 
-  // SMTP & IMAP Credentials
-  const [smtpHost, setSmtpHost] = useState("");
-  const [smtpPort, setSmtpPort] = useState("");
-  const [smtpPassword, setSmtpPassword] = useState("");
-  const [smtpSecurity, setSmtpSecurity] = useState<"keep" | "tls" | "ssl" | "none">("keep");
-  const [imapHost, setImapHost] = useState("");
-  const [imapPort, setImapPort] = useState("");
-  const [imapPassword, setImapPassword] = useState("");
-
-  // Profile
-  const [fromName, setFromName] = useState("");
-  const [replyTo, setReplyTo] = useState("");
-  const [timezone, setTimezone] = useState("");
-
-  const resetForm = () => {
-    setStatusAction("keep");
-    setDailyLimit("");
-    setHourlyLimit("");
-    setSmtpHost("");
-    setSmtpPort("");
-    setSmtpPassword("");
-    setSmtpSecurity("keep");
-    setImapHost("");
-    setImapPort("");
-    setImapPassword("");
-    setFromName("");
-    setReplyTo("");
-    setTimezone("");
+  const close = (o: boolean) => {
+    if (!o) setV(EMPTY);
+    onOpenChange(o);
   };
 
-  const handleApply = () => {
-    if (selectedIds.length === 0) return;
-
-    startTransition(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const updates: Record<string, any> = {};
-
-      if (statusAction === "active") updates.status = "active";
-      if (statusAction === "paused") updates.status = "paused";
-
-      if (dailyLimit.trim() && !isNaN(Number(dailyLimit))) {
-        updates.dailyLimit = Math.max(1, Number(dailyLimit));
-      }
-      if (hourlyLimit.trim() && !isNaN(Number(hourlyLimit))) {
-        updates.hourlyLimit = Math.max(1, Number(hourlyLimit));
-      }
-
-      if (smtpHost.trim()) updates.smtpHost = smtpHost.trim();
-      if (smtpPort.trim() && !isNaN(Number(smtpPort))) updates.smtpPort = Number(smtpPort);
-      if (smtpPassword.trim()) updates.smtpPassword = smtpPassword.trim();
-      if (smtpSecurity !== "keep") updates.smtpSecurity = smtpSecurity;
-
-      if (imapHost.trim()) updates.imapHost = imapHost.trim();
-      if (imapPort.trim() && !isNaN(Number(imapPort))) updates.imapPort = Number(imapPort);
-      if (imapPassword.trim()) updates.imapPassword = imapPassword.trim();
-
-      if (fromName.trim()) updates.fromName = fromName.trim();
-      if (replyTo.trim()) updates.replyTo = replyTo.trim();
-      if (timezone.trim()) updates.timezone = timezone.trim();
-
-      if (Object.keys(updates).length === 0) {
-        toast.info("No field values were changed");
-        onOpenChange(false);
-        return;
-      }
-
+  const apply = async () => {
+    if (n === 0 || changeCount === 0 || replyToError) return;
+    setPending(true);
+    try {
       const res = await bulkUpdateSenders(selectedIds, updates);
       if (!res.ok) {
-        toast.error(res.error || "Failed to bulk update senders");
-      } else {
-        toast.success(res.message ?? `Updated ${selectedIds.length} senders successfully`);
-        resetForm();
-        onOpenChange(false);
-        onSuccess();
-        router.refresh();
+        toast.error(res.error || "Could not update these mailboxes");
+        return;
       }
-    });
+      // The server message says "senders"; keep the UI's own wording.
+      toast.success(`Updated ${n} ${noun}`);
+      close(false);
+      onSuccess();
+      router.refresh();
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : "Could not update these mailboxes");
+    } finally {
+      setPending(false);
+    }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+    <Dialog open={open} onOpenChange={close}>
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
-            <Sliders className="size-5 text-primary" />
-            Bulk Edit {selectedIds.length} Sender{selectedIds.length === 1 ? "" : "s"}
+          <DialogTitle>
+            Edit {n} {noun}
           </DialogTitle>
-          <DialogDescription className="text-xs">
-            Fields left blank or unchanged will retain their existing mailbox configurations. Only specified fields will be applied across all {selectedIds.length} selected accounts.
+          <DialogDescription>
+            Only the fields you fill in change. Everything you leave blank stays as it is on each mailbox.
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="limits" className="w-full mt-2">
-          <TabsList className="grid w-full grid-cols-3 rounded-xl border border-border/80 bg-muted/60 p-1 sm:p-1.5 gap-1 sm:gap-1.5 shadow-2xs">
-            <TabsTrigger
-              value="limits"
-              className="gap-1.5 sm:gap-2 rounded-lg py-2 sm:py-2.5 text-[11px] sm:text-xs font-medium text-muted-foreground transition-all hover:text-foreground hover:bg-background/40 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border"
-            >
-              <Sliders className="size-3.5 text-amber-500" />
-              <span className="truncate">Status & Limits</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="servers"
-              className="gap-1.5 sm:gap-2 rounded-lg py-2 sm:py-2.5 text-[11px] sm:text-xs font-medium text-muted-foreground transition-all hover:text-foreground hover:bg-background/40 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border"
-            >
-              <Server className="size-3.5 text-blue-500" />
-              <span className="truncate">SMTP & IMAP</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="profile"
-              className="gap-1.5 sm:gap-2 rounded-lg py-2 sm:py-2.5 text-[11px] sm:text-xs font-medium text-muted-foreground transition-all hover:text-foreground hover:bg-background/40 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border"
-            >
-              <Mail className="size-3.5 text-violet-500" />
-              <span className="truncate">Profile & Pacing</span>
-            </TabsTrigger>
-          </TabsList>
+        <form
+          id="bulk-edit-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void apply();
+          }}
+        >
+          <Tabs defaultValue="sending">
+            <TabsList>
+              <TabsTrigger value="sending">Sending</TabsTrigger>
+              <TabsTrigger value="servers">Servers</TabsTrigger>
+              <TabsTrigger value="identity">Identity</TabsTrigger>
+            </TabsList>
 
-          {/* Flexible container that adapts cleanly on mobile */}
-          <div className="min-h-0 sm:min-h-[340px] pt-3 flex flex-col justify-start">
-            {/* TAB 1: Status & Limits */}
-            <TabsContent value="limits" className="space-y-4 m-0">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Account Status</Label>
-                <Select value={statusAction} onValueChange={(v: any) => setStatusAction(v)}>
-                  <SelectTrigger className="h-8 text-xs bg-background">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="keep">Keep Current</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="paused">Paused</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs">Daily Limit (emails/day)</Label>
-                <Input
-                  type="number"
-                  placeholder="e.g. 40"
-                  value={dailyLimit}
-                  onChange={(e) => setDailyLimit(e.target.value)}
-                  className="h-8 text-xs bg-background"
-                  min={1}
-                  max={2000}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs">Hourly Limit</Label>
-                <Input
-                  type="number"
-                  placeholder="e.g. 10"
-                  value={hourlyLimit}
-                  onChange={(e) => setHourlyLimit(e.target.value)}
-                  className="h-8 text-xs bg-background"
-                  min={1}
-                  max={500}
-                />
-              </div>
-            </div>
-          </TabsContent>
-
-          {/* TAB 2: SMTP & IMAP */}
-          <TabsContent value="servers" className="space-y-4 m-0">
-            <div className="space-y-3 rounded-xl border border-border/70 bg-card/60 p-3.5 sm:p-4">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                <Server className="size-3.5 text-primary" /> SMTP Outbound Host & Security
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="space-y-1 col-span-1 sm:col-span-2">
-                  <Label className="text-[11px] text-muted-foreground">SMTP Server Host</Label>
-                  <Input
-                    placeholder="e.g. smtp.gmail.com"
-                    value={smtpHost}
-                    onChange={(e) => setSmtpHost(e.target.value)}
-                    className="h-8 text-xs bg-background"
-                  />
-                </div>
-                <div className="space-y-1 col-span-1">
-                  <Label className="text-[11px] text-muted-foreground">Port</Label>
+            <TabsContent value="sending" className="flex flex-col gap-5">
+              <Field label="Status">
+                <NativeSelect value={v.status} onChange={(e) => set("status", e.target.value as Values["status"])}>
+                  <option value={KEEP}>Don&apos;t change</option>
+                  <option value="active">Active</option>
+                  <option value="paused">Paused</option>
+                </NativeSelect>
+              </Field>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <Field label="Emails per day" hint="Between 1 and 2,000.">
                   <Input
                     type="number"
-                    placeholder="587"
-                    value={smtpPort}
-                    onChange={(e) => setSmtpPort(e.target.value)}
-                    className="h-8 text-xs bg-background"
+                    inputMode="numeric"
+                    min={1}
+                    max={2000}
+                    placeholder="Don't change"
+                    value={v.dailyLimit}
+                    onChange={(e) => set("dailyLimit", e.target.value)}
+                    className="tabular"
                   />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-[11px] text-muted-foreground">SMTP Password / App Password</Label>
-                  <Input
-                    type="password"
-                    placeholder="Update credentials across selected…"
-                    value={smtpPassword}
-                    onChange={(e) => setSmtpPassword(e.target.value)}
-                    className="h-8 text-xs bg-background"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[11px] text-muted-foreground">Security Mode</Label>
-                  <Select value={smtpSecurity} onValueChange={(v: any) => setSmtpSecurity(v)}>
-                    <SelectTrigger className="h-8 text-xs bg-background">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="keep">Keep Current</SelectItem>
-                      <SelectItem value="tls">STARTTLS (Port 587)</SelectItem>
-                      <SelectItem value="ssl">SSL / TLS (Port 465)</SelectItem>
-                      <SelectItem value="none">None (Port 25)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3 rounded-xl border border-border/70 bg-card/60 p-3.5 sm:p-4">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                <Shield className="size-3.5 text-primary" /> IMAP Inbound Sync (UniBox)
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="space-y-1 col-span-1 sm:col-span-2">
-                  <Label className="text-[11px] text-muted-foreground">IMAP Server Host</Label>
-                  <Input
-                    placeholder="e.g. imap.gmail.com"
-                    value={imapHost}
-                    onChange={(e) => setImapHost(e.target.value)}
-                    className="h-8 text-xs bg-background"
-                  />
-                </div>
-                <div className="space-y-1 col-span-1">
-                  <Label className="text-[11px] text-muted-foreground">Port</Label>
+                </Field>
+                <Field label="Emails per hour" hint="Between 1 and 500.">
                   <Input
                     type="number"
-                    placeholder="993"
-                    value={imapPort}
-                    onChange={(e) => setImapPort(e.target.value)}
-                    className="h-8 text-xs bg-background"
+                    inputMode="numeric"
+                    min={1}
+                    max={500}
+                    placeholder="Don't change"
+                    value={v.hourlyLimit}
+                    onChange={(e) => set("hourlyLimit", e.target.value)}
+                    className="tabular"
                   />
-                </div>
+                </Field>
               </div>
+            </TabsContent>
 
-              <div className="space-y-1">
-                <Label className="text-[11px] text-muted-foreground">IMAP Password</Label>
-                <Input
-                  type="password"
-                  placeholder="Leave blank to keep current…"
-                  value={imapPassword}
-                  onChange={(e) => setImapPassword(e.target.value)}
-                  className="h-8 text-xs bg-background"
-                />
+            <TabsContent value="servers" className="flex flex-col gap-5">
+              <p className="text-[13px] text-muted-foreground">
+                Every selected mailbox gets the same value. Use this when they share one provider.
+              </p>
+              <div className="grid gap-5 sm:grid-cols-6">
+                <Field label="SMTP server" className="sm:col-span-4">
+                  <Input
+                    placeholder="Don't change"
+                    value={v.smtpHost}
+                    onChange={(e) => set("smtpHost", e.target.value)}
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </Field>
+                <Field label="SMTP port" className="sm:col-span-2">
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="—"
+                    value={v.smtpPort}
+                    onChange={(e) => set("smtpPort", e.target.value)}
+                    className="tabular"
+                  />
+                </Field>
+                <Field label="Encryption" className="sm:col-span-3">
+                  <NativeSelect
+                    value={v.smtpSecurity}
+                    onChange={(e) => set("smtpSecurity", e.target.value as Values["smtpSecurity"])}
+                  >
+                    <option value={KEEP}>Don&apos;t change</option>
+                    {SECURITY_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field label="SMTP password" className="sm:col-span-3">
+                  <PasswordInput
+                    placeholder="Don't change"
+                    value={v.smtpPassword}
+                    onChange={(e) => set("smtpPassword", e.target.value)}
+                  />
+                </Field>
+                <Field label="IMAP server" className="sm:col-span-4">
+                  <Input
+                    placeholder="Don't change"
+                    value={v.imapHost}
+                    onChange={(e) => set("imapHost", e.target.value)}
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </Field>
+                <Field label="IMAP port" className="sm:col-span-2">
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="—"
+                    value={v.imapPort}
+                    onChange={(e) => set("imapPort", e.target.value)}
+                    className="tabular"
+                  />
+                </Field>
+                <Field label="IMAP password" className="sm:col-span-6">
+                  <PasswordInput
+                    placeholder="Don't change"
+                    value={v.imapPassword}
+                    onChange={(e) => set("imapPassword", e.target.value)}
+                  />
+                </Field>
               </div>
-            </div>
-          </TabsContent>
+            </TabsContent>
 
-          {/* TAB 3: Profile & Pacing */}
-          <TabsContent value="profile" className="space-y-4 m-0">
-            <div className="space-y-3 rounded-xl border border-border/70 bg-card/60 p-3.5 sm:p-4">
-              <div className="space-y-1">
-                <Label className="text-xs">Display Sender Name</Label>
-                <Input
-                  placeholder="e.g. Alex at Acme"
-                  value={fromName}
-                  onChange={(e) => setFromName(e.target.value)}
-                  className="h-8 text-xs bg-background"
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  The visible human name prospects see next to your mailbox address.
-                </p>
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs">Reply-To Address</Label>
+            <TabsContent value="identity" className="flex flex-col gap-5">
+              <Field label="Display name" hint="The name recipients see next to the address.">
+                <Input placeholder="Don't change" value={v.fromName} onChange={(e) => set("fromName", e.target.value)} />
+              </Field>
+              <Field
+                label="Reply-to address"
+                error={replyToError}
+                hint="Replies from every selected mailbox go to this inbox."
+              >
                 <Input
                   type="email"
-                  placeholder="e.g. replies@acme.com"
-                  value={replyTo}
-                  onChange={(e) => setReplyTo(e.target.value)}
-                  className="h-8 text-xs bg-background"
+                  placeholder="Don't change"
+                  value={v.replyTo}
+                  onChange={(e) => set("replyTo", e.target.value)}
+                  spellCheck={false}
                 />
-                <p className="text-[11px] text-muted-foreground">
-                  Route prospect replies to an alternate inbox if specified.
-                </p>
-              </div>
+              </Field>
+              <Field label="Time zone">
+                <NativeSelect value={v.timezone} onChange={(e) => set("timezone", e.target.value)}>
+                  <option value="">Don&apos;t change</option>
+                  {(TIMEZONES as readonly string[]).map((tz) => (
+                    <option key={tz} value={tz}>
+                      {tz.replace(/_/g, " ")}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </Field>
+            </TabsContent>
+          </Tabs>
+        </form>
 
-              <div className="space-y-1">
-                <Label className="text-xs">Timezone</Label>
-                <Input
-                  placeholder="e.g. America/New_York or UTC"
-                  value={timezone}
-                  onChange={(e) => setTimezone(e.target.value)}
-                  className="h-8 text-xs bg-background"
-                />
-              </div>
-            </div>
-          </TabsContent>
+        <DialogFooter className="sm:justify-between">
+          <p className="text-[13px] text-muted-foreground" aria-live="polite">
+            {changeCount === 0
+              ? "Nothing to change yet."
+              : `${changeCount} ${changeCount === 1 ? "change" : "changes"} to apply.`}
+          </p>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            <Button variant="outline" onClick={() => close(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="bulk-edit-form"
+              loading={pending}
+              disabled={changeCount === 0 || n === 0 || Boolean(replyToError)}
+            >
+              Apply to {n} {noun}
+            </Button>
           </div>
-        </Tabs>
-
-        <DialogFooter className="mt-4 flex-col-reverse sm:flex-row gap-2">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
-            Cancel
-          </Button>
-          <Button size="sm" onClick={handleApply} disabled={pending} className="w-full sm:w-auto">
-            {pending ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : <Check className="size-3.5 mr-1.5" />}
-            {pending ? "Applying changes…" : `Apply to ${selectedIds.length} Senders`}
-          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

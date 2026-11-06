@@ -1,328 +1,254 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { Eye, Mail } from "lucide-react";
+import { formatDate, formatDateTime, timeAgo } from "@smartreach/shared";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
+  Badge,
   Button,
+  DataList,
+  EmptyState,
+  ErrorState,
+  Sheet,
+  SheetBody,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  Skeleton,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  statusVariant,
 } from "@smartreach/ui";
-import {
-  User,
-  Mail,
-  Eye,
-  Server,
-  ShieldCheck,
-  CheckCircle2,
-  AlertTriangle,
-  Clock,
-  Loader2,
-  Globe,
-  Layers,
-} from "lucide-react";
 import { fetchUserDetailAction } from "@/lib/admin-actions";
-import type { UserDetailActivity } from "@/lib/admin-analytics";
+import type { UserDetailActivity, UserMailboxDetail } from "@/lib/admin-analytics";
 
-export function AdminUserDetailModal({
-  userId,
-  onClose,
-}: {
-  userId: string | null;
-  onClose: () => void;
-}) {
-  const [data, setData] = useState<UserDetailActivity | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"mailboxes" | "pages">("mailboxes");
+type LoadState =
+  | { kind: "loading" }
+  | { kind: "error" }
+  | { kind: "missing" }
+  | { kind: "ready"; data: UserDetailActivity };
+
+const LOADING: LoadState = { kind: "loading" };
+
+/**
+ * Side sheet with one user's mailboxes and page history. Opens when `userId`
+ * is set; closing calls `onClose`.
+ */
+export function AdminUserDetailModal({ userId, onClose }: { userId: string | null; onClose: () => void }) {
+  // The result is tagged with the user it belongs to, so opening a different
+  // user never flashes the previous user's details before the new load starts.
+  const [result, setResult] = useState<{ userId: string; attempt: number; state: LoadState } | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (!userId) {
-      setData(null);
-      return;
-    }
+    if (!userId) return;
     let cancelled = false;
-    setLoading(true);
     fetchUserDetailAction(userId)
       .then((res) => {
-        if (!cancelled) {
-          setData(res);
-          setLoading(false);
-        }
+        if (!cancelled)
+          setResult({ userId, attempt, state: res ? { kind: "ready", data: res } : { kind: "missing" } });
       })
       .catch((err) => {
         console.error("Failed to load user detail:", err);
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setResult({ userId, attempt, state: { kind: "error" } });
       });
-
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [userId, attempt]);
 
-  if (!userId) return null;
+  const state: LoadState =
+    result && result.userId === userId && result.attempt === attempt ? result.state : LOADING;
+  const data = state.kind === "ready" ? state.data : null;
 
   return (
-    <Dialog open={Boolean(userId)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto p-6 rounded-xl border border-zinc-800/80 bg-zinc-950/95 backdrop-blur-xl text-white font-sans card-shine shadow-2xl">
-        <DialogHeader className="space-y-1.5 border-b border-zinc-800/80 pb-4">
-          <div className="flex items-center gap-2 text-xs font-medium text-zinc-400">
-            <User className="size-3.5 text-zinc-300" /> User Telemetry & Mailbox Profile
-          </div>
-          <DialogTitle className="text-lg font-bold tracking-tight flex flex-wrap items-center gap-2 text-white">
-            <span>{data?.user.name || "Loading user..."}</span>
-            <span className="text-xs font-normal text-zinc-400 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded-full">
-              {data?.user.email || userId}
-            </span>
-          </DialogTitle>
-          <DialogDescription className="text-xs text-zinc-500">
-            Joined {data?.user.createdAt ? new Date(data.user.createdAt).toLocaleDateString() : "..."} · User ID: {userId}
-          </DialogDescription>
-        </DialogHeader>
+    <Sheet open={Boolean(userId)} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent className="sm:max-w-2xl">
+        <SheetHeader>
+          <SheetTitle className="truncate">
+            {data ? data.user.name || data.user.email : state.kind === "loading" ? "Loading user" : "User details"}
+          </SheetTitle>
+          <SheetDescription className="truncate">
+            {data ? `${data.user.email} · Joined ${formatDate(data.user.createdAt)}` : "Mailboxes and page history"}
+          </SheetDescription>
+        </SheetHeader>
 
-        {loading ? (
-          <div className="py-16 flex flex-col items-center justify-center space-y-3">
-            <Loader2 className="size-7 animate-spin text-zinc-400" />
-            <p className="text-xs text-zinc-500">Loading user behavior and mailbox metrics...</p>
-          </div>
-        ) : !data ? (
-          <div className="py-12 text-center text-xs text-zinc-500">
-            User details not found or failed to load.
-          </div>
-        ) : (
-          <div className="space-y-6 pt-2">
-            {/* Quick Stat Highlights */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4 space-y-1">
-                <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                  <Mail className="size-3.5 text-zinc-400" />
-                  <span>Total Mailboxes</span>
-                </div>
-                <div className="text-xl font-bold tracking-tight text-white">
-                  {data.mailboxes.length}
-                </div>
-                <div className="text-xs text-zinc-500">
-                  {data.mailboxes.filter((m) => m.status === "active").length} active accounts
+        <SheetBody>
+          {state.kind === "loading" ? (
+            <DetailSkeleton />
+          ) : state.kind === "error" ? (
+            <ErrorState
+              title="Could not load this user"
+              description="Check your connection and try again."
+              onRetry={() => setAttempt((n) => n + 1)}
+            />
+          ) : state.kind === "missing" ? (
+            <EmptyState icon={Eye} title="User not found" description="This account may have been deleted." />
+          ) : (
+            <UserDetail data={state.data} />
+          )}
+        </SheetBody>
+
+        <SheetFooter>
+          <SheetClose asChild>
+            <Button variant="outline">Close</Button>
+          </SheetClose>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function UserDetail({ data }: { data: UserDetailActivity }) {
+  const active = data.mailboxes.filter((m) => m.status === "active").length;
+  const failing = data.mailboxes.filter((m) => m.status === "failed" || m.smtpStatus === "failed").length;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <DataList
+        items={[
+          { label: "Email", value: data.user.email },
+          { label: "User ID", value: <span className="font-mono text-xs">{data.user.id}</span> },
+          { label: "Joined", value: formatDateTime(data.user.createdAt) },
+          {
+            label: "Mailboxes",
+            value:
+              data.mailboxes.length === 0
+                ? "None connected"
+                : `${data.mailboxes.length} connected, ${active} active${failing ? `, ${failing} failing` : ""}`,
+          },
+          {
+            label: "Recent page views",
+            value: `${data.pageViews.length.toLocaleString()} across ${data.pageCounts.length.toLocaleString()} ${data.pageCounts.length === 1 ? "page" : "pages"}`,
+          },
+        ]}
+      />
+
+      <Tabs defaultValue="mailboxes">
+        <TabsList variant="pill">
+          <TabsTrigger value="mailboxes">Mailboxes ({data.mailboxes.length})</TabsTrigger>
+          <TabsTrigger value="pages">Recent pages ({data.pageViews.length})</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="mailboxes">
+          {data.mailboxes.length === 0 ? (
+            <EmptyState
+              compact
+              icon={Mail}
+              title="No mailboxes connected"
+              description="This user has not added a sending mailbox yet."
+            />
+          ) : (
+            <ul className="divide-y divide-border rounded-xl border border-border">
+              {data.mailboxes.map((mb) => (
+                <MailboxRow key={mb.id} mailbox={mb} />
+              ))}
+            </ul>
+          )}
+        </TabsContent>
+
+        <TabsContent value="pages" className="flex flex-col gap-5">
+          {data.pageViews.length === 0 ? (
+            <EmptyState compact icon={Eye} title="No page views" description="This user has not opened any pages yet." />
+          ) : (
+            <>
+              <div>
+                <h3 className="mb-2 text-[13px] font-medium">Most visited</h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {data.pageCounts.map((pc) => (
+                    <Badge key={pc.path} variant="neutral">
+                      <span className="font-mono">{pc.path}</span>
+                      <span className="tabular text-subtle-foreground">{pc.count}</span>
+                    </Badge>
+                  ))}
                 </div>
               </div>
-
-              <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4 space-y-1">
-                <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                  <Eye className="size-3.5 text-zinc-400" />
-                  <span>Pages Visited</span>
-                </div>
-                <div className="text-xl font-bold tracking-tight text-white">
-                  {data.pageViews.length}
-                </div>
-                <div className="text-xs text-zinc-500">
-                  across {data.pageCounts.length} unique routes
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4 space-y-1">
-                <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                  <Server className="size-3.5 text-zinc-400" />
-                  <span>Health & Status</span>
-                </div>
-                <div className="text-xl font-bold tracking-tight text-white">
-                  {data.mailboxes.some((m) => m.status === "failed" || m.smtpStatus === "failed")
-                    ? "Attention Needed"
-                    : data.mailboxes.length > 0
-                    ? "Operational"
-                    : "No Mailboxes"}
-                </div>
-                <div className="text-xs text-zinc-500">
-                  {data.mailboxes.filter((m) => m.status === "failed").length} degraded
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Internal Tabs */}
-            <div className="flex items-center gap-2 border-b border-zinc-800/80 pb-2">
-              <button
-                type="button"
-                onClick={() => setActiveTab("mailboxes")}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all border ${
-                  activeTab === "mailboxes"
-                    ? "bg-zinc-800 border-zinc-700 text-white shadow-xs"
-                    : "border-transparent text-zinc-400 hover:text-white hover:bg-zinc-900"
-                }`}
-              >
-                <Mail className="size-3.5" />
-                <span>Connected Mailboxes ({data.mailboxes.length})</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab("pages")}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all border ${
-                  activeTab === "pages"
-                    ? "bg-zinc-800 border-zinc-700 text-white shadow-xs"
-                    : "border-transparent text-zinc-400 hover:text-white hover:bg-zinc-900"
-                }`}
-              >
-                <Eye className="size-3.5" />
-                <span>Page Navigation Log ({data.pageViews.length})</span>
-              </button>
-            </div>
-
-            {/* Tab 1: Mailboxes */}
-            {activeTab === "mailboxes" && (
-              <div className="space-y-3">
-                {data.mailboxes.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-zinc-800 p-8 text-center text-xs text-zinc-500 space-y-1">
-                    <Mail className="mx-auto size-6 text-zinc-600 mb-2" />
-                    <p className="font-medium text-zinc-300">No mailboxes connected yet</p>
-                    <p>This user has not configured any SMTP/IMAP sender accounts.</p>
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-zinc-800/80 overflow-hidden bg-zinc-900/20">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs text-left">
-                        <thead className="bg-zinc-900/60 border-b border-zinc-800/80 text-zinc-400 text-xs font-medium">
-                          <tr>
-                            <th className="py-2.5 px-3 font-medium">Sender Mailbox</th>
-                            <th className="py-2.5 px-3 font-medium">Host & Port</th>
-                            <th className="py-2.5 px-3 font-medium">SMTP / IMAP</th>
-                            <th className="py-2.5 px-3 font-medium">Daily Limit</th>
-                            <th className="py-2.5 px-3 font-medium">Health Score</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-zinc-800/50">
-                          {data.mailboxes.map((mb) => {
-                            const isHealthy = mb.status === "active" && mb.smtpStatus !== "failed";
-                            return (
-                              <tr key={mb.id} className="hover:bg-zinc-900/40 transition-colors">
-                                <td className="py-2.5 px-3 font-medium text-white">
-                                  <div>{mb.senderName || mb.email}</div>
-                                  <div className="text-[11px] text-zinc-500">{mb.email}</div>
-                                </td>
-                                <td className="py-2.5 px-3 text-[11px] text-zinc-400">
-                                  {mb.smtpHost || "custom"}:{mb.smtpPort || 587}
-                                </td>
-                                <td className="py-2.5 px-3">
-                                  <div className="flex items-center gap-1.5 text-[10px]">
-                                    <span
-                                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 border ${
-                                        mb.smtpStatus === "ok"
-                                          ? "bg-emerald-950/40 text-emerald-400 border-emerald-500/30"
-                                          : mb.smtpStatus === "failed"
-                                          ? "bg-rose-950/40 text-rose-400 border-rose-500/30"
-                                          : "bg-zinc-900 text-zinc-400 border-zinc-800"
-                                      }`}
-                                    >
-                                      SMTP: {mb.smtpStatus}
-                                    </span>
-                                    <span
-                                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 border ${
-                                        mb.imapStatus === "ok"
-                                          ? "bg-emerald-950/40 text-emerald-400 border-emerald-500/30"
-                                          : mb.imapStatus === "failed"
-                                          ? "bg-rose-950/40 text-rose-400 border-rose-500/30"
-                                          : "bg-zinc-900 text-zinc-400 border-zinc-800"
-                                      }`}
-                                    >
-                                      IMAP: {mb.imapStatus}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td className="py-2.5 px-3 text-zinc-400 text-[11px]">
-                                  {mb.dailyLimit} emails/day
-                                </td>
-                                <td className="py-2.5 px-3">
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-12 bg-zinc-900 rounded-full h-1.5 overflow-hidden border border-zinc-800">
-                                      <div
-                                        className={`h-full rounded-full ${
-                                          mb.health >= 80
-                                            ? "bg-emerald-400"
-                                            : mb.health >= 50
-                                            ? "bg-amber-400"
-                                            : "bg-rose-400"
-                                        }`}
-                                        style={{ width: `${mb.health}%` }}
-                                      />
-                                    </div>
-                                    <span className="text-[11px] font-medium text-zinc-300">{mb.health}%</span>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Tab 2: Page Views */}
-            {activeTab === "pages" && (
-              <div className="space-y-4">
-                {/* Most visited sections summary */}
-                <div className="space-y-1.5">
-                  <div className="text-xs font-medium text-zinc-400 flex items-center gap-1.5">
-                    <Layers className="size-3.5 text-zinc-300" /> Most Visited Sections by this User
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {data.pageCounts.map((pc) => (
-                      <span
-                        key={pc.path}
-                        className="inline-flex items-center gap-1 rounded-lg border border-zinc-800/80 bg-zinc-900/60 px-2 py-0.5 text-xs text-zinc-300"
-                      >
-                        <span className="text-white text-[11px]">{pc.path}</span>
-                        <span className="text-zinc-500 text-[10px]">({pc.count} visits)</span>
+              <div>
+                <h3 className="mb-2 text-[13px] font-medium">Latest visits, newest first</h3>
+                <ul className="divide-y divide-border rounded-xl border border-border text-[13px]">
+                  {data.pageViews.map((pv) => (
+                    <li key={pv.id} className="flex items-center gap-3 px-4 py-2.5">
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-mono text-xs">{pv.path}</span>
+                        {pv.pageTitle ? (
+                          <span className="block truncate text-xs text-muted-foreground">{pv.pageTitle}</span>
+                        ) : null}
                       </span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Chronological page log */}
-                <div className="rounded-xl border border-zinc-800/80 overflow-hidden bg-zinc-900/20">
-                  <div className="max-h-72 overflow-y-auto">
-                    <table className="w-full text-xs text-left">
-                      <thead className="bg-zinc-900/60 border-b border-zinc-800/80 text-zinc-400 text-xs font-medium sticky top-0">
-                        <tr>
-                          <th className="py-2.5 px-3 font-medium">Page Route</th>
-                          <th className="py-2.5 px-3 font-medium">Page Title</th>
-                          <th className="py-2.5 px-3 font-medium">Visited At</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-800/50">
-                        {data.pageViews.map((pv) => (
-                          <tr key={pv.id} className="hover:bg-zinc-900/40 transition-colors">
-                            <td className="py-2 px-3 text-[11px] font-medium text-white">
-                              {pv.path}
-                            </td>
-                            <td className="py-2 px-3 text-zinc-400 truncate max-w-xs text-xs">
-                              {pv.pageTitle || "—"}
-                            </td>
-                            <td className="py-2 px-3 text-[11px] text-zinc-500 whitespace-nowrap">
-                              {new Date(pv.createdAt).toLocaleString()}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                      <time
+                        dateTime={pv.createdAt}
+                        title={formatDateTime(pv.createdAt)}
+                        className="shrink-0 text-xs text-subtle-foreground"
+                      >
+                        {timeAgo(pv.createdAt)}
+                      </time>
+                    </li>
+                  ))}
+                </ul>
               </div>
-            )}
+            </>
+          )}
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
 
-            <div className="flex justify-end pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onClose}
-                className="text-xs rounded-lg border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:text-white hover:bg-zinc-800"
-              >
-                Close Profile
-              </Button>
-            </div>
+function connectionVariant(status: string) {
+  if (status === "ok") return "success" as const;
+  if (status === "failed") return "destructive" as const;
+  return "neutral" as const;
+}
+
+function MailboxRow({ mailbox: mb }: { mailbox: UserMailboxDetail }) {
+  const healthTone = mb.health >= 80 ? "text-success-text" : mb.health >= 50 ? "text-warning-text" : "text-destructive-text";
+  return (
+    <li className="flex flex-col gap-2 px-4 py-3 text-[13px]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate font-medium">{mb.senderName || mb.email}</div>
+          <div className="truncate text-xs text-muted-foreground">{mb.email}</div>
+        </div>
+        <Badge variant={statusVariant(mb.status)} dot className="shrink-0 capitalize">
+          {mb.status}
+        </Badge>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+        <span className="font-mono">
+          {mb.smtpHost || "Custom host"}:{mb.smtpPort || 587}
+        </span>
+        <Badge variant={connectionVariant(mb.smtpStatus)}>SMTP {mb.smtpStatus}</Badge>
+        <Badge variant={connectionVariant(mb.imapStatus)}>IMAP {mb.imapStatus}</Badge>
+        <span className="tabular">{mb.dailyLimit} a day</span>
+        <span className="tabular">
+          Health <span className={healthTone}>{mb.health}%</span>
+        </span>
+      </div>
+    </li>
+  );
+}
+
+function DetailSkeleton() {
+  return (
+    <div className="flex flex-col gap-6" aria-busy="true">
+      <div className="flex flex-col gap-3">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="grid grid-cols-[2fr_3fr] gap-4">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-4 w-full" />
           </div>
-        )}
-      </DialogContent>
-    </Dialog>
+        ))}
+      </div>
+      <Skeleton className="h-9 w-64" />
+      <div className="flex flex-col gap-2">
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-16 w-full" />
+      </div>
+      <span className="sr-only">Loading user</span>
+    </div>
   );
 }

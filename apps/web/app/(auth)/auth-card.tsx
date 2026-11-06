@@ -1,38 +1,53 @@
+import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { Card, cn } from "@smartreach/ui";
 
-/** Shared frame for the auth pages (login, sign-up, password reset). */
+/** Inline text link used inside auth copy and footers. */
+export const authLinkClass =
+  "font-medium text-foreground underline decoration-border-strong underline-offset-4 transition-colors hover:decoration-foreground";
+
+const toneClasses = {
+  neutral: "bg-muted text-muted-foreground",
+  success: "bg-success-soft text-success-text",
+  warning: "bg-warning-soft text-warning-text",
+  destructive: "bg-destructive-soft text-destructive-text",
+} as const;
+
+/**
+ * Frame for every auth screen: one card with a title, optional description
+ * and status icon, and a line of links underneath (switch flow, go back).
+ */
 export function AuthCard({
   title,
-  subtitle,
+  description,
+  icon: Icon,
+  tone = "neutral",
   children,
   footer,
 }: {
   title: string;
-  subtitle?: ReactNode;
-  children: ReactNode;
+  description?: ReactNode;
+  /** Shown above the title on status screens (check inbox, link expired). */
+  icon?: LucideIcon;
+  tone?: keyof typeof toneClasses;
+  children?: ReactNode;
   footer?: ReactNode;
 }) {
   return (
-    <div className="hairline-top w-full max-w-md rounded-2xl border border-zinc-800/80 bg-zinc-950/80 p-6 sm:p-8 shadow-[0_30px_80px_-40px_rgba(0,0,0,0.9)] backdrop-blur-xl">
-      <div className="mb-6 space-y-1.5 text-center">
-        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-zinc-50">{title}</h1>
-        {subtitle ? <p className="text-sm text-zinc-400">{subtitle}</p> : null}
-      </div>
-
-      {children}
-
-      {footer ? (
-        <div className="mt-6 border-t border-zinc-800/80 pt-4 text-center text-xs text-zinc-400">{footer}</div>
-      ) : null}
-    </div>
-  );
-}
-
-/** Neutral notice used for "check your inbox" style confirmations. */
-export function AuthNotice({ children }: { children: ReactNode }) {
-  return (
-    <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/60 px-4 py-3 text-xs leading-relaxed text-zinc-300">
-      {children}
+    <div className="flex flex-col gap-6">
+      <Card className="p-6 sm:p-8">
+        {Icon ? (
+          <div className={cn("mb-5 flex size-10 items-center justify-center rounded-lg", toneClasses[tone])}>
+            <Icon className="size-5" aria-hidden />
+          </div>
+        ) : null}
+        <h1 className="text-balance text-xl font-semibold tracking-[-0.02em] text-foreground">{title}</h1>
+        {description ? (
+          <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{description}</p>
+        ) : null}
+        {children ? <div className="mt-6">{children}</div> : null}
+      </Card>
+      {footer ? <div className="text-center text-sm text-muted-foreground">{footer}</div> : null}
     </div>
   );
 }

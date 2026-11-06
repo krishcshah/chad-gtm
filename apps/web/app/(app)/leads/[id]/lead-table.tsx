@@ -3,34 +3,30 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Download, Plus, Search, Tag, Trash2, Upload, UserPlus, X } from "lucide-react";
+import { ArrowLeft, MoreHorizontal, Pencil, Plus, Trash2, Upload, UserPlus } from "lucide-react";
 import { toast } from "sonner";
-import { LEAD_STATUSES } from "@smartreach/shared";
 import {
+  Alert,
+  AlertDescription,
   Button,
-  Checkbox,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
   EmptyState,
   ErrorState,
-  Input,
   PageHeader,
   PermissionDenied,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-  cn,
 } from "@smartreach/ui";
-import { bulkTagLeads, createLeadTag, fetchLeadsPage, updateLeadStatus } from "@/lib/actions";
+import { bulkTagLeads, fetchLeadsPage, updateLeadStatus } from "@/lib/actions";
 import { asCustomFields, isNextRedirect, isPermissionError } from "@/lib/lead-form";
 import { LeadFormDialog, type LeadFormLead } from "./lead-form-dialog";
 import { DeleteLeadsDialog, DeleteListDialog, RenameListDialog } from "./lead-manage-dialogs";
+import { downloadLeadsCsv } from "./lead-export";
+import { NewTagDialog, type TagOpt } from "./lead-tags";
+import { BulkActionBar, LeadToolbar } from "./lead-toolbar";
+import { LeadRowsTable } from "./lead-rows-table";
 
 export interface LeadRow {
   id: string;
@@ -41,13 +37,23 @@ export interface LeadRow {
   status: string;
   tags: string[] | null;
   customFields?: Record<string, string> | null;
+  jobTitle?: string | null;
+  createdAt?: string | Date | null;
 }
+
+const PAGE_SIZE = 50;
 
 function normalizeRow(row: LeadRow): LeadRow {
   return { ...row, customFields: asCustomFields(row.customFields) };
 }
 
-interface TagOpt { id: string; name: string; color: string }
+function fileSlug(name: string) {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "leads";
+}
 
 export function LeadTable({
   listName,
@@ -76,7 +82,10 @@ export function LeadTable({
   const [title, setTitle] = useState(listName);
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteListOpen, setDeleteListOpen] = useState(false);
-  const [deleteRequest, setDeleteRequest] = useState<{ mode: "one" | "bulk"; leads: { id: string; email: string }[] } | null>(null);
+  const [newTagOpen, setNewTagOpen] = useState(false);
+  const [deleteRequest, setDeleteRequest] = useState<{ mode: "one" | "bulk"; leads: { id: string; email: string }[] } | null>(
+    null,
+  );
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [tagList, setTagList] = useState(tags);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -91,6 +100,13 @@ export function LeadTable({
     setTitle(listName);
   }, [listName]);
 
+  useEffect(
+    () => () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    },
+    [],
+  );
+
   const tagById = useMemo(() => Object.fromEntries(tagList.map((t) => [t.id, t])), [tagList]);
 
   const writeFilterUrl = (q: string, s: string) => {
@@ -101,12 +117,19 @@ export function LeadTable({
     router.replace(qs ? `/leads/${listId}?${qs}` : `/leads/${listId}`, { scroll: false });
   };
 
+  const handleLoadFailure = (error: unknown) => {
+    if (isNextRedirect(error)) throw error;
+    const message = error instanceof Error ? error.message : "Could not load leads";
+    if (isPermissionError(message)) setDenied(true);
+    else setLoadError(message);
+  };
+
   const applyFilters = (q: string, s: string) => {
     const id = ++requestId.current;
     writeFilterUrl(q, s);
     startList(async () => {
       try {
-        const res = await fetchLeadsPage({ listId, search: q || undefined, status: s || undefined, pageSize: 50 });
+        const res = await fetchLeadsPage({ listId, search: q || undefined, status: s || undefined, pageSize: PAGE_SIZE });
         if (id !== requestId.current) return;
         setRows((res.items as LeadRow[]).map(normalizeRow));
         setCursor(res.nextCursor);
@@ -114,11 +137,8 @@ export function LeadTable({
         setLoadError(null);
         setDenied(false);
       } catch (error) {
-        if (isNextRedirect(error)) throw error;
-        if (id !== requestId.current) return;
-        const message = error instanceof Error ? error.message : "Could not load leads";
-        if (isPermissionError(message)) setDenied(true);
-        else setLoadError(message);
+        if (id !== requestId.current && !isNextRedirect(error)) return;
+        handleLoadFailure(error);
       }
     });
   };
@@ -129,22 +149,37 @@ export function LeadTable({
     searchTimer.current = setTimeout(() => applyFilters(v, status), 350);
   };
 
+  const onStatusFilter = (s: string) => {
+    setStatus(s);
+    applyFilters(search, s);
+  };
+
+  const clearFilters = () => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    setSearch("");
+    setStatus("");
+    applyFilters("", "");
+  };
+
   const loadMore = () =>
     startList(async () => {
       if (!cursor) return;
       const id = requestId.current;
       try {
-        const res = await fetchLeadsPage({ listId, search: search || undefined, status: status || undefined, cursor, pageSize: 50 });
+        const res = await fetchLeadsPage({
+          listId,
+          search: search || undefined,
+          status: status || undefined,
+          cursor,
+          pageSize: PAGE_SIZE,
+        });
         if (id !== requestId.current) return;
         setRows((r) => [...r, ...(res.items as LeadRow[]).map(normalizeRow)]);
         setCursor(res.nextCursor);
         setLoadError(null);
       } catch (error) {
-        if (isNextRedirect(error)) throw error;
-        if (id !== requestId.current) return;
-        const message = error instanceof Error ? error.message : "Could not load leads";
-        if (isPermissionError(message)) setDenied(true);
-        else setLoadError(message);
+        if (id !== requestId.current && !isNextRedirect(error)) return;
+        handleLoadFailure(error);
       }
     });
 
@@ -155,7 +190,7 @@ export function LeadTable({
     const next = normalizeRow(row);
     setRows((current) => {
       const index = current.findIndex((item) => item.id === next.id);
-      if (index === -1) return [next, ...current];
+      if (index === -1) return [{ ...next, createdAt: next.createdAt ?? new Date().toISOString() }, ...current];
       return current.map((item) =>
         item.id === next.id ? { ...item, ...next, status: item.status, tags: item.tags } : item,
       );
@@ -187,8 +222,7 @@ export function LeadTable({
     });
   };
 
-  const toggleAll = (checked: boolean) =>
-    setSelected(checked ? new Set(rows.map((r) => r.id)) : new Set());
+  const toggleAll = (checked: boolean) => setSelected(checked ? new Set(rows.map((r) => r.id)) : new Set());
 
   const toggleOne = (id: string, checked: boolean) =>
     setSelected((p) => {
@@ -208,84 +242,103 @@ export function LeadTable({
     const removed = new Set(ids);
     setRows((current) => current.filter((row) => !removed.has(row.id)));
     setSelected(new Set());
-    toast.success(ids.length === 1 ? "Lead deleted" : `Deleted ${ids.length} leads`);
+    toast.success(ids.length === 1 ? "Lead deleted" : `Deleted ${ids.length.toLocaleString()} leads`);
     router.refresh();
   };
 
   const doExport = () => {
-    const header = "email,first_name,last_name,company,status\n";
-    const body = rows
-      .filter((r) => selected.size === 0 || selected.has(r.id))
-      .map((r) =>
-        [r.email, r.firstName ?? "", r.lastName ?? "", r.company ?? "", r.status]
-          .map((v) => (String(v).includes(",") ? `"${String(v).replace(/"/g, '""')}"` : v))
-          .join(","),
-      )
-      .join("\n");
-    const blob = new Blob([header + body], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "leads-export.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+    const picked = rows.filter((r) => selected.size === 0 || selected.has(r.id));
+    if (picked.length === 0) {
+      toast.error("There are no leads to export");
+      return;
+    }
+    downloadLeadsCsv(picked, `${fileSlug(title)}-leads.csv`);
+    const noun = picked.length === 1 ? "lead" : "leads";
+    if (selected.size === 0 && cursor) {
+      toast.success(`Exported the ${picked.length.toLocaleString()} ${noun} loaded so far`, {
+        description: "Load more rows first to include the rest of the list.",
+      });
+    } else {
+      toast.success(`Exported ${picked.length.toLocaleString()} ${noun}`);
+    }
   };
 
-  const doTag = (tagId: string, mode: "add" | "remove") =>
+  const doTag = (tagId: string, mode: "add" | "remove") => {
+    const ids = [...selected];
+    if (ids.length === 0) return;
     start(async () => {
-      const res = await bulkTagLeads([...selected], tagId, mode);
+      const res = await bulkTagLeads(ids, tagId, mode);
       if (res.ok) {
-        toast.success("Tags updated");
+        const tagName = tagById[tagId]?.name;
+        toast.success(
+          tagName
+            ? `${mode === "add" ? "Added" : "Removed"} "${tagName}" ${mode === "add" ? "to" : "from"} ${ids.length.toLocaleString()} ${ids.length === 1 ? "lead" : "leads"}`
+            : "Tags updated",
+        );
         applyFilters(search, status);
       } else toast.error(res.error);
     });
-
-  const newTag = () => {
-    const name = window.prompt("New tag name");
-    if (!name?.trim()) return;
-    start(async () => {
-      const res = await createLeadTag({ name: name.trim() });
-      if (res.ok && res.data) {
-        setTagList((t) => [...t, { id: res.data!.id, name: name.trim(), color: "#6366f1" }]);
-        toast.success(`Tag "${name.trim()}" created`);
-      } else if (!res.ok) toast.error(res.error);
-    });
   };
 
-  const allSelected = rows.length > 0 && selected.size === rows.length;
+  const onTagCreated = (tag: TagOpt) => {
+    setTagList((t) => [...t, tag]);
+    if (selected.size > 0) {
+      const ids = [...selected];
+      start(async () => {
+        const res = await bulkTagLeads(ids, tag.id, "add");
+        if (res.ok) applyFilters(search, status);
+        else toast.error(res.error);
+      });
+    }
+  };
+
   const filtered = Boolean(search || status);
-  const countLabel = `${rows.length}${cursor ? "+" : ""}`;
   const exactTotal = totalCount ?? rows.length;
+  const isEmptyList = rows.length === 0 && !filtered && !loadError && !cursor && !listPending;
+  const importHref = `/leads/import?listId=${listId}`;
+
+  const description = `${exactTotal.toLocaleString()} ${exactTotal === 1 ? "lead" : "leads"} in this list.`;
 
   return (
-    <div className="page-stack">
+    <>
       <PageHeader
-        title={title}
-        description={
-          filtered
-            ? `${countLabel} matching ${rows.length === 1 ? "lead" : "leads"} for email, name, or company.`
-            : `${exactTotal.toLocaleString()} ${exactTotal === 1 ? "lead" : "leads"} in this list.`
+        eyebrow={
+          <Link href="/leads" className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground">
+            <ArrowLeft className="size-4" aria-hidden />
+            Leads
+          </Link>
         }
+        title={title}
+        description={description}
         actions={
           <>
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/leads/import?listId=${listId}`}>
-                <Upload className="h-4 w-4 mr-1.5 text-primary" /> Import CSV
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" aria-label="More list actions">
+                  <MoreHorizontal />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
+                  <Pencil />
+                  Rename list
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem destructive onSelect={() => setDeleteListOpen(true)}>
+                  <Trash2 />
+                  Delete list
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button variant="outline" onClick={openCreate}>
+              <Plus />
+              Add lead
+            </Button>
+            <Button asChild>
+              <Link href={importHref}>
+                <Upload />
+                Import CSV
               </Link>
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setRenameOpen(true)}>
-              Rename
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => setDeleteListOpen(true)}
-            >
-              <Trash2 className="h-4 w-4 mr-1.5" /> Delete List
-            </Button>
-            <Button size="sm" onClick={openCreate}>
-              <Plus className="h-4 w-4" /> Add Lead
             </Button>
           </>
         }
@@ -293,179 +346,102 @@ export function LeadTable({
 
       {denied ? (
         <PermissionDenied />
-      ) : (
-      <>
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={search} onChange={(e) => onSearch(e.target.value)} placeholder="Search email, name, company…"
-            className="w-full pl-9" type="search" aria-label="Search leads by email, name, or company" />
-        </div>
-        <div className="w-full sm:w-40">
-        <Select value={status || "all"} onValueChange={(v) => { const s = v === "all" ? "" : v; setStatus(s); applyFilters(search, s); }}>
-          <SelectTrigger className="w-full" aria-label="Filter by status"><SelectValue placeholder="All statuses" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            {LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        </div>
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-          {selected.size > 0 && (
-            <span className="text-sm text-muted-foreground">{selected.size} selected</span>
-          )}
-          {filtered ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSearch("");
-                setStatus("");
-                applyFilters("", "");
-              }}
-            >
-              Clear
-            </Button>
-          ) : null}
-          <Button variant="outline" size="sm" onClick={doExport}>
-            <Download className="h-4 w-4" /> Export
-          </Button>
-          {selected.size > 0 && (
-            <>
-              <TagDropdown tags={tagList} onTag={doTag} onNew={newTag} />
-              <Button variant="destructive" size="sm" onClick={askBulkDelete} disabled={pending}>
-                <Trash2 className="h-4 w-4" /> Delete
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {listPending ? (
-        <p className="text-sm text-muted-foreground" role="status">
-          Loading leads…
-        </p>
-      ) : null}
-
-      {loadError ? (
-        <ErrorState
-          title="Could not load leads"
-          description={loadError}
-          onRetry={() => applyFilters(search, status)}
-        />
-      ) : null}
-
-      {rows.length === 0 && !filtered && !loadError ? (
+      ) : isEmptyList ? (
         <EmptyState
           icon={UserPlus}
-          title="No leads in this list"
-          description="Add a lead manually, or upload a CSV file to import contacts directly into this list."
+          title="This list is empty"
+          description="Import a CSV to add many contacts at once, or add a single lead by hand."
           action={
-            <div className="flex items-center gap-2">
-              <Button size="sm" asChild className="gap-1.5">
-                <Link href={`/leads/import?listId=${listId}`}>
-                  <Upload className="h-4 w-4" /> Import CSV
+            <>
+              <Button asChild size="sm">
+                <Link href={importHref}>
+                  <Upload />
+                  Import CSV
                 </Link>
               </Button>
-              <Button size="sm" variant="outline" onClick={openCreate} className="gap-1.5">
-                <Plus className="h-4 w-4" /> Add Lead
+              <Button size="sm" variant="outline" onClick={openCreate}>
+                <Plus />
+                Add lead
               </Button>
-            </div>
+            </>
           }
         />
-      ) : rows.length > 0 || filtered ? (
-      <div className={cn("overflow-x-auto rounded-xl border", listPending && "opacity-60")} aria-busy={listPending}>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-10">
-                <Checkbox checked={allSelected} onCheckedChange={(v) => toggleAll(!!v)} />
-              </TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Company</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Tags</TableHead>
-              <TableHead className="w-[1%]"><span className="sr-only">Actions</span></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="py-16 text-center text-muted-foreground">
-                  No leads match these filters.
-                </TableCell>
-              </TableRow>
-            ) : (
-              rows.map((r) => (
-                <TableRow key={r.id} data-state={selected.has(r.id) ? "selected" : undefined}>
-                  <TableCell>
-                    <Checkbox checked={selected.has(r.id)} onCheckedChange={(v) => toggleOne(r.id, !!v)} />
-                  </TableCell>
-                  <TableCell className="font-medium">{r.email}</TableCell>
-                  <TableCell>{[r.firstName, r.lastName].filter(Boolean).join(" ") || "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">{r.company ?? "—"}</TableCell>
-                  <TableCell>
-                    <LeadStatusSelect
-                      status={r.status}
-                      email={r.email}
-                      disabled={pending}
-                      onChange={(next) => changeStatus(r.id, next)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {(r.tags ?? []).map((tId) => {
-                        const t = tagById[tId];
-                        if (!t) return null;
-                        return (
-                          <span key={tId} className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px]"
-                            style={{ backgroundColor: `${t.color}22`, color: t.color }}>
-                            {t.name}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openEdit(r)}
-                        aria-label={`Edit Lead ${r.email}`}
-                      >
-                        Edit Lead
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => setDeleteRequest({ mode: "one", leads: [{ id: r.id, email: r.email }] })}
-                        aria-label={`Delete lead ${r.email}`}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
-      ) : null}
+      ) : (
+        <section aria-label="Leads" className="flex flex-col gap-4">
+          <LeadToolbar
+            search={search}
+            status={status}
+            filtered={filtered}
+            loading={listPending}
+            selectedCount={selected.size}
+            onSearch={onSearch}
+            onStatus={onStatusFilter}
+            onClearFilters={clearFilters}
+            onExport={doExport}
+          />
 
-      {cursor && !loadError && (rows.length > 0 || filtered) && (
-        <div className="flex justify-center">
-          <Button variant="outline" size="sm" onClick={loadMore} disabled={listPending}>
-            {listPending ? "Loading leads…" : "Load more"}
-          </Button>
-        </div>
-      )}
-      </>
+          {loadError && rows.length > 0 ? (
+            <Alert
+              variant="destructive"
+              action={
+                <Button variant="outline" size="xs" onClick={() => applyFilters(search, status)}>
+                  Try again
+                </Button>
+              }
+            >
+              <AlertDescription className="mt-0 text-foreground">Could not load leads. {loadError}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {loadError && rows.length === 0 ? (
+            <ErrorState
+              title="Could not load leads"
+              description={loadError}
+              onRetry={() => applyFilters(search, status)}
+            />
+          ) : (
+            <LeadRowsTable
+              rows={rows}
+              selected={selected}
+              tagById={tagById}
+              loading={listPending}
+              statusDisabled={pending}
+              filtered={filtered}
+              onToggleAll={toggleAll}
+              onToggleOne={toggleOne}
+              onEdit={openEdit}
+              onDelete={(row) => setDeleteRequest({ mode: "one", leads: [{ id: row.id, email: row.email }] })}
+              onStatusChange={changeStatus}
+              onClearFilters={clearFilters}
+            />
+          )}
+
+          <BulkActionBar
+            selectedCount={selected.size}
+            busy={pending}
+            tags={tagList}
+            onClearSelection={() => setSelected(new Set())}
+            onExport={doExport}
+            onTag={doTag}
+            onNewTag={() => setNewTagOpen(true)}
+            onDelete={askBulkDelete}
+          />
+
+          {rows.length > 0 ? (
+            <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
+              <p className="tabular text-xs text-subtle-foreground" aria-live="polite">
+                {filtered
+                  ? `Showing ${rows.length.toLocaleString()}${cursor ? "+" : ""} matching ${rows.length === 1 && !cursor ? "lead" : "leads"}`
+                  : `Showing ${rows.length.toLocaleString()} of ${Math.max(exactTotal, rows.length).toLocaleString()}`}
+              </p>
+              {cursor && !(loadError && rows.length === 0) ? (
+                <Button variant="outline" size="sm" onClick={loadMore} loading={listPending}>
+                  Load more
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
       )}
 
       {editor ? (
@@ -502,9 +478,10 @@ export function LeadTable({
           open
           listId={listId}
           name={title}
+          leadCount={totalCount}
           onOpenChange={setDeleteListOpen}
           onDeleted={() => {
-            toast.success("List deleted");
+            toast.success(`Deleted "${title}"`);
             router.push("/leads");
             router.refresh();
           }}
@@ -522,70 +499,15 @@ export function LeadTable({
           onDeleted={onDeleted}
         />
       ) : null}
-    </div>
-  );
-}
 
-function LeadStatusSelect({
-  status,
-  email,
-  disabled,
-  onChange,
-}: {
-  status: string;
-  email: string;
-  disabled: boolean;
-  onChange: (status: string) => void;
-}) {
-  const known = (LEAD_STATUSES as readonly string[]).includes(status);
-  return (
-    <Select value={status} onValueChange={onChange} disabled={disabled}>
-      <SelectTrigger className="h-8 w-[9.5rem]" aria-label={`Status for ${email}`}>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {!known && status ? <SelectItem value={status}>{status}</SelectItem> : null}
-        {LEAD_STATUSES.map((s) => (
-          <SelectItem key={s} value={s}>{s}</SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
-function TagDropdown({ tags, onTag, onNew }: { tags: TagOpt[]; onTag: (id: string, m: "add" | "remove") => void; onNew: () => void }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="relative">
-      <Button variant="outline" size="sm" onClick={() => setOpen((o) => !o)}>
-        <Tag className="h-4 w-4" /> Tag <ChevronDown className="h-3 w-3 opacity-60" />
-      </Button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-50 mt-1 w-48 rounded-lg border bg-popover p-1 shadow-xl">
-            {tags.length === 0 && <p className="px-2 py-3 text-center text-xs text-muted-foreground">No tags yet</p>}
-            {tags.map((t) => (
-              <div key={t.id} className="flex items-center justify-between gap-1 px-1">
-                <span className="flex items-center gap-2 px-1 py-1.5 text-sm">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: t.color }} />
-                  {t.name}
-                </span>
-                <div className="flex gap-0.5">
-                  <button onClick={() => { onTag(t.id, "add"); setOpen(false); }} className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">+</button>
-                  <button onClick={() => { onTag(t.id, "remove"); setOpen(false); }} className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              </div>
-            ))}
-            <div className="my-1 border-t" />
-            <button onClick={() => { onNew(); setOpen(false); }} className="w-full rounded px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground">
-              + New tag
-            </button>
-          </div>
-        </>
-      )}
-    </div>
+      {newTagOpen ? (
+        <NewTagDialog
+          open
+          selectedCount={selected.size}
+          onOpenChange={setNewTagOpen}
+          onCreated={onTagCreated}
+        />
+      ) : null}
+    </>
   );
 }

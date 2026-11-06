@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2 } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   Alert,
@@ -41,6 +41,16 @@ interface FieldRow {
   id: string;
   name: string;
   value: string;
+}
+
+const MAX_CUSTOM_FIELDS = 50;
+
+const INLINE_KEYS = /^(email|firstName|lastName|company|customFields|customFields\.\d+\.(name|value))$/;
+
+/** True when every error has an inline home next to its control. */
+function allInline(errors: LeadFieldErrors) {
+  const keys = Object.keys(errors);
+  return keys.length > 0 && keys.every((key) => INLINE_KEYS.test(key));
 }
 
 function rowsFromLead(lead: LeadFormLead | null): FieldRow[] {
@@ -99,6 +109,24 @@ export function LeadFormDialog({
     setFields((prev) => [...prev, { id: crypto.randomUUID(), name: "", value: "" }]);
   };
 
+  const updateField = (id: string, patch: Partial<Omit<FieldRow, "id">>) => {
+    setFields((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  };
+
+  const showActionError = (error: string, serverFields?: Record<string, string[]>) => {
+    if (isPermissionError(error)) {
+      setDenied(true);
+      return;
+    }
+    const next: LeadFieldErrors = {};
+    for (const [key, messages] of Object.entries(serverFields ?? {})) {
+      if (messages?.[0]) next[key] = messages[0];
+    }
+    if (/email/i.test(error) && !next.email) next.email = error;
+    setFieldErrors(next);
+    setFormError(allInline(next) ? null : error);
+  };
+
   const save = (event: React.FormEvent) => {
     event.preventDefault();
     if (pending) return;
@@ -115,7 +143,7 @@ export function LeadFormDialog({
 
     if (!prepared.ok) {
       setFieldErrors(prepared.fieldErrors);
-      setFormError(prepared.error);
+      setFormError(allInline(prepared.fieldErrors) ? null : prepared.error);
       setDenied(false);
       return;
     }
@@ -175,41 +203,32 @@ export function LeadFormDialog({
     });
   };
 
-  const showActionError = (error: string, serverFields?: Record<string, string[]>) => {
-    if (isPermissionError(error)) {
-      setDenied(true);
-      return;
-    }
-    const next: LeadFieldErrors = {};
-    for (const [key, messages] of Object.entries(serverFields ?? {})) {
-      if (messages?.[0]) next[key] = messages[0];
-    }
-    if (/email/i.test(error) && !next.email) next.email = error;
-    setFieldErrors(next);
-    setFormError(error);
-  };
-
-  const title = mode === "create" ? "Add Lead" : "Edit Lead";
+  const atFieldLimit = fields.length >= MAX_CUSTOM_FIELDS;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100%-2rem)]">
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!pending) onOpenChange(next);
+      }}
+    >
+      <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle>{mode === "create" ? "Add lead" : "Edit lead"}</DialogTitle>
           <DialogDescription>
             {mode === "create"
-              ? "Email is required. Name, company, and custom fields are optional."
-              : "Update this contact. Remove a custom field to delete it from the lead."}
+              ? "Only the email is required. New leads start with the status New."
+              : "Changes apply to future emails. Past emails are not changed."}
           </DialogDescription>
         </DialogHeader>
 
         {denied ? (
-          <PermissionDenied />
+          <PermissionDenied className="py-10" />
         ) : (
-          <form onSubmit={save} className="space-y-4" noValidate>
+          <form onSubmit={save} className="flex flex-col gap-5" noValidate>
             {formError ? (
               <Alert variant="destructive">
-                <AlertDescription>{formError}</AlertDescription>
+                <AlertDescription className="mt-0 text-foreground">{formError}</AlertDescription>
               </Alert>
             ) : null}
 
@@ -230,8 +249,8 @@ export function LeadFormDialog({
               />
             </Field>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="First name" error={fieldErrors.firstName}>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field label="First name" optional error={fieldErrors.firstName}>
                 <Input
                   autoComplete="given-name"
                   value={firstName}
@@ -243,7 +262,7 @@ export function LeadFormDialog({
                   }}
                 />
               </Field>
-              <Field label="Last name" error={fieldErrors.lastName}>
+              <Field label="Last name" optional error={fieldErrors.lastName}>
                 <Input
                   autoComplete="family-name"
                   value={lastName}
@@ -257,7 +276,7 @@ export function LeadFormDialog({
               </Field>
             </div>
 
-            <Field label="Company" error={fieldErrors.company}>
+            <Field label="Company" optional error={fieldErrors.company}>
               <Input
                 autoComplete="organization"
                 value={company}
@@ -270,23 +289,35 @@ export function LeadFormDialog({
               />
             </Field>
 
-            <fieldset className="space-y-3" disabled={pending}>
-              <legend className="text-[13px] font-medium text-foreground/90">Custom fields</legend>
-              {fields.length === 0 ? (
-                <p className="text-xs text-muted-foreground" role="status">
-                  No custom fields yet.
-                </p>
-              ) : (
-                <ul className="space-y-3">
+            <fieldset className="flex flex-col gap-3 border-t border-border pt-5" disabled={pending}>
+              <legend className="sr-only">Custom fields</legend>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p aria-hidden className="text-[13px] font-medium text-foreground">
+                    Custom fields
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    Use them in templates as variables, for example {"{{"}role{"}}"}.
+                  </p>
+                </div>
+                <Button type="button" variant="outline" size="xs" onClick={addField} disabled={atFieldLimit}>
+                  <Plus />
+                  Add field
+                </Button>
+              </div>
+
+              {fields.length > 0 ? (
+                <ul className="flex flex-col gap-2">
                   {fields.map((row, index) => {
                     const nameError = fieldErrors[`customFields.${index}.name`];
                     const valueError = fieldErrors[`customFields.${index}.value`];
                     const nameId = `${row.id}-name`;
                     const valueId = `${row.id}-value`;
+                    const label = row.name.trim();
                     return (
-                      <li key={row.id} className="space-y-1.5">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-                          <div className="min-w-0 flex-1 space-y-1">
+                      <li key={row.id} className="flex flex-col gap-1">
+                        <div className="flex items-start gap-2">
+                          <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
                             <label htmlFor={nameId} className="sr-only">
                               Custom field name
                             </label>
@@ -295,29 +326,26 @@ export function LeadFormDialog({
                               value={row.name}
                               maxLength={64}
                               placeholder="Field name"
-                              aria-invalid={!!nameError}
+                              className="font-mono text-[13px]"
+                              aria-invalid={nameError ? true : undefined}
                               aria-describedby={nameError ? `${nameId}-error` : undefined}
                               onChange={(event) => {
-                                const name = event.target.value;
-                                setFields((prev) => prev.map((item) => (item.id === row.id ? { ...item, name } : item)));
+                                updateField(row.id, { name: event.target.value });
                                 clearError(`customFields.${index}.name`);
                               }}
                             />
-                          </div>
-                          <div className="min-w-0 flex-[1.4] space-y-1">
                             <label htmlFor={valueId} className="sr-only">
-                              Custom field value
+                              {label ? `Value for ${label}` : "Custom field value"}
                             </label>
                             <Input
                               id={valueId}
                               value={row.value}
                               maxLength={2000}
                               placeholder="Value"
-                              aria-invalid={!!valueError}
+                              aria-invalid={valueError ? true : undefined}
                               aria-describedby={valueError ? `${valueId}-error` : undefined}
                               onChange={(event) => {
-                                const value = event.target.value;
-                                setFields((prev) => prev.map((item) => (item.id === row.id ? { ...item, value } : item)));
+                                updateField(row.id, { value: event.target.value });
                                 clearError(`customFields.${index}.value`);
                               }}
                             />
@@ -325,24 +353,23 @@ export function LeadFormDialog({
                           <Button
                             type="button"
                             variant="ghost"
-                            size="sm"
-                            className="shrink-0"
-                            aria-label={row.name.trim() ? `Remove ${row.name.trim()}` : "Remove custom field"}
+                            size="icon"
+                            aria-label={label ? `Remove ${label}` : "Remove custom field"}
                             onClick={() => {
                               setFields((prev) => prev.filter((item) => item.id !== row.id));
                               clearCustomFieldErrors();
                             }}
                           >
-                            Remove
+                            <X />
                           </Button>
                         </div>
                         {nameError ? (
-                          <p id={`${nameId}-error`} className="text-xs text-destructive">
+                          <p id={`${nameId}-error`} className="text-xs text-destructive-text">
                             {nameError}
                           </p>
                         ) : null}
                         {valueError ? (
-                          <p id={`${valueId}-error`} className="text-xs text-destructive">
+                          <p id={`${valueId}-error`} className="text-xs text-destructive-text">
                             {valueError}
                           </p>
                         ) : null}
@@ -350,15 +377,13 @@ export function LeadFormDialog({
                     );
                   })}
                 </ul>
-              )}
-              {fieldErrors.customFields ? (
-                <p className="text-xs text-destructive">{fieldErrors.customFields}</p>
               ) : null}
-              <Button type="button" variant="outline" size="sm" onClick={addField} disabled={fields.length >= 50}>
-                + field
-              </Button>
-              {fields.length >= 50 ? (
-                <p className="text-xs text-muted-foreground">A lead can have at most 50 custom fields.</p>
+
+              {fieldErrors.customFields ? (
+                <p className="text-xs text-destructive-text">{fieldErrors.customFields}</p>
+              ) : null}
+              {atFieldLimit ? (
+                <p className="text-xs text-muted-foreground">A lead can have up to {MAX_CUSTOM_FIELDS} custom fields.</p>
               ) : null}
             </fieldset>
 
@@ -366,9 +391,8 @@ export function LeadFormDialog({
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={pending}>
-                {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {pending ? "Saving…" : "Save lead"}
+              <Button type="submit" loading={pending}>
+                {mode === "create" ? "Add lead" : "Save changes"}
               </Button>
             </DialogFooter>
           </form>

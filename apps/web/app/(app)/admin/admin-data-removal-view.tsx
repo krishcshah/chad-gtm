@@ -1,338 +1,382 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { Download, ShieldCheck } from "lucide-react";
+import { formatDateTime, timeAgo } from "@smartreach/shared";
 import {
-  Download,
-  Search,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
-  HelpCircle,
-  Filter,
-  UserX,
-  Mail,
-  Loader2,
-  ShieldCheck,
-  XCircle,
-} from "lucide-react";
+  Badge,
+  Button,
+  Card,
+  ConfirmDialog,
+  DataList,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  EmptyState,
+  SegmentedControl,
+  Sheet,
+  SheetBody,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  toast,
+} from "@smartreach/ui";
 import type { DataRemovalRequestDTO, DataRemovalStatus } from "@/lib/data-removal";
 import { updateDataRemovalStatusAction } from "@/lib/data-removal-actions";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@smartreach/ui";
+import { NoMatches, RowActionsButton, SearchField, Toolbar, countBy, downloadCsv, todayStamp, withCount } from "./admin-ui";
 
-export function AdminDataRemovalView({ initialRequests }: { initialRequests: DataRemovalRequestDTO[] }) {
+const STATUSES: {
+  value: DataRemovalStatus;
+  label: string;
+  action: string;
+  variant: "info" | "warning" | "success" | "destructive";
+}[] = [
+  { value: "pending", label: "Pending", action: "Mark as pending", variant: "info" },
+  { value: "in_progress", label: "In progress", action: "Mark as in progress", variant: "warning" },
+  { value: "completed", label: "Completed", action: "Mark as completed", variant: "success" },
+  { value: "rejected", label: "Rejected", action: "Mark as rejected", variant: "destructive" },
+];
+
+function statusMeta(status: string) {
+  return STATUSES.find((s) => s.value === status) ?? STATUSES[0];
+}
+
+/** Final states are confirmed first: they record that the request is closed. */
+const CONFIRM_COPY: Partial<Record<DataRemovalStatus, { title: string; description: string; label: string }>> = {
+  completed: {
+    title: "Mark this request as completed?",
+    description: "Only do this after their data has been deleted. It records that the request has been fulfilled.",
+    label: "Mark as completed",
+  },
+  rejected: {
+    title: "Reject this request?",
+    description: "Use this when the request is invalid or cannot be verified. Let the person know why by email.",
+    label: "Reject request",
+  },
+};
+
+/** Data removal (erasure) requests from users and the public form. */
+export function AdminDataRemovalView({
+  initialRequests,
+  onPendingCountChange,
+}: {
+  initialRequests: DataRemovalRequestDTO[];
+  onPendingCountChange?: (count: number) => void;
+}) {
   const [requests, setRequests] = useState<DataRemovalRequestDTO[]>(initialRequests);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [isUpdating, startTransition] = useTransition();
+  const [statusFilter, setStatusFilter] = useState<"all" | DataRemovalStatus>("all");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [confirm, setConfirm] = useState<{ request: DataRemovalRequestDTO; status: DataRemovalStatus } | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  // Filtered requests
-  const filteredRequests = requests.filter((r) => {
-    const matchesStatus = statusFilter === "all" || r.status === statusFilter;
-    const query = search.toLowerCase().trim();
-    if (!query) return matchesStatus;
+  const statusCounts = useMemo(() => countBy(requests, (r) => r.status), [requests]);
+  const pendingCount = statusCounts.pending ?? 0;
+  const selected = requests.find((r) => r.id === selectedId) ?? null;
 
-    const matchesSearch =
-      r.contactEmail.toLowerCase().includes(query) ||
-      r.description.toLowerCase().includes(query);
+  useEffect(() => {
+    onPendingCountChange?.(pendingCount);
+  }, [pendingCount, onPendingCountChange]);
 
-    return matchesStatus && matchesSearch;
-  });
-
-  // KPI stats
-  const totalCount = requests.length;
-  const pendingCount = requests.filter((r) => r.status === "pending").length;
-  const inProgressCount = requests.filter((r) => r.status === "in_progress").length;
-  const completedCount = requests.filter((r) => r.status === "completed").length;
-
-  // Handle status update
-  const handleStatusChange = (id: string, newStatus: DataRemovalStatus) => {
-    setUpdatingId(id);
-    startTransition(async () => {
-      try {
-        const res = await updateDataRemovalStatusAction(id, newStatus);
-        if (res.ok) {
-          setRequests((prev) =>
-            prev.map((r) => (r.id === id ? { ...r, status: newStatus } : r))
-          );
-        }
-      } catch (err) {
-        console.error("Failed to update removal status:", err);
-      } finally {
-        setUpdatingId(null);
-      }
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return requests.filter((r) => {
+      if (statusFilter !== "all" && r.status !== statusFilter) return false;
+      if (!q) return true;
+      return r.contactEmail.toLowerCase().includes(q) || r.description.toLowerCase().includes(q);
     });
+  }, [requests, statusFilter, search]);
+
+  const openRequest = (id: string) => {
+    setSelectedId(id);
+    setSheetOpen(true);
   };
 
-  // CSV Export
-  const downloadCSV = () => {
-    const headers = [
-      "Request ID",
-      "Date (UTC)",
-      "Contact Email",
-      "User ID",
-      "Description (Requested Erasure)",
-      "Status",
-      "Updated At",
-    ];
-
-    const rows = filteredRequests.map((r) => [
-      `"${r.id}"`,
-      `"${r.createdAt}"`,
-      `"${r.contactEmail.replace(/"/g, '""')}"`,
-      `"${(r.userId || "anonymous visitor").replace(/"/g, '""')}"`,
-      `"${r.description.replace(/"/g, '""').replace(/\n/g, " ")}"`,
-      `"${r.status}"`,
-      `"${r.updatedAt}"`,
-    ]);
-
-    const csvContent =
-      "data:text/csv;charset=utf-8," +
-      [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute(
-      "download",
-      `data-removal-requests-${new Date().toISOString().split("T")[0]}.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const getStatusBadge = (status: DataRemovalStatus) => {
-    switch (status) {
-      case "pending":
-        return (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-950/40 border border-amber-500/30 px-2 py-0.5 text-[10px] font-medium text-amber-400">
-            <Clock className="size-2.5" /> Pending Review
-          </span>
+  const applyStatus = async (request: DataRemovalRequestDTO, status: DataRemovalStatus) => {
+    setUpdatingId(request.id);
+    try {
+      const res = await updateDataRemovalStatusAction(request.id, status);
+      if (res.ok) {
+        setRequests((prev) =>
+          prev.map((r) => (r.id === request.id ? { ...r, status, updatedAt: new Date().toISOString() } : r)),
         );
-      case "in_progress":
-        return (
-          <span className="inline-flex items-center gap-1 rounded-full bg-zinc-900 border border-zinc-700 px-2 py-0.5 text-[10px] font-medium text-zinc-200">
-            <AlertCircle className="size-2.5" /> In Progress
-          </span>
-        );
-      case "completed":
-        return (
-          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-950/40 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
-            <CheckCircle2 className="size-2.5" /> Purged / Completed
-          </span>
-        );
-      case "rejected":
-        return (
-          <span className="inline-flex items-center gap-1 rounded-full bg-rose-950/40 border border-rose-500/30 px-2 py-0.5 text-[10px] font-medium text-rose-400">
-            <XCircle className="size-2.5" /> Rejected
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1 rounded-full bg-zinc-900 border border-zinc-800 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
-            {status}
-          </span>
-        );
+        toast.success(`Request marked as ${statusMeta(status).label.toLowerCase()}.`);
+      } else {
+        toast.error(res.error || "Could not update the request.");
+      }
+    } catch (err) {
+      console.error("Failed to update removal status:", err);
+      toast.error("Could not update the request. Try again.");
+    } finally {
+      setUpdatingId(null);
     }
   };
 
+  const requestStatus = (request: DataRemovalRequestDTO, status: DataRemovalStatus) => {
+    if (request.status === status) return;
+    if (CONFIRM_COPY[status]) {
+      setConfirm({ request, status });
+      setConfirmOpen(true);
+      return;
+    }
+    void applyStatus(request, status);
+  };
+
+  const exportCsv = () => {
+    downloadCsv(
+      `data-removal-requests-${todayStamp()}.csv`,
+      ["Request ID", "Date (UTC)", "Contact Email", "User ID", "Description (Requested Erasure)", "Status", "Updated At"],
+      filtered.map((r) => [
+        r.id,
+        r.createdAt,
+        r.contactEmail,
+        r.userId || "anonymous visitor",
+        r.description.replace(/\n/g, " "),
+        r.status,
+        r.updatedAt,
+      ]),
+    );
+  };
+
+  const confirmCopy = confirm ? CONFIRM_COPY[confirm.status] : undefined;
+
   return (
-    <div className="space-y-6 font-sans">
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-        <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/90 p-4 space-y-1 card-shine shadow-xs">
-          <span className="text-xs text-zinc-400 font-medium">
-            Total Requests
-          </span>
-          <div className="text-2xl font-bold tracking-tight text-white">{totalCount}</div>
+    <div className="flex flex-col gap-4">
+      <Toolbar
+        actions={
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={filtered.length === 0}>
+            <Download />
+            Export CSV
+          </Button>
+        }
+      >
+        <SearchField value={search} onChange={setSearch} placeholder="Search email or request" label="Search data requests" />
+        <div className="max-w-full overflow-x-auto">
+          <SegmentedControl
+            size="sm"
+            aria-label="Filter data requests by status"
+            value={statusFilter}
+            onValueChange={setStatusFilter}
+            options={[
+              { value: "all", label: withCount("All", requests.length) },
+              ...STATUSES.map((s) => ({ value: s.value, label: withCount(s.label, statusCounts[s.value] ?? 0) })),
+            ]}
+          />
         </div>
+      </Toolbar>
 
-        <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/90 p-4 space-y-1 card-shine shadow-xs">
-          <span className="text-xs text-amber-400 font-medium flex items-center gap-1">
-            <Clock className="size-3" /> Pending Review
-          </span>
-          <div className="text-2xl font-bold tracking-tight text-amber-400">{pendingCount}</div>
-        </div>
+      <Card className="overflow-hidden">
+        {requests.length === 0 ? (
+          <EmptyState
+            compact
+            icon={ShieldCheck}
+            title="No data removal requests"
+            description="Requests from account settings and the public removal form appear here."
+          />
+        ) : filtered.length === 0 ? (
+          <NoMatches
+            what="requests"
+            onClear={() => {
+              setSearch("");
+              setStatusFilter("all");
+            }}
+          />
+        ) : (
+          <Table className="min-w-[760px]">
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>Contact</TableHead>
+                <TableHead className="w-[44%]">Request</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Received</TableHead>
+                <TableHead className="text-right">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((r) => {
+                const status = statusMeta(r.status);
+                return (
+                  <TableRow key={r.id}>
+                    <TableCell className="max-w-[240px]">
+                      <button
+                        type="button"
+                        onClick={() => openRequest(r.id)}
+                        className="block max-w-full truncate text-left font-medium hover:underline"
+                      >
+                        {r.contactEmail}
+                      </button>
+                      <span className="text-xs text-muted-foreground">
+                        {r.userId ? "Registered user" : "Public form"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="max-w-[420px]">
+                      <p className="line-clamp-2 text-muted-foreground">{r.description}</p>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={status.variant} dot>
+                        {status.label}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      <time suppressHydrationWarning dateTime={r.createdAt} title={formatDateTime(r.createdAt)}>
+                        {timeAgo(r.createdAt)}
+                      </time>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <StatusMenu
+                        request={r}
+                        disabled={updatingId === r.id}
+                        onView={() => openRequest(r.id)}
+                        onStatus={(s) => requestStatus(r, s)}
+                      />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </Card>
 
-        <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/90 p-4 space-y-1 card-shine shadow-xs">
-          <span className="text-xs text-sky-400 font-medium flex items-center gap-1">
-            <AlertCircle className="size-3" /> In Progress
-          </span>
-          <div className="text-2xl font-bold tracking-tight text-zinc-200">{inProgressCount}</div>
-        </div>
+      <Sheet open={sheetOpen && selected !== null} onOpenChange={setSheetOpen}>
+        <SheetContent>
+          {selected ? (
+            <>
+              <SheetHeader>
+                <SheetTitle className="truncate">{selected.contactEmail}</SheetTitle>
+                <SheetDescription>Received {formatDateTime(selected.createdAt)}</SheetDescription>
+              </SheetHeader>
+              <SheetBody className="flex flex-col gap-6">
+                <div>
+                  <h3 className="mb-2 text-[13px] font-medium">What they asked for</h3>
+                  <p className="whitespace-pre-wrap break-words rounded-lg bg-muted/60 p-4 text-sm leading-relaxed">
+                    {selected.description}
+                  </p>
+                </div>
+                <DataList
+                  items={[
+                    {
+                      label: "Status",
+                      value: (
+                        <Badge variant={statusMeta(selected.status).variant} dot>
+                          {statusMeta(selected.status).label}
+                        </Badge>
+                      ),
+                    },
+                    { label: "Source", value: selected.userId ? "Registered user" : "Public form" },
+                    {
+                      label: "User ID",
+                      value: selected.userId ? <span className="font-mono text-xs">{selected.userId}</span> : "None",
+                    },
+                    { label: "Last updated", value: formatDateTime(selected.updatedAt) },
+                    { label: "Request ID", value: <span className="font-mono text-xs">{selected.id}</span> },
+                  ]}
+                />
+              </SheetBody>
+              <SheetFooter className="justify-between">
+                <Button asChild variant="outline">
+                  <a href={`mailto:${selected.contactEmail}`}>Email them</a>
+                </Button>
+                <div className="flex items-center gap-2">
+                  <SheetClose asChild>
+                    <Button variant="ghost">Close</Button>
+                  </SheetClose>
+                  <StatusMenu
+                    request={selected}
+                    disabled={updatingId === selected.id}
+                    onStatus={(s) => requestStatus(selected, s)}
+                    trigger="button"
+                  />
+                </div>
+              </SheetFooter>
+            </>
+          ) : null}
+        </SheetContent>
+      </Sheet>
 
-        <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/90 p-4 space-y-1 card-shine shadow-xs">
-          <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">
-            <CheckCircle2 className="size-3" /> Purged / Done
-          </span>
-          <div className="text-2xl font-bold tracking-tight text-emerald-400">{completedCount}</div>
-        </div>
-      </div>
-
-      {/* Filter and Action Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="flex flex-1 items-center gap-2">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
-            <input
-              type="text"
-              placeholder="Search by contact email or description..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-9 w-full rounded-lg border border-zinc-800/80 bg-zinc-900/50 pl-9 pr-3 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-700 transition-colors"
-            />
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            <Filter className="size-3.5 text-zinc-500" />
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-9 w-[170px] rounded-lg border-zinc-800/80 bg-zinc-900/50 px-2.5 text-xs text-zinc-300 focus:ring-0 focus:border-zinc-700">
-                <SelectValue placeholder={`All Statuses (${totalCount})`} />
-              </SelectTrigger>
-              <SelectContent align="end" className="rounded-lg border-zinc-800 bg-zinc-950 text-xs">
-                <SelectItem value="all">All Statuses ({totalCount})</SelectItem>
-                <SelectItem value="pending">Pending ({pendingCount})</SelectItem>
-                <SelectItem value="in_progress">In Progress ({inProgressCount})</SelectItem>
-                <SelectItem value="completed">Completed ({completedCount})</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={downloadCSV}
-          disabled={filteredRequests.length === 0}
-          className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3.5 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-800 hover:text-white transition-all disabled:opacity-40 disabled:pointer-events-none"
-        >
-          <Download className="size-3.5" />
-          Export CSV ({filteredRequests.length})
-        </button>
-      </div>
-
-      {/* Table */}
-      <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/20 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-sans">
-            <thead className="border-b border-zinc-800/80 bg-zinc-900/60 text-xs font-medium text-zinc-400">
-              <tr>
-                <th className="px-4 py-3 font-medium">Contact Email</th>
-                <th className="px-4 py-3 font-medium">Description (Requested Erasure)</th>
-                <th className="px-4 py-3 font-medium">Status & Action</th>
-                <th className="px-4 py-3 text-right font-medium">Submitted</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800/50">
-              {filteredRequests.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-12 text-center text-zinc-500">
-                    <UserX className="mx-auto size-8 text-zinc-600 mb-2" />
-                    <p className="font-semibold text-sm text-zinc-300">No removal requests found</p>
-                    <p className="text-xs text-zinc-500 mt-0.5">
-                      {search || statusFilter !== "all"
-                        ? "Try clearing filters to view all entries."
-                        : "No data subjects have requested data erasure yet."}
-                    </p>
-                  </td>
-                </tr>
-              ) : (
-                filteredRequests.map((req) => {
-                  const isRowUpdating = updatingId === req.id && isUpdating;
-
-                  return (
-                    <tr key={req.id} className="hover:bg-zinc-900/40 transition-colors">
-                      {/* Email */}
-                      <td className="px-4 py-3.5 align-top">
-                        <div className="space-y-1">
-                          <a
-                            href={`mailto:${req.contactEmail}`}
-                            className="font-medium text-white hover:text-zinc-300 transition-colors flex items-center gap-1.5"
-                          >
-                            <Mail className="size-3 text-zinc-500" />
-                            <span>{req.contactEmail}</span>
-                          </a>
-                          <span className="text-[11px] text-zinc-500">
-                            {req.userId ? "Registered User" : "Public Web Request"}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Description */}
-                      <td className="px-4 py-3.5 align-top max-w-md">
-                        <p className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed">
-                          {req.description}
-                        </p>
-                        <span className="text-[10px] text-zinc-500 block mt-1 font-mono">
-                          ID: {req.id}
-                        </span>
-                      </td>
-
-                      {/* Status Selector */}
-                      <td className="px-4 py-3.5 align-top">
-                        <div className="space-y-1.5">
-                          <div>{getStatusBadge(req.status)}</div>
-                          <div className="flex items-center gap-1.5 pt-0.5">
-                            <Select
-                              disabled={isRowUpdating}
-                              value={req.status}
-                              onValueChange={(val) =>
-                                handleStatusChange(
-                                  req.id,
-                                  val as DataRemovalStatus
-                                )
-                              }
-                            >
-                              <SelectTrigger className="h-7 w-[140px] rounded-lg border-zinc-800 bg-zinc-900/80 px-2 text-[11px] text-zinc-300 focus:ring-0">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent align="start" className="rounded-lg border-zinc-800 bg-zinc-950 text-xs">
-                                <SelectItem value="pending">Mark Pending</SelectItem>
-                                <SelectItem value="in_progress">Mark In Progress</SelectItem>
-                                <SelectItem value="completed">Mark Purged/Done</SelectItem>
-                                <SelectItem value="rejected">Mark Rejected</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            {isRowUpdating && (
-                              <Loader2 className="size-3 animate-spin text-zinc-400" />
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Submitted Date */}
-                      <td className="px-4 py-3.5 align-top text-right text-zinc-400 whitespace-nowrap text-xs">
-                        <div className="space-y-0.5">
-                          <span className="text-xs font-medium text-white">
-                            {new Date(req.createdAt).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })}
-                          </span>
-                          <div className="text-[10px] text-zinc-500">
-                            {new Date(req.createdAt).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={confirmCopy?.title ?? "Change status?"}
+        description={
+          confirm ? (
+            <>
+              {confirmCopy?.description} Request from <span className="font-medium text-foreground">{confirm.request.contactEmail}</span>.
+            </>
+          ) : undefined
+        }
+        confirmLabel={confirmCopy?.label ?? "Confirm"}
+        destructive={confirm?.status === "rejected"}
+        onConfirm={async () => {
+          if (confirm) await applyStatus(confirm.request, confirm.status);
+        }}
+      />
     </div>
+  );
+}
+
+function StatusMenu({
+  request,
+  disabled,
+  onStatus,
+  onView,
+  trigger = "icon",
+}: {
+  request: DataRemovalRequestDTO;
+  disabled: boolean;
+  onStatus: (status: DataRemovalStatus) => void;
+  onView?: () => void;
+  trigger?: "icon" | "button";
+}) {
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        {trigger === "icon" ? (
+          <RowActionsButton label={`Actions for request from ${request.contactEmail}`} disabled={disabled} />
+        ) : (
+          <Button loading={disabled}>Change status</Button>
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {onView ? (
+          <>
+            <DropdownMenuItem onSelect={onView}>View request</DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <a href={`mailto:${request.contactEmail}`}>Email {request.contactEmail}</a>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
+        <DropdownMenuLabel>Status</DropdownMenuLabel>
+        {STATUSES.map((s) => (
+          <Fragment key={s.value}>
+            {s.value === "rejected" ? <DropdownMenuSeparator /> : null}
+            <DropdownMenuItem
+              disabled={request.status === s.value}
+              destructive={s.value === "rejected"}
+              onSelect={() => onStatus(s.value)}
+            >
+              {s.action}
+            </DropdownMenuItem>
+          </Fragment>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

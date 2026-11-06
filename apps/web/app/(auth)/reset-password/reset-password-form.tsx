@@ -2,22 +2,18 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import {
-  Alert,
-  AlertDescription,
-  Button,
-  Input,
-  Label,
-} from "@smartreach/ui";
+import { Alert, AlertDescription, Button } from "@smartreach/ui";
 import { authClient } from "@/lib/auth-client";
-import { validateNewPassword } from "@/lib/password-rules";
-import { AuthCard } from "../auth-card";
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, validateNewPassword } from "@/lib/password-rules";
+import { AuthCard, authLinkClass } from "../auth-card";
+import { AuthField } from "../auth-field";
+import { PasswordInput } from "../password-input";
 
 export function ResetPasswordForm({ token }: { token: string }) {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [fieldError, setFieldError] = useState("");
+  const [fieldError, setFieldError] = useState<{ field: "password" | "confirm"; message: string } | null>(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -25,8 +21,12 @@ export function ResetPasswordForm({ token }: { token: string }) {
     e.preventDefault();
     setError("");
     const problem = validateNewPassword(password, confirm);
-    if (problem) return setFieldError(problem);
-    setFieldError("");
+    if (problem) {
+      // Length problems belong to the first field; anything else is a mismatch.
+      const lengthOk = password.length >= PASSWORD_MIN_LENGTH && password.length <= PASSWORD_MAX_LENGTH;
+      return setFieldError({ field: lengthOk ? "confirm" : "password", message: problem });
+    }
+    setFieldError(null);
     setSubmitting(true);
     try {
       const res = await authClient.resetPassword({ newPassword: password, token });
@@ -47,55 +47,48 @@ export function ResetPasswordForm({ token }: { token: string }) {
   return (
     <AuthCard
       title="Choose a new password"
-      subtitle="You'll be signed out everywhere else."
+      description="You'll be signed out on every other device."
       footer={
-        <Link href="/login" className="text-zinc-100 hover:underline transition-colors font-medium">
+        <Link href="/login" className={authLinkClass}>
           Back to sign in
         </Link>
       }
     >
-      <form onSubmit={onSubmit} className="space-y-4" noValidate>
-        <div className="space-y-1.5">
-          <Label htmlFor="password" className="text-xs font-medium text-zinc-300">
-            New password
-          </Label>
-          <Input
-            id="password"
-            type="password"
+      <form onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
+        <AuthField
+          id="password"
+          label="New password"
+          hint={`At least ${PASSWORD_MIN_LENGTH} characters.`}
+          error={fieldError?.field === "password" ? fieldError.message : undefined}
+        >
+          <PasswordInput
             autoComplete="new-password"
-            className="h-10 rounded-lg text-sm placeholder:text-zinc-600"
+            autoFocus
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-        </div>
+        </AuthField>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="confirm" className="text-xs font-medium text-zinc-300">
-            Confirm new password
-          </Label>
-          <Input
-            id="confirm"
-            type="password"
-            autoComplete="new-password"
-            className="h-10 rounded-lg text-sm placeholder:text-zinc-600"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-          />
-          {fieldError && <p className="text-[11px] text-rose-400">{fieldError}</p>}
-        </div>
+        <AuthField
+          id="confirm"
+          label="Confirm new password"
+          error={fieldError?.field === "confirm" ? fieldError.message : undefined}
+        >
+          <PasswordInput autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+        </AuthField>
 
         {error && (
-          <Alert variant="destructive" className="rounded-lg border-rose-500/30 bg-rose-500/10 text-rose-200">
-            <AlertDescription className="text-xs">
+          <Alert variant="destructive">
+            <AlertDescription className="mt-0 text-foreground">
               {error}{" "}
-              <Link href="/forgot-password" className="underline">
+              <Link href="/forgot-password" className={authLinkClass}>
                 Send a new link
               </Link>
             </AlertDescription>
           </Alert>
         )}
 
-        <Button type="submit" variant="brand" className="w-full h-10 text-sm" disabled={submitting}>
+        <Button type="submit" className="h-10 w-full" loading={submitting}>
           {submitting ? "Saving…" : "Update password"}
         </Button>
       </form>

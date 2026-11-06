@@ -2,8 +2,9 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Briefcase, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import {
+  Alert,
   Button,
   Dialog,
   DialogContent,
@@ -11,8 +12,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  Field,
   Input,
-  Label,
   Textarea,
 } from "@smartreach/ui";
 import { createWorkspaceAction } from "@/lib/actions";
@@ -23,118 +24,104 @@ interface CreateWorkspaceDialogProps {
   onCreated?: () => void;
 }
 
-export function CreateWorkspaceDialog({
-  open,
-  onOpenChange,
-  onCreated,
-}: CreateWorkspaceDialogProps) {
+/** Create a workspace. The new workspace becomes the active one. */
+export function CreateWorkspaceDialog({ open, onOpenChange, onCreated }: CreateWorkspaceDialogProps) {
   const router = useRouter();
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [loading, setLoading] = React.useState(false);
+  const [nameError, setNameError] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  function reset() {
+    setName("");
+    setDescription("");
+    setNameError(null);
+    setError(null);
+  }
+
+  function handleOpenChange(next: boolean) {
+    if (loading) return;
+    if (!next) reset();
+    onOpenChange(next);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) {
-      setError("Please enter a workspace name");
+      setNameError("Enter a name for the workspace.");
       return;
     }
-
     setLoading(true);
+    setNameError(null);
     setError(null);
     try {
       const res = await createWorkspaceAction({
         name: name.trim(),
         description: description.trim() || undefined,
       });
-
       if (!res.ok) {
         setError(res.error);
-        setLoading(false);
         return;
       }
-
-      setName("");
-      setDescription("");
+      toast.success(`Created ${name.trim()} and switched to it`);
+      reset();
       onOpenChange(false);
       onCreated?.();
       router.refresh();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to create workspace");
+      setError(err instanceof Error ? err.message : "The workspace could not be created.");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[440px]">
-        <form onSubmit={handleSubmit}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
           <DialogHeader>
-            <div className="flex items-center gap-2.5 mb-1">
-              <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Briefcase className="size-4" />
-              </div>
-              <DialogTitle>New Client Workspace</DialogTitle>
-            </div>
+            <DialogTitle>New workspace</DialogTitle>
             <DialogDescription>
-              Each workspace is an isolated blank slate with its own mailboxes, lead lists, campaigns, and suppressions.
+              A workspace has its own mailboxes, leads, campaigns and blocklist. Use one per client or brand.
+              You switch to it as soon as it is created.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            {error && (
-              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
-                {error}
-              </div>
-            )}
-            <div className="space-y-1.5">
-              <Label htmlFor="ws-name">Workspace / Client Name *</Label>
-              <Input
-                id="ws-name"
-                placeholder="e.g. Acme Corp, Berlin Outbound, Client X"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                disabled={loading}
-                autoFocus
-              />
-            </div>
+          {error ? <Alert variant="destructive">{error}</Alert> : null}
 
-            <div className="space-y-1.5">
-              <Label htmlFor="ws-desc">Description (Optional)</Label>
-              <Textarea
-                id="ws-desc"
-                placeholder="Notes about this client or outbound campaign scope..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                disabled={loading}
-                rows={2}
-              />
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
+          <Field label="Name" required error={nameError}>
+            <Input
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (nameError) setNameError(null);
+              }}
+              placeholder="Acme Corp"
               disabled={loading}
-            >
+              autoFocus
+              autoComplete="off"
+              maxLength={120}
+            />
+          </Field>
+
+          <Field label="Description" optional hint="Only you see this. Useful for client or scope notes.">
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Outbound for Acme's EU sales team"
+              disabled={loading}
+              rows={2}
+              className="min-h-0"
+            />
+          </Field>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={loading}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading || !name.trim()}>
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 size-3.5 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <Plus className="mr-1.5 size-3.5" />
-                  Create Workspace
-                </>
-              )}
+            <Button type="submit" loading={loading} disabled={!name.trim()}>
+              Create workspace
             </Button>
           </DialogFooter>
         </form>

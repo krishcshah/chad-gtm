@@ -1,25 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import {
-  Badge,
-  Button,
-  Label,
-  Switch,
-  Textarea,
-  cn,
-} from "@smartreach/ui";
-import {
-  Sparkles,
-  Eye,
-  RefreshCw,
-  Sliders,
-  Wand2,
-  HelpCircle,
-} from "lucide-react";
+import { useId, useState, useTransition } from "react";
+import { Eye } from "lucide-react";
+import { Alert, Button, Switch, Textarea, cn } from "@smartreach/ui";
+import { toast } from "sonner";
 import { previewAiSequenceGeneration } from "@/lib/actions";
 import { AiGenerationPreviewDialog, type PreviewSample } from "./ai-generation-preview-dialog";
-import { toast } from "sonner";
 
 interface AiDynamicScriptCardProps {
   enabled: boolean;
@@ -33,30 +19,33 @@ interface AiDynamicScriptCardProps {
   className?: string;
 }
 
-const PROMPT_RECIPES = [
+const EXAMPLES = [
   {
-    label: "Pain Point Hook",
-    prompt: "Cite their company's likely growth challenges in their industry. Keep it under 75 words with a casual, respectful tone and a low-friction ask.",
+    label: "Their likely challenge",
+    prompt:
+      "Cite their company's likely growth challenges in their industry. Keep it under 75 words with a casual, respectful tone and a low-friction ask.",
   },
   {
-    label: "Benchmark Data",
-    prompt: "Highlight that we benchmarked deliverability and conversion rates for companies in their space. Ask if they are open to reviewing the benchmark deck.",
+    label: "Benchmark offer",
+    prompt:
+      "Highlight that we benchmarked deliverability and conversion rates for companies in their space. Ask if they are open to reviewing the benchmark deck.",
   },
   {
-    label: "Short & Direct 3-Sentence",
-    prompt: "Keep the body strictly to 3 sentences. State why we reached out to their company, the tangible ROI, and ask for a 4-minute intro this week.",
+    label: "Three sentences",
+    prompt:
+      "Keep the body strictly to 3 sentences. State why we reached out to their company, the tangible ROI, and ask for a 4-minute intro this week.",
   },
 ];
 
-const VARIABLE_CHIPS = [
-  "first_name",
-  "company",
-  "job_title",
-  "industry",
-  "website",
-  "location",
-];
+const LEAD_FIELDS = ["first_name", "company", "job_title", "industry", "website", "location"];
 
+const SAMPLE_COUNT = 5;
+
+/**
+ * "Write each email with AI" setting for one email version. When on, the
+ * sender writes a unique email per lead at send time from these instructions;
+ * the written email is the fallback if that fails.
+ */
 export function AiDynamicScriptCard({
   enabled,
   onEnabledChange,
@@ -69,177 +58,153 @@ export function AiDynamicScriptCard({
   className,
 }: AiDynamicScriptCardProps) {
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewSamples, setPreviewSamples] = useState<PreviewSample[]>([]);
+  const [samples, setSamples] = useState<PreviewSample[]>([]);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [loading, startTransition] = useTransition();
+  const id = useId();
+  const switchLabelId = `${id}-label`;
+  const switchDescId = `${id}-desc`;
+  const instructionsId = `${id}-instructions`;
+  const instructionsHintId = `${id}-instructions-hint`;
 
-  const handleOpenPreview = () => {
+  const runPreview = () => {
+    setPreviewOpen(true);
+    setPreviewError(null);
     startTransition(async () => {
       try {
-        setPreviewOpen(true);
         const res = await previewAiSequenceGeneration({
           campaignId,
           leadListId,
           customInstruction: instruction,
           fallbackSubject,
           fallbackBody,
-          sampleCount: 5,
+          sampleCount: SAMPLE_COUNT,
         });
-
         if (!res.ok) {
-          toast.error(res.error || "Failed to generate sample preview emails");
+          setSamples([]);
+          setPreviewError(res.error || "Could not write the sample emails.");
+          toast.error(res.error || "Could not write the sample emails");
           return;
         }
-
         if (!res.data) {
-          toast.error("No preview samples returned");
+          setSamples([]);
+          setPreviewError("No sample emails came back. Try again.");
           return;
         }
-
-        setPreviewSamples(res.data.samples);
-      } catch (err: any) {
-        toast.error(err?.message || "Failed to preview AI generation");
+        setSamples(res.data.samples);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Could not write the sample emails.";
+        setSamples([]);
+        setPreviewError(message);
+        toast.error(message);
       }
     });
   };
 
-  const insertVariable = (variable: string) => {
-    const token = `{{${variable}}}`;
+  const insertField = (field: string) => {
+    const token = `{{${field}}}`;
     onInstructionChange(instruction ? `${instruction} ${token}` : token);
   };
 
+  const missingInstructions = enabled && !instruction.trim();
+
   return (
     <>
-      <div
-        className={cn(
-          "rounded-xl border transition-all duration-200 p-4 space-y-3.5",
-          enabled
-            ? "border-primary/40 bg-primary/[0.03] shadow-xs"
-            : "border-border/70 bg-card/60 hover:border-border",
-          className
-        )}
-      >
-        {/* Card Header & Toggle */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-start sm:items-center gap-2.5 min-w-0 flex-1">
-            <span
-              className={cn(
-                "flex size-7 items-center justify-center rounded-lg transition-colors shrink-0 mt-0.5 sm:mt-0",
-                enabled ? "bg-primary text-primary-foreground shadow-xs" : "bg-muted text-muted-foreground"
-              )}
-            >
-              <Sparkles className="size-3.5" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                <span className="font-semibold text-xs sm:text-sm text-foreground">
-                  Write scripts on the fly
-                </span>
-                <Badge
-                  variant={enabled ? "default" : "outline"}
-                  className={cn(
-                    "text-[10px] uppercase font-bold tracking-wider py-0 px-1.5 shrink-0",
-                    enabled ? "bg-primary text-primary-foreground" : "text-muted-foreground border-border"
-                  )}
-                >
-                  AI Personalization
-                </Badge>
-              </div>
-              <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2 sm:line-clamp-none">
-                Generate unique, lead-specific cold outreach scripts at dispatch-time based on their live role and company data.
-              </p>
-            </div>
+      <div className={cn("rounded-lg border border-border", className)}>
+        <div className="flex items-start justify-between gap-4 p-4">
+          <div className="min-w-0">
+            <p id={switchLabelId} className="text-sm font-medium text-foreground">
+              Write each email with AI
+            </p>
+            <p id={switchDescId} className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
+              At send time, AI writes a unique version for every lead from their name, role and company. If it
+              cannot, the email you wrote is sent instead.
+            </p>
           </div>
-
           <Switch
             checked={enabled}
             onCheckedChange={onEnabledChange}
-            aria-label="Toggle write scripts on the fly"
-            className="shrink-0 self-center"
+            aria-labelledby={switchLabelId}
+            aria-describedby={switchDescId}
+            className="mt-0.5"
           />
         </div>
 
-        {/* Expanded Controls when Enabled */}
         {enabled && (
-          <div className="pt-2 border-t border-primary/20 space-y-3 animate-in fade-in-50 duration-200">
-            {/* Custom Instructions Input */}
-            <div className="space-y-1.5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-[11px]">
-                <Label htmlFor="ai-instructions" className="font-semibold text-foreground flex items-center gap-1.5 shrink-0">
-                  <Sliders className="size-3 text-primary" />
-                  Custom Instructions & Script Prompt
-                </Label>
-                <div className="flex flex-wrap items-center gap-1 text-muted-foreground">
-                  <span className="shrink-0">Insert variables:</span>
-                  <div className="flex flex-wrap items-center gap-1">
-                    {VARIABLE_CHIPS.map((chip) => (
-                      <button
-                        key={chip}
-                        type="button"
-                        onClick={() => insertVariable(chip)}
-                        className="rounded bg-muted/80 px-1.5 py-0.2 hover:bg-primary/20 hover:text-primary transition-colors text-[10px] font-mono"
-                        title={`Insert {{${chip}}}`}
-                      >
-                        {chip}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
+          <div className="flex flex-col gap-4 border-t border-border p-4">
+            <div className="flex flex-col gap-2">
+              <label htmlFor={instructionsId} className="text-[13px] font-medium leading-none text-foreground">
+                Instructions for the AI
+              </label>
               <Textarea
-                id="ai-instructions"
-                rows={3}
+                id={instructionsId}
+                rows={4}
                 value={instruction}
                 onChange={(e) => onInstructionChange(e.target.value)}
-                placeholder="e.g. Reference their company industry challenges. Focus on deliverability without domain burn. Keep body under 70 words, casual peer-to-peer tone, with a soft ask for benchmark data..."
-                className="text-xs resize-y bg-background/80 min-h-[75px] max-h-[160px]"
+                aria-describedby={instructionsHintId}
+                placeholder="What the email should say, the tone, the length and the ask. For example: mention a challenge typical for their industry, stay under 70 words, ask if they want the benchmark."
+                className="max-h-64 min-h-[96px] resize-y text-[13px]"
               />
-            </div>
-
-            {/* Prompt Quick Recipes & Preview Action */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
-              <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                <span className="font-medium text-foreground/80 shrink-0">Recipes:</span>
-                {PROMPT_RECIPES.map((r) => (
+              <div id={instructionsHintId} className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Add a lead field</span>
+                {LEAD_FIELDS.map((f) => (
                   <button
-                    key={r.label}
+                    key={f}
                     type="button"
-                    onClick={() => onInstructionChange(r.prompt)}
-                    className="rounded-md border border-border/60 bg-muted/30 px-2 py-0.5 text-[10px] font-medium hover:border-primary/40 hover:bg-primary/5 hover:text-primary transition-all"
+                    onClick={() => insertField(f)}
+                    aria-label={`Insert ${f.replace(/_/g, " ")}`}
+                    className="rounded-md border border-border bg-card px-1.5 py-0.5 font-mono text-xs text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring"
                   >
-                    + {r.label}
+                    {`{{${f}}}`}
                   </button>
                 ))}
               </div>
+            </div>
 
-              {/* Top 5 Saved Leads Preview Button */}
+            {missingInstructions ? (
+              <Alert variant="warning">
+                Add instructions. Without them every lead gets the email you wrote above.
+              </Alert>
+            ) : null}
+
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Start from an example</span>
+                {EXAMPLES.map((r) => (
+                  <Button
+                    key={r.label}
+                    type="button"
+                    variant="secondary"
+                    size="xs"
+                    onClick={() => onInstructionChange(r.prompt)}
+                  >
+                    {r.label}
+                  </Button>
+                ))}
+              </div>
               <Button
                 type="button"
-                variant="default"
+                variant="outline"
                 size="sm"
-                onClick={handleOpenPreview}
-                disabled={loading}
-                className="h-7 px-3 text-xs font-semibold gap-1.5 shadow-xs w-full sm:w-auto shrink-0 justify-center"
+                onClick={runPreview}
+                loading={loading}
+                className="self-start"
               >
-                {loading ? (
-                  <RefreshCw className="size-3.5 animate-spin" />
-                ) : (
-                  <Eye className="size-3.5" />
-                )}
-                <span>{loading ? "Generating Previews…" : "Preview Top 5 Leads"}</span>
+                {!loading && <Eye aria-hidden />}
+                {loading ? "Writing samples…" : `Preview ${SAMPLE_COUNT} leads`}
               </Button>
             </div>
           </div>
         )}
       </div>
 
-      {/* 10 Sample Email Preview Dialog */}
       <AiGenerationPreviewDialog
         open={previewOpen}
         onOpenChange={setPreviewOpen}
-        samples={previewSamples}
+        samples={samples}
         loading={loading}
-        onRegenerate={handleOpenPreview}
+        error={previewError}
+        onRegenerate={runPreview}
         customInstruction={instruction}
       />
     </>

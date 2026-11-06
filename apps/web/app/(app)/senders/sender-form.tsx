@@ -1,236 +1,414 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Flame, Loader2, Plug, XCircle } from "lucide-react";
-import { toast } from "sonner";
+import { Lock, Plug } from "lucide-react";
 import { TIMEZONES } from "@smartreach/shared";
 import {
   Alert,
   AlertDescription,
   AlertTitle,
   Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Field,
   Input,
-  Label,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  NativeSelect,
+  SegmentedControl,
   Textarea,
+  toast,
 } from "@smartreach/ui";
 import { createSender, testSenderConnection } from "@/lib/actions";
 import { WARMUP_STATUS_DESCRIPTION, WARMUP_STATUS_TITLE } from "@/lib/sender-warmup";
+import { ConnectionResult } from "./connection-result";
+import { firstFieldErrors, type ConnectionCheck, type SmtpSecurity } from "./sender-types";
+import { ImapFields, SmtpFields, type ServerValues } from "./server-fields";
 
-type ConnResult = {
-  smtp: { ok: boolean; message: string; latencyMs?: number };
-  imap: { ok: boolean; message: string; latencyMs?: number };
+type Provider = "google" | "microsoft" | "zoho" | "other";
+
+/** Known server settings. They only fill the fields; everything stays editable. */
+const PROVIDERS: Record<Exclude<Provider, "other">, Partial<ServerValues>> = {
+  google: { smtpHost: "smtp.gmail.com", smtpPort: "587", smtpSecurity: "tls", imapHost: "imap.gmail.com", imapPort: "993" },
+  microsoft: {
+    smtpHost: "smtp.office365.com",
+    smtpPort: "587",
+    smtpSecurity: "tls",
+    imapHost: "outlook.office365.com",
+    imapPort: "993",
+  },
+  zoho: { smtpHost: "smtp.zoho.com", smtpPort: "465", smtpSecurity: "ssl", imapHost: "imap.zoho.com", imapPort: "993" },
 };
+
+interface FormValues extends ServerValues {
+  senderName: string;
+  email: string;
+  fromName: string;
+  replyTo: string;
+  dailyLimit: string;
+  hourlyLimit: string;
+  timezone: string;
+  signature: string;
+}
+
+const INITIAL: FormValues = {
+  senderName: "",
+  email: "",
+  fromName: "",
+  replyTo: "",
+  smtpHost: "",
+  smtpPort: "587",
+  smtpSecurity: "tls",
+  smtpUsername: "",
+  smtpPassword: "",
+  imapHost: "",
+  imapPort: "993",
+  imapUsername: "",
+  imapPassword: "",
+  dailyLimit: "50",
+  hourlyLimit: "20",
+  timezone: "UTC",
+  signature: "",
+};
+
+type Errors = Partial<Record<keyof FormValues, string>>;
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const SERVER_KEYS: (keyof ServerValues)[] = [
+  "smtpHost",
+  "smtpPort",
+  "smtpSecurity",
+  "smtpUsername",
+  "smtpPassword",
+  "imapHost",
+  "imapPort",
+  "imapUsername",
+  "imapPassword",
+];
+
+function validPort(v: string) {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 1 && n <= 65535;
+}
 
 export function SenderForm() {
   const router = useRouter();
-  const [pending, start] = useTransition();
-  const [f, setF] = useState<Record<string, string>>({});
+  const [f, setF] = useState<FormValues>(INITIAL);
+  const [provider, setProvider] = useState<Provider>("other");
+  const [errors, setErrors] = useState<Errors>({});
+  const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [test, setTest] = useState<ConnResult | null>(null);
+  const [test, setTest] = useState<ConnectionCheck | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
-  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-    setF((p) => ({ ...p, [k]: e.target.value }));
+  // Move focus to the first field with an error so keyboard and screen-reader users land on it.
+  const showErrors = (e: Errors) => {
+    setErrors(e);
+    requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus());
+  };
 
-  const runTest = () => {
+  const update = (patch: Partial<FormValues>) => {
+    setF((prev) => ({ ...prev, ...patch }));
+    // A result for different server settings would be misleading.
+    if (Object.keys(patch).some((k) => SERVER_KEYS.includes(k as keyof ServerValues) || k === "email")) setTest(null);
+    setErrors((prev) => {
+      const next = { ...prev };
+      for (const k of Object.keys(patch)) delete next[k as keyof FormValues];
+      return next;
+    });
+  };
+
+  const pickProvider = (p: Provider) => {
+    setProvider(p);
+    if (p !== "other") update(PROVIDERS[p]);
+  };
+
+  // Usernames default to the email address, IMAP login to the SMTP login.
+  const smtpUsername = f.smtpUsername.trim() || f.email.trim();
+  const imapEnabled = f.imapHost.trim() !== "";
+  const imapUsername = imapEnabled ? f.imapUsername.trim() || smtpUsername : f.imapUsername.trim();
+  const imapPassword = imapEnabled ? f.imapPassword || f.smtpPassword : f.imapPassword;
+
+  const serverPayload = () => ({
+    smtpHost: f.smtpHost.trim(),
+    smtpPort: Number(f.smtpPort || 587),
+    smtpUsername,
+    smtpPassword: f.smtpPassword,
+    smtpSecurity: f.smtpSecurity as SmtpSecurity,
+    imapHost: f.imapHost.trim(),
+    imapPort: Number(f.imapPort || 993),
+    imapUsername,
+    imapPassword,
+  });
+
+  const serverErrors = (): Errors => {
+    const e: Errors = {};
+    if (!f.smtpHost.trim()) e.smtpHost = "Enter the SMTP server";
+    if (!smtpUsername) e.smtpUsername = "Enter the username, or fill in the email address";
+    if (!f.smtpPassword) e.smtpPassword = "Enter the password";
+    if (!validPort(f.smtpPort)) e.smtpPort = "Use a port between 1 and 65535";
+    if (imapEnabled && !validPort(f.imapPort)) e.imapPort = "Use a port between 1 and 65535";
+    return e;
+  };
+
+  const runTest = async () => {
     setTest(null);
-    if (!f.smtpHost || !f.smtpUsername || !f.smtpPassword) {
-      toast.error("Fill in SMTP host, username and password first");
+    const e = serverErrors();
+    if (Object.keys(e).length > 0) {
+      showErrors(e);
+      toast.error(
+        e.smtpHost || e.smtpUsername || e.smtpPassword
+          ? "Fill in the SMTP server, username and password first"
+          : "Check the highlighted fields",
+      );
       return;
     }
     setTesting(true);
-    testSenderConnection({
-      smtpHost: f.smtpHost,
-      smtpPort: Number(f.smtpPort ?? 587),
-      smtpUsername: f.smtpUsername,
-      smtpPassword: f.smtpPassword,
-      smtpSecurity: (f.smtpSecurity as "tls" | "ssl" | "none") ?? "tls",
-      imapHost: f.imapHost ?? "",
-      imapPort: Number(f.imapPort ?? 993),
-      imapUsername: f.imapUsername ?? "",
-      imapPassword: f.imapPassword ?? "",
-    })
-      .then((res) => {
-        if (res.ok && res.data) setTest(res.data);
-        else if (!res.ok) toast.error(res.error);
-      })
-      .catch((e) => toast.error(e instanceof Error ? e.message : "Test failed"))
-      .finally(() => setTesting(false));
-  };
-
-  const submit = (testOnly: boolean) =>
-    start(async () => {
-      setTest(null);
-      if (testOnly) {
-        runTest();
-        return;
-      }
-      const res = await createSender({
-        senderName: f.senderName ?? "",
-        email: f.email ?? "",
-        smtpHost: f.smtpHost ?? "",
-        smtpPort: Number(f.smtpPort ?? 587),
-        smtpUsername: f.smtpUsername ?? "",
-        smtpPassword: f.smtpPassword ?? "",
-        smtpSecurity: (f.smtpSecurity as "tls" | "ssl" | "none") ?? "tls",
-        imapHost: f.imapHost ?? "",
-        imapPort: Number(f.imapPort ?? 993),
-        imapUsername: f.imapUsername ?? "",
-        imapPassword: f.imapPassword ?? "",
-        dailyLimit: Number(f.dailyLimit ?? 50),
-        hourlyLimit: Number(f.hourlyLimit ?? 20),
-        fromName: f.fromName ?? f.senderName ?? "",
-        replyTo: f.replyTo ?? "",
-        timezone: f.timezone ?? "UTC",
-        signature: f.signature ?? "",
-      });
-      if (res.ok) {
-        toast.success("Sender added");
-        router.push("/senders");
-      } else {
+    try {
+      const res = await testSenderConnection(serverPayload());
+      if (res.ok && res.data) setTest(res.data);
+      else if (!res.ok) {
+        setErrors(firstFieldErrors(res.fieldErrors) as Errors);
         toast.error(res.error);
       }
-    });
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : "The connection test failed");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const submit = async () => {
+    const e: Errors = { ...serverErrors() };
+    if (!f.senderName.trim()) e.senderName = "Give the mailbox a name";
+    if (!EMAIL_RE.test(f.email.trim())) e.email = "Enter a valid email address";
+    if (f.replyTo.trim() && !EMAIL_RE.test(f.replyTo.trim())) e.replyTo = "Enter a valid email address";
+    if (!(Number(f.dailyLimit) >= 1)) e.dailyLimit = "Use at least 1";
+    if (!(Number(f.hourlyLimit) >= 1)) e.hourlyLimit = "Use at least 1";
+    if (Object.keys(e).length > 0) {
+      showErrors(e);
+      toast.error("Check the highlighted fields");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await createSender({
+        senderName: f.senderName.trim(),
+        email: f.email.trim(),
+        ...serverPayload(),
+        dailyLimit: Number(f.dailyLimit || 50),
+        hourlyLimit: Number(f.hourlyLimit || 20),
+        fromName: f.fromName.trim() || f.senderName.trim(),
+        replyTo: f.replyTo.trim(),
+        timezone: f.timezone || "UTC",
+        signature: f.signature,
+      });
+      if (res.ok) {
+        toast.success(`${f.email.trim()} connected`);
+        router.push("/senders");
+        return;
+      }
+      showErrors(firstFieldErrors(res.fieldErrors) as Errors);
+      toast.error(res.error);
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : "Could not connect this mailbox");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <form
+      ref={formRef}
+      noValidate
       onSubmit={(e) => {
         e.preventDefault();
-        submit(false);
+        void submit();
       }}
-      className="space-y-8"
+      className="flex flex-col gap-6"
     >
-      {/* Identity */}
-      <Section title="Identity">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Sender name" required><Input id="senderName" name="senderName" value={f.senderName ?? ""} onChange={set("senderName")} placeholder="Krish Shah" /></Field>
-          <Field label="Email address" required><Input id="email" name="email" type="email" value={f.email ?? ""} onChange={set("email")} placeholder="krish@yourdomain.com" /></Field>
-          <Field label="From name"><Input id="fromName" name="fromName" value={f.fromName ?? ""} onChange={set("fromName")} placeholder="Krish from SmartReach" /></Field>
-          <Field label="Reply-To"><Input id="replyTo" name="replyTo" type="email" value={f.replyTo ?? ""} onChange={set("replyTo")} placeholder="replies@yourdomain.com" /></Field>
-        </div>
-      </Section>
+      <Card>
+        <CardHeader>
+          <CardTitle>Mailbox</CardTitle>
+          <CardDescription>The address campaigns send from and how it appears to recipients.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-5 sm:grid-cols-2">
+          <Field label="Name" required error={errors.senderName} hint="Helps you tell mailboxes apart.">
+            <Input
+              name="senderName"
+              value={f.senderName}
+              onChange={(e) => update({ senderName: e.target.value })}
+              placeholder="Jane, sales"
+              autoComplete="off"
+            />
+          </Field>
+          <Field label="Email address" required error={errors.email}>
+            <Input
+              name="email"
+              type="email"
+              value={f.email}
+              onChange={(e) => update({ email: e.target.value })}
+              placeholder="jane@yourcompany.com"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </Field>
+          <Field
+            label="Display name"
+            optional
+            error={errors.fromName}
+            hint="What recipients see next to the address. Defaults to the name above."
+          >
+            <Input
+              name="fromName"
+              value={f.fromName}
+              onChange={(e) => update({ fromName: e.target.value })}
+              placeholder="Jane Cooper"
+              autoComplete="off"
+            />
+          </Field>
+          <Field
+            label="Reply-to address"
+            optional
+            error={errors.replyTo}
+            hint="Send replies to a different inbox. Leave blank to keep them in this mailbox."
+          >
+            <Input
+              name="replyTo"
+              type="email"
+              value={f.replyTo}
+              onChange={(e) => update({ replyTo: e.target.value })}
+              placeholder="replies@yourcompany.com"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </Field>
+        </CardContent>
+      </Card>
 
-      {/* SMTP */}
-      <Section title="SMTP (sending)">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="SMTP host" required><Input id="smtpHost" name="smtpHost" value={f.smtpHost ?? ""} onChange={set("smtpHost")} placeholder="smtp.gmail.com" /></Field>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Port"><Input id="smtpPort" name="smtpPort" type="number" value={f.smtpPort ?? "587"} onChange={set("smtpPort")} /></Field>
-            <Field label="Security">
-              <Select value={f.smtpSecurity ?? "tls"} onValueChange={(v) => setF((p) => ({ ...p, smtpSecurity: v }))}>
-                <SelectTrigger id="smtpSecurity"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="tls">TLS (STARTTLS)</SelectItem>
-                  <SelectItem value="ssl">SSL</SelectItem>
-                  <SelectItem value="none">None</SelectItem>
-                </SelectContent>
-              </Select>
+      <Card>
+        <CardHeader>
+          <CardTitle>Sending server (SMTP)</CardTitle>
+          <CardDescription>Pick your email provider to fill in its server settings, or enter them yourself.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-5">
+          <div className="-mx-5 overflow-x-auto px-5">
+            <SegmentedControl
+              aria-label="Email provider"
+              value={provider}
+              onValueChange={pickProvider}
+              options={[
+                { value: "google", label: "Google" },
+                { value: "microsoft", label: "Microsoft 365" },
+                { value: "zoho", label: "Zoho" },
+                { value: "other", label: "Other" },
+              ]}
+            />
+          </div>
+          <SmtpFields
+            values={f}
+            onChange={update}
+            errors={errors}
+            mode="create"
+            usernamePlaceholder={f.email.trim() || undefined}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Reply detection (IMAP)</CardTitle>
+          <CardDescription>
+            Optional, but without it AutoGTM can&apos;t see replies, so follow-ups keep going to people who already
+            answered.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ImapFields values={f} onChange={update} errors={errors} mode="create" />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Limits and signature</CardTitle>
+          <CardDescription>Keep volume low on new mailboxes. You can change these later.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-5">
+          <div className="grid gap-5 sm:grid-cols-3">
+            <Field label="Emails per day" error={errors.dailyLimit} hint="Sending stops for the day at this number.">
+              <Input
+                name="dailyLimit"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                value={f.dailyLimit}
+                onChange={(e) => update({ dailyLimit: e.target.value })}
+                className="tabular"
+              />
+            </Field>
+            <Field label="Emails per hour" error={errors.hourlyLimit} hint="Spreads sending across the day.">
+              <Input
+                name="hourlyLimit"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                value={f.hourlyLimit}
+                onChange={(e) => update({ hourlyLimit: e.target.value })}
+                className="tabular"
+              />
+            </Field>
+            <Field label="Time zone" error={errors.timezone}>
+              <NativeSelect name="timezone" value={f.timezone} onChange={(e) => update({ timezone: e.target.value })}>
+                {(TIMEZONES as readonly string[]).map((tz) => (
+                  <option key={tz} value={tz}>
+                    {tz.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </NativeSelect>
             </Field>
           </div>
-          <Field label="Username" required><Input id="smtpUsername" name="smtpUsername" value={f.smtpUsername ?? ""} onChange={set("smtpUsername")} placeholder="krish@yourdomain.com" /></Field>
-          <Field label="Password / App password" required><Input id="smtpPassword" name="smtpPassword" type="password" value={f.smtpPassword ?? ""} onChange={set("smtpPassword")} placeholder="••••••••" /></Field>
-        </div>
-      </Section>
-
-      {/* IMAP */}
-      <Section title="IMAP (reply detection)" hint="Optional, but required to detect replies and auto-stop follow-ups.">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="IMAP host"><Input id="imapHost" name="imapHost" value={f.imapHost ?? ""} onChange={set("imapHost")} placeholder="imap.gmail.com" /></Field>
-          <Field label="IMAP port"><Input id="imapPort" name="imapPort" type="number" value={f.imapPort ?? "993"} onChange={set("imapPort")} /></Field>
-          <Field label="IMAP username"><Input id="imapUsername" name="imapUsername" value={f.imapUsername ?? ""} onChange={set("imapUsername")} placeholder="krish@yourdomain.com" /></Field>
-          <Field label="IMAP password"><Input id="imapPassword" name="imapPassword" type="password" value={f.imapPassword ?? ""} onChange={set("imapPassword")} placeholder="••••••••" /></Field>
-        </div>
-      </Section>
-
-      {/* Limits & meta */}
-      <Section title="Limits & settings">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Daily limit"><Input type="number" min={1} value={f.dailyLimit ?? "50"} onChange={set("dailyLimit")} /></Field>
-          <Field label="Hourly limit"><Input type="number" min={1} value={f.hourlyLimit ?? "20"} onChange={set("hourlyLimit")} /></Field>
-          <Field label="Timezone">
-            <Select value={f.timezone ?? "UTC"} onValueChange={(v) => setF((p) => ({ ...p, timezone: v }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {(TIMEZONES as readonly string[]).map((tz) => <SelectItem key={tz} value={tz}>{tz}</SelectItem>)}
-              </SelectContent>
-            </Select>
+          <Field
+            label="Signature"
+            optional
+            error={errors.signature}
+            hint="Added wherever a template uses {{signature}}."
+          >
+            <Textarea
+              name="signature"
+              rows={4}
+              value={f.signature}
+              onChange={(e) => update({ signature: e.target.value })}
+              placeholder={"Jane Cooper\nHead of Sales, Acme"}
+            />
           </Field>
-        </div>
-        <Field label="Signature" hint="Appended to every email if your template includes {{signature}}.">
-          <Textarea rows={3} value={f.signature ?? ""} onChange={set("signature")} placeholder={"—\nElena Rostova\nGrowth & Outbound, AutoGTM"} />
-        </Field>
-      </Section>
+        </CardContent>
+      </Card>
 
-      <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-card/40 p-4">
-        <Flame className="size-4 text-muted-foreground shrink-0 mt-0.5" />
-        <div className="text-xs leading-relaxed">
-          <p className="font-semibold text-foreground">{WARMUP_STATUS_TITLE}</p>
-          <p className="text-muted-foreground mt-0.5">{WARMUP_STATUS_DESCRIPTION}</p>
-        </div>
-      </div>
+      <Alert variant="info">
+        <AlertTitle>{WARMUP_STATUS_TITLE}</AlertTitle>
+        <AlertDescription>{WARMUP_STATUS_DESCRIPTION}</AlertDescription>
+      </Alert>
 
-      {test && (
-        <Alert variant={test.smtp.ok ? "success" : "destructive"}>
-          <AlertTitle className="flex items-center gap-4">
-            <span className={`flex items-center gap-1.5 ${test.smtp.ok ? "" : "text-destructive"}`}>
-              {test.smtp.ok ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-              SMTP {test.smtp.ok ? `working${test.smtp.latencyMs != null ? ` · ${test.smtp.latencyMs}ms` : ""}` : "failed"}
-            </span>
-            <span className={`flex items-center gap-1.5 ${test.imap.ok ? "" : "text-muted-foreground"}`}>
-              {test.imap.ok ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-              IMAP {test.imap.ok ? `working${test.imap.latencyMs != null ? ` · ${test.imap.latencyMs}ms` : ""}` : f.imapHost ? "failed" : "not configured"}
-            </span>
-          </AlertTitle>
-          <AlertDescription>
-            {test.smtp.message}
-            {test.smtp.message && test.imap.message ? " · " : ""}
-            {test.imap.message}
-          </AlertDescription>
-        </Alert>
-      )}
+      {test && <ConnectionResult result={test} imapConfigured={imapEnabled} />}
 
-      <div className="flex flex-wrap items-center gap-3 border-t pt-6">
-        <Button type="submit" disabled={pending}>
-          {pending && !test ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          Save sender
-        </Button>
-        <Button type="button" variant="outline" disabled={pending || testing} onClick={() => submit(true)}>
-          {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />}
-          {testing ? "Testing…" : "Test connection"}
-        </Button>
-        <p className="text-xs text-muted-foreground">
-          Credentials are encrypted before they're stored. Never sent back to the browser.
+      <div className="flex flex-col gap-4 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between">
+        <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground sm:max-w-xs">
+          <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          Passwords are encrypted before they&apos;re stored and are never shown again.
         </p>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row">
+          <Button type="button" variant="outline" loading={testing} disabled={saving} onClick={() => void runTest()}>
+            {testing ? null : <Plug />}
+            {testing ? "Testing…" : "Test connection"}
+          </Button>
+          <Button type="submit" loading={saving} disabled={testing}>
+            Connect mailbox
+          </Button>
+        </div>
       </div>
     </form>
-  );
-}
-
-function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <section className="space-y-4">
-      <div>
-        <h2 className="font-medium">{title}</h2>
-        {hint && <p className="text-sm text-muted-foreground">{hint}</p>}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function Field({ label, hint, required, children }: { label: string; hint?: string; required?: boolean; children: React.ReactNode }) {
-  return (
-    <div className="space-y-2">
-      <Label>
-        {label} {required && <span className="text-destructive">*</span>}
-      </Label>
-      {children}
-      {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
-    </div>
   );
 }

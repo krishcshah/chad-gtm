@@ -1,44 +1,48 @@
-import { Bug, Sparkles, Lightbulb, Mail, HelpCircle } from "lucide-react";
+import { Bug, HelpCircle, Lightbulb, Mail, Sparkles, type LucideIcon } from "lucide-react";
+import { Badge } from "@smartreach/ui";
 import type { TicketCategory } from "@/lib/support-types";
 
-const categoryConfig: Record<TicketCategory, { label: string; icon: any; className: string }> = {
+/** Sentence-case names and short explanations for each ticket category. */
+export const TICKET_CATEGORY_META: Record<
+  TicketCategory,
+  { label: string; description: string; icon: LucideIcon }
+> = {
   bug_report: {
-    label: "Bug Report",
+    label: "Bug",
+    description: "Something is broken, shows the wrong thing or throws an error.",
     icon: Bug,
-    className: "border-red-900/60 bg-red-950/30 text-red-400",
   },
   feature_request: {
-    label: "Feature Request",
+    label: "Feature request",
+    description: "Something you would like AutoGTM to do.",
     icon: Sparkles,
-    className: "border-zinc-700 bg-zinc-900 text-white",
   },
   suggestion: {
     label: "Suggestion",
+    description: "An idea to improve copy, delivery or the interface.",
     icon: Lightbulb,
-    className: "border-zinc-800 bg-zinc-950 text-zinc-300",
   },
   contact: {
-    label: "Direct Contact",
+    label: "Contact us",
+    description: "Talk to the team about your account or a custom setup.",
     icon: Mail,
-    className: "border-zinc-700 bg-black text-white",
   },
   miscellaneous: {
-    label: "Miscellaneous",
+    label: "Other",
+    description: "Questions and anything else.",
     icon: HelpCircle,
-    className: "border-zinc-800 bg-black text-zinc-400",
   },
 };
 
-export function TicketCategoryBadge({ category }: { category: TicketCategory }) {
-  const conf = categoryConfig[category] || categoryConfig.miscellaneous;
-  const Icon = conf.icon;
+export function ticketCategoryLabel(category: TicketCategory): string {
+  return (TICKET_CATEGORY_META[category] ?? TICKET_CATEGORY_META.miscellaneous).label;
+}
 
+export function TicketCategoryBadge({ category, className }: { category: TicketCategory; className?: string }) {
+  const meta = TICKET_CATEGORY_META[category] ?? TICKET_CATEGORY_META.miscellaneous;
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[9px] font-mono uppercase tracking-wider font-semibold ${conf.className}`}
-    >
-      <Icon className="size-3" />
-      <span>{conf.label}</span>
-    </span>
+    <Badge variant="outline" className={className}>
+      {meta.label}
+    </Badge>
   );
 }

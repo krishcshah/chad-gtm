@@ -2,27 +2,41 @@
 
 import { ChevronRight } from "lucide-react";
 import { useLayoutEffect, useMemo, useState } from "react";
+import { cn } from "@smartreach/ui";
 import { sanitizeEmailHtml, type SanitizedEmail } from "@/lib/email-html";
 import { linkifyPlainText, prepareMessageBody, type TextSegment } from "@/lib/message-body";
 
-/** Prefer `html` (sanitized) and fall back to `text`. `inverse` is for plain text on the right-hand bubble. */
+/**
+ * Renders an email body. HTML is sanitised with DOMPurify (sanitizeEmailHtml)
+ * and shown on the paper-white `.email-sheet`, because senders' HTML assumes a
+ * light background. Plain text falls back to app typography with linkified
+ * URLs. Quoted history is collapsed behind a toggle.
+ *
+ * `tone="inverse"` is kept for older callers; it renders like the default.
+ */
 export function EmailBody({
   html,
   text,
-  tone = "default",
+  tone: _tone = "default",
+  className,
 }: {
   html?: string | null;
   text?: string | null;
   tone?: "default" | "inverse";
+  className?: string;
 }) {
   const prepared = useMemo(() => prepareMessageBody({ html, text }), [html, text]);
   const [safe, setSafe] = useState<{ key: string; value: SanitizedEmail } | null>(null);
 
+  // DOMPurify needs the DOM, so sanitising happens on the client before paint.
   useLayoutEffect(() => {
     if (prepared.kind !== "html") return;
     try {
       const value = sanitizeEmailHtml(prepared.html);
-      setSafe(value.main.trim() || value.quoted?.trim() ? { key: prepared.html, value } : { key: prepared.html, value: { main: "", quoted: null } });
+      setSafe({
+        key: prepared.html,
+        value: value.main.trim() || value.quoted?.trim() ? value : { main: "", quoted: null },
+      });
     } catch {
       setSafe({ key: prepared.html, value: { main: "", quoted: null } });
     }
@@ -30,19 +44,17 @@ export function EmailBody({
 
   const htmlView = prepared.kind === "html" && safe?.key === prepared.html ? safe.value : null;
   const showHtml = Boolean(htmlView && (htmlView.main.trim() || htmlView.quoted?.trim()));
-  const plainBody = prepared.body;
-  const plainQuoted = prepared.quoted;
 
   if (showHtml && htmlView) {
     return (
-      <div className="email-sheet rounded-lg px-3.5 py-3 text-[14px] leading-relaxed shadow-sm">
+      <div className={cn("email-sheet px-4 py-3.5 text-sm leading-relaxed", className)}>
         {htmlView.main.trim() ? (
           <div className="email-sheet-html" dangerouslySetInnerHTML={{ __html: htmlView.main }} />
         ) : (
-          <p className="text-[13px] text-slate-700">Quoted reply hidden.</p>
+          <p className="email-quoted text-[13px]">Only quoted text in this message.</p>
         )}
         {htmlView.quoted?.trim() ? (
-          <QuotedBlock tone="sheet">
+          <QuotedBlock onSheet>
             <div className="email-sheet-html" dangerouslySetInnerHTML={{ __html: htmlView.quoted }} />
           </QuotedBlock>
         ) : null}
@@ -50,45 +62,45 @@ export function EmailBody({
     );
   }
 
-  const muted = tone === "inverse" ? "text-indigo-100" : "text-muted-foreground";
-  const body = tone === "inverse" ? "text-white" : "text-foreground";
+  const body = prepared.body;
+  const quoted = prepared.quoted;
 
   return (
-    <div className={`text-[14px] leading-relaxed ${body}`}>
-      {plainBody || plainQuoted ? (
+    <div className={cn("text-sm leading-relaxed text-foreground", className)}>
+      {body || quoted ? (
         <>
-          {plainBody ? <PlainText text={plainBody} tone={tone} /> : <p className={`text-[13px] ${muted}`}>Quoted reply hidden.</p>}
-          {plainQuoted ? (
-            <QuotedBlock tone={tone === "inverse" ? "inverse" : "chat"}>
-              <PlainText text={plainQuoted} tone={tone} muted />
+          {body ? (
+            <PlainText text={body} />
+          ) : (
+            <p className="text-[13px] text-muted-foreground">Only quoted text in this message.</p>
+          )}
+          {quoted ? (
+            <QuotedBlock>
+              <PlainText text={quoted} muted />
             </QuotedBlock>
           ) : null}
         </>
       ) : (
-        <p className={`text-[13px] ${muted}`}>This message has no body.</p>
+        <p className="text-[13px] text-muted-foreground">This message has no text.</p>
       )}
     </div>
   );
 }
 
-function QuotedBlock({ children, tone }: { children: React.ReactNode; tone: "sheet" | "chat" | "inverse" }) {
+function QuotedBlock({ children, onSheet = false }: { children: React.ReactNode; onSheet?: boolean }) {
   const [open, setOpen] = useState(false);
-  const button =
-    tone === "inverse"
-      ? "text-blue-200 hover:bg-white/10"
-      : tone === "sheet"
-        ? "text-blue-800 hover:bg-slate-100"
-        : "text-primary hover:bg-accent";
-  const rule = tone === "inverse" ? "border-white/20" : tone === "sheet" ? "border-slate-200" : "border-border";
   return (
-    <div className={`mt-2.5 border-t pt-2 ${rule}`}>
+    <div className={cn("mt-3 border-t pt-2", onSheet ? "border-current/15" : "border-border")}>
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className={`inline-flex items-center gap-1 rounded-lg px-1 py-0.5 text-[13px] font-medium ${button}`}
+        className={cn(
+          "-ml-1 inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-[13px] font-medium outline-none focus-visible:ring-[3px] focus-visible:ring-ring",
+          onSheet ? "email-quoted hover:underline" : "text-muted-foreground hover:text-foreground",
+        )}
       >
-        <ChevronRight className={`size-3.5 shrink-0 transition-transform ${open ? "rotate-90" : ""}`} aria-hidden />
+        <ChevronRight className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-90")} aria-hidden />
         {open ? "Hide quoted text" : "Show quoted text"}
       </button>
       {open ? <div className="email-quoted mt-2">{children}</div> : null}
@@ -96,32 +108,26 @@ function QuotedBlock({ children, tone }: { children: React.ReactNode; tone: "she
   );
 }
 
-function PlainText({
-  text,
-  tone,
-  muted = false,
-}: {
-  text: string;
-  tone: "default" | "inverse";
-  muted?: boolean;
-}) {
+function PlainText({ text, muted = false }: { text: string; muted?: boolean }) {
   const segments = linkifyPlainText(text);
-  const color =
-    tone === "inverse" ? (muted ? "text-indigo-100" : "text-white") : muted ? "text-muted-foreground" : "text-foreground";
   return (
-    <div className={`whitespace-pre-wrap break-words ${color}`}>
+    <div className={cn("whitespace-pre-wrap break-words", muted ? "text-muted-foreground" : "text-foreground")}>
       {segments.map((seg, i) => (
-        <SegmentView key={i} segment={seg} tone={tone} />
+        <SegmentView key={i} segment={seg} />
       ))}
     </div>
   );
 }
 
-function SegmentView({ segment, tone }: { segment: TextSegment; tone: "default" | "inverse" }) {
+function SegmentView({ segment }: { segment: TextSegment }) {
   if (segment.type === "link" && segment.href && isSafeHttp(segment.href)) {
-    const link = tone === "inverse" ? "font-medium text-blue-200 underline underline-offset-2" : "font-medium text-primary underline underline-offset-2";
     return (
-      <a href={segment.href} target="_blank" rel="noopener noreferrer" className={link}>
+      <a
+        href={segment.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-medium text-foreground underline decoration-border-strong underline-offset-2 hover:decoration-foreground"
+      >
         {segment.value}
       </a>
     );

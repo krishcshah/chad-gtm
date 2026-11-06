@@ -1,37 +1,22 @@
+import { Badge, type BadgeProps } from "@smartreach/ui";
 import type { TicketStatus } from "@/lib/support-types";
 
-const statusConfig: Record<TicketStatus, { label: string; className: string; dotClass: string }> = {
-  open: {
-    label: "Open",
-    className: "border-zinc-700 bg-zinc-900 text-white",
-    dotClass: "bg-white animate-pulse",
-  },
-  in_progress: {
-    label: "Ongoing",
-    className: "border-zinc-700 bg-black text-zinc-200",
-    dotClass: "bg-zinc-400",
-  },
-  resolved: {
-    label: "Resolved",
-    className: "border-emerald-800/60 bg-emerald-950/30 text-emerald-400",
-    dotClass: "bg-emerald-400",
-  },
-  closed: {
-    label: "Closed",
-    className: "border-zinc-900 bg-black text-zinc-500",
-    dotClass: "bg-zinc-600",
-  },
+export const TICKET_STATUS_META: Record<TicketStatus, { label: string; variant: BadgeProps["variant"] }> = {
+  open: { label: "Open", variant: "info" },
+  in_progress: { label: "In progress", variant: "warning" },
+  resolved: { label: "Resolved", variant: "success" },
+  closed: { label: "Closed", variant: "outline" },
 };
 
-export function TicketStatusBadge({ status }: { status: TicketStatus }) {
-  const conf = statusConfig[status] || statusConfig.open;
+export function ticketStatusLabel(status: TicketStatus): string {
+  return (TICKET_STATUS_META[status] ?? TICKET_STATUS_META.open).label;
+}
 
+export function TicketStatusBadge({ status, className }: { status: TicketStatus; className?: string }) {
+  const meta = TICKET_STATUS_META[status] ?? TICKET_STATUS_META.open;
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[9px] font-mono uppercase tracking-widest font-bold ${conf.className}`}
-    >
-      <span className={`size-1 rounded-lg ${conf.dotClass}`} />
-      <span>{conf.label}</span>
-    </span>
+    <Badge variant={meta.variant} dot className={className}>
+      {meta.label}
+    </Badge>
   );
 }

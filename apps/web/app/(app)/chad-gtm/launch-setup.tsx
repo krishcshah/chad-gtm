@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -9,13 +9,27 @@ import {
   Clock,
   Hourglass,
   Loader2,
-  Mail,
   RefreshCw,
   Rocket,
   SearchX,
   Target,
+  type LucideIcon,
 } from "lucide-react";
-import { Button, Input, Textarea, cn, toast } from "@smartreach/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  SegmentedControl,
+  Textarea,
+  cn,
+  toast,
+  type BadgeProps,
+} from "@smartreach/ui";
 import {
   completeAutopilotSetupAction,
   retryAutopilotLaunchAction,
@@ -31,28 +45,94 @@ type Missing = NonNullable<AutopilotOutcome["missing"]>;
 /** Manual targeting: the client picks directory industries and titles themselves. */
 export const GUIDED_SETUP_HREF = "/chad-gtm?mode=guided";
 
-/** Badge label + colors per run phase (launcher list and mission control header). */
-export const PHASE_BADGE: Record<RunPhase, { label: string; dot: string; text: string; ring: string }> = {
-  live: { label: "Live", dot: "bg-brand-400", text: "text-brand-300", ring: "border-brand-400/25 bg-brand-400/10" },
-  paused: { label: "Paused", dot: "bg-zinc-500", text: "text-zinc-400", ring: "border-zinc-700 bg-zinc-900" },
-  completed: { label: "Completed", dot: "bg-zinc-500", text: "text-zinc-400", ring: "border-zinc-700 bg-zinc-900" },
-  needs_research: { label: "Needs your input", dot: "bg-amber-400", text: "text-amber-300", ring: "border-amber-400/25 bg-amber-400/10" },
-  needs_details: { label: "Needs details", dot: "bg-amber-400", text: "text-amber-300", ring: "border-amber-400/25 bg-amber-400/10" },
-  awaiting_approval: { label: "Waiting for approval", dot: "bg-sky-400", text: "text-sky-300", ring: "border-sky-400/25 bg-sky-400/10" },
-  ready: { label: "Ready to launch", dot: "bg-brand-400", text: "text-brand-300", ring: "border-brand-400/25 bg-brand-400/10" },
-  launch_failed: { label: "Not launched", dot: "bg-rose-400", text: "text-rose-300", ring: "border-rose-400/25 bg-rose-400/10" },
-  launching: { label: "Launching", dot: "bg-sky-400", text: "text-sky-300", ring: "border-sky-400/25 bg-sky-400/10" },
-  draft: { label: "Draft", dot: "bg-zinc-500", text: "text-zinc-400", ring: "border-zinc-700 bg-zinc-900" },
+/** Label and badge variant per run phase (launcher list and mission control header). */
+export const PHASE_BADGE: Record<RunPhase, { label: string; variant: BadgeProps["variant"] }> = {
+  live: { label: "Live", variant: "success" },
+  paused: { label: "Paused", variant: "neutral" },
+  completed: { label: "Completed", variant: "outline" },
+  needs_research: { label: "Needs your input", variant: "warning" },
+  needs_details: { label: "Needs details", variant: "warning" },
+  awaiting_approval: { label: "Waiting for approval", variant: "info" },
+  ready: { label: "Ready to launch", variant: "info" },
+  launch_failed: { label: "Not launched", variant: "destructive" },
+  launching: { label: "Launching", variant: "info" },
+  draft: { label: "Draft", variant: "neutral" },
 };
 
-export function PhaseBadge({ phase }: { phase: RunPhase }) {
-  const b = PHASE_BADGE[phase];
+export function PhaseBadge({ phase, className }: { phase: RunPhase; className?: string }) {
+  const b = PHASE_BADGE[phase] ?? PHASE_BADGE.draft;
   return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium", b.ring, b.text)}>
-      {phase === "live" ? <span className="live-dot" /> : <span className={cn("size-1.5 rounded-full", b.dot)} />} {b.label}
-    </span>
+    <Badge variant={b.variant} dot className={className}>
+      {b.label}
+    </Badge>
   );
 }
+
+/* ─── Shared building blocks ─────────────────────────────────────────── */
+
+type Tone = "warning" | "info" | "destructive";
+
+const toneIcon: Record<Tone, string> = {
+  warning: "bg-warning-soft text-warning-text",
+  info: "bg-info-soft text-info-text",
+  destructive: "bg-destructive-soft text-destructive-text",
+};
+
+/** One card that explains a blocked run and holds the action that unblocks it. */
+function StateCard({
+  tone,
+  icon: Icon,
+  spin,
+  title,
+  children,
+}: {
+  tone: Tone;
+  icon: LucideIcon;
+  spin?: boolean;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card className="p-5">
+      <div className="flex items-start gap-4">
+        <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg", toneIcon[tone])}>
+          <Icon className={cn("size-4", spin && "animate-spin")} aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{title}</h2>
+          <div className="mt-1 text-sm leading-relaxed text-muted-foreground">{children}</div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/** Label + control + hint with a fixed control id (tests and deep links rely on these ids). */
+function FormRow({
+  id,
+  label,
+  hint,
+  children,
+}: {
+  id: string;
+  label: string;
+  hint?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      {children}
+      {hint ? (
+        <p id={`${id}-hint`} className="text-xs leading-relaxed text-muted-foreground">
+          {hint}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/* ─── Launch details ─────────────────────────────────────────────────── */
 
 /**
  * Booking link + CAN-SPAM identity in one step. Only the missing fields are
@@ -78,6 +158,7 @@ export function LaunchDetailsForm({
   const [postalAddress, setPostalAddress] = useState(identity?.postalAddress ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const errorId = useId();
 
   const canSubmit =
     (!needsBooking || booking.trim().length > 0) &&
@@ -96,91 +177,94 @@ export function LaunchDetailsForm({
 
   const title =
     needsBooking && needsIdentity
-      ? "Two quick things before we send"
+      ? "Two details before we send"
       : needsBooking
-        ? "One last thing: where should leads book?"
+        ? "Where should interested leads book a call?"
         : "Add your sender details";
 
   return (
-    <div className="w-full animate-float-up rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-5 text-left">
-      <div className="flex items-start gap-3">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-300">
-          <CalendarClock className="size-4" />
-        </div>
-        <form
-          className="min-w-0 flex-1"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (canSubmit && !pending) submit();
-          }}
-        >
-          <h2 className="text-[15px] font-semibold text-zinc-50">{title}</h2>
-          <div className="mt-4 flex flex-col gap-4">
-            {needsBooking && (
-              <div>
-                <label htmlFor="setup-booking" className="mb-1 block text-xs font-medium text-zinc-300">
-                  Booking link
-                </label>
-                <p className="mb-2 text-xs text-zinc-500">
-                  We couldn&apos;t find a booking page on {companyLabel}&apos;s site. Paste your Calendly, Cal.com, HubSpot, or
-                  Google booking link.
-                </p>
+    <Card>
+      <form
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (canSubmit && !pending) submit();
+        }}
+      >
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <CalendarClock className="size-4 text-warning-text" aria-hidden />
+            <CardTitle>{title}</CardTitle>
+          </div>
+          <CardDescription>Nothing is sent until these are filled in.</CardDescription>
+        </CardHeader>
+        <div className="flex flex-col gap-5 p-5">
+          {needsBooking && (
+            <FormRow
+              id="setup-booking"
+              label="Booking link"
+              hint={`We couldn't find a booking page on ${companyLabel}'s site. Paste a Calendly, Cal.com, HubSpot or Google Calendar link. The reply agent sends it to leads who want to talk.`}
+            >
+              <Input
+                id="setup-booking"
+                type="url"
+                inputMode="url"
+                autoComplete="url"
+                autoFocus
+                value={booking}
+                onChange={(e) => setBooking(e.target.value)}
+                placeholder="https://cal.com/you/intro"
+                aria-describedby="setup-booking-hint"
+              />
+            </FormRow>
+          )}
+          {needsIdentity && (
+            <>
+              <p className="text-[13px] leading-relaxed text-muted-foreground">
+                Anti-spam law (CAN-SPAM) requires every cold email to name the sender and include a physical postal
+                address. We add both to the footer and save them in Settings, under Compliance.
+              </p>
+              <FormRow id="setup-company" label="Company name">
                 <Input
-                  id="setup-booking"
-                  autoFocus
-                  value={booking}
-                  onChange={(e) => setBooking(e.target.value)}
-                  placeholder="https://cal.com/you/intro"
-                  className="h-10 text-sm"
+                  id="setup-company"
+                  autoFocus={!needsBooking}
+                  autoComplete="organization"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  placeholder="Acme Inc."
                 />
-              </div>
-            )}
-            {needsIdentity && (
-              <div className="flex flex-col gap-3">
-                <p className="text-xs text-zinc-500">
-                  Anti-spam law (CAN-SPAM) requires every email to name the sender and include a physical postal address. We
-                  add them to the footer and save them in Settings → Compliance.
-                </p>
-                <div>
-                  <label htmlFor="setup-company" className="mb-1 block text-xs font-medium text-zinc-300">
-                    Company name
-                  </label>
-                  <Input
-                    id="setup-company"
-                    autoFocus={!needsBooking}
-                    value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
-                    placeholder="Acme Inc."
-                    className="h-10 text-sm"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="setup-postal" className="mb-1 block text-xs font-medium text-zinc-300">
-                    Physical postal address
-                  </label>
-                  <Textarea
-                    id="setup-postal"
-                    value={postalAddress}
-                    onChange={(e) => setPostalAddress(e.target.value)}
-                    placeholder={"123 Market St, Suite 400\nSan Francisco, CA 94105\nUSA"}
-                    rows={3}
-                    className="text-sm"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-          {error && <p className="mt-3 text-xs text-rose-300">{error}</p>}
-          <div className="mt-4 flex justify-end">
-            <Button type="submit" variant="brand" size="lg" disabled={pending || !canSubmit}>
-              {pending ? <Loader2 className="animate-spin" /> : <ArrowRight />} Save and continue
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+              </FormRow>
+              <FormRow id="setup-postal" label="Postal address" hint="A street address or PO box where you receive mail.">
+                <Textarea
+                  id="setup-postal"
+                  autoComplete="street-address"
+                  value={postalAddress}
+                  onChange={(e) => setPostalAddress(e.target.value)}
+                  placeholder={"123 Market St, Suite 400\nSan Francisco, CA 94105\nUSA"}
+                  rows={3}
+                  aria-describedby="setup-postal-hint"
+                />
+              </FormRow>
+            </>
+          )}
+          {error && (
+            <p id={errorId} role="alert" className="text-[13px] text-destructive-text">
+              {error}
+            </p>
+          )}
+        </div>
+        <div className="flex justify-end border-t border-border px-5 py-3">
+          <Button type="submit" loading={pending} disabled={!canSubmit}>
+            Save and continue
+            {!pending && <ArrowRight />}
+          </Button>
+        </div>
+      </form>
+    </Card>
   );
 }
+
+/* ─── Launch state ───────────────────────────────────────────────────── */
 
 /**
  * The state card for an autopilot run that is not live yet: what blocks it,
@@ -212,24 +296,17 @@ export function LaunchStatePanel({
 }) {
   const [notes, setNotes] = useState("");
   const [pending, start] = useTransition();
+  const notesId = useId();
 
-  const retryLaunch = () =>
-    start(async () => {
-      const res = await retryAutopilotLaunchAction(runId);
-      if (!res.ok) return void toast.error(res.error);
-      if (res.data?.phase === "live") toast.success(res.message || "Outreach is live");
-      else if (res.message) toast.info(res.message);
-      onChanged(res.data!, res.message);
-    });
+  const report = (res: Awaited<ReturnType<typeof retryAutopilotLaunchAction>>) => {
+    if (!res.ok) return void toast.error(res.error);
+    if (res.data?.phase === "live") toast.success(res.message || "Outreach is live");
+    else if (res.message) toast.info(res.message);
+    onChanged(res.data!, res.message);
+  };
 
-  const retryResearch = () =>
-    start(async () => {
-      const res = await retryAutopilotResearchAction(runId, notes);
-      if (!res.ok) return void toast.error(res.error);
-      if (res.data?.phase === "live") toast.success(res.message || "Outreach is live");
-      else if (res.message) toast.info(res.message);
-      onChanged(res.data!, res.message);
-    });
+  const retryLaunch = () => start(async () => report(await retryAutopilotLaunchAction(runId)));
+  const retryResearch = () => start(async () => report(await retryAutopilotResearchAction(runId, notes)));
 
   if (phase === "needs_details") {
     return (
@@ -244,33 +321,44 @@ export function LaunchStatePanel({
   }
 
   const researchRetry = (
-    <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-      <Input
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        placeholder='Who do you sell to? e.g. "dental clinics" or "logistics companies"'
-        className="h-10 text-sm"
-        aria-label="Who do you sell to"
-      />
-      <Button variant="brand" size="lg" onClick={retryResearch} disabled={pending} className="shrink-0">
-        {pending ? <Loader2 className="animate-spin" /> : <RefreshCw />} Retry research
-      </Button>
-    </div>
+    <form
+      className="mt-4 flex flex-col gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!pending) retryResearch();
+      }}
+    >
+      <Label htmlFor={notesId} className="text-foreground">
+        Who do you sell to?
+      </Label>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input
+          id={notesId}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="e.g. dental clinics, or logistics companies in the US"
+        />
+        <Button type="submit" loading={pending} className="shrink-0">
+          {!pending && <RefreshCw />}
+          Retry research
+        </Button>
+      </div>
+    </form>
   );
 
   if (phase === "needs_research") {
     return (
-      <StateCard tone="amber" icon={<Target className="size-4" />} title="We need a hint about your audience">
+      <StateCard tone="warning" icon={Target} title="Tell us who you sell to">
         <p>{reason}</p>
         {researchRetry}
-        <p className="mt-3 text-xs text-zinc-500">
-          Retrying doesn&apos;t help if your site blocks automated visits. Pick your industries and titles yourself
-          instead:{" "}
+        <p className="mt-4 text-[13px]">
+          If your site blocks automated visits, retrying won&apos;t help. You can{" "}
           <Link
             href={GUIDED_SETUP_HREF}
-            className="inline-flex items-center gap-1 font-medium text-zinc-300 underline decoration-zinc-700 underline-offset-4 hover:decoration-zinc-400"
+            className="inline-flex items-center gap-1 font-medium text-foreground underline decoration-border-strong underline-offset-4 hover:decoration-foreground"
           >
-            set up targeting manually (guided setup) <ArrowRight className="size-3" />
+            pick industries and titles yourself in guided setup
+            <ArrowRight className="size-3.5" aria-hidden />
           </Link>
         </p>
       </StateCard>
@@ -279,21 +367,23 @@ export function LaunchStatePanel({
 
   if (phase === "awaiting_approval" || phase === "ready") {
     return (
-      <StateCard tone="sky" icon={<Hourglass className="size-4" />} title={approved ? "Ready to launch" : "Waiting for approval"}>
+      <StateCard tone="info" icon={Hourglass} title={approved ? "Ready to launch" : "Waiting for approval"}>
         <p>
           {approved
-            ? "Your account is approved. Review the plan and sample emails below, then launch when you're ready."
+            ? "Your account is approved. Check the plan below, then launch when you're ready."
             : reason
               ? approvalCopy(reason, emailOnApprove)
               : awaitingApprovalText(emailOnApprove)}
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <Button variant="brand" size="lg" onClick={retryLaunch} disabled={pending || !approved}>
-            {pending ? <Loader2 className="animate-spin" /> : <Rocket />} Launch outreach
+          <Button variant="brand" onClick={retryLaunch} loading={pending} disabled={!approved}>
+            {!pending && <Rocket />}
+            Launch outreach
           </Button>
           {!approved && (
-            <span className="inline-flex items-center gap-1.5 text-xs text-zinc-500">
-              <Clock className="size-3.5" /> Launch unlocks once an admin approves your account.
+            <span className="inline-flex items-center gap-1.5 text-xs text-subtle-foreground">
+              <Clock className="size-3.5" aria-hidden />
+              Launch unlocks once your account is approved.
             </span>
           )}
         </div>
@@ -304,18 +394,15 @@ export function LaunchStatePanel({
   if (phase === "launch_failed") {
     const audienceProblem = failureCode === "no_leads" || failureCode === "all_contacted";
     return (
-      <StateCard
-        tone="rose"
-        icon={audienceProblem ? <SearchX className="size-4" /> : <AlertTriangle className="size-4" />}
-        title="Not launched yet"
-      >
-        <p>{reason || "The launch didn't complete and nothing was sent. Your plan is saved, so you can retry."}</p>
+      <StateCard tone="destructive" icon={audienceProblem ? SearchX : AlertTriangle} title="Not launched yet">
+        <p>{reason || "The launch didn't finish and nothing was sent. Your plan is saved, so you can try again."}</p>
         {audienceProblem ? (
           researchRetry
         ) : (
           <div className="mt-4">
-            <Button variant="brand" size="lg" onClick={retryLaunch} disabled={pending}>
-              {pending ? <Loader2 className="animate-spin" /> : <RefreshCw />} Retry launch
+            <Button onClick={retryLaunch} loading={pending}>
+              {!pending && <RefreshCw />}
+              Retry launch
             </Button>
           </div>
         )}
@@ -325,11 +412,12 @@ export function LaunchStatePanel({
 
   if (phase === "launching") {
     return (
-      <StateCard tone="sky" icon={<Loader2 className="size-4 animate-spin" />} title="Setting up your campaign">
-        <p>This usually takes under a minute. If it doesn&apos;t finish, retry below.</p>
+      <StateCard tone="info" icon={Loader2} spin title="Setting up your campaign">
+        <p>This usually takes under a minute and this page updates on its own. If it seems stuck, retry.</p>
         <div className="mt-4">
-          <Button variant="outline" size="sm" onClick={retryLaunch} disabled={pending}>
-            <RefreshCw /> Retry launch
+          <Button variant="outline" size="sm" onClick={retryLaunch} loading={pending}>
+            {!pending && <RefreshCw />}
+            Retry launch
           </Button>
         </div>
       </StateCard>
@@ -339,123 +427,86 @@ export function LaunchStatePanel({
   return null;
 }
 
-function StateCard({
-  tone,
-  icon,
-  title,
-  children,
-}: {
-  tone: "amber" | "sky" | "rose";
-  icon: React.ReactNode;
-  title: string;
-  children: React.ReactNode;
-}) {
-  const tones = {
-    amber: "border-amber-400/25 bg-amber-400/[0.06]",
-    sky: "border-sky-400/25 bg-sky-400/[0.06]",
-    rose: "border-rose-400/25 bg-rose-400/[0.06]",
-  } as const;
-  const iconTones = {
-    amber: "bg-amber-400/15 text-amber-300",
-    sky: "bg-sky-400/15 text-sky-300",
-    rose: "bg-rose-400/15 text-rose-300",
-  } as const;
-  return (
-    <div className={cn("w-full animate-float-up rounded-2xl border p-5 text-left", tones[tone])}>
-      <div className="flex items-start gap-3">
-        <div className={cn("flex size-9 shrink-0 items-center justify-center rounded-xl", iconTones[tone])}>{icon}</div>
-        <div className="min-w-0 flex-1 text-[13px] text-zinc-400">
-          <h2 className="mb-1 text-[15px] font-semibold text-zinc-50">{title}</h2>
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-}
+/* ─── Plan preview ───────────────────────────────────────────────────── */
 
 /** The targeting plan and the baseline emails the client is approving. */
 export function PlanPreviewCard({ preview }: { preview: PlanPreview }) {
-  const [open, setOpen] = useState(0);
-  const email = preview.sampleEmails[open];
+  const [open, setOpen] = useState("0");
+  const index = Number(open);
+  const email = preview.sampleEmails[index];
+
+  const options = preview.sampleEmails.map((_, i) => ({
+    value: String(i),
+    label:
+      i === 0
+        ? "First email"
+        : `Day ${preview.sampleEmails.slice(0, i + 1).reduce((d, s) => d + s.delayDays, 0)}`,
+  }));
+
   return (
-    <section className="overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-950/70">
-      <div className="border-b border-zinc-800/70 px-5 py-3.5">
-        <h2 className="text-sm font-semibold text-zinc-100">Your plan</h2>
-        <p className="mt-0.5 text-xs text-zinc-500">Nothing is sent until the campaign is live.</p>
-      </div>
-      <dl className="grid gap-4 px-5 py-4 text-[13px] sm:grid-cols-2">
+    <Card>
+      <CardHeader>
+        <CardTitle>Your plan</CardTitle>
+        <CardDescription>Who we&apos;ll contact and what they&apos;ll receive. Nothing is sent until the campaign is live.</CardDescription>
+      </CardHeader>
+      <dl className="grid gap-x-6 gap-y-4 p-5 text-[13px] sm:grid-cols-2">
         <PlanRow label="Industries" values={preview.industries} />
         <PlanRow label="Job titles" values={preview.titles} />
         <PlanRow label="Countries" values={preview.countries} />
         <div>
-          <dt className="text-xs font-medium text-zinc-500">Sending window</dt>
-          <dd className="mt-1 text-zinc-200">{preview.sendingWindow}</dd>
+          <dt className="text-xs text-muted-foreground">Sending window</dt>
+          <dd className="mt-1.5 text-foreground">{preview.sendingWindow}</dd>
         </div>
         {preview.offer?.valueProp && (
           <div className="sm:col-span-2">
-            <dt className="text-xs font-medium text-zinc-500">Pitch</dt>
-            <dd className="mt-1 text-zinc-200">
-              {preview.offer.title ? <span className="font-medium">{preview.offer.title}: </span> : null}
+            <dt className="text-xs text-muted-foreground">Pitch</dt>
+            <dd className="mt-1.5 leading-relaxed text-foreground">
+              {preview.offer.title ? <span className="font-medium">{preview.offer.title}. </span> : null}
               {preview.offer.valueProp}
             </dd>
           </div>
         )}
       </dl>
       {email && (
-        <div className="border-t border-zinc-800/70 px-5 py-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h3 className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-400">
-              <Mail className="size-3.5" /> Sample emails
-            </h3>
-            <div className="grid grid-cols-3 gap-1 rounded-lg bg-zinc-900/70 p-1 ring-1 ring-zinc-800">
-              {preview.sampleEmails.map((e, i) => (
-                <button
-                  key={e.step}
-                  type="button"
-                  onClick={() => setOpen(i)}
-                  className={cn(
-                    "rounded-md px-2.5 py-1 text-[11px] font-medium transition-all",
-                    open === i ? "bg-zinc-50 text-black shadow" : "text-zinc-400 hover:text-zinc-100",
-                  )}
-                >
-                  {i === 0 ? "Email 1" : `Day ${preview.sampleEmails.slice(0, i + 1).reduce((d, s) => d + s.delayDays, 0)}`}
-                </button>
-              ))}
-            </div>
+        <div className="border-t border-border p-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-[13px] font-medium">Sample sequence</h3>
+            {options.length > 1 && (
+              <SegmentedControl size="sm" aria-label="Choose a sample email" value={open} onValueChange={setOpen} options={options} />
+            )}
           </div>
-          <div className="rounded-xl bg-zinc-900/50 p-4 ring-1 ring-zinc-800">
+          <article className="rounded-lg border border-border bg-muted/40 p-4">
             {email.recipient && (
-              <div className="mb-2 text-[11px] text-zinc-500">
+              <p className="mb-2 text-xs text-subtle-foreground">
                 To {email.recipient.firstName || "a prospect"}
                 {email.recipient.jobTitle ? `, ${email.recipient.jobTitle}` : ""}
                 {email.recipient.company ? ` at ${email.recipient.company}` : ""}
-              </div>
+              </p>
             )}
-            <div className="text-[13px] font-medium text-zinc-100">{email.subject}</div>
-            <p className="mt-2 whitespace-pre-line text-[13px] leading-relaxed text-zinc-300">{email.body}</p>
-          </div>
-          <p className="mt-2 text-[11px] text-zinc-600">
-            Sample built from your plan for a real matching prospect. Each live email is personalized for its
-            recipient.
+            <p className="text-sm font-medium">{email.subject}</p>
+            <p className="mt-2 whitespace-pre-line text-[13px] leading-relaxed text-muted-foreground">{email.body}</p>
+          </article>
+          <p className="mt-2 text-xs text-subtle-foreground">
+            Written for a real prospect that matches your plan. Every live email is personalized for its recipient.
           </p>
         </div>
       )}
-    </section>
+    </Card>
   );
 }
 
 function PlanRow({ label, values }: { label: string; values: string[] }) {
   return (
     <div>
-      <dt className="text-xs font-medium text-zinc-500">{label}</dt>
-      <dd className="mt-1 flex flex-wrap gap-1.5">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-1.5 flex flex-wrap gap-1.5">
         {values.length === 0 ? (
-          <span className="text-zinc-500">—</span>
+          <span className="text-subtle-foreground">Not set</span>
         ) : (
           values.map((v) => (
-            <span key={v} className="rounded-md bg-zinc-900 px-2 py-0.5 text-xs text-zinc-200 ring-1 ring-zinc-800">
+            <Badge key={v} variant="neutral">
               {v}
-            </span>
+            </Badge>
           ))
         )}
       </dd>

@@ -1,20 +1,60 @@
 "use client";
-import { Moon, Sun } from "lucide-react";
-import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
 
-export function ThemeToggle() {
-  const { resolvedTheme, setTheme } = useTheme();
+import { useEffect, useState, type ReactNode } from "react";
+import { useTheme } from "next-themes";
+import { Monitor, Moon, Sun } from "lucide-react";
+import { SegmentedControl, Skeleton } from "@smartreach/ui";
+
+type ThemeChoice = "light" | "dark" | "system";
+
+const OPTIONS: { value: ThemeChoice; label: ReactNode }[] = [
+  {
+    value: "light",
+    label: (
+      <>
+        <Sun aria-hidden /> Light
+      </>
+    ),
+  },
+  {
+    value: "dark",
+    label: (
+      <>
+        <Moon aria-hidden /> Dark
+      </>
+    ),
+  },
+  {
+    value: "system",
+    label: (
+      <>
+        <Monitor aria-hidden /> System
+      </>
+    ),
+  },
+];
+
+function toChoice(theme: string | undefined): ThemeChoice {
+  return theme === "light" || theme === "dark" ? theme : "system";
+}
+
+/** Light / dark / system theme picker. Renders a placeholder until mounted to avoid a hydration mismatch. */
+export function ThemeToggle({ className }: { className?: string }) {
+  const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  if (!mounted) {
+    return <Skeleton className="h-9 w-[252px] max-w-full rounded-lg" aria-hidden />;
+  }
+
   return (
-    <button
-      type="button"
-      aria-label="Toggle theme"
-      onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-      className="flex size-8 items-center justify-center rounded-lg border border-border/60 text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
-    >
-      {mounted && resolvedTheme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
-    </button>
+    <SegmentedControl
+      aria-label="Theme"
+      value={toChoice(theme)}
+      onValueChange={(value) => setTheme(value)}
+      options={OPTIONS}
+      className={className}
+    />
   );
 }

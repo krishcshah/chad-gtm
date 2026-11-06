@@ -1,47 +1,41 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useTransition } from "react";
+import * as React from "react";
 import Link from "next/link";
+import { ListChecks, Plus } from "lucide-react";
 import {
-  Badge,
   Button,
-  Card,
-  CardContent,
-  EmptyState,
   PageHeader,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  toast,
 } from "@smartreach/ui";
-import {
-  Database,
-  Download,
-  FileSpreadsheet,
-  Filter,
-  Plus,
-  Search,
-  Sparkles,
-  Upload,
-  Users,
-} from "lucide-react";
 import type {
   DirectoryFacets,
   DirectoryLead,
   DirectorySearchParams,
   DirectorySearchResult,
 } from "@/lib/leads-directory";
+import { exportMatchingDirectoryLeadsCsvAction, searchDirectoryLeadsAction } from "@/lib/actions";
+import { AddToCampaignDialog } from "./add-to-campaign-dialog";
+import { DirectoryPagination } from "./directory-pagination";
+import { DirectoryToolbar } from "./directory-toolbar";
 import {
-  searchDirectoryLeadsAction,
-  getDirectoryFacetsAction,
-  exportMatchingDirectoryLeadsCsvAction,
-} from "@/lib/actions";
+  activeFilterChips,
+  countActiveFilters,
+  downloadCsv,
+  emptyDirectoryFilters,
+  leadsToCsv,
+  type ActiveFilterChip,
+} from "./directory-utils";
+import { LeadDetailsSheet } from "./lead-details-sheet";
 import { LeadFiltersPanel } from "./lead-filters-panel";
 import { LeadsDataTable } from "./leads-data-table";
-import { LeadDetailsSheet } from "./lead-details-sheet";
-import { AddToCampaignDialog } from "./add-to-campaign-dialog";
-import { LeadListCard } from "@/app/(app)/leads/lead-list-card";
-import { toast } from "sonner";
 
 interface ExistingListOption {
   id: string;
@@ -54,535 +48,358 @@ interface ApolloLeadsViewProps {
   initialResult: DirectorySearchResult;
   initialFacets: DirectoryFacets;
   existingLists: ExistingListOption[];
-  workspaceName: string;
-  defaultTab?: "directory" | "saved-lists";
-  hideTabs?: boolean;
+  /** Extra row under the page description (the admin access note). */
+  meta?: React.ReactNode;
+  /** Most rows one "add to list" can copy for this account. */
+  saveLimit?: number;
+  /** Most rows one "export all matches" can download for this account. */
+  exportLimit?: number;
 }
 
+const SEARCH_DEBOUNCE_MS = 350;
+
+type AddTarget = { leadIds: number[]; allMatching: boolean; single: boolean };
+
+/** The B2B directory: filter rail, results table, record sheet and bulk actions. */
 export function ApolloLeadsView({
   initialResult,
   initialFacets,
   existingLists,
-  workspaceName,
-  defaultTab = "directory",
-  hideTabs = false,
+  meta,
+  saveLimit,
+  exportLimit,
 }: ApolloLeadsViewProps) {
-  const [activeTab, setActiveTab] = useState<"directory" | "saved-lists">(defaultTab);
+  const facets = initialFacets;
+  const [result, setResult] = React.useState<DirectorySearchResult>(initialResult);
+  const [filters, setFilters] = React.useState<DirectorySearchParams>(() =>
+    emptyDirectoryFilters(initialResult.pageSize || 25),
+  );
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
-  // Lead Directory state
-  const [facets, setFacets] = useState<DirectoryFacets>(initialFacets);
-  const [searchResult, setSearchResult] = useState<DirectorySearchResult>(initialResult);
-  const [filters, setFilters] = useState<DirectorySearchParams>({
-    query: "",
-    industries: [],
-    countries: [],
-    jobTitles: [],
-    companyName: "",
-    teamSizes: [],
-    revenueRanges: [],
-    hasEmail: false,
-    hasWorkEmail: false,
-    hasPersonalEmail: false,
-    hasPhone: false,
-    hasLinkedin: false,
-    page: 1,
-    pageSize: 10,
-    sortBy: "default",
-    sortOrder: "desc",
-  });
+  // Selection. Selected rows are kept with their data so an export works across pages.
+  const [selected, setSelected] = React.useState<Map<number, DirectoryLead>>(new Map());
+  const [isSelectAllMatching, setIsSelectAllMatching] = React.useState(false);
+  const selectedLeadIds = React.useMemo(() => new Set(selected.keys()), [selected]);
 
-  const [isLoading, startTransition] = useTransition();
+  const [inspectingLead, setInspectingLead] = React.useState<DirectoryLead | null>(null);
+  const [detailsOpen, setDetailsOpen] = React.useState(false);
+  const [addTarget, setAddTarget] = React.useState<AddTarget | null>(null);
+  const [addOpen, setAddOpen] = React.useState(false);
+  const [isExporting, setIsExporting] = React.useState(false);
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
 
-  // Selected leads
-  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<number>>(new Set());
-  const [isSelectAllMatching, setIsSelectAllMatching] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
+  // The filters behind the rows on screen: used for "all matches" saves and exports.
+  const appliedFilters = React.useRef<DirectorySearchParams>(filters);
+  const requestId = React.useRef(0);
+  const debounceTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
 
-  // Modal states
-  const [inspectingLead, setInspectingLead] = useState<DirectoryLead | null>(null);
-  const [isAddToListOpen, setIsAddToListOpen] = useState(false);
-
-  // Measure table container height to perfectly match the filter panel height on desktop
-  const tableRef = useRef<HTMLDivElement>(null);
-  const [tableHeight, setTableHeight] = useState<number | null>(null);
-
-  useEffect(() => {
-    const el = tableRef.current;
-    if (!el) return;
-
-    const updateHeight = () => {
-      if (el.offsetHeight > 0) {
-        setTableHeight(el.offsetHeight);
+  const runSearch = React.useCallback(async (params: DirectorySearchParams) => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    const id = ++requestId.current;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await searchDirectoryLeadsAction(params);
+      if (id !== requestId.current) return; // a newer search is on its way
+      if (res.ok && res.data) {
+        setResult(res.data);
+        appliedFilters.current = params;
+      } else {
+        setError(res.ok ? "The search returned nothing." : res.error || "The directory search failed.");
       }
-    };
+    } catch {
+      if (id === requestId.current) setError("Could not reach the directory. Check your connection and try again.");
+    } finally {
+      if (id === requestId.current) setIsLoading(false);
+    }
+  }, []);
 
-    updateHeight();
+  React.useEffect(
+    () => () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    },
+    [],
+  );
 
-    const ro = new ResizeObserver(() => {
-      updateHeight();
-    });
-    ro.observe(el);
-
-    return () => ro.disconnect();
-  }, [searchResult.leads.length, isLoading]);
-
-  // Trigger directory search query
-  const executeSearch = (overrideParams?: Partial<DirectorySearchParams>) => {
-    const params: DirectorySearchParams = {
-      ...filters,
-      ...overrideParams,
-    };
-
-    startTransition(async () => {
-      try {
-        const res = await searchDirectoryLeadsAction(params);
-        if (res.ok) {
-          if (res.data) {
-            setSearchResult(res.data);
-          }
-        } else {
-          toast.error(res.error || "Failed to search leads directory");
-        }
-      } catch (err: any) {
-        toast.error("Failed to query leads database");
-      }
-    });
-  };
-
-  const handleApplyFilters = () => {
-    setSelectedLeadIds(new Set());
+  const clearSelection = React.useCallback(() => {
+    setSelected(new Map());
     setIsSelectAllMatching(false);
-    executeSearch({ page: 1 });
+  }, []);
+
+  /** Filter edits go back to page 1 and search after a short pause. */
+  const updateFilters = (patch: Partial<DirectorySearchParams>) => {
+    const next = { ...filters, ...patch, page: 1 };
+    setFilters(next);
+    clearSelection();
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      // Rows ticked on the old results during the pause no longer match these filters.
+      clearSelection();
+      void runSearch(next);
+    }, SEARCH_DEBOUNCE_MS);
   };
 
-  const handlePageChange = (newPage: number) => {
-    setFilters((prev) => ({ ...prev, page: newPage }));
-    executeSearch({ page: newPage });
+  const resetFilters = () => {
+    const next = emptyDirectoryFilters(filters.pageSize || 25);
+    setFilters(next);
+    clearSelection();
+    void runSearch(next);
   };
 
-  const handlePageSizeChange = (newSize: number) => {
-    setSelectedLeadIds(new Set());
-    setIsSelectAllMatching(false);
-    setFilters((prev) => ({ ...prev, pageSize: newSize, page: 1 }));
-    executeSearch({ pageSize: newSize, page: 1 });
+  const handlePageChange = (page: number) => {
+    const next = { ...filters, page };
+    setFilters(next);
+    void runSearch(next);
+  };
+
+  const handlePageSizeChange = (pageSize: number) => {
+    const next = { ...filters, pageSize, page: 1 };
+    setFilters(next);
+    clearSelection();
+    void runSearch(next);
   };
 
   const handleSelectLead = (id: number) => {
-    setSelectedLeadIds((prev) => {
-      const next = new Set(prev);
-      if (isSelectAllMatching) {
-        searchResult.leads.forEach((l) => next.add(l.id));
-        next.delete(id);
-        setIsSelectAllMatching(false);
-        return next;
-      }
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
+    if (isSelectAllMatching) {
+      // Leaving "every match" mode: keep this page minus the row just unticked.
+      setSelected(new Map(result.leads.filter((l) => l.id !== id).map((l) => [l.id, l])));
+      setIsSelectAllMatching(false);
+      return;
+    }
+    setSelected((prev) => {
+      const next = new Map(prev);
+      if (next.has(id)) next.delete(id);
+      else {
+        const lead = result.leads.find((l) => l.id === id);
+        if (lead) next.set(id, lead);
       }
       return next;
     });
   };
 
-  const handleSelectCurrentPage = () => {
-    const currentPageIds = searchResult.leads.map((l) => l.id);
-    setSelectedLeadIds(new Set(currentPageIds));
-    setIsSelectAllMatching(false);
-    toast.info(`Selected ${currentPageIds.length} leads on this page`);
+  const pageSelectedCount = result.leads.filter((l) => selectedLeadIds.has(l.id)).length;
+  const allPageSelected = result.leads.length > 0 && pageSelectedCount === result.leads.length;
+
+  const handleTogglePage = () => {
+    if (isSelectAllMatching) return clearSelection();
+    setSelected((prev) => {
+      const next = new Map(prev);
+      if (allPageSelected) result.leads.forEach((l) => next.delete(l.id));
+      else result.leads.forEach((l) => next.set(l.id, l));
+      return next;
+    });
   };
 
   const handleSelectAllMatching = () => {
-    const currentPageIds = searchResult.leads.map((l) => l.id);
-    setSelectedLeadIds(new Set(currentPageIds));
+    setSelected(new Map(result.leads.map((l) => [l.id, l])));
     setIsSelectAllMatching(true);
-    toast.success(`Selected all ${searchResult.total.toLocaleString()} leads in this list`);
   };
 
-  const handleClearSelection = () => {
-    setSelectedLeadIds(new Set());
-    setIsSelectAllMatching(false);
-  };
-
-  const handleSelectAll = () => {
+  const handleExport = async () => {
     if (isSelectAllMatching) {
-      handleClearSelection();
-      return;
-    }
-    const currentPageIds = searchResult.leads.map((l) => l.id);
-    const allSelected =
-      currentPageIds.length > 0 && currentPageIds.every((id) => selectedLeadIds.has(id));
-
-    if (allSelected) {
-      handleClearSelection();
-    } else {
-      handleSelectCurrentPage();
-    }
-  };
-
-  // Export current view or selected leads as CSV
-  const handleExportCsv = async () => {
-    if (isSelectAllMatching) {
+      setIsExporting(true);
       try {
-        setIsExporting(true);
-        toast.info(`Preparing full CSV export for all matching leads...`);
-        const res = await exportMatchingDirectoryLeadsCsvAction(filters);
-        if (!res.ok) {
-          toast.error(res.error || "Failed to export CSV");
-        } else if (res.data) {
-          const blob = new Blob([res.data.csv], { type: "text/csv;charset=utf-8;" });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement("a");
-          link.setAttribute("href", url);
-          link.setAttribute("download", res.data.filename);
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-          toast.success(`Exported all ${res.data.count.toLocaleString()} matching leads to CSV`);
+        const res = await exportMatchingDirectoryLeadsCsvAction(appliedFilters.current);
+        if (!res.ok) toast.error(res.error || "Export failed");
+        else if (res.data) {
+          downloadCsv(res.data.csv, res.data.filename);
+          const capped = exportLimit !== undefined && result.total > res.data.count;
+          toast.success(
+            `Exported ${res.data.count.toLocaleString()} ${res.data.count === 1 ? "person" : "people"}`,
+            capped ? { description: `Exports stop at ${res.data.count.toLocaleString()} rows. Narrow your filters for the rest.` } : undefined,
+          );
         }
       } catch (err: any) {
-        toast.error(err?.message || "Failed to export leads");
+        toast.error(err?.message || "Export failed");
       } finally {
         setIsExporting(false);
       }
       return;
     }
 
-    const leadsToExport =
-      selectedLeadIds.size > 0
-        ? searchResult.leads.filter((l) => selectedLeadIds.has(l.id))
-        : searchResult.leads;
-
-    if (leadsToExport.length === 0) {
+    const rows = selected.size > 0 ? Array.from(selected.values()) : result.leads;
+    if (rows.length === 0) {
       toast.error("No leads to export");
       return;
     }
-
-    const headers = [
-      "Full Name",
-      "First Name",
-      "Last Name",
-      "Job Title",
-      "Company Name",
-      "Company Website",
-      "Primary Email",
-      "Email Status",
-      "Phone",
-      "Industry",
-      "Country",
-      "City",
-      "State",
-      "Team Size",
-      "Revenue Range",
-      "LinkedIn URL",
-    ];
-
-    const rows = leadsToExport.map((l) => [
-      `"${(l.fullName || "").replace(/"/g, '""')}"`,
-      `"${(l.firstName || "").replace(/"/g, '""')}"`,
-      `"${(l.lastName || "").replace(/"/g, '""')}"`,
-      `"${(l.jobTitle || "").replace(/"/g, '""')}"`,
-      `"${(l.companyName || "").replace(/"/g, '""')}"`,
-      `"${(l.companyWebsite || "").replace(/"/g, '""')}"`,
-      `"${(l.email || "").replace(/"/g, '""')}"`,
-      `"${(l.emailStatus || "").replace(/"/g, '""')}"`,
-      `"${(l.phone || "").replace(/"/g, '""')}"`,
-      `"${(l.industry || "").replace(/"/g, '""')}"`,
-      `"${(l.country || "").replace(/"/g, '""')}"`,
-      `"${(l.city || "").replace(/"/g, '""')}"`,
-      `"${(l.state || "").replace(/"/g, '""')}"`,
-      `"${(l.teamSize || "").replace(/"/g, '""')}"`,
-      `"${(l.revenueRange || "").replace(/"/g, '""')}"`,
-      `"${(l.linkedinUrl || "").replace(/"/g, '""')}"`,
-    ]);
-
-    const csvContent =
-      "data:text/csv;charset=utf-8," +
-      [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `smartreach_leads_export_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    toast.success(`Exported ${leadsToExport.length} leads to CSV`);
+    downloadCsv(leadsToCsv(rows), `directory-export-${new Date().toISOString().slice(0, 10)}.csv`);
+    toast.success(`Exported ${rows.length.toLocaleString()} ${rows.length === 1 ? "person" : "people"}`);
   };
 
-  const totalSavedLeads = existingLists.reduce((acc, l) => acc + Number(l.leadCount || 0), 0);
+  // "/" focuses the keyword search, like most search tools.
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.closest("input,textarea,select,[contenteditable=true]") || t.isContentEditable)) return;
+      // Leave the key alone while a dialog or sheet is open over the page.
+      if (t?.closest('[role="dialog"],[role="alertdialog"]') || document.querySelector('[role="dialog"][data-state="open"]')) return;
+      const input = searchInputRef.current;
+      if (!input || input.offsetParent === null) return; // rail hidden on small screens
+      e.preventDefault();
+      input.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const chips = activeFilterChips(filters, facets);
+  const activeCount = countActiveFilters(filters);
+  const removeChip = (chip: ActiveFilterChip) => updateFilters(chip.remove(filters));
+
+  const openAdd = (target: AddTarget) => {
+    setAddTarget(target);
+    setAddOpen(true);
+  };
+  const openAddForSelection = () =>
+    openAdd({ leadIds: Array.from(selected.keys()), allMatching: isSelectAllMatching, single: false });
 
   return (
-    <div className="apollo-leads-root space-y-5 w-full max-w-full min-w-0">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-5 w-full max-w-full min-w-0">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-              {activeTab === "saved-lists" ? "My Leads & Contact Lists" : "B2B Leads Database"}
-            </h1>
-            {activeTab === "directory" ? (
-              <Badge
-                variant="outline"
-                className="bg-primary/10 text-primary border-primary/20 text-xs font-semibold px-2 py-0.5 whitespace-nowrap"
-              >
-                {facets.totalLeads.toLocaleString()} Leads Database
-              </Badge>
-            ) : (
-              <Badge
-                variant="outline"
-                className="bg-violet-500/10 text-violet-400 border-violet-500/20 text-xs font-semibold px-2 py-0.5 whitespace-nowrap"
-              >
-                {existingLists.length} Saved Lists
-              </Badge>
-            )}
-            {activeTab === "directory" && (
-              <div className="hidden sm:inline-flex items-center gap-3 text-xs text-muted-foreground ml-2">
-                <span className="flex items-center gap-1.5">
-                  <span className="size-2 rounded-full bg-emerald-400 inline-block" />
-                  Sub-15ms Index
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="size-2 rounded-full bg-blue-400 inline-block" />
-                  100% Unmasked Emails
-                </span>
-              </div>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            {activeTab === "saved-lists"
-              ? `Manage custom contact lists, uploaded CSVs, and enrolled prospects across ${workspaceName}.`
-              : `Search verified contacts, filter by industry & location, and import directly into ${workspaceName} campaigns.`}
-          </p>
-        </div>
-
-        {/* Global Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
-          {activeTab === "saved-lists" && (
+    <>
+      <div className="shrink-0 border-b border-border px-4 py-5 sm:px-6 lg:py-6">
+        <PageHeader
+          title="B2B directory"
+          description={`Search ${facets.totalLeads.toLocaleString()} business contacts, then add the right people to a lead list for your campaigns.`}
+          meta={meta}
+          actions={
             <>
-              <Button size="sm" variant="outline" asChild className="gap-1.5 shadow-sm text-xs font-semibold">
-                <Link href="/leads/import">
-                  <Upload className="h-4 w-4 text-primary" />
-                  Import CSV
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/leads">
+                  <ListChecks />
+                  Your lead lists
                 </Link>
               </Button>
-              <Button size="sm" variant="outline" asChild className="gap-1.5 shadow-sm text-xs font-semibold">
-                <Link href="/leads/new">
-                  <Plus className="h-4 w-4" />
-                  New List
+              <Button asChild variant="outline" size="sm">
+                <Link href="/campaigns/new">
+                  <Plus />
+                  New campaign
                 </Link>
               </Button>
             </>
-          )}
-          <Button size="sm" asChild className="gap-1.5 shadow-sm text-xs font-semibold">
-            <Link href="/campaigns/new">
-              <Sparkles className="h-4 w-4" />
-              Launch Campaign
-            </Link>
-          </Button>
-        </div>
+          }
+        />
       </div>
 
-      {/* Tab Navigation */}
-      <Tabs
-        value={activeTab}
-        onValueChange={(val) => setActiveTab(val as "directory" | "saved-lists")}
-        className="w-full max-w-full min-w-0 space-y-4"
-      >
-        {!hideTabs && (
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border/60 pb-2 gap-2">
-            <TabsList className="grid grid-cols-2 sm:inline-flex w-full sm:w-auto bg-muted/40 p-1 h-auto">
-              <TabsTrigger value="directory" className="gap-2 text-xs font-semibold py-2 px-3">
-                <Database className="size-3.5 text-primary shrink-0" />
-                <span className="truncate">Directory ({facets.totalLeads.toLocaleString()})</span>
-              </TabsTrigger>
-              <TabsTrigger value="saved-lists" className="gap-2 text-xs font-semibold py-2 px-3">
-                <FileSpreadsheet className="size-3.5 text-violet-400 shrink-0" />
-                <span className="truncate">Saved Lists ({existingLists.length})</span>
-              </TabsTrigger>
-            </TabsList>
-
-            <div className="hidden sm:flex items-center gap-4 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-emerald-400 inline-block" />
-                Sub-15ms Index
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-blue-400 inline-block" />
-                100% Unmasked Emails
-              </span>
-            </div>
+      <div className="flex min-h-0 flex-1">
+        <aside
+          aria-label="Filters"
+          className="hidden w-72 shrink-0 flex-col border-r border-border bg-card lg:flex"
+        >
+          <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
+            <h2 className="text-[13px] font-semibold text-foreground">Filters</h2>
+            {activeCount > 0 ? (
+              <Button variant="ghost" size="xs" onClick={resetFilters}>
+                Clear all
+              </Button>
+            ) : null}
           </div>
-        )}
-
-        {/* TAB 1: APOLLO.IO B2B DIRECTORY SEARCH */}
-        <TabsContent value="directory" className="mt-0 space-y-4 outline-none w-full max-w-full min-w-0">
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-start gap-4 w-full max-w-full min-w-0">
-            {/* Left Filter Panel */}
+          <div className="min-h-0 flex-1 overflow-y-auto">
             <LeadFiltersPanel
               facets={facets}
               filters={filters}
-              onChange={setFilters}
-              onApply={handleApplyFilters}
-              isLoading={isLoading}
-              totalResults={searchResult.total}
-              tableHeight={tableHeight}
+              onChange={updateFilters}
+              searchInputRef={searchInputRef}
+              showShortcut
             />
+          </div>
+        </aside>
 
-            {/* Right Data Table */}
+        <section aria-label="Results" className="flex min-w-0 flex-1 flex-col">
+          <DirectoryToolbar
+            total={result.total}
+            isLoading={isLoading}
+            chips={chips}
+            onRemoveChip={removeChip}
+            onClearFilters={resetFilters}
+            onOpenFilters={() => setFiltersOpen(true)}
+            selectedCount={selected.size}
+            isSelectAllMatching={isSelectAllMatching}
+            pageCount={result.leads.length}
+            allPageSelected={allPageSelected}
+            onSelectAllMatching={handleSelectAllMatching}
+            onClearSelection={clearSelection}
+            onExport={handleExport}
+            isExporting={isExporting}
+            exportDisabled={isLoading || (selected.size === 0 && !isSelectAllMatching && result.leads.length === 0)}
+            onAddToList={openAddForSelection}
+          />
+
+          <div className="min-h-0 flex-1 overflow-auto bg-card">
             <LeadsDataTable
-              containerRef={tableRef}
-              leads={searchResult.leads}
-              total={searchResult.total}
-              page={searchResult.page}
-              pageSize={searchResult.pageSize}
-              totalPages={searchResult.totalPages}
+              leads={result.leads}
+              pageSize={filters.pageSize || result.pageSize}
               isLoading={isLoading}
-              isExporting={isExporting}
+              error={error}
+              onRetry={() => void runSearch(filters)}
               selectedLeadIds={selectedLeadIds}
               isSelectAllMatching={isSelectAllMatching}
               onSelectLead={handleSelectLead}
-              onSelectAll={handleSelectAll}
-              onSelectCurrentPage={handleSelectCurrentPage}
-              onSelectAllMatching={handleSelectAllMatching}
-              onClearSelection={handleClearSelection}
+              onTogglePage={handleTogglePage}
+              onViewLeadDetails={(lead) => {
+                setInspectingLead(lead);
+                setDetailsOpen(true);
+              }}
+              hasFilters={activeCount > 0}
+              onClearFilters={resetFilters}
+            />
+          </div>
+
+          {result.total > 0 && !error ? (
+            <DirectoryPagination
+              page={result.page}
+              pageSize={result.pageSize}
+              total={result.total}
+              totalPages={result.totalPages}
+              isLoading={isLoading}
               onPageChange={handlePageChange}
               onPageSizeChange={handlePageSizeChange}
-              onViewLeadDetails={(lead) => setInspectingLead(lead)}
-              onOpenAddToList={() => setIsAddToListOpen(true)}
-              onExportCsv={handleExportCsv}
             />
-          </div>
-        </TabsContent>
+          ) : null}
+        </section>
+      </div>
 
-        {/* TAB 2: MY SAVED CAMPAIGN LISTS */}
-        <TabsContent value="saved-lists" className="mt-0 space-y-6 outline-none w-full max-w-full min-w-0">
-          {/* Action & Info banner for Saved Lists */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border/70 bg-card/60 p-4 shadow-xs backdrop-blur">
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
-                <FileSpreadsheet className="size-4 text-violet-400" />
-                <h2 className="text-sm font-semibold text-foreground">Workspace Saved Lists</h2>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Custom leads imported via CSV or saved from the 183k+ B2B Directory into your workspace to launch outreach campaigns.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" asChild className="gap-1.5 shadow-sm text-xs font-semibold">
-                <Link href="/leads/import">
-                  <Upload className="size-3.5" />
-                  Import CSV to List
-                </Link>
-              </Button>
-              <Button size="sm" variant="outline" asChild className="gap-1.5 text-xs font-semibold">
-                <Link href="/leads/new">
-                  <Plus className="size-3.5" />
-                  New Empty List
-                </Link>
-              </Button>
-            </div>
-          </div>
+      <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+        <SheetContent side="left" className="sm:max-w-sm">
+          <SheetHeader>
+            <SheetTitle>Filters</SheetTitle>
+            <SheetDescription>Results update as you change filters.</SheetDescription>
+          </SheetHeader>
+          <SheetBody className="px-0 py-0">
+            <LeadFiltersPanel facets={facets} filters={filters} onChange={updateFilters} />
+          </SheetBody>
+          <SheetFooter className="justify-between">
+            <Button variant="ghost" onClick={resetFilters} disabled={activeCount === 0}>
+              Clear all
+            </Button>
+            <Button onClick={() => setFiltersOpen(false)} loading={isLoading}>
+              Show {result.total.toLocaleString()} {result.total === 1 ? "person" : "people"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
-          {/* Summary Strip */}
-          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-            <div className="rounded-xl border border-border/60 bg-card/40 p-4 backdrop-blur">
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-xs font-medium uppercase tracking-wider">
-                  Total Ready Contacts
-                </span>
-                <Users className="size-4 text-primary" />
-              </div>
-              <p className="mt-2 text-2xl font-bold tracking-tight tabular-nums">
-                {totalSavedLeads.toLocaleString()}
-              </p>
-              <p className="mt-1 text-[11px] text-muted-foreground flex items-center gap-1">
-                <Sparkles className="size-3 text-emerald-400" />
-                Verified & enrolled in outreach sequences
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-border/60 bg-card/40 p-4 backdrop-blur">
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-xs font-medium uppercase tracking-wider">
-                  Target Audience Lists
-                </span>
-                <FileSpreadsheet className="size-4 text-violet-400" />
-              </div>
-              <p className="mt-2 text-2xl font-bold tracking-tight tabular-nums">
-                {existingLists.length}
-              </p>
-              <p className="mt-1 text-[11px] text-muted-foreground">Segmented campaign lists</p>
-            </div>
-          </div>
-
-          {existingLists.length === 0 ? (
-            <EmptyState
-              icon={Users}
-              title="No campaign lists created yet"
-              description="Import your own CSV contacts into your workspace, or segment leads from the 183k+ B2B directory into campaign lists."
-              action={
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  <Button size="sm" asChild className="gap-1.5">
-                    <Link href="/leads/import">
-                      <Upload className="h-4 w-4" /> Import CSV
-                    </Link>
-                  </Button>
-                  <Button size="sm" variant="outline" asChild className="gap-1.5">
-                    <Link href="/leads/new">
-                      <Plus className="h-4 w-4" /> New List
-                    </Link>
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setActiveTab("directory")} className="gap-1.5">
-                    <Database className="h-4 w-4" /> Explore Directory
-                  </Button>
-                </div>
-              }
-            />
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {existingLists.map((list) => (
-                <LeadListCard
-                  key={list.id}
-                  id={list.id}
-                  name={list.name}
-                  leadCount={Number(list.leadCount || 0)}
-                  createdAt={list.createdAt}
-                />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
-
-      {/* Inspect Lead Sheet Drawer */}
       <LeadDetailsSheet
         lead={inspectingLead}
-        open={!!inspectingLead}
-        onOpenChange={(open) => {
-          if (!open) setInspectingLead(null);
-        }}
-        onAddToList={(id) => {
-          setSelectedLeadIds(new Set([id]));
-          setIsAddToListOpen(true);
-        }}
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        onAddToList={(id) => openAdd({ leadIds: [id], allMatching: false, single: true })}
       />
 
-      {/* Add To Campaign List Dialog */}
       <AddToCampaignDialog
-        open={isAddToListOpen}
-        onOpenChange={setIsAddToListOpen}
-        selectedLeadIds={Array.from(selectedLeadIds)}
-        isSelectAllMatching={isSelectAllMatching}
-        totalMatchingCount={searchResult.total}
-        searchParams={filters}
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        selectedLeadIds={addTarget?.leadIds ?? []}
+        isSelectAllMatching={addTarget?.allMatching ?? false}
+        totalMatchingCount={result.total}
+        searchParams={appliedFilters.current}
         existingLists={existingLists}
+        saveLimit={saveLimit}
         onSuccess={() => {
-          setSelectedLeadIds(new Set());
-          setIsSelectAllMatching(false);
+          if (!addTarget?.single) clearSelection();
         }}
       />
-    </div>
+    </>
   );
 }

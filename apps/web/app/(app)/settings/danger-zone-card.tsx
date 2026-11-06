@@ -1,161 +1,128 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
+  Alert,
+  Button,
   Card,
   CardContent,
-  Button,
-  Input,
+  CardDescription,
+  CardHeader,
+  CardTitle,
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
+  Field,
+  Input,
 } from "@smartreach/ui";
-import { AlertTriangle, Trash2, ShieldAlert, Loader2 } from "lucide-react";
 import { deleteAccountAction } from "@/lib/account-actions";
-import { toast } from "sonner";
 
+const CONFIRM_WORD = "DELETE";
+
+/** Permanent account deletion. Asks the user to type DELETE before it runs. */
 export function DangerZoneCard({ userEmail }: { userEmail: string }) {
   const router = useRouter();
-  const [modalOpen, setModalOpen] = useState(false);
+  const [open, setOpen] = useState(false);
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const isConfirmed = confirmation.trim() === "DELETE";
+  const isConfirmed = confirmation.trim() === CONFIRM_WORD;
 
-  const handleDelete = () => {
-    if (!isConfirmed) return;
+  function handleOpenChange(next: boolean) {
+    if (isPending) return;
+    setOpen(next);
+    if (!next) {
+      setConfirmation("");
+      setError(null);
+    }
+  }
+
+  function handleDelete(e: React.FormEvent) {
+    e.preventDefault();
+    if (!isConfirmed || isPending) return;
     setError(null);
-
     startTransition(async () => {
       const res = await deleteAccountAction(confirmation);
       if (res.ok) {
-        toast.success("Your account and all associated data have been permanently deleted.");
-        // Redirect to login
+        toast.success("Your account and its data have been deleted");
         router.push("/login?deleted=true");
       } else {
-        setError(res.error || "Failed to delete account. Please try again.");
+        setError(res.error || "Your account could not be deleted. Try again.");
       }
     });
-  };
+  }
 
   return (
-    <>
-      <Card className="border-rose-500/30 bg-rose-500/5 shadow-sm">
-        <CardContent className="p-6 space-y-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="size-4 text-rose-500" />
-                <h2 className="font-semibold text-base text-rose-500">Danger Zone</h2>
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Irreversible actions that affect your account ownership and stored data.
-              </p>
+    <Card className="border-destructive/30">
+      <CardHeader>
+        <CardTitle>Delete account</CardTitle>
+        <CardDescription>Permanently delete your account and everything in it. This cannot be undone.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-[13px] leading-relaxed text-muted-foreground">
+          Removes all workspaces, mailboxes, campaigns, leads and email history for{" "}
+          <span className="font-medium text-foreground">{userEmail}</span>.
+        </p>
+        <Button variant="destructive-outline" onClick={() => setOpen(true)} className="shrink-0 self-start sm:self-auto">
+          Delete account
+        </Button>
+      </CardContent>
+
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={handleDelete} className="flex flex-col gap-5">
+            <DialogHeader>
+              <DialogTitle>Delete your account?</DialogTitle>
+              <DialogDescription>
+                This permanently deletes <span className="font-medium text-foreground">{userEmail}</span> and signs you
+                out. We cannot recover anything afterwards.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex flex-col gap-2 text-[13px] text-muted-foreground">
+              <p>Deleted right away:</p>
+              <ul className="list-disc space-y-1 pl-5">
+                <li>Connected mailboxes and their stored credentials</li>
+                <li>Campaigns, sequences and queued emails</li>
+                <li>Lead lists, contacts and tags</li>
+                <li>Inbox threads, replies and tracking history</li>
+                <li>Workspaces and settings</li>
+              </ul>
             </div>
-            <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 border border-rose-500/30 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-rose-400 shrink-0">
-              Irreversible
-            </span>
-          </div>
 
-          <div className="rounded-xl border border-rose-500/20 bg-background/60 p-4 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="space-y-1">
-                <h3 className="font-bold text-sm text-foreground">Permanently Delete Account</h3>
-                <p className="text-xs text-muted-foreground max-w-lg leading-relaxed">
-                  Permanently erase your account, login credentials, all workspaces, connected mailboxes, campaigns, lead lists, uploaded contacts, and email records. Data cannot be recovered once purged.
-                </p>
-              </div>
+            {error ? <Alert variant="destructive">{error}</Alert> : null}
 
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => setModalOpen(true)}
-                className="shrink-0 text-xs font-semibold gap-1.5 shadow-sm"
-              >
-                <Trash2 className="size-3.5" />
-                Delete Account
+            <Field label={`Type ${CONFIRM_WORD} to confirm`}>
+              <Input
+                value={confirmation}
+                onChange={(e) => setConfirmation(e.target.value)}
+                placeholder={CONFIRM_WORD}
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                autoFocus
+                disabled={isPending}
+                className="font-mono"
+              />
+            </Field>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isPending}>
+                Cancel
               </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Confirmation Modal */}
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-md p-6 space-y-4">
-          <DialogHeader className="space-y-2">
-            <div className="flex size-10 items-center justify-center rounded-full bg-rose-500/10 text-rose-500">
-              <ShieldAlert className="size-5" />
-            </div>
-            <DialogTitle className="text-lg font-bold text-rose-500">
-              Delete Account Permanently?
-            </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
-              This action <strong>cannot be undone</strong>. This will permanently delete your account (<code className="font-mono text-foreground">{userEmail}</code>) and immediately purge all:
-            </DialogDescription>
-          </DialogHeader>
-
-          <ul className="list-disc pl-5 space-y-1 text-xs text-muted-foreground">
-            <li>Connected mailboxes &amp; encrypted credentials</li>
-            <li>Outreach campaigns, email jobs &amp; sequence drafts</li>
-            <li>Lead databases, custom prospect lists &amp; tags</li>
-            <li>UniBox email threads, received replies &amp; tracking history</li>
-            <li>Active session tokens &amp; workspace configuration</li>
-          </ul>
-
-          <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-xs text-rose-400">
-            To confirm deletion, please type <strong className="font-mono text-foreground font-bold">DELETE</strong> below:
-          </div>
-
-          <div className="space-y-2">
-            <Input
-              value={confirmation}
-              onChange={(e) => setConfirmation(e.target.value)}
-              placeholder="Type DELETE"
-              className="text-xs font-mono h-9"
-              autoFocus
-            />
-            {error && <p className="text-xs text-rose-400">{error}</p>}
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setModalOpen(false);
-                setConfirmation("");
-                setError(null);
-              }}
-              className="text-xs"
-              disabled={isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={!isConfirmed || isPending}
-              onClick={handleDelete}
-              className="text-xs font-semibold gap-1.5"
-            >
-              {isPending ? (
-                <>
-                  <Loader2 className="size-3.5 animate-spin" /> Purging Account...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="size-3.5" /> Purge Account Now
-                </>
-              )}
-            </Button>
-          </div>
+              <Button type="submit" variant="destructive" loading={isPending} disabled={!isConfirmed}>
+                Delete account permanently
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
-    </>
+    </Card>
   );
 }

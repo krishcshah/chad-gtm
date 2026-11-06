@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import * as React from "react";
+import { useRouter } from "next/navigation";
 import {
+  Alert,
   Button,
   Dialog,
   DialogContent,
@@ -9,25 +11,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  Field,
   Input,
-  Label,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  NativeSelect,
+  SegmentedControl,
+  toast,
 } from "@smartreach/ui";
-import {
-  CheckCircle2,
-  FolderPlus,
-  Loader2,
-  Sparkles,
-  UserPlus,
-  Users,
-} from "lucide-react";
 import { saveDirectoryLeadsToCampaignListAction } from "@/lib/actions";
 import type { DirectorySearchParams } from "@/lib/leads-directory";
-import { toast } from "sonner";
 
 interface ExistingListOption {
   id: string;
@@ -44,8 +35,13 @@ interface AddToCampaignDialogProps {
   searchParams?: DirectorySearchParams;
   existingLists: ExistingListOption[];
   onSuccess: () => void;
+  /** Most rows one save can copy for this account. */
+  saveLimit?: number;
 }
 
+type Mode = "new" | "existing";
+
+/** Copy directory contacts into a new or existing lead list. */
 export function AddToCampaignDialog({
   open,
   onOpenChange,
@@ -55,31 +51,42 @@ export function AddToCampaignDialog({
   searchParams,
   existingLists,
   onSuccess,
+  saveLimit,
 }: AddToCampaignDialogProps) {
-  const [mode, setMode] = useState<"new" | "existing">("new");
-  const [newListName, setNewListName] = useState("");
-  const [selectedListId, setSelectedListId] = useState<string>(
-    existingLists[0]?.id || ""
-  );
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const router = useRouter();
+  const [mode, setMode] = React.useState<Mode>("new");
+  const [newListName, setNewListName] = React.useState("");
+  const [selectedListId, setSelectedListId] = React.useState<string>(existingLists[0]?.id || "");
+  const [error, setError] = React.useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   const effectiveCount = isSelectAllMatching ? totalMatchingCount : selectedLeadIds.length;
+  const capped = isSelectAllMatching && saveLimit !== undefined && totalMatchingCount > saveLimit;
+  const people = effectiveCount === 1 ? "person" : "people";
 
-  const handleAdd = async () => {
+  // Fresh form each time the dialog opens; pick a list if the old pick is gone.
+  React.useEffect(() => {
+    if (!open) return;
+    setError(null);
+    setSelectedListId((cur) => (existingLists.some((l) => l.id === cur) ? cur : existingLists[0]?.id || ""));
+    if (existingLists.length === 0) setMode("new");
+  }, [open, existingLists]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (effectiveCount === 0) {
       toast.error("No leads selected");
       return;
     }
-
     if (mode === "new" && !newListName.trim()) {
-      toast.error("Please enter a name for the new list");
+      setError("Give the new list a name.");
       return;
     }
-
     if (mode === "existing" && !selectedListId) {
-      toast.error("Please choose an existing list");
+      setError("Choose a list.");
       return;
     }
+    setError(null);
 
     try {
       setIsSubmitting(true);
@@ -92,140 +99,94 @@ export function AddToCampaignDialog({
       });
 
       if (res.ok) {
-        toast.success(res.message || "Leads saved to campaign list!");
+        const listId = res.data?.leadListId;
+        const added = res.data?.count;
+        toast.success(
+          typeof added === "number" ? `Added ${added.toLocaleString()} ${added === 1 ? "person" : "people"} to the list` : "Added to the list",
+          listId ? { action: { label: "Open list", onClick: () => router.push(`/leads/${listId}`) } } : undefined,
+        );
         onOpenChange(false);
         setNewListName("");
         onSuccess();
+        router.refresh();
       } else {
-        toast.error(res.error || "Failed to save leads");
+        toast.error(res.error || "Could not add these people to the list");
       }
     } catch (err: any) {
-      toast.error(err?.message || "Failed to save leads");
+      toast.error(err?.message || "Could not add these people to the list");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(o) => !isSubmitting && onOpenChange(o)}>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <div className="flex items-center gap-2">
-            <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-              <UserPlus className="size-4" />
-            </div>
-            <div>
-              <DialogTitle className="text-lg font-bold">
-                Add to Campaign List
-              </DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground">
-                {isSelectAllMatching
-                  ? `Import all ${effectiveCount.toLocaleString()} leads matching current filters into an active SmartReach list for email sequences.`
-                  : `Import ${effectiveCount.toLocaleString()} verified leads into an active SmartReach list for email sequences.`}
-              </DialogDescription>
-            </div>
-          </div>
-        </DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
+          <DialogHeader>
+            <DialogTitle>Add to a lead list</DialogTitle>
+            <DialogDescription>
+              {isSelectAllMatching
+                ? `All ${effectiveCount.toLocaleString()} people matching your filters.`
+                : `${effectiveCount.toLocaleString()} selected ${people}.`}{" "}
+              Campaigns send to lead lists. People without an email address are skipped.
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="space-y-4 py-2">
-          {/* Mode Switcher */}
-          <div className="grid grid-cols-2 gap-2 p-1 bg-muted/40 rounded-lg border border-border/60">
-            <button
-              type="button"
-              onClick={() => setMode("new")}
-              className={`py-1.5 px-3 rounded-md text-xs font-semibold transition-all ${
-                mode === "new"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Create New List
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("existing")}
-              disabled={existingLists.length === 0}
-              className={`py-1.5 px-3 rounded-md text-xs font-semibold transition-all ${
-                mode === "existing"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground disabled:opacity-40"
-              }`}
-            >
-              Existing List ({existingLists.length})
-            </button>
-          </div>
+          {capped ? (
+            <Alert variant="warning">
+              Only the first {saveLimit!.toLocaleString()} matches are added in one go. Narrow your filters to pick
+              which ones.
+            </Alert>
+          ) : null}
+
+          <SegmentedControl<Mode>
+            aria-label="Destination"
+            value={mode}
+            onValueChange={(v) => {
+              setMode(v);
+              setError(null);
+            }}
+            className="self-start"
+            options={[
+              { value: "new", label: "New list" },
+              { value: "existing", label: "Existing list", disabled: existingLists.length === 0 },
+            ]}
+          />
 
           {mode === "new" ? (
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold">List Name</Label>
+            <Field label="List name" required error={error ?? undefined}>
               <Input
-                placeholder="e.g. US Restaurant Founders Q4"
+                autoFocus
+                placeholder="e.g. US restaurant founders"
                 value={newListName}
                 onChange={(e) => setNewListName(e.target.value)}
-                className="text-xs h-9"
+                maxLength={120}
               />
-              <p className="text-[11px] text-muted-foreground">
-                A dedicated list will be created in your workspace containing{" "}
-                {isSelectAllMatching
-                  ? `all ${effectiveCount.toLocaleString()} leads matching current filters`
-                  : `these ${effectiveCount.toLocaleString()} leads`}
-                .
-              </p>
-            </div>
+            </Field>
           ) : (
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold">Select Destination List</Label>
-              <Select value={selectedListId} onValueChange={setSelectedListId}>
-                <SelectTrigger className="w-full h-9 rounded-md border-input bg-background px-3 py-1 text-xs shadow-sm focus:ring-1 focus:ring-ring">
-                  <SelectValue placeholder="Choose a destination list..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {existingLists.map((l) => (
-                    <SelectItem key={l.id} value={l.id}>
-                      {l.name} ({l.leadCount || 0} leads)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[11px] text-muted-foreground">
-                Duplicates are automatically skipped to prevent emailing the same contact twice.
-              </p>
-            </div>
+            <Field label="List" required error={error ?? undefined} hint="New people are added alongside the ones already on it.">
+              <NativeSelect value={selectedListId} onChange={(e) => setSelectedListId(e.target.value)}>
+                {existingLists.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name} ({(l.leadCount || 0).toLocaleString()} leads)
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
           )}
-        </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => onOpenChange(false)}
-            disabled={isSubmitting}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={handleAdd}
-            disabled={isSubmitting || effectiveCount === 0}
-            className="gap-1.5 font-semibold bg-primary text-primary-foreground"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="size-3.5 animate-spin" />
-                Importing Leads...
-              </>
-            ) : (
-              <>
-                <FolderPlus className="size-3.5" />
-                {isSelectAllMatching
-                  ? `Add All ${effectiveCount.toLocaleString()} Leads`
-                  : `Add ${effectiveCount.toLocaleString()} Leads`}
-              </>
-            )}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={isSubmitting} disabled={effectiveCount === 0}>
+              {capped
+                ? `Add first ${saveLimit!.toLocaleString()}`
+                : `Add ${effectiveCount.toLocaleString()} ${people}`}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

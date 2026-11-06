@@ -1,26 +1,21 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, FileSpreadsheet, Loader2, Trash2, Upload } from "lucide-react";
+import { MoreHorizontal, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { formatDate } from "@smartreach/shared";
 import {
-  Alert,
-  AlertDescription,
-  Badge,
   Button,
   Card,
-  CardContent,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@smartreach/ui";
-import { formatDate } from "@smartreach/shared";
-import { deleteLeadList } from "@/lib/actions";
+import { DeleteListDialog } from "./[id]/lead-manage-dialogs";
 
 interface LeadListCardProps {
   id: string;
@@ -29,138 +24,71 @@ interface LeadListCardProps {
   createdAt: string | Date;
 }
 
+function toIso(value: string | Date | null | undefined) {
+  if (!value) return null;
+  return typeof value === "string" ? value : new Date(value).toISOString();
+}
+
+/** One lead list as a card: name, lead count, created date and a row of actions. */
 export function LeadListCard({ id, name, leadCount, createdAt }: LeadListCardProps) {
   const router = useRouter();
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-
-  const handleDelete = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDeleteOpen(true);
-  };
-
-  const confirmDelete = () => {
-    if (pending) return;
-    setError(null);
-    start(async () => {
-      try {
-        const res = await deleteLeadList(id);
-        if (!res.ok) {
-          setError(res.error || "Failed to delete list");
-          toast.error(res.error || "Failed to delete list");
-        } else {
-          toast.success(`List "${name}" deleted`);
-          setDeleteOpen(false);
-          router.refresh();
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to delete list");
-      }
-    });
-  };
 
   return (
     <>
-      <Link
-        href={`/leads/${id}`}
-        className="group relative rounded-lg focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <Card className="h-full border-border/60 bg-card/50 transition-all hover:bg-accent/40 hover:border-border hover:shadow-md">
-          <CardContent className="p-5 flex flex-col justify-between h-full">
-            <div>
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary border border-primary/20">
-                    <FileSpreadsheet className="size-4" />
-                  </div>
-                  <h3 className="font-semibold text-sm truncate text-foreground group-hover:text-primary transition-colors">
-                    {name}
-                  </h3>
-                </div>
-
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <Badge variant="secondary" className="font-semibold tabular-nums">
-                    {leadCount.toLocaleString()} {leadCount === 1 ? "lead" : "leads"}
-                  </Badge>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    asChild
-                    className="size-8 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
-                    title={`Import CSV to ${name}`}
-                  >
-                    <Link
-                      href={`/leads/import?listId=${id}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                      }}
-                    >
-                      <Upload className="size-3.5" />
-                    </Link>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleDelete}
-                    aria-label={`Delete list ${name}`}
-                    className="size-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 flex items-center justify-between pt-3 border-t border-border/40 text-xs text-muted-foreground">
-              <span>Created {formatDate(typeof createdAt === "string" ? createdAt : createdAt ? new Date(createdAt).toISOString() : null)}</span>
-              <span className="inline-flex items-center gap-1 font-medium text-primary group-hover:translate-x-0.5 transition-transform">
-                View Contacts <ArrowRight className="size-3" />
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      </Link>
-
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="w-[calc(100%-2rem)]">
-          <DialogHeader>
-            <DialogTitle>Delete lead list</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete &ldquo;{name}&rdquo;? This will remove the list and all {leadCount.toLocaleString()} contacts within it.
-            </DialogDescription>
-          </DialogHeader>
-
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setDeleteOpen(false)}
-              disabled={pending}
+      <Card className="relative flex flex-col gap-4 p-5 transition-colors hover:border-border-strong">
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="min-w-0 text-[15px] font-semibold tracking-[-0.01em]">
+            <Link
+              href={`/leads/${id}`}
+              className="block truncate rounded-sm outline-none after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:after:ring-[3px] focus-visible:after:ring-ring"
             >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={confirmDelete}
-              disabled={pending}
-            >
-              {pending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-              {pending ? "Deleting…" : "Delete List"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              {name}
+            </Link>
+          </h3>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon-sm" className="relative z-10 -mr-1.5 -mt-1" aria-label={`Actions for ${name}`}>
+                <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem asChild>
+                <Link href={`/leads/import?listId=${id}`}>
+                  <Upload />
+                  Import CSV into list
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem destructive onSelect={() => setDeleteOpen(true)}>
+                <Trash2 />
+                Delete list
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="text-sm">
+            <span className="tabular font-semibold">{leadCount.toLocaleString()}</span>{" "}
+            <span className="text-muted-foreground">{leadCount === 1 ? "lead" : "leads"}</span>
+          </span>
+          <span className="text-xs text-subtle-foreground">Created {formatDate(toIso(createdAt))}</span>
+        </div>
+      </Card>
+
+      {deleteOpen ? (
+        <DeleteListDialog
+          open
+          listId={id}
+          name={name}
+          leadCount={leadCount}
+          onOpenChange={setDeleteOpen}
+          onDeleted={() => {
+            toast.success(`Deleted "${name}"`);
+            router.refresh();
+          }}
+        />
+      ) : null}
     </>
   );
 }

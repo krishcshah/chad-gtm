@@ -1,20 +1,44 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Card, CardContent, Button, Input, Textarea, Label } from "@smartreach/ui";
-import { UserX, CheckCircle2, ShieldCheck, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+  Field,
+  Input,
+  Textarea,
+} from "@smartreach/ui";
 import { submitDataRemovalAction } from "@/lib/data-removal-actions";
 
+type Errors = { contactEmail?: string; description?: string };
+
+/** GDPR Art. 17 erasure request for personal data AutoGTM holds about someone. */
 export function RemoveMyInfoCard({ userEmail }: { userEmail?: string | null }) {
   const [contactEmail, setContactEmail] = useState(userEmail || "");
   const [description, setDescription] = useState("");
-  const [submitted, setSubmitted] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [submittedFor, setSubmittedFor] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Errors>({});
+  const [formError, setFormError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
+    const found: Errors = {};
+    const email = contactEmail.trim();
+    if (!email || !email.includes("@") || email.length < 5) found.contactEmail = "Enter a valid email address.";
+    if (description.trim().length < 3) found.description = "Tell us what you want removed.";
+    setErrors(found);
+    setFormError(null);
+    if (Object.keys(found).length > 0) return;
 
     const formData = new FormData();
     formData.append("contactEmail", contactEmail);
@@ -23,100 +47,80 @@ export function RemoveMyInfoCard({ userEmail }: { userEmail?: string | null }) {
     startTransition(async () => {
       const res = await submitDataRemovalAction(formData);
       if (res.ok) {
-        setSubmitted(true);
+        setSubmittedFor(email);
         setDescription("");
+        toast.success("Removal request sent");
       } else {
-        setError(res.error || "Failed to submit request.");
+        const message = res.error || "The request could not be sent. Try again.";
+        setFormError(message);
+        toast.error(message);
       }
     });
-  };
+  }
 
   return (
-    <Card className="border-border/70 shadow-sm">
-      <CardContent className="p-6 space-y-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <UserX className="size-4 text-rose-400" />
-              <h2 className="font-semibold text-base text-foreground">Remove My Info</h2>
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Exercise your GDPR Art. 17 &quot;Right to Erasure&quot;. Request the permanent removal of your email, company, or personal data from the AutoGTM database and search index.
-            </p>
-          </div>
-          <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 text-[10px] font-semibold text-rose-400 shrink-0">
-            <ShieldCheck className="size-3" /> GDPR Art. 17
-          </span>
-        </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Request data removal</CardTitle>
+        <CardDescription>
+          Ask us to delete personal data about you from AutoGTM, including the shared lead directory (your right to
+          erasure under GDPR Article 17). This does not delete your account.
+        </CardDescription>
+      </CardHeader>
 
-        {submitted ? (
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 space-y-2">
-            <div className="flex items-center gap-2 text-sm font-semibold text-emerald-400">
-              <CheckCircle2 className="size-4" />
-              <span>Removal Request Submitted</span>
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              We have received your erasure request for <strong className="text-foreground">{contactEmail}</strong>. Our compliance team will review and purge all matching records from the database within 72 hours.
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-2 text-xs"
-              onClick={() => setSubmitted(false)}
+      {submittedFor ? (
+        <CardContent>
+          <Alert
+            variant="success"
+            action={
+              <Button variant="outline" size="sm" onClick={() => setSubmittedFor(null)}>
+                Send another
+              </Button>
+            }
+          >
+            <AlertTitle>Request received</AlertTitle>
+            <AlertDescription>
+              We will review it and remove matching records for <span className="text-foreground">{submittedFor}</span>{" "}
+              within 72 hours.
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      ) : (
+        <form onSubmit={handleSubmit} noValidate>
+          <CardContent className="flex flex-col gap-5">
+            {formError ? <Alert variant="destructive">{formError}</Alert> : null}
+            <Field
+              label="Email address"
+              required
+              error={errors.contactEmail}
+              hint="We remove every lead and outreach record that matches this address."
             >
-              Submit Another Request
-            </Button>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4 pt-1">
-            {error && (
-              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
-                {error}
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              <Label htmlFor="removal-email" className="text-xs font-medium">
-                Contact Email
-              </Label>
               <Input
-                id="removal-email"
                 type="email"
-                required
                 value={contactEmail}
                 onChange={(e) => setContactEmail(e.target.value)}
                 placeholder="name@company.com"
-                className="h-9 text-xs"
+                autoComplete="email"
+                disabled={isPending}
               />
-              <p className="text-[11px] text-muted-foreground">
-                The primary email address to match and remove from all outreach lists and lead records.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="removal-description" className="text-xs font-medium">
-                What do you want to get removed?
-              </Label>
+            </Field>
+            <Field label="What should we remove?" required error={errors.description}>
               <Textarea
-                id="removal-description"
-                required
                 rows={3}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="e.g. Please purge my personal email, phone number, and any company lead records from your database."
-                className="text-xs"
+                placeholder="My work email, phone number and the company record for Acme Inc."
+                disabled={isPending}
               />
-            </div>
-
-            <div className="flex justify-end pt-1">
-              <Button type="submit" disabled={isPending} size="sm" className="text-xs font-medium">
-                {isPending && <Loader2 className="mr-2 size-3.5 animate-spin" />}
-                Submit Erasure Request
-              </Button>
-            </div>
-          </form>
-        )}
-      </CardContent>
+            </Field>
+          </CardContent>
+          <CardFooter>
+            <Button type="submit" loading={isPending}>
+              Send request
+            </Button>
+          </CardFooter>
+        </form>
+      )}
     </Card>
   );
 }

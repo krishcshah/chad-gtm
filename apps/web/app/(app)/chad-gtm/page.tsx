@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/session";
 import { getDb, ensureChadGtmTables } from "@/lib/db";
 import { getDirectoryFacets } from "@/lib/leads-directory";
 import { loadLaunchContext, runLaunchState } from "@/lib/autopilot-state";
+import { Page } from "@/components/layout/page";
 import { ChadGtmWizard } from "./chad-gtm-wizard";
 import { AutopilotLauncher, type RunSummary } from "./autopilot-launcher";
 
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Autopilot",
-  description: "Paste your website. AutoGTM researches, prospects, sends, replies, and books meetings for you.",
+  description: "Paste your website. AutoGTM finds buyers, sends the emails, answers replies and books meetings.",
 };
 
 export default async function ChadGtmPage({
@@ -25,9 +26,9 @@ export default async function ChadGtmPage({
   if (mode === "guided") {
     const facets = getDirectoryFacets();
     return (
-      <div className="mx-auto max-w-6xl">
+      <Page width="narrow">
         <ChadGtmWizard allIndustries={facets.industries.map((i) => i.value)} />
-      </div>
+      </Page>
     );
   }
 

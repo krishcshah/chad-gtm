@@ -29,12 +29,12 @@ export const metadata: Metadata = {
     "Paste your website. AutoGTM researches your market, finds verified buyers, runs cold email from a managed mailbox pool, answers replies, and books meetings on your calendar.",
   icons: {
     icon: [
-      { url: "/icon.svg?v=20261019", type: "image/svg+xml" },
-      { url: "/favicon.png?v=20261019", type: "image/png" },
-      { url: "/favicon.ico?v=20261019" },
+      { url: "/icon.svg?v=20261106", type: "image/svg+xml" },
+      { url: "/favicon.png?v=20261106", type: "image/png" },
+      { url: "/favicon.ico?v=20261106" },
     ],
-    shortcut: "/favicon.ico?v=20261019",
-    apple: "/apple-touch-icon.png?v=20261019",
+    shortcut: "/favicon.ico?v=20261106",
+    apple: "/apple-touch-icon.png?v=20261106",
   },
 };
 

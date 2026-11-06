@@ -9,8 +9,8 @@ import { MissionControlView, type LaunchView } from "./mission-control-view";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Mission Control",
-  description: "Live real-time telemetry, opens, replies, and controls for AutoGTM autonomous outreach.",
+  title: "Mission control",
+  description: "Sends, replies, meetings and controls for one autopilot run.",
 };
 
 export default async function ChadGtmRunPage({

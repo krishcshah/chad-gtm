@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
+import { ArrowRight, Sparkles } from "lucide-react";
 import {
   Button,
   Dialog,
@@ -10,25 +11,12 @@ import {
   DialogHeader,
   DialogTitle,
   Input,
-  Label,
   Popover,
   PopoverContent,
   PopoverTrigger,
-  cn,
 } from "@smartreach/ui";
-import {
-  Sparkles,
-  Zap,
-  Briefcase,
-  Target,
-  Wand2,
-  Check,
-  RefreshCw,
-  X,
-  ArrowRight,
-} from "lucide-react";
-import { improveSequenceCopy } from "@/lib/actions";
 import { toast } from "sonner";
+import { improveSequenceCopy } from "@/lib/actions";
 
 interface AiAssistantPopoverProps {
   subject: string;
@@ -37,191 +25,160 @@ interface AiAssistantPopoverProps {
   disabled?: boolean;
 }
 
-export function AiAssistantPopover({
-  subject,
-  bodyText,
-  onApply,
-  disabled = false,
-}: AiAssistantPopoverProps) {
-  const [popoverOpen, setPopoverOpen] = useState(false);
-  const [customPrompt, setCustomPrompt] = useState("");
+type Suggestion = { subject: string; bodyText: string; bodyHtml: string; changesSummary: string };
+
+/** Tones accepted by improveSequenceCopy (aiImproveCopySchema). */
+const PRESETS: { tone: "auto" | "concise" | "executive" | "punchy_cta"; label: string; hint: string }[] = [
+  { tone: "auto", label: "Improve overall", hint: "Clearer, more natural wording" },
+  { tone: "concise", label: "Make it shorter", hint: "Cut about a third of the words" },
+  { tone: "executive", label: "Sound more senior", hint: "Peer-to-peer, less salesy" },
+  { tone: "punchy_cta", label: "Strengthen the ask", hint: "A clearer, easier next step" },
+];
+
+/**
+ * "Improve with AI" menu for an email. Every suggestion opens in a review
+ * dialog first; nothing changes until the user applies it.
+ */
+export function AiAssistantPopover({ subject, bodyText, onApply, disabled = false }: AiAssistantPopoverProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [custom, setCustom] = useState("");
   const [pending, startTransition] = useTransition();
-
-  // Review modal state
   const [reviewOpen, setReviewOpen] = useState(false);
-  const [suggestion, setSuggestion] = useState<{
-    subject: string;
-    bodyText: string;
-    bodyHtml: string;
-    changesSummary: string;
-  } | null>(null);
+  const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
+  const customId = useId();
 
-  const handleImprove = (tone: string, instruction?: string) => {
-    setPopoverOpen(false);
+  const empty = !subject.trim() && !bodyText.trim();
+
+  const improve = (tone: (typeof PRESETS)[number]["tone"], instruction = "") => {
+    setMenuOpen(false);
     startTransition(async () => {
       try {
-        const res = await improveSequenceCopy({
-          subject,
-          bodyText,
-          tone,
-          instruction: instruction || "",
-        });
-
+        const res = await improveSequenceCopy({ subject, bodyText, tone, instruction });
         if (!res.ok) {
-          toast.error(res.error || "Failed to generate copy suggestion");
+          toast.error(res.error || "Could not get a suggestion");
           return;
         }
-
         if (!res.data) {
-          toast.error("No suggestion returned");
+          toast.error("The AI returned no suggestion. Try again.");
           return;
         }
-
         setSuggestion(res.data);
         setReviewOpen(true);
-      } catch (err: any) {
-        toast.error(err?.message || "AI copy assistant failed");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not get a suggestion");
       }
     });
   };
 
-  const handleAccept = () => {
+  const submitCustom = () => {
+    const text = custom.trim();
+    if (!text) return;
+    improve("auto", text);
+  };
+
+  const apply = () => {
     if (suggestion) {
-      onApply({
-        subject: suggestion.subject,
-        bodyText: suggestion.bodyText,
-        bodyHtml: suggestion.bodyHtml,
-      });
-      toast.success("Applied AI enhanced copy to variant");
+      onApply({ subject: suggestion.subject, bodyText: suggestion.bodyText, bodyHtml: suggestion.bodyHtml });
+      toast.success("Suggestion applied");
     }
     setReviewOpen(false);
   };
 
   return (
     <>
-      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+      <Popover open={menuOpen} onOpenChange={setMenuOpen}>
         <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={disabled || pending}
-            className="h-7 gap-1.5 px-2.5 text-xs font-medium border-primary/30 text-primary hover:bg-primary/10 hover:text-primary transition-all"
-            title="AI Assistant - Copy Enhancement"
-            aria-label="AI Assistant Copy Enhancement"
-          >
-            <Sparkles className={cn("size-3.5", pending && "animate-spin text-primary")} />
-            {pending ? "Enhancing…" : "AI Assistant"}
+          <Button type="button" variant="outline" size="xs" disabled={disabled} loading={pending}>
+            {!pending && <Sparkles aria-hidden />}
+            {pending ? "Writing…" : "Improve with AI"}
           </Button>
         </PopoverTrigger>
-
-        <PopoverContent align="end" className="w-64 p-2 space-y-1 shadow-lg border-border/80">
-          <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Copy Enhancement
-          </div>
-
-          <button
-            type="button"
-            onClick={() => handleImprove("auto")}
-            className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
+        <PopoverContent align="end" className="w-72 p-1.5">
+          {empty ? (
+            <p className="px-2.5 pb-1 pt-1.5 text-xs text-muted-foreground">
+              This email is empty, so the AI writes a first draft. Describe what it should say below for a better start.
+            </p>
+          ) : null}
+          <ul className="flex flex-col">
+            {PRESETS.map((p) => (
+              <li key={p.tone}>
+                <button
+                  type="button"
+                  onClick={() => improve(p.tone)}
+                  className="flex w-full flex-col rounded-md px-2.5 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:bg-muted"
+                >
+                  <span className="text-[13px] font-medium text-foreground">{p.label}</span>
+                  <span className="text-xs text-muted-foreground">{p.hint}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <form
+            className="mt-1 flex flex-col gap-1.5 border-t border-border px-1 pb-1 pt-2.5"
+            onSubmit={(e) => {
+              // Rendered in a portal but still inside the caller's React tree: keep the
+              // submit from reaching any form the editor is wrapped in.
+              e.preventDefault();
+              e.stopPropagation();
+              submitCustom();
+            }}
           >
-            <Wand2 className="size-3.5 text-primary" />
-            <span>Auto-Improve Copy</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleImprove("concise")}
-            className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
-          >
-            <Zap className="size-3.5 text-amber-500" />
-            <span>Make More Concise (-30%)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleImprove("executive")}
-            className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
-          >
-            <Briefcase className="size-3.5 text-blue-500" />
-            <span>Executive / Peer Tone</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleImprove("punchy_cta")}
-            className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
-          >
-            <Target className="size-3.5 text-emerald-500" />
-            <span>Strengthen Call to Action</span>
-          </button>
-
-          <div className="pt-2 border-t border-border/50 px-1 space-y-1.5">
-            <Label className="text-[10px] uppercase font-semibold text-muted-foreground">Custom Request</Label>
-            <div className="flex items-center gap-1">
+            <label htmlFor={customId} className="px-1 text-xs font-medium text-muted-foreground">
+              Or describe the change
+            </label>
+            <div className="flex items-center gap-1.5">
               <Input
-                placeholder="e.g. Add humor, mention SOC2"
-                value={customPrompt}
-                onChange={(e) => setCustomPrompt(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && customPrompt.trim()) {
-                    e.preventDefault();
-                    handleImprove("custom", customPrompt.trim());
-                  }
-                }}
-                className="h-7 text-xs"
+                id={customId}
+                value={custom}
+                maxLength={2000}
+                onChange={(e) => setCustom(e.target.value)}
+                placeholder="Mention our SOC 2 report"
+                className="h-8 text-[13px]"
               />
               <Button
-                type="button"
-                size="sm"
-                variant="default"
-                disabled={!customPrompt.trim()}
-                onClick={() => handleImprove("custom", customPrompt.trim())}
-                className="h-7 px-2"
+                type="submit"
+                size="icon-sm"
+                aria-label="Ask the AI"
+                disabled={!custom.trim()}
               >
-                <ArrowRight className="size-3" />
+                <ArrowRight />
               </Button>
             </div>
-          </div>
+          </form>
         </PopoverContent>
       </Popover>
 
-      {/* Review Dialog */}
       <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
-        <DialogContent className="max-w-2xl p-6 space-y-4">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <div className="flex items-center gap-2">
-              <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Sparkles className="size-4" />
-              </span>
-              <DialogTitle className="text-base font-semibold">Review AI Suggestion</DialogTitle>
-            </div>
-            <DialogDescription className="text-xs text-muted-foreground">
-              {suggestion?.changesSummary || "Review the enhanced copy before applying to your sequence."}
+            <DialogTitle>Review the suggestion</DialogTitle>
+            <DialogDescription>
+              {suggestion?.changesSummary || "Compare with your version, then apply it or keep yours."}
             </DialogDescription>
           </DialogHeader>
-
           {suggestion ? (
-            <div className="space-y-3">
-              <div className="rounded-lg border border-border/80 bg-background p-3 space-y-1">
-                <span className="text-[11px] font-semibold text-muted-foreground uppercase">Suggested Subject</span>
-                <p className="text-sm font-semibold text-foreground">{suggestion.subject}</p>
+            <div className="flex flex-col divide-y divide-border rounded-lg border border-border">
+              <div className="flex flex-col gap-1 px-4 py-3">
+                <span className="text-xs text-muted-foreground">Subject</span>
+                <p className="text-sm font-medium text-foreground">{suggestion.subject || "No subject"}</p>
+                {subject && subject !== suggestion.subject ? (
+                  <p className="text-xs text-subtle-foreground">
+                    Was: <span className="line-through">{subject}</span>
+                  </p>
+                ) : null}
               </div>
-
-              <div className="rounded-lg border border-border/80 bg-background p-4 space-y-1">
-                <span className="text-[11px] font-semibold text-muted-foreground uppercase">Suggested Body</span>
-                <p className="text-xs whitespace-pre-wrap leading-relaxed text-foreground/90">{suggestion.bodyText}</p>
+              <div className="flex max-h-[45dvh] flex-col gap-1 overflow-y-auto px-4 py-3">
+                <span className="text-xs text-muted-foreground">Email</span>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{suggestion.bodyText}</p>
               </div>
             </div>
           ) : null}
-
-          <DialogFooter className="flex items-center justify-between sm:justify-between pt-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setReviewOpen(false)}>
-              Discard
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setReviewOpen(false)}>
+              Keep mine
             </Button>
-            <Button type="button" size="sm" onClick={handleAccept} className="gap-1.5 font-semibold">
-              <Check className="size-3.5" />
-              Apply to Sequence
+            <Button type="button" onClick={apply}>
+              Apply suggestion
             </Button>
           </DialogFooter>
         </DialogContent>

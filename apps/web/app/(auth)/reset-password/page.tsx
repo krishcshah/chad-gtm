@@ -1,9 +1,13 @@
 import Link from "next/link";
+import { LinkIcon } from "lucide-react";
+import { Button } from "@smartreach/ui";
 import { authLinkErrorMessage, firstParam } from "@/lib/auth-redirects";
-import { AuthCard, AuthNotice } from "../auth-card";
+import { AuthCard, authLinkClass } from "../auth-card";
 import { ResetPasswordForm } from "./reset-password-form";
 
 export const dynamic = "force-dynamic";
+
+export const metadata = { title: "Choose a new password" };
 
 /**
  * better-auth redirects the emailed link here with ?token=… (valid) or
@@ -21,22 +25,19 @@ export default async function ResetPasswordPage({
   if (error) {
     return (
       <AuthCard
-        title="Reset link not valid"
+        icon={LinkIcon}
+        tone="warning"
+        title="This reset link doesn't work"
+        description={`${error} Reset links work once and expire after 1 hour.`}
         footer={
-          <Link href="/login" className="text-zinc-100 hover:underline transition-colors font-medium">
+          <Link href="/login" className={authLinkClass}>
             Back to sign in
           </Link>
         }
       >
-        <div className="space-y-4">
-          <AuthNotice>{error} Reset links work once and expire after 1 hour.</AuthNotice>
-          <Link
-            href="/forgot-password"
-            className="flex h-10 w-full items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950/60 text-sm text-zinc-200 transition-colors hover:border-zinc-700 hover:bg-zinc-900 hover:text-white"
-          >
-            Send a new link
-          </Link>
-        </div>
+        <Button asChild className="h-10 w-full">
+          <Link href="/forgot-password">Send a new link</Link>
+        </Button>
       </AuthCard>
     );
   }

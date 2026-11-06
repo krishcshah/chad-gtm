@@ -1,17 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal, Pause, Play, Archive, Trash2, Copy } from "lucide-react";
+import { Archive, Copy, MoreHorizontal, Pause, Play, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Button,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  ConfirmDialog,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -20,143 +16,156 @@ import {
 } from "@smartreach/ui";
 import { campaignAction, duplicateCampaignToDraft } from "@/lib/actions";
 
-export function CampaignActions({
-  id,
-  status,
-  showDeleteDirect = false,
-}: {
-  id: string;
-  status: string;
-  showDeleteDirect?: boolean;
-}) {
+type CampaignCommand = Parameters<typeof campaignAction>[1];
+
+/** What the main status action does for a campaign in a given state. */
+export function statusCommand(status: string): {
+  kind: "draft" | "command";
+  command?: CampaignCommand;
+  label: string;
+} {
+  if (status === "draft") return { kind: "draft", label: "Continue setup" };
+  if (status === "running") return { kind: "command", command: "pause", label: "Pause" };
+  if (status === "paused") return { kind: "command", command: "resume", label: "Resume" };
+  if (status === "scheduled") return { kind: "command", command: "start", label: "Start now" };
+  return { kind: "command", command: "start", label: "Start again" };
+}
+
+function useCampaignCommands(id: string) {
   const [pending, start] = useTransition();
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const router = useRouter();
 
-  const run = (action: Parameters<typeof campaignAction>[1]) =>
-    start(async () => {
-      const res = await campaignAction(id, action);
-      if (res.ok) {
-        toast.success(res.message ?? "Done");
-        if (action === "delete") {
-          setConfirmOpen(false);
-          router.push("/campaigns");
-        } else {
+  const run = (command: CampaignCommand) =>
+    new Promise<void>((resolve) => {
+      start(async () => {
+        const res = await campaignAction(id, command);
+        if (res.ok) {
+          toast.success(res.message ?? "Done");
+          if (command === "delete") router.push("/campaigns");
           router.refresh();
+        } else {
+          toast.error(res.error);
         }
-      } else {
-        toast.error(res.error);
-      }
+        resolve();
+      });
     });
 
-  const handleDuplicate = () =>
+  const duplicate = () =>
     start(async () => {
       const res = await duplicateCampaignToDraft(id);
       if (res.ok && res.data?.draftId) {
-        toast.success("Campaign duplicated into editor");
+        toast.success("Copy created. Review it before you start it.");
         router.push(`/campaigns/new?draft=${res.data.draftId}`);
       } else {
-        toast.error(res.ok ? "Duplicate failed" : res.error);
+        toast.error(res.ok ? "Could not duplicate this campaign." : res.error);
       }
     });
 
-  const running = status === "running";
+  return { pending, run, duplicate };
+}
+
+/** Start / pause / resume button for the campaign detail header. */
+export function CampaignStatusButton({ id, status }: { id: string; status: string }) {
+  const { pending, run } = useCampaignCommands(id);
+  const action = statusCommand(status);
+
+  if (action.kind === "draft") {
+    return (
+      <Button asChild>
+        <Link href={`/campaigns/new?draft=${id}`}>
+          <Play />
+          {action.label}
+        </Link>
+      </Button>
+    );
+  }
+
+  const Icon = action.command === "pause" ? Pause : Play;
+  return (
+    <Button
+      variant={action.command === "pause" ? "outline" : "primary"}
+      loading={pending}
+      onClick={() => action.command && void run(action.command)}
+    >
+      {pending ? null : <Icon />}
+      {action.label}
+    </Button>
+  );
+}
+
+/**
+ * Row and header overflow menu: status action (optional), duplicate, archive
+ * and delete. Delete is confirmed and names the campaign.
+ */
+export function CampaignActions({
+  id,
+  status,
+  name,
+  includeStatusAction = true,
+  triggerVariant = "ghost",
+}: {
+  id: string;
+  status: string;
+  name?: string;
+  /** Hide start/pause when the page already shows them as a button. */
+  includeStatusAction?: boolean;
+  triggerVariant?: "ghost" | "outline";
+}) {
+  const { pending, run, duplicate } = useCampaignCommands(id);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const router = useRouter();
+  const action = statusCommand(status);
+  const label = name ? `Actions for ${name}` : "Campaign actions";
 
   return (
     <>
-      <div className="flex items-center gap-1.5">
-        {showDeleteDirect && (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
           <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setConfirmOpen(true)}
+            variant={triggerVariant}
+            size={triggerVariant === "outline" ? "icon" : "icon-sm"}
             disabled={pending}
-            className="rounded-lg border-red-900/60 bg-red-950/20 text-red-400 hover:bg-red-900/30 hover:text-red-300 text-xs font-mono uppercase tracking-wider h-8 px-2.5 gap-1.5"
+            aria-label={label}
           >
-            <Trash2 className="size-3.5" />
-            <span>Delete</span>
+            <MoreHorizontal />
           </Button>
-        )}
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              disabled={pending}
-              aria-label="Campaign actions"
-              className="rounded-lg hover:bg-zinc-900 hover:text-white border border-transparent hover:border-zinc-800"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="rounded-lg border-zinc-800 bg-black font-mono">
-            {status === "draft" ? (
-              <DropdownMenuItem onClick={() => router.push(`/campaigns/new?draft=${id}`)}>
-                <Play className="h-4 w-4" /> Resume
-              </DropdownMenuItem>
-            ) : running ? (
-              <DropdownMenuItem onClick={() => run("pause")}>
-                <Pause className="h-4 w-4" /> Pause
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {includeStatusAction ? (
+            action.kind === "draft" ? (
+              <DropdownMenuItem onSelect={() => router.push(`/campaigns/new?draft=${id}`)}>
+                <Play /> {action.label}
               </DropdownMenuItem>
             ) : (
-              <DropdownMenuItem onClick={() => run(running ? "pause" : "resume")}>
-                <Play className="h-4 w-4" /> {status === "paused" ? "Resume" : "Start"}
+              <DropdownMenuItem onSelect={() => action.command && void run(action.command)}>
+                {action.command === "pause" ? <Pause /> : <Play />} {action.label}
               </DropdownMenuItem>
-            )}
-            <DropdownMenuItem onClick={handleDuplicate}>
-              <Copy className="h-4 w-4" /> Duplicate
+            )
+          ) : null}
+          <DropdownMenuItem onSelect={duplicate}>
+            <Copy /> Duplicate
+          </DropdownMenuItem>
+          {status !== "archived" ? (
+            <DropdownMenuItem onSelect={() => void run("archive")}>
+              <Archive /> Archive
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => run("archive")}>
-              <Archive className="h-4 w-4" /> Archive
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-zinc-800" />
-            <DropdownMenuItem
-              onClick={() => setConfirmOpen(true)}
-              className="text-red-400 focus:bg-red-950/40 focus:text-red-300"
-            >
-              <Trash2 className="h-4 w-4" /> Delete Campaign
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+          ) : null}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem destructive onSelect={() => setConfirmOpen(true)}>
+            <Trash2 /> Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
-      {/* Confirmation Modal */}
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="rounded-lg border border-zinc-800 bg-zinc-950 font-mono text-zinc-100 max-w-md p-6">
-          <DialogHeader className="space-y-2 text-left">
-            <DialogTitle className="text-base font-bold uppercase tracking-wider text-white flex items-center gap-2">
-              <Trash2 className="size-4 text-red-500" /> Delete Campaign
-            </DialogTitle>
-            <DialogDescription className="text-xs text-zinc-400 font-sans leading-relaxed">
-              Are you sure you want to delete this campaign? All scheduled delivery pacing and pending outbound emails for this campaign will be immediately cancelled. This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-
-          <DialogFooter className="mt-6 flex flex-row justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setConfirmOpen(false)}
-              disabled={pending}
-              className="rounded-lg border-zinc-800 bg-black text-xs font-mono uppercase tracking-wider hover:bg-zinc-900"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => run("delete")}
-              disabled={pending}
-              className="rounded-lg bg-red-600 text-white hover:bg-red-700 text-xs font-mono uppercase tracking-wider font-semibold"
-            >
-              {pending ? "Deleting..." : "Confirm Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        destructive
+        title={name ? `Delete “${name}”?` : "Delete this campaign?"}
+        description="Sending stops and every email that is scheduled but not yet sent is cancelled. This cannot be undone."
+        confirmLabel="Delete campaign"
+        onConfirm={() => run("delete")}
+      />
     </>
   );
 }

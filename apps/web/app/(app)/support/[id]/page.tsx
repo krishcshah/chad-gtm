@@ -5,32 +5,22 @@ import { TicketThreadView } from "@/components/support/ticket-thread-view";
 
 export const dynamic = "force-dynamic";
 
-export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  return {
-    title: `Ticket #${id.slice(0, 8)} · Support & Feedback · AutoGTM`,
-  };
-}
+export const metadata = { title: "Support ticket" };
 
-export default async function SupportTicketDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function SupportTicketPage({ params }: { params: Promise<{ id: string }> }) {
   const { user } = await requireWorkspace();
   const { id } = await params;
 
+  // Returns null for unknown tickets and for tickets the user may not see.
   const data = await getTicketDetails(id, user);
   if (!data) notFound();
 
   return (
-    <div className="page-stack">
-      <TicketThreadView
-        ticket={data.ticket}
-        messages={data.messages}
-        isAdminUser={data.isAdminUser}
-        currentUserId={user.id}
-      />
-    </div>
+    <TicketThreadView
+      ticket={data.ticket}
+      messages={data.messages}
+      isAdminUser={data.isAdminUser}
+      currentUserId={user.id}
+    />
   );
 }
