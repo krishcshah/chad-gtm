@@ -2,7 +2,10 @@
 # Back up the AutoGTM Postgres database with pg_dump (custom format).
 #
 #   scripts/backup-db.sh                    -> $BACKUP_DIR/chadgtm-<UTC timestamp>.dump
-#   scripts/backup-db.sh predeploy-<sha>    -> $BACKUP_DIR/chadgtm-predeploy-<sha>.dump
+#   scripts/backup-db.sh <label>            -> $BACKUP_DIR/chadgtm-<label>.dump
+#
+# Never overwrites an existing dump: a second run with the same label fails.
+# The deploy uses predeploy-<sha>-<UTC timestamp>, unique per run.
 #
 # Env (all optional):
 #   DATABASE_URL     default: read from $ENV_FILE (never printed)
@@ -66,13 +69,19 @@ mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
 target="$BACKUP_DIR/chadgtm-$LABEL.dump"
 tmp="$target.partial"
+if [[ -e "$target" ]]; then
+  echo "[backup] $target already exists; refusing to overwrite it (use another label)" >&2
+  exit 1
+fi
 trap 'rm -f "$tmp"' EXIT
 
 echo "[backup] dumping database to $target"
 pg_dump --format=custom --compress=6 --file="$tmp" --dbname="$DATABASE_URL"
 # A dump that pg_restore cannot list is not a backup.
 pg_restore --list "$tmp" >/dev/null
-mv -f "$tmp" "$target"
+# ln + rm instead of mv: fails instead of replacing a dump that appeared meanwhile.
+ln "$tmp" "$target"
+rm -f "$tmp"
 trap - EXIT
 echo "[backup] ok: $(du -h "$target" | cut -f1) $target"
 

@@ -2,8 +2,10 @@ name: Deploy AutoGTM to Oracle VM
 
 # Deploys main to /home/ubuntu/chad-gtm (pm2: chadgtm-web on :3005, chadgtm-worker).
 # Never touches /home/ubuntu/smart-reach or SmartReach's PM2 processes.
-# Steps: lock -> pull --ff-only -> npm ci -> pg_dump -> db:migrate -> build -> pm2 reload -> health check.
-# The server-side steps after the pull live in scripts/deploy-remote.sh.
+# Steps: lock -> fetch -> preflight (env/db check) -> fast-forward -> npm ci -> pg_dump -> db:migrate
+#        -> build -> pm2 reload -> health check. A failure before the reload restores the previous
+#        commit, node_modules and .next. The server-side steps live in scripts/deploy-remote.sh,
+#        run from the fetched commit. Timing: lock wait 10 min + deploy (~25 min worst case) < 55m.
 # Manual equivalent: scripts/deploy_remote_chadgtm.py. Runbook: docs/OPERATIONS.md.
 #
 # Repository secrets: SERVER_HOST, SERVER_USER, SSH_PRIVATE_KEY (a dedicated deploy key);
@@ -26,7 +28,7 @@ jobs:
   deploy:
     name: Deploy to Oracle VM
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 65
     steps:
       - name: Check deploy secrets
         env:
@@ -50,7 +52,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           fingerprint: ${{ secrets.SERVER_FINGERPRINT }}
-          command_timeout: 45m
+          command_timeout: 55m
           # Keep this block identical to BOOTSTRAP in scripts/deploy_remote_chadgtm.py.
           script: |
             bash -s <<'DEPLOY'
@@ -60,17 +62,26 @@ jobs:
             # Same lock as SmartReach's deploy, so two builds never run at once on the VM.
             exec 9>>"$LOCK_FILE"
             echo "==> waiting for deploy lock $LOCK_FILE"
-            flock -w 1800 9 || { echo "!! could not get the deploy lock within 30 minutes" >&2; exit 1; }
+            # 10 min wait + a worst-case deploy (~25 min) stays well inside command_timeout (55m).
+            flock -w 600 9 || { echo "!! could not get the deploy lock within 10 minutes" >&2; exit 1; }
             export DEPLOY_LOCK_HELD=1
             cd "$APP_DIR"
             branch="$(git rev-parse --abbrev-ref HEAD)"
             [ "$branch" = "main" ] || { echo "!! $APP_DIR is on branch $branch, expected main" >&2; exit 1; }
             # Old deploys ran npm install, which rewrote the lockfile; drop that drift.
             git checkout -- package-lock.json 2>/dev/null || true
-            PREVIOUS_SHA="$(git rev-parse --short=12 HEAD)"
-            export PREVIOUS_SHA
-            # data/leads.db.gz is no longer tracked, so the pull deletes it: unpack it first if it is the only copy.
+            # data/leads.db.gz is no longer tracked, so moving to main deletes it: unpack it first if it is the only copy.
             if [ ! -s data/leads.db ] && [ -s data/leads.db.gz ]; then gunzip -k data/leads.db.gz; fi
-            git pull --ff-only origin main
-            exec bash scripts/deploy-remote.sh
+            # Fetch only: the checkout (and so the code the running processes restart
+            # into) stays as it is until deploy-remote.sh's preflight has passed.
+            git fetch --quiet origin main
+            TARGET_SHA="$(git rev-parse FETCH_HEAD)"
+            export TARGET_SHA APP_DIR
+            DEPLOY_SCRIPTS_DIR="$(mktemp -d)/scripts"
+            export DEPLOY_SCRIPTS_DIR
+            git archive "$TARGET_SHA" scripts/deploy-remote.sh scripts/check-deploy-env.mjs | tar -x -C "${DEPLOY_SCRIPTS_DIR%/scripts}"
+            rc=0
+            bash "$DEPLOY_SCRIPTS_DIR/deploy-remote.sh" || rc=$?
+            rm -rf "${DEPLOY_SCRIPTS_DIR%/scripts}"
+            exit "$rc"
             DEPLOY

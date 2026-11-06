@@ -96,10 +96,13 @@ Production is a single Oracle VM: checkout in `/home/ubuntu/chad-gtm`, PM2 proce
 (:3005, behind Caddy at https://autogtm.tech) and `chadgtm-worker`, Postgres database `chadgtm`.
 
 Pushing to `main` runs `.github/workflows/deploy.yml` (needs the `SERVER_HOST`, `SERVER_USER` and
-`SSH_PRIVATE_KEY` repository secrets). It takes the deploy lock, `git pull --ff-only`, then
-`scripts/deploy-remote.sh`: `npm ci` → `pg_dump` backup → **`db:migrate`** → build →
-`pm2 reload chadgtm-web` / `chadgtm-worker` → health check on `/api/health`, printing PM2 logs and
-failing on error. Only the two AutoGTM processes are touched, never `pm2 all`.
+`SSH_PRIVATE_KEY` repository secrets). It takes the deploy lock, fetches `main`, and runs
+`scripts/deploy-remote.sh` from the fetched commit: preflight (including a check that web, worker
+and migrations all use the `chadgtm` database) → fast-forward → `npm ci` → `pg_dump` backup →
+**`db:migrate`** → build → `pm2 reload chadgtm-web` / `chadgtm-worker` → health check on
+`/api/health`. A failure before the reload puts the previous commit, `node_modules` and `.next`
+back. The (public) workflow log shows pm2 status only, never application logs. Only the two
+AutoGTM processes are touched, never `pm2 all`.
 
 Manual deploy, same steps: `SERVER_HOST=<vm> python3 scripts/deploy_remote_chadgtm.py`.
 
