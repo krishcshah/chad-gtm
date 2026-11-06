@@ -7,6 +7,7 @@ import { schema, encryptSecret } from "@smartreach/database";
 import { nowIso } from "@smartreach/shared";
 import { hasWarmupMarker, stripWarmupMarker } from "./sender-warmup";
 import { patchChangesCredentials, poolActivationBlocker } from "./pool-mailbox-import";
+import { senderEndpointPatchError } from "./mail-host-guard";
 
 const { senderAccounts } = schema;
 
@@ -174,6 +175,17 @@ export async function updateSenderDetailsForUser(
     if (data.imapPassword !== undefined && data.imapPassword.trim() !== "") {
       patch.imapPasswordEnc = encryptSecret(data.imapPassword.trim());
     }
+
+    // Only public mail servers on mail ports (the server action also resolves new hosts).
+    const changed = (key: "smtpHost" | "smtpPort" | "imapHost" | "imapPort") =>
+      patch[key] !== undefined && patch[key] !== sender[key] ? patch[key] : undefined;
+    const endpointError = senderEndpointPatchError({
+      smtpHost: changed("smtpHost"),
+      smtpPort: changed("smtpPort"),
+      imapHost: changed("imapHost"),
+      imapPort: changed("imapPort"),
+    });
+    if (endpointError) return { ok: false, error: endpointError };
 
     // A shared pool mailbox with new login details must pass a new test before it sends again.
     const needsRetest = Boolean(sender.isSystemPool) && patchChangesCredentials(patch);

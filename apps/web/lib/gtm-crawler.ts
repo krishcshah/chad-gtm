@@ -2,6 +2,7 @@ import fs from "node:fs";
 import * as cheerio from "cheerio";
 import { extractBookingLinks, pickBestBookingUrl } from "./booking-links";
 import { checkUrlSyntax, isPublicUrl, safeFetchText } from "./url-guard";
+import { chromiumProxyArgs, startGuardedProxy, type GuardedProxy } from "./guarded-proxy";
 
 export interface PricingTier {
   name: string;
@@ -336,22 +337,35 @@ function isThinContent(page: CrawledPageContent): boolean {
   return page.wordCount < THIN_WORD_THRESHOLD || substantive < 4;
 }
 
-class HeadlessRenderer {
+/** Test seam: how the renderer starts the egress proxy and loads puppeteer. */
+export const headlessDeps = {
+  startProxy: (): Promise<GuardedProxy> => startGuardedProxy(),
+  loadPuppeteer: (): Promise<any> => import("puppeteer-core"),
+  resolveExecutable: (): string | null => resolveChromeExecutable(),
+};
+
+export class HeadlessRenderer {
   private browser: any = null;
+  private proxy: GuardedProxy | null = null;
   private launching: Promise<any> | null = null;
   private unavailable = false;
 
   private async getBrowser(): Promise<any> {
     if (this.browser) return this.browser;
     if (this.launching) return this.launching;
-    const executablePath = resolveChromeExecutable();
+    const executablePath = headlessDeps.resolveExecutable();
     if (!executablePath) {
       this.unavailable = true;
       console.warn("[gtm-crawler] No Chromium executable found; skipping headless fallback.");
       return null;
     }
     this.launching = (async () => {
-      const puppeteer = await import("puppeteer-core");
+      // All Chromium traffic goes through an in-process proxy that resolves
+      // names itself and only connects to validated public IPs. Chromium
+      // never does its own DNS, so a rebinding host can't reach internal
+      // addresses after the interception check passed.
+      this.proxy = await headlessDeps.startProxy();
+      const puppeteer = await headlessDeps.loadPuppeteer();
       const launch = (puppeteer as any).default?.launch ?? (puppeteer as any).launch;
       this.browser = await launch({
         executablePath,
@@ -364,6 +378,7 @@ class HeadlessRenderer {
           "--no-first-run",
           "--no-zygote",
           "--disable-background-networking",
+          ...chromiumProxyArgs(this.proxy.url),
         ],
         protocolTimeout: HEADLESS_TIMEOUT_MS,
       });
@@ -374,10 +389,17 @@ class HeadlessRenderer {
     } catch (err: any) {
       this.unavailable = true;
       console.warn("[gtm-crawler] Chromium launch failed:", err?.message || err);
+      await this.closeProxy();
       return null;
     } finally {
       this.launching = null;
     }
+  }
+
+  private async closeProxy(): Promise<void> {
+    const proxy = this.proxy;
+    this.proxy = null;
+    if (proxy) await proxy.close().catch(() => undefined);
   }
 
   async render(url: string): Promise<string | null> {
@@ -408,10 +430,12 @@ class HeadlessRenderer {
   }
 
   async close(): Promise<void> {
+    if (this.launching) await this.launching.catch(() => undefined);
     if (this.browser) {
       await this.browser.close().catch(() => undefined);
       this.browser = null;
     }
+    await this.closeProxy();
   }
 }
 
@@ -420,12 +444,21 @@ class HeadlessRenderer {
  * (navigation, each redirect hop, subresources, XHR/fetch) is checked against
  * the SSRF guard before Chromium may send it. Service workers are bypassed so
  * every request is visible here, and WebSocket/WebRTC/WebTransport (which
- * request interception does not see) are removed from the page.
+ * request interception does not see) and workers (whose sockets it does not
+ * see either) are removed from the page. This is defense in depth: the egress
+ * proxy (./guarded-proxy) is what pins every connection to a public IP.
  */
 async function guardHeadlessPage(page: any): Promise<void> {
   await page.setBypassServiceWorker?.(true);
   await page.evaluateOnNewDocument(() => {
-    for (const name of ["WebSocket", "WebTransport", "RTCPeerConnection", "webkitRTCPeerConnection"]) {
+    for (const name of [
+      "WebSocket",
+      "WebTransport",
+      "RTCPeerConnection",
+      "webkitRTCPeerConnection",
+      "Worker",
+      "SharedWorker",
+    ]) {
       try {
         Object.defineProperty(window, name, { value: undefined, configurable: false, writable: false });
       } catch {

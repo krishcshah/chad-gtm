@@ -60,9 +60,12 @@ import { getDb } from "./db";
 import { requireUser } from "./session";
 import { isAdmin } from "./admin";
 import { APPROVAL_REQUIRED_ERROR, assertCanSend } from "./approval";
+import { mailHostError, senderEndpointPatchError, senderEndpointsError } from "./mail-host-guard";
 import { campaignStartPostalError } from "./campaign-start-guard";
 import {
+  isAutopilotCampaign,
   poolCampaignEditError,
+  poolCampaignSenderChangeError,
   poolLeadEditError,
   poolListEditError,
   poolTemplateEditError,
@@ -163,20 +166,6 @@ async function loadAttachedSenderRefs(db: DbHandle, campaignId: string): Promise
     .from(campaignSenders)
     .innerJoin(senderAccounts, eq(senderAccounts.id, campaignSenders.senderId))
     .where(eq(campaignSenders.campaignId, campaignId));
-}
-
-/** Autopilot campaigns are the ones the AutoGTM launcher linked to a run. */
-async function isAutopilotCampaign(db: DbHandle, campaignId: string): Promise<boolean> {
-  try {
-    const [row] = await db
-      .select({ id: schema.chadGtmRuns.id })
-      .from(schema.chadGtmRuns)
-      .where(eq(schema.chadGtmRuns.campaignId, campaignId))
-      .limit(1);
-    return Boolean(row);
-  } catch {
-    return false;
-  }
 }
 
 /** Requested sender ids from a wizard payload (undefined when the field is absent). */
@@ -583,6 +572,9 @@ export async function createSender(input: unknown): Promise<ActionResult<{ id: s
   const workspace = await getActiveWorkspace(user.id);
   const parsed = senderCreateSchema.safeParse(input);
   if (!parsed.success) return zodFail(parsed.error);
+  // Only public mail servers on mail ports (the engine connects to these).
+  const endpointError = await senderEndpointsError(parsed.data);
+  if (endpointError) return { ok: false, error: endpointError };
   const db = getDb();
   try {
     const [row] = await db
@@ -637,6 +629,16 @@ export async function updateSenderDetails(
   data: Parameters<typeof updateSenderDetailsForUser>[3],
 ): Promise<ActionResult> {
   const user = await requireUser();
+  // Pure shape/port checks run in updateSenderDetailsForUser; resolve new hosts here.
+  for (const [kind, host] of [
+    ["smtp", data?.smtpHost],
+    ["imap", data?.imapHost],
+  ] as const) {
+    if (typeof host === "string" && host.trim()) {
+      const hostError = await mailHostError(kind, host);
+      if (hostError) return { ok: false, error: hostError };
+    }
+  }
   const result = await updateSenderDetailsForUser(getDb(), user.id, senderId, data);
   if (result.ok) revalidatePath("/senders");
   return result;
@@ -666,6 +668,9 @@ export async function retestSenderConnection(senderId: string): Promise<
       .limit(1);
 
     if (!sender) return { ok: false, error: "Sender not found" };
+
+    const endpointError = await senderEndpointsError(sender);
+    if (endpointError) return { ok: false, error: endpointError };
 
     const { testConnection } = await import("@smartreach/email-engine/mailer");
     const result = await testConnection(sender as any);
@@ -732,6 +737,23 @@ export async function bulkUpdateSenders(
   const user = await requireUser();
   if (!senderIds || senderIds.length === 0) {
     return { ok: false, error: "No senders selected" };
+  }
+  const endpointPatch = {
+    smtpHost: updates.smtpHost?.trim() ? updates.smtpHost : undefined,
+    smtpPort: updates.smtpPort !== undefined && !isNaN(updates.smtpPort) ? updates.smtpPort : undefined,
+    imapHost: updates.imapHost?.trim() ? updates.imapHost : undefined,
+    imapPort: updates.imapPort !== undefined && !isNaN(updates.imapPort) ? updates.imapPort : undefined,
+  };
+  const patchError = senderEndpointPatchError(endpointPatch);
+  if (patchError) return { ok: false, error: patchError };
+  for (const [kind, host] of [
+    ["smtp", endpointPatch.smtpHost],
+    ["imap", endpointPatch.imapHost],
+  ] as const) {
+    if (host) {
+      const hostError = await mailHostError(kind, host);
+      if (hostError) return { ok: false, error: hostError };
+    }
   }
 
   const db = getDb();
@@ -1319,28 +1341,39 @@ export async function updateCampaignSettings(
       .where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, user.id), isNull(campaigns.deletedAt)));
     if (!c) return { ok: false, error: "Campaign not found" };
 
-    // Validate mailboxes before changing anything. Pool mailboxes may only stay
-    // on the autopilot campaign they were attached to; they can't be added.
+    // Validate mailboxes before changing anything. On a pool campaign
+    // (autopilot-linked, or with shared mailboxes attached) a non-admin can't
+    // change the mailboxes at all: detaching the pool mailboxes would unlock
+    // the list/template/sequence while the engine still sends the campaign
+    // from the shared pool. Resubmitting the same set is a no-op.
     let targetSenderIds: string[] | null = null;
     if (Array.isArray(input.senderIds)) {
       const userIsAdmin = isAdmin(user);
-      const keepPoolIds = new Set<string>();
-      if (!userIsAdmin && (await isAutopilotCampaign(db, campaignId))) {
-        for (const s of await loadAttachedSenderRefs(db, campaignId)) {
-          if (s.isSystemPool) keepPoolIds.add(s.id);
-        }
-      }
       const requested = input.senderIds.filter((id): id is string => typeof id === "string");
-      const partition = partitionCampaignSenders({
-        senderIds: requested,
-        senders: await loadSenderRefs(db, requested),
-        userId: user.id,
-        isAdmin: userIsAdmin,
-        keepPoolIds,
-      });
-      const senderError = senderPartitionError(partition);
-      if (senderError) return { ok: false, error: senderError };
-      targetSenderIds = partition.allowed;
+      let lockedNoop = false;
+      if (!userIsAdmin) {
+        const attached = await loadAttachedSenderRefs(db, campaignId);
+        const autopilot = await isAutopilotCampaign(db, campaignId);
+        const lockError = poolCampaignSenderChangeError({
+          isAdmin: false,
+          isAutopilotCampaign: autopilot,
+          attached,
+          requested,
+        });
+        if (lockError) return { ok: false, error: lockError };
+        lockedNoop = autopilot || attached.some((s) => s.isSystemPool);
+      }
+      if (!lockedNoop) {
+        const partition = partitionCampaignSenders({
+          senderIds: requested,
+          senders: await loadSenderRefs(db, requested),
+          userId: user.id,
+          isAdmin: userIsAdmin,
+        });
+        const senderError = senderPartitionError(partition);
+        if (senderError) return { ok: false, error: senderError };
+        targetSenderIds = partition.allowed;
+      }
     }
 
     const updateData: Record<string, unknown> = { updatedAt: nowIso() };
@@ -1397,6 +1430,9 @@ export async function testSenderConnection(input: unknown): Promise<
     })
     .safeParse(input ?? {});
   if (!parsed.success) return zodFail(parsed.error);
+  // No probing of loopback/private/metadata addresses or non-mail ports.
+  const endpointError = await senderEndpointsError(parsed.data);
+  if (endpointError) return { ok: false, error: endpointError };
 
   try {
     const { testConnection } = await import("@smartreach/email-engine/mailer");

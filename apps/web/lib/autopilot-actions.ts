@@ -572,6 +572,19 @@ export async function resolveAgentRequestAction(input: {
     .where(eq(schema.senderAccounts.id, reply.senderId))
     .limit(1);
   if (!sender) return { ok: false, error: "The mailbox for this thread is no longer available." };
+  // Only the owner's own mailbox, or a shared-pool mailbox the platform sent
+  // from on their behalf. Pool mailboxes need an approved account: a revoked
+  // account must not keep sending free text from the shared pool.
+  if (!sender.isSystemPool && sender.userId !== user.id) {
+    return { ok: false, error: "The mailbox for this thread is no longer available." };
+  }
+  if (sender.isSystemPool) {
+    try {
+      await assertCanSend(user.id);
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : APPROVAL_REQUIRED_ERROR };
+    }
+  }
 
   // Do not message someone who opted out since the request was created.
   const [suppressed] = await db

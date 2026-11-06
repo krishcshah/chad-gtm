@@ -60,6 +60,7 @@ describe("directory paywall (server side)", () => {
       page: 1,
       pageSize: DIRECTORY_PREVIEW_PAGE_SIZE,
       industries: ["x"],
+      searchContactFields: false,
     });
     expect(clampDirectorySearchParams({ pageSize: 5 }, "none").pageSize).toBe(5);
     expect(clampDirectorySearchParams({ page: 40, pageSize: 100 }, "paid")).toEqual({ page: 40, pageSize: 100 });
