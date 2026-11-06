@@ -1,184 +1,261 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { CheckCircle2, Clock, ExternalLink, Loader2, UserCheck, UserX } from "lucide-react";
-import { Button } from "@smartreach/ui";
+import { useEffect, useMemo, useState } from "react";
+import { ExternalLink, UserCheck, UserX, UsersRound } from "lucide-react";
+import { formatDateTime, timeAgo } from "@smartreach/shared";
+import {
+  Badge,
+  Button,
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  ConfirmDialog,
+  EmptyState,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  toast,
+} from "@smartreach/ui";
 import type { AccountApprovalRow, AccountApprovalsPayload } from "@/lib/account-approvals";
 import { approveUserAction, revokeUserApprovalAction } from "@/lib/admin-actions";
+import { NoMatches, SearchField } from "./admin-ui";
 
-function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
+type Pending = { kind: "approve" | "revoke"; row: AccountApprovalRow } | null;
 
 function websiteHref(url: string): string {
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
 }
 
-function UserCell({ row }: { row: AccountApprovalRow }) {
+function matches(row: AccountApprovalRow, q: string) {
+  if (!q) return true;
+  return [row.name, row.email, row.website ?? ""].some((v) => v.toLowerCase().includes(q));
+}
+
+/** Accounts waiting for approval to send, plus recently approved ones that can be revoked. */
+export function AdminApprovalsView({
+  initial,
+  onPendingCountChange,
+}: {
+  initial: AccountApprovalsPayload;
+  onPendingCountChange?: (count: number) => void;
+}) {
+  const [pending, setPending] = useState(initial.pending);
+  const [approved, setApproved] = useState(initial.recentlyApproved);
+  // `confirm` keeps the last target so the dialog text does not change while it animates closed.
+  const [confirm, setConfirm] = useState<Pending>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const ask = (next: NonNullable<Pending>) => {
+    setConfirm(next);
+    setConfirmOpen(true);
+  };
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    onPendingCountChange?.(pending.length);
+  }, [pending.length, onPendingCountChange]);
+
+  const q = search.trim().toLowerCase();
+  const visiblePending = useMemo(() => pending.filter((r) => matches(r, q)), [pending, q]);
+  const visibleApproved = useMemo(() => approved.filter((r) => matches(r, q)), [approved, q]);
+
+  const approve = async (row: AccountApprovalRow) => {
+    try {
+      const res = await approveUserAction(row.userId);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      setPending((prev) => prev.filter((r) => r.userId !== row.userId));
+      setApproved((prev) => [{ ...row, approvedAt: new Date().toISOString() }, ...prev]);
+      if (res.warning) toast.warning(`${row.email}: ${res.warning}`);
+      else toast.success(`Approved ${row.email}${res.emailed ? " and emailed them." : "."}`);
+    } catch {
+      toast.error("Could not approve. Try again.");
+    }
+  };
+
+  const revoke = async (row: AccountApprovalRow) => {
+    try {
+      const res = await revokeUserApprovalAction(row.userId);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      setApproved((prev) => prev.filter((r) => r.userId !== row.userId));
+      setPending((prev) =>
+        [{ ...row, approvedAt: null }, ...prev].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      );
+      toast.success(`Revoked ${row.email}.`);
+    } catch {
+      toast.error("Could not revoke. Try again.");
+    }
+  };
+
   return (
-    <div className="min-w-0">
-      <div className="flex items-center gap-2">
-        <span className="truncate text-sm font-medium text-zinc-100">{row.name || row.email}</span>
-        {!row.emailVerified && (
-          <span className="rounded-full border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-zinc-400">
-            Unverified
-          </span>
-        )}
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
+          New accounts can set everything up, but nothing sends until you approve them.{" "}
+          {initial.emailOnApprove
+            ? "Approving emails the user."
+            : "No system mailer is configured, so approvals are not emailed."}
+        </p>
+        {pending.length + approved.length > 0 ? (
+          <SearchField value={search} onChange={setSearch} placeholder="Search name, email or website" label="Search accounts" />
+        ) : null}
       </div>
-      <div className="truncate text-xs text-zinc-500">{row.email}</div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Waiting for approval</CardTitle>
+          <CardDescription>
+            {pending.length === 0
+              ? "Nobody is waiting."
+              : `${pending.length.toLocaleString()} ${pending.length === 1 ? "account" : "accounts"}, newest first.`}
+          </CardDescription>
+        </CardHeader>
+        {pending.length === 0 ? (
+          <EmptyState
+            compact
+            icon={UserCheck}
+            title="Nobody is waiting for approval"
+            description="New sign-ups appear here. They can explore the app while they wait."
+          />
+        ) : visiblePending.length === 0 ? (
+          <NoMatches what="accounts" onClear={() => setSearch("")} />
+        ) : (
+          <AccountTable
+            rows={visiblePending}
+            dateLabel="Signed up"
+            date={(r) => r.createdAt}
+            action={(row) => (
+              <Button variant="outline" size="sm" onClick={() => ask({ kind: "approve", row })}>
+                <UserCheck />
+                Approve
+              </Button>
+            )}
+          />
+        )}
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Recently approved</CardTitle>
+          <CardDescription>Most recent approvals first. Revoke one to stop that account sending.</CardDescription>
+        </CardHeader>
+        {approved.length === 0 ? (
+          <EmptyState compact icon={UsersRound} title="No approvals yet" description="Accounts you approve are listed here." />
+        ) : visibleApproved.length === 0 ? (
+          <NoMatches what="accounts" onClear={() => setSearch("")} />
+        ) : (
+          <AccountTable
+            rows={visibleApproved}
+            dateLabel="Approved"
+            date={(r) => r.approvedAt}
+            action={(row) => (
+              <Button variant="destructive-outline" size="sm" onClick={() => ask({ kind: "revoke", row })}>
+                <UserX />
+                Revoke
+              </Button>
+            )}
+          />
+        )}
+      </Card>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={
+          confirm?.kind === "revoke"
+            ? `Revoke approval for ${confirm.row.email}?`
+            : `Approve ${confirm?.row.email ?? "this account"}?`
+        }
+        description={
+          confirm?.kind === "revoke"
+            ? "Their campaigns stop sending until you approve them again. Their data is kept."
+            : initial.emailOnApprove
+              ? "They can start sending right away. We email them to say they are approved."
+              : "They can start sending right away. No email is sent because no system mailer is configured."
+        }
+        confirmLabel={confirm?.kind === "revoke" ? "Revoke approval" : "Approve account"}
+        destructive={confirm?.kind === "revoke"}
+        onConfirm={async () => {
+          if (!confirm) return;
+          if (confirm.kind === "approve") await approve(confirm.row);
+          else await revoke(confirm.row);
+        }}
+      />
     </div>
   );
 }
 
-function WebsiteCell({ url }: { url: string | null }) {
-  if (!url) return <span className="text-xs text-zinc-600">No run yet</span>;
+function AccountTable({
+  rows,
+  dateLabel,
+  date,
+  action,
+}: {
+  rows: AccountApprovalRow[];
+  dateLabel: string;
+  date: (row: AccountApprovalRow) => string | null;
+  action: (row: AccountApprovalRow) => React.ReactNode;
+}) {
   return (
-    <a
-      href={websiteHref(url)}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex max-w-[220px] items-center gap-1 truncate text-xs text-zinc-300 hover:text-white hover:underline"
-    >
-      <span className="truncate">{url.replace(/^https?:\/\//i, "")}</span>
-      <ExternalLink className="size-3 shrink-0" />
-    </a>
-  );
-}
-
-export function AdminApprovalsView({ initial }: { initial: AccountApprovalsPayload }) {
-  const [pending, setPending] = useState(initial.pending);
-  const [approved, setApproved] = useState(initial.recentlyApproved);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [message, setMessage] = useState<{ tone: "ok" | "warn" | "error"; text: string } | null>(null);
-  const [, startTransition] = useTransition();
-
-  const approve = (row: AccountApprovalRow) => {
-    setBusyId(row.userId);
-    setMessage(null);
-    startTransition(async () => {
-      try {
-        const res = await approveUserAction(row.userId);
-        if (!res.ok) return setMessage({ tone: "error", text: res.error });
-        setPending((prev) => prev.filter((r) => r.userId !== row.userId));
-        setApproved((prev) => [{ ...row, approvedAt: new Date().toISOString() }, ...prev]);
-        setMessage(
-          res.warning
-            ? { tone: "warn", text: `${row.email}: ${res.warning}` }
-            : { tone: "ok", text: `Approved ${row.email}${res.emailed ? " and emailed them." : "."}` },
-        );
-      } catch {
-        setMessage({ tone: "error", text: "Could not approve. Try again." });
-      } finally {
-        setBusyId(null);
-      }
-    });
-  };
-
-  const revoke = (row: AccountApprovalRow) => {
-    if (!window.confirm(`Revoke sending for ${row.email}? Their campaigns stop sending until you approve them again.`)) {
-      return;
-    }
-    setBusyId(row.userId);
-    setMessage(null);
-    startTransition(async () => {
-      try {
-        const res = await revokeUserApprovalAction(row.userId);
-        if (!res.ok) return setMessage({ tone: "error", text: res.error });
-        setApproved((prev) => prev.filter((r) => r.userId !== row.userId));
-        setPending((prev) => [{ ...row, approvedAt: null }, ...prev].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
-        setMessage({ tone: "ok", text: `Revoked ${row.email}.` });
-      } catch {
-        setMessage({ tone: "error", text: "Could not revoke. Try again." });
-      } finally {
-        setBusyId(null);
-      }
-    });
-  };
-
-  const toneClass =
-    message?.tone === "error"
-      ? "border-rose-500/30 bg-rose-500/10 text-rose-200"
-      : message?.tone === "warn"
-        ? "border-amber-500/30 bg-amber-950/30 text-amber-200"
-        : "border-emerald-500/30 bg-emerald-950/30 text-emerald-200";
-
-  return (
-    <section className="rounded-lg border border-zinc-800/80 bg-zinc-950/80 font-sans">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Clock className="size-4 text-amber-400" />
-          <h2 className="text-sm font-semibold text-zinc-100">Pending approval</h2>
-          <span className="rounded-full border border-amber-500/30 bg-amber-950/40 px-2 py-0.5 text-[10px] font-medium text-amber-400">
-            {pending.length}
-          </span>
-        </div>
-        <p className="text-[11px] text-zinc-500">
-          New accounts can set everything up; nothing sends until approved.
-          {initial.emailOnApprove ? " Approving emails the user." : " No system mailer: approvals are not emailed."}
-        </p>
-      </div>
-
-      {message && (
-        <div className={`mx-4 mt-3 rounded-lg border px-3 py-2 text-xs ${toneClass}`}>{message.text}</div>
-      )}
-
-      {pending.length === 0 ? (
-        <div className="flex items-center gap-2 px-4 py-6 text-xs text-zinc-500">
-          <CheckCircle2 className="size-4 text-emerald-400" /> Nobody is waiting for approval.
-        </div>
-      ) : (
-        <ul className="divide-y divide-zinc-800/80">
-          {pending.map((row) => (
-            <li key={row.userId} className="grid grid-cols-1 gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:items-center sm:gap-4">
-              <UserCell row={row} />
-              <WebsiteCell url={row.website} />
-              <span className="text-xs text-zinc-500">Signed up {formatDate(row.createdAt)}</span>
-              <Button
-                type="button"
-                variant="brand"
-                size="sm"
-                className="rounded-lg"
-                onClick={() => approve(row)}
-                disabled={busyId !== null}
-              >
-                {busyId === row.userId ? <Loader2 className="size-3 animate-spin" /> : <UserCheck className="size-3" />}
-                Approve
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {approved.length > 0 && (
-        <details className="border-t border-zinc-800/80">
-          <summary className="cursor-pointer select-none px-4 py-3 text-xs font-medium text-zinc-400 hover:text-zinc-200">
-            Recently approved ({approved.length})
-          </summary>
-          <ul className="divide-y divide-zinc-800/80">
-            {approved.map((row) => (
-              <li key={row.userId} className="grid grid-cols-1 gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:items-center sm:gap-4">
-                <UserCell row={row} />
-                <WebsiteCell url={row.website} />
-                <span className="text-xs text-zinc-500">Approved {formatDate(row.approvedAt)}</span>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  className="rounded-lg"
-                  onClick={() => revoke(row)}
-                  disabled={busyId !== null}
-                >
-                  {busyId === row.userId ? <Loader2 className="size-3 animate-spin" /> : <UserX className="size-3" />}
-                  Revoke
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-    </section>
+    <div className="mt-4 border-t border-border">
+      <Table className="min-w-[640px]">
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead>Account</TableHead>
+            <TableHead>Website</TableHead>
+            <TableHead>{dateLabel}</TableHead>
+            <TableHead className="text-right">
+              <span className="sr-only">Actions</span>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => {
+            const when = date(row);
+            return (
+              <TableRow key={row.userId}>
+                <TableCell className="max-w-[280px]">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-medium">{row.name || row.email}</span>
+                    {!row.emailVerified && <Badge variant="outline">Email not verified</Badge>}
+                  </div>
+                  {row.name ? <div className="truncate text-xs text-muted-foreground">{row.email}</div> : null}
+                </TableCell>
+                <TableCell className="max-w-[240px]">
+                  {row.website ? (
+                    <a
+                      href={websiteHref(row.website)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex max-w-full items-center gap-1 text-muted-foreground hover:text-foreground hover:underline"
+                    >
+                      <span className="truncate">{row.website.replace(/^https?:\/\//i, "")}</span>
+                      <ExternalLink className="size-3.5 shrink-0" aria-hidden />
+                      <span className="sr-only">(opens in a new tab)</span>
+                    </a>
+                  ) : (
+                    <span className="text-subtle-foreground">No run yet</span>
+                  )}
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-muted-foreground">
+                  <time suppressHydrationWarning dateTime={when ?? undefined} title={formatDateTime(when)}>
+                    {timeAgo(when)}
+                  </time>
+                </TableCell>
+                <TableCell className="text-right">{action(row)}</TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
   );
 }

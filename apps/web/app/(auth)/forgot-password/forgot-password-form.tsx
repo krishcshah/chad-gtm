@@ -1,16 +1,12 @@
 "use client";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
+import { MailCheck } from "lucide-react";
 import { z } from "zod";
-import {
-  Alert,
-  AlertDescription,
-  Button,
-  Input,
-  Label,
-} from "@smartreach/ui";
+import { Alert, AlertDescription, Button, Input } from "@smartreach/ui";
 import { authClient } from "@/lib/auth-client";
-import { AuthCard, AuthNotice } from "../auth-card";
+import { AuthCard, authLinkClass } from "../auth-card";
+import { AuthField } from "../auth-field";
 
 const emailSchema = z.string().trim().email("Enter a valid email");
 
@@ -46,7 +42,7 @@ export function ForgotPasswordForm() {
   const footer = (
     <>
       Remembered it?{" "}
-      <Link href="/login" className="text-zinc-100 hover:underline transition-colors font-medium">
+      <Link href="/login" className={authLinkClass}>
         Back to sign in
       </Link>
     </>
@@ -54,45 +50,58 @@ export function ForgotPasswordForm() {
 
   if (sentTo) {
     return (
-      <AuthCard title="Check your inbox" footer={footer}>
-        <AuthNotice>
-          If an account exists for <span className="font-medium text-zinc-100">{sentTo}</span>, we sent
-          a link to choose a new password. It expires in 1 hour.
-        </AuthNotice>
+      <AuthCard
+        icon={MailCheck}
+        title="Check your inbox"
+        description={
+          <>
+            If an account exists for <span className="font-medium text-foreground">{sentTo}</span>, we sent a link
+            to choose a new password. It expires in 1 hour.
+          </>
+        }
+        footer={footer}
+      >
+        <Button
+          type="button"
+          variant="outline"
+          className="h-10 w-full"
+          onClick={() => {
+            setSentTo("");
+            setEmail("");
+          }}
+        >
+          Use a different email
+        </Button>
       </AuthCard>
     );
   }
 
   return (
     <AuthCard
-      title="Forgot your password?"
-      subtitle="Enter your email and we'll send you a reset link."
+      title="Reset your password"
+      description="Enter the email you signed up with and we'll send you a link to choose a new password."
       footer={footer}
     >
-      <form onSubmit={onSubmit} className="space-y-4" noValidate>
-        <div className="space-y-1.5">
-          <Label htmlFor="email" className="text-xs font-medium text-zinc-300">
-            Work email
-          </Label>
+      <form onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
+        <AuthField id="email" label="Work email" error={fieldError}>
           <Input
-            id="email"
             type="email"
             placeholder="you@company.com"
             autoComplete="email"
-            className="h-10 rounded-lg text-sm placeholder:text-zinc-600"
+            autoFocus
+            className="h-10"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
-          {fieldError && <p className="text-[11px] text-rose-400">{fieldError}</p>}
-        </div>
+        </AuthField>
 
         {error && (
-          <Alert variant="destructive" className="rounded-lg border-rose-500/30 bg-rose-500/10 text-rose-200">
-            <AlertDescription className="text-xs">{error}</AlertDescription>
+          <Alert variant="destructive">
+            <AlertDescription className="mt-0 text-foreground">{error}</AlertDescription>
           </Alert>
         )}
 
-        <Button type="submit" variant="brand" className="w-full h-10 text-sm" disabled={submitting}>
+        <Button type="submit" className="h-10 w-full" loading={submitting}>
           {submitting ? "Sending…" : "Send reset link"}
         </Button>
       </form>

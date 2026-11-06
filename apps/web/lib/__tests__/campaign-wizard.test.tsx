@@ -138,12 +138,12 @@ describe("CampaignWizard", () => {
       initialDraft: draft({ wizardStep: 6, templateId: "tpl-1", startMode: "later" }),
     });
     expect(host.textContent).toContain("Ready to publish");
-    expect(host.textContent).toContain("Target Leads");
-    expect(host.textContent).toContain("Connected Senders");
-    expect(host.textContent).toContain("Audience & Senders");
-    expect(host.textContent).toContain("Sequence Steps");
-    expect(host.textContent).toContain("Save as Draft");
-    expect(host.textContent).toContain("Publish Campaign");
+    expect(host.textContent).toContain("Target leads");
+    expect(host.textContent).toContain("Connected senders");
+    expect(host.textContent).toContain("Audience & senders");
+    expect(host.textContent).toContain("Sequence steps");
+    expect(host.textContent).toContain("Save as draft");
+    expect(host.textContent).toContain("Publish campaign");
     await unmount();
   });
 });

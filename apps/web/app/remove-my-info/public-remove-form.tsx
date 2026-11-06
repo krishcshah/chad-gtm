@@ -1,8 +1,20 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Button, Input, Textarea, Label } from "@smartreach/ui";
-import { CheckCircle2, Loader2, Send } from "lucide-react";
+import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
+import { CheckCircle2 } from "lucide-react";
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  Field,
+  Input,
+  Textarea,
+} from "@smartreach/ui";
 import { submitDataRemovalAction } from "@/lib/data-removal-actions";
 
 export function PublicRemoveMyInfoForm() {
@@ -11,8 +23,13 @@ export function PublicRemoveMyInfoForm() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const confirmationRef = useRef<HTMLHeadingElement>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (submitted) confirmationRef.current?.focus();
+  }, [submitted]);
+
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -33,87 +50,83 @@ export function PublicRemoveMyInfoForm() {
 
   if (submitted) {
     return (
-      <div className="text-center py-6 space-y-4">
-        <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-          <CheckCircle2 className="size-6" />
-        </div>
-        <div className="space-y-1">
-          <h3 className="text-lg font-bold text-foreground">Request Received</h3>
-          <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
-            Thank you. We have recorded your request to remove data for <strong className="text-foreground">{contactEmail}</strong>. All matching records will be removed within 72 hours.
+      <Card>
+        <div role="status" className="flex flex-col items-center px-6 py-10 text-center">
+          <div className="mb-4 flex size-10 items-center justify-center rounded-lg bg-success-soft text-success-text">
+            <CheckCircle2 className="size-5" aria-hidden />
+          </div>
+          <h2 ref={confirmationRef} tabIndex={-1} className="text-[15px] font-semibold tracking-[-0.01em] outline-none">
+            Request received
+          </h2>
+          <p className="mt-1.5 max-w-md text-sm leading-relaxed text-muted-foreground">
+            We recorded your request to remove data for{" "}
+            <span className="font-medium text-foreground">{contactEmail}</span>. All matching records will be removed
+            within 72 hours.
           </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-5"
+            onClick={() => {
+              setSubmitted(false);
+              setContactEmail("");
+            }}
+          >
+            Submit another request
+          </Button>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            setSubmitted(false);
-            setContactEmail("");
-          }}
-          className="mt-2"
-        >
-          Submit Another Request
-        </Button>
-      </div>
+      </Card>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      {error && (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-xs text-destructive">
-          {error}
-        </div>
-      )}
-
-      <div className="space-y-2">
-        <Label htmlFor="public-email" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Your Contact Email <span className="text-destructive">*</span>
-        </Label>
-        <Input
-          id="public-email"
-          type="email"
-          required
-          value={contactEmail}
-          onChange={(e) => setContactEmail(e.target.value)}
-          placeholder="your.email@example.com"
-          className="h-10 text-sm"
-        />
-        <p className="text-[11px] text-muted-foreground">
-          Enter the exact email address or corporate address you wish to have removed from all lists.
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="public-desc" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          What do you want to get removed? <span className="text-destructive">*</span>
-        </Label>
-        <Textarea
-          id="public-desc"
-          required
-          rows={4}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="e.g. Please remove my name, work email address, phone number, and company lead record from the database."
-          className="text-sm"
-        />
-      </div>
-
-      <div className="pt-2 flex justify-end">
-        <Button type="submit" disabled={isPending} className="font-semibold text-xs px-5">
-          {isPending ? (
-            <>
-              <Loader2 className="mr-2 size-3.5 animate-spin" />
-              Submitting...
-            </>
-          ) : (
-            <>
-              <Send className="mr-2 size-3.5" />
-              Submit Erasure Request
-            </>
+    <Card>
+      <form onSubmit={handleSubmit}>
+        <CardHeader>
+          <h2 className="text-[15px] font-semibold leading-tight tracking-[-0.01em]">Erasure request</h2>
+          <CardDescription>Both fields are required. You don&apos;t need an AutoGTM account.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-5">
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription className="mt-0 text-foreground">{error}</AlertDescription>
+            </Alert>
           )}
-        </Button>
-      </div>
-    </form>
+
+          <Field
+            label="Email address"
+            required
+            hint="The exact personal or company address you want removed from all lists."
+          >
+            <Input
+              type="email"
+              name="contactEmail"
+              required
+              autoComplete="email"
+              value={contactEmail}
+              onChange={(e) => setContactEmail(e.target.value)}
+              placeholder="you@example.com"
+            />
+          </Field>
+
+          <Field label="What should we remove?" required>
+            <Textarea
+              name="description"
+              required
+              rows={4}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="For example: my name, work email, phone number and company record."
+            />
+          </Field>
+        </CardContent>
+        <CardFooter>
+          <Button type="submit" loading={isPending}>
+            {isPending ? "Sending request…" : "Send request"}
+          </Button>
+        </CardFooter>
+      </form>
+    </Card>
   );
 }

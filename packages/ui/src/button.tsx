@@ -1,32 +1,50 @@
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
+import { Loader2 } from "lucide-react";
 import * as React from "react";
 import { cn } from "./utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-xs font-semibold tracking-tight transition-all duration-150 outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-40 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0 active:scale-[0.98]",
+  [
+    "relative inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium",
+    "transition-[background-color,border-color,color,box-shadow,opacity] duration-150",
+    "outline-none focus-visible:ring-[3px] focus-visible:ring-ring",
+    "disabled:pointer-events-none disabled:opacity-50",
+    "[&_svg]:pointer-events-none [&_svg]:shrink-0",
+  ].join(" "),
   {
     variants: {
       variant: {
-        default:
-          "bg-zinc-50 text-black font-semibold hover:bg-white border border-white/80 shadow-[0_1px_0_0_rgba(255,255,255,0.4)_inset,0_6px_16px_-8px_rgba(255,255,255,0.35)] active:bg-zinc-200",
-        brand:
-          "bg-brand-gradient text-black font-semibold border border-brand-300/40 shadow-[0_8px_24px_-10px_rgba(52,211,166,0.6)] hover:brightness-110 active:brightness-95",
-        destructive: "bg-rose-950/40 text-rose-200 border border-rose-900/60 hover:bg-rose-900/60 hover:text-white hover:border-rose-700/80 shadow-xs",
-        outline: "border border-zinc-800 bg-zinc-950/60 text-zinc-200 hover:bg-zinc-900 hover:border-zinc-700 hover:text-white shadow-xs",
-        secondary: "bg-zinc-900 text-zinc-100 border border-zinc-800 hover:bg-zinc-800/90 hover:border-zinc-700 shadow-xs",
-        ghost: "text-zinc-400 hover:bg-zinc-900/80 hover:text-white",
-        link: "text-white underline-offset-4 hover:underline font-normal",
+        /** The one main action on a surface. */
+        primary: "bg-primary text-primary-foreground shadow-xs hover:bg-primary/88 active:bg-primary/80",
+        /** Brand call to action: marketing pages and "launch" moments only. */
+        brand: "bg-brand text-brand-foreground shadow-xs hover:bg-brand/90 active:bg-brand/85",
+        /** Neutral bordered button, the default for secondary actions. */
+        outline:
+          "border border-border-strong bg-card text-foreground shadow-xs hover:bg-muted active:bg-accent",
+        secondary: "bg-muted text-foreground hover:bg-accent",
+        ghost: "text-muted-foreground hover:bg-muted hover:text-foreground",
+        destructive:
+          "bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive/90 active:bg-destructive/85",
+        "destructive-outline":
+          "border border-border-strong bg-card text-destructive-text shadow-xs hover:border-destructive/40 hover:bg-destructive-soft",
+        link: "h-auto px-0 text-foreground underline decoration-border-strong underline-offset-4 hover:decoration-foreground",
+        /** @deprecated alias of primary */
+        default: "bg-primary text-primary-foreground shadow-xs hover:bg-primary/88 active:bg-primary/80",
       },
       size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-8 px-3 text-[11px]",
-        lg: "h-10 px-5 text-sm font-semibold",
-        icon: "h-9 w-9 p-0",
-        "icon-sm": "h-7 w-7 p-0 text-[10px]",
+        xs: "h-7 rounded-md px-2.5 text-xs [&_svg]:size-3.5",
+        sm: "h-8 px-3 text-[13px] [&_svg]:size-4",
+        md: "h-9 px-3.5 text-sm [&_svg]:size-4",
+        lg: "h-11 rounded-lg px-5 text-[15px] [&_svg]:size-4",
+        icon: "size-9 [&_svg]:size-4",
+        "icon-sm": "size-8 [&_svg]:size-4",
+        "icon-xs": "size-7 [&_svg]:size-3.5",
+        /** @deprecated alias of md */
+        default: "h-9 px-3.5 text-sm [&_svg]:size-4",
       },
     },
-    defaultVariants: { variant: "default", size: "default" },
+    defaultVariants: { variant: "primary", size: "md" },
   },
 );
 
@@ -34,12 +52,32 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
+  /** Shows a spinner, disables the button and keeps its width. */
+  loading?: boolean;
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button";
-    return <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />;
+  ({ className, variant, size, asChild = false, loading = false, disabled, children, ...props }, ref) => {
+    const classes = cn(buttonVariants({ variant, size }), className);
+    if (asChild) {
+      return (
+        <Slot className={classes} ref={ref} {...props}>
+          {children}
+        </Slot>
+      );
+    }
+    return (
+      <button
+        className={classes}
+        ref={ref}
+        disabled={disabled || loading}
+        aria-busy={loading || undefined}
+        {...props}
+      >
+        {loading ? <Loader2 className="animate-spin" aria-hidden /> : null}
+        {children}
+      </button>
+    );
   },
 );
 Button.displayName = "Button";

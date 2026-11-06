@@ -1,729 +1,285 @@
 "use client";
 
-import React, { useState } from "react";
+import * as React from "react";
+import { Building2, ChevronDown, Search } from "lucide-react";
+import { Badge, Checkbox, Input, Kbd, Label, Switch, cn } from "@smartreach/ui";
+import type { DirectoryFacetItem, DirectoryFacets, DirectorySearchParams } from "@/lib/leads-directory";
 import {
-  Badge,
-  Button,
-  Checkbox,
-  Input,
-  Separator,
-  Switch,
-  cn,
-} from "@smartreach/ui";
-import {
-  Briefcase,
-  Building2,
-  ChevronDown,
-  ChevronUp,
-  DollarSign,
-  Filter,
-  Globe2,
-  Linkedin,
-  Mail,
-  Phone,
-  RotateCcw,
-  Search,
-  Sparkles,
-  Users2,
-  SlidersHorizontal,
-  User,
-} from "lucide-react";
-import type { DirectoryFacets, DirectorySearchParams } from "@/lib/leads-directory";
+  CONTACT_TOGGLES,
+  ROLE_OPTIONS,
+  formatCount,
+  type ContactToggleKey,
+  type ListFilterKey,
+} from "./directory-utils";
 
 interface LeadFiltersPanelProps {
-  facets: DirectoryFacets | null;
+  facets: DirectoryFacets;
   filters: DirectorySearchParams;
-  onChange: (updatedFilters: DirectorySearchParams) => void;
-  onApply: () => void;
-  isLoading?: boolean;
-  totalResults?: number;
-  tableHeight?: number | null;
+  /** Merge a patch into the filters. The parent resets the page and re-runs the search. */
+  onChange: (patch: Partial<DirectorySearchParams>) => void;
+  /** Ref for the keyword input, so the parent can focus it with "/". */
+  searchInputRef?: React.Ref<HTMLInputElement>;
+  /** Show the "/" shortcut hint in the keyword field. */
+  showShortcut?: boolean;
   className?: string;
 }
 
+/** The filter controls. The parent places them in the desktop rail or the mobile sheet. */
 export function LeadFiltersPanel({
   facets,
   filters,
   onChange,
-  onApply,
-  isLoading = false,
-  totalResults,
-  tableHeight,
+  searchInputRef,
+  showShortcut,
   className,
 }: LeadFiltersPanelProps) {
-  // Local collapsible sections
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    search: true,
-    industry: true,
-    country: true,
-    seniority: true,
-    teamSize: true,
-    revenue: false,
-    contactData: true,
-  });
-
-  // Industry search filter inside facet list
-  const [industrySearch, setIndustrySearch] = useState("");
-  const [showAllIndustries, setShowAllIndustries] = useState(false);
-
-  // Country search filter inside facet list
-  const [countrySearch, setCountrySearch] = useState("");
-  const [showAllCountries, setShowAllCountries] = useState(false);
-
-  const [isLg, setIsLg] = useState(false);
-  const [mobileExpanded, setMobileExpanded] = useState(false);
-
-  React.useEffect(() => {
-    const checkLg = () => setIsLg(window.innerWidth >= 1024);
-    checkLg();
-    window.addEventListener("resize", checkLg);
-    return () => window.removeEventListener("resize", checkLg);
-  }, []);
-
-  const toggleSection = (section: string) => {
-    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
-  };
-
-  const handleTextQueryChange = (val: string) => {
-    onChange({ ...filters, query: val, page: 1 });
-  };
-
-  const handleCompanyChange = (val: string) => {
-    onChange({ ...filters, companyName: val, page: 1 });
-  };
-
-  const toggleIndustry = (val: string) => {
-    const current = new Set(filters.industries || []);
-    if (current.has(val)) {
-      current.delete(val);
-    } else {
-      current.add(val);
-    }
+  const toggleValue = (key: ListFilterKey, value: string) => {
+    const current = filters[key] || [];
     onChange({
-      ...filters,
-      industries: Array.from(current),
-      page: 1,
-    });
+      [key]: current.includes(value) ? current.filter((v) => v !== value) : [...current, value],
+    } as Partial<DirectorySearchParams>);
   };
 
-  const toggleCountry = (val: string) => {
-    const current = new Set(filters.countries || []);
-    if (current.has(val)) {
-      current.delete(val);
-    } else {
-      current.add(val);
-    }
-    onChange({
-      ...filters,
-      countries: Array.from(current),
-      page: 1,
-    });
-  };
-
-  const toggleTeamSize = (val: string) => {
-    const current = new Set(filters.teamSizes || []);
-    if (current.has(val)) {
-      current.delete(val);
-    } else {
-      current.add(val);
-    }
-    onChange({
-      ...filters,
-      teamSizes: Array.from(current),
-      page: 1,
-    });
-  };
-
-  const toggleRevenue = (val: string) => {
-    const current = new Set(filters.revenueRanges || []);
-    if (current.has(val)) {
-      current.delete(val);
-    } else {
-      current.add(val);
-    }
-    onChange({
-      ...filters,
-      revenueRanges: Array.from(current),
-      page: 1,
-    });
-  };
-
-  const toggleJobTitleKeyword = (title: string) => {
-    const current = new Set(filters.jobTitles || []);
-    if (current.has(title)) {
-      current.delete(title);
-    } else {
-      current.add(title);
-    }
-    onChange({
-      ...filters,
-      jobTitles: Array.from(current),
-      page: 1,
-    });
-  };
-
-  const handleReset = () => {
-    onChange({
-      query: "",
-      industries: [],
-      countries: [],
-      jobTitles: [],
-      companyName: "",
-      teamSizes: [],
-      revenueRanges: [],
-      hasEmail: false,
-      hasWorkEmail: false,
-      hasPersonalEmail: false,
-      hasPhone: false,
-      hasLinkedin: false,
-      page: 1,
-      pageSize: filters.pageSize || 20,
-    });
-    // Trigger apply immediately
-    setTimeout(() => {
-      onApply();
-    }, 50);
-  };
-
-  // Filtered industries
-  const filteredIndustries = (facets?.industries || []).filter((item) =>
-    item.label.toLowerCase().includes(industrySearch.toLowerCase())
-  );
-  const displayedIndustries = showAllIndustries
-    ? filteredIndustries
-    : filteredIndustries.slice(0, 7);
-
-  // Filtered countries
-  const filteredCountries = (facets?.countries || []).filter((item) =>
-    item.label.toLowerCase().includes(countrySearch.toLowerCase())
-  );
-  const displayedCountries = showAllCountries
-    ? filteredCountries
-    : filteredCountries.slice(0, 6);
-
-  // Common seniority quick options
-  const seniorityOptions = [
-    { label: "Owner / Founder", value: "Owner" },
-    { label: "CEO / Executive", value: "CEO" },
-    { label: "President", value: "President" },
-    { label: "VP / Vice President", value: "VP" },
-    { label: "Director", value: "Director" },
-    { label: "Manager", value: "Manager" },
-    { label: "Partner", value: "Partner" },
-  ];
-
-  // Active filter count
-  const activeCount =
-    (filters.query ? 1 : 0) +
-    (filters.companyName ? 1 : 0) +
-    (filters.industries?.length || 0) +
-    (filters.countries?.length || 0) +
-    (filters.jobTitles?.length || 0) +
-    (filters.teamSizes?.length || 0) +
-    (filters.revenueRanges?.length || 0) +
-    (filters.hasEmail ? 1 : 0) +
-    (filters.hasWorkEmail ? 1 : 0) +
-    (filters.hasPersonalEmail ? 1 : 0) +
-    (filters.hasPhone ? 1 : 0) +
-    (filters.hasLinkedin ? 1 : 0);
+  const contactCount = CONTACT_TOGGLES.filter((t) => filters[t.key]).length;
 
   return (
-    <aside
-      style={isLg && tableHeight ? { height: `${tableHeight}px` } : undefined}
-      className={cn(
-        "w-full lg:w-80 shrink-0 flex flex-col bg-card/60 border border-border/70 rounded-xl overflow-hidden shadow-sm backdrop-blur-sm max-w-full min-w-0 transition-[height] duration-150",
-        className
-      )}
-    >
-      {/* Panel Header */}
-      <div className="p-3.5 sm:p-4 border-b border-border/70 bg-muted/20 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2">
-          <SlidersHorizontal className="size-4 text-primary" />
-          <span className="font-semibold text-sm text-foreground">Lead Filters</span>
-          {activeCount > 0 && (
-            <Badge
-              variant="default"
-              className="text-[10px] h-5 px-1.5 font-bold bg-primary text-primary-foreground"
-            >
-              {activeCount}
-            </Badge>
-          )}
+    <div className={cn("flex flex-col divide-y divide-border", className)}>
+      <div className="flex flex-col gap-3 px-4 py-4">
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle-foreground"
+            aria-hidden
+          />
+          <Input
+            ref={searchInputRef}
+            type="search"
+            aria-label="Search by name, title or keyword"
+            placeholder="Name, title or keyword"
+            value={filters.query || ""}
+            onChange={(e) => onChange({ query: e.target.value })}
+            className={cn("pl-9", showShortcut && "pr-9")}
+          />
+          {showShortcut && !filters.query ? (
+            <Kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2">/</Kbd>
+          ) : null}
         </div>
-        <div className="flex items-center gap-2">
-          {activeCount > 0 && (
-            <button
-              type="button"
-              onClick={handleReset}
-              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-            >
-              <RotateCcw className="size-3" />
-              Reset
-            </button>
-          )}
-          {/* Mobile Collapse Toggle Button */}
-          <button
-            type="button"
-            onClick={() => setMobileExpanded(!mobileExpanded)}
-            className="lg:hidden text-xs font-semibold text-primary hover:text-primary/80 flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 transition-colors"
-          >
-            {mobileExpanded ? "Hide Filters" : "Show Filters"}
-            {mobileExpanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-          </button>
+        <div className="relative">
+          <Building2
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle-foreground"
+            aria-hidden
+          />
+          <Input
+            type="search"
+            aria-label="Company name or domain"
+            placeholder="Company name or domain"
+            value={filters.companyName || ""}
+            onChange={(e) => onChange({ companyName: e.target.value })}
+            className="pl-9"
+          />
         </div>
       </div>
 
-      {/* Scrollable Filters Body (Collapsible on Mobile) */}
-      <div className={cn(
-        "flex-1 min-h-0 overflow-y-auto divide-y divide-border/50 text-sm",
-        !mobileExpanded && "hidden lg:block"
-      )}>
-        {/* Quick Search Section */}
-        <div className="p-3.5 space-y-2.5">
-          <div
-            className="flex items-center justify-between cursor-pointer select-none font-medium text-xs uppercase tracking-wider text-muted-foreground"
-            onClick={() => toggleSection("search")}
-          >
-            <span className="flex items-center gap-1.5">
-              <Search className="size-3.5 text-primary" />
-              Keywords & Title
-            </span>
-            {openSections.search ? (
-              <ChevronUp className="size-3.5" />
-            ) : (
-              <ChevronDown className="size-3.5" />
-            )}
-          </div>
+      <FilterSection title="Role" count={filters.jobTitles?.length}>
+        <OptionList
+          name="Role"
+          items={ROLE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+          selected={filters.jobTitles || []}
+          onToggle={(v) => toggleValue("jobTitles", v)}
+        />
+      </FilterSection>
 
-          {openSections.search && (
-            <div className="space-y-2 pt-1">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
-                <Input
-                  placeholder="e.g. CEO, founder, or keyword..."
-                  value={filters.query || ""}
-                  onChange={(e) => handleTextQueryChange(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") onApply();
-                  }}
-                  className="pl-8 text-xs h-9 bg-background/50"
-                />
-              </div>
+      <FilterSection title="Industry" count={filters.industries?.length}>
+        <OptionList
+          name="Industry"
+          searchable
+          items={facets.industries}
+          selected={filters.industries || []}
+          onToggle={(v) => toggleValue("industries", v)}
+        />
+      </FilterSection>
 
-              <div className="relative">
-                <Building2 className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
-                <Input
-                  placeholder="Company name or domain..."
-                  value={filters.companyName || ""}
-                  onChange={(e) => handleCompanyChange(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") onApply();
-                  }}
-                  className="pl-8 text-xs h-9 bg-background/50"
-                />
-              </div>
-            </div>
-          )}
-        </div>
+      <FilterSection title="Country" count={filters.countries?.length}>
+        <OptionList
+          name="Country"
+          searchable
+          items={facets.countries}
+          selected={filters.countries || []}
+          onToggle={(v) => toggleValue("countries", v)}
+        />
+      </FilterSection>
 
-        {/* Industry Section */}
-        <div className="p-3.5 space-y-2.5">
-          <div
-            className="flex items-center justify-between cursor-pointer select-none font-medium text-xs uppercase tracking-wider text-muted-foreground"
-            onClick={() => toggleSection("industry")}
-          >
-            <span className="flex items-center gap-1.5">
-              <Briefcase className="size-3.5 text-violet-400" />
-              Industry
-              {(filters.industries?.length || 0) > 0 && (
-                <Badge variant="secondary" className="text-[10px] h-4 px-1">
-                  {filters.industries?.length}
-                </Badge>
-              )}
-            </span>
-            {openSections.industry ? (
-              <ChevronUp className="size-3.5" />
-            ) : (
-              <ChevronDown className="size-3.5" />
-            )}
-          </div>
+      <FilterSection title="Company size" count={filters.teamSizes?.length}>
+        <OptionList
+          name="Company size"
+          items={facets.teamSizes}
+          selected={filters.teamSizes || []}
+          onToggle={(v) => toggleValue("teamSizes", v)}
+        />
+      </FilterSection>
 
-          {openSections.industry && (
-            <div className="space-y-2 pt-1">
-              {(facets?.industries?.length || 0) > 6 && (
-                <Input
-                  placeholder="Search industries..."
-                  value={industrySearch}
-                  onChange={(e) => setIndustrySearch(e.target.value)}
-                  className="text-xs h-8 bg-background/50"
-                />
-              )}
+      <FilterSection title="Annual revenue" count={filters.revenueRanges?.length} defaultOpen={false}>
+        <OptionList
+          name="Annual revenue"
+          items={facets.revenueRanges}
+          selected={filters.revenueRanges || []}
+          onToggle={(v) => toggleValue("revenueRanges", v)}
+        />
+      </FilterSection>
 
-              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                {displayedIndustries.map((item) => {
-                  const isChecked = filters.industries?.includes(item.value);
-                  return (
-                    <label
-                      key={item.value}
-                      className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-muted/40 cursor-pointer text-xs group"
-                    >
-                      <div className="flex items-center gap-2 min-w-0 pr-2">
-                        <Checkbox
-                          checked={isChecked}
-                          onCheckedChange={() => toggleIndustry(item.value)}
-                        />
-                        <span
-                          className={`truncate ${
-                            isChecked ? "font-semibold text-foreground" : "text-muted-foreground group-hover:text-foreground"
-                          }`}
-                        >
-                          {item.label}
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
-                        {item.count > 1000 ? `${(item.count / 1000).toFixed(1)}k` : item.count}
-                      </span>
-                    </label>
-                  );
-                })}
+      <FilterSection title="Contact details" count={contactCount}>
+        <p className="mb-2 px-2 text-xs text-muted-foreground">Only show people who have:</p>
+        <ul className="flex flex-col">
+          {CONTACT_TOGGLES.map((t) => (
+            <ContactToggle
+              key={t.key}
+              id={t.key}
+              label={t.label}
+              checked={!!filters[t.key]}
+              onChange={(c) => onChange({ [t.key]: c } as Partial<Record<ContactToggleKey, boolean>>)}
+            />
+          ))}
+        </ul>
+      </FilterSection>
+    </div>
+  );
+}
 
-                {displayedIndustries.length === 0 && (
-                  <p className="text-xs text-muted-foreground py-2 text-center">
-                    No matching industries
-                  </p>
-                )}
-              </div>
-
-              {filteredIndustries.length > 7 && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllIndustries(!showAllIndustries)}
-                  className="text-xs text-primary hover:underline font-medium pt-1"
-                >
-                  {showAllIndustries
-                    ? "Show less"
-                    : `+ Show ${filteredIndustries.length - 7} more`}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Country Section */}
-        <div className="p-3.5 space-y-2.5">
-          <div
-            className="flex items-center justify-between cursor-pointer select-none font-medium text-xs uppercase tracking-wider text-muted-foreground"
-            onClick={() => toggleSection("country")}
-          >
-            <span className="flex items-center gap-1.5">
-              <Globe2 className="size-3.5 text-blue-400" />
-              Country & Region
-              {(filters.countries?.length || 0) > 0 && (
-                <Badge variant="secondary" className="text-[10px] h-4 px-1">
-                  {filters.countries?.length}
-                </Badge>
-              )}
-            </span>
-            {openSections.country ? (
-              <ChevronUp className="size-3.5" />
-            ) : (
-              <ChevronDown className="size-3.5" />
-            )}
-          </div>
-
-          {openSections.country && (
-            <div className="space-y-2 pt-1">
-              {(facets?.countries?.length || 0) > 6 && (
-                <Input
-                  placeholder="Search countries..."
-                  value={countrySearch}
-                  onChange={(e) => setCountrySearch(e.target.value)}
-                  className="text-xs h-8 bg-background/50"
-                />
-              )}
-
-              <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
-                {displayedCountries.map((item) => {
-                  const isChecked = filters.countries?.includes(item.value);
-                  return (
-                    <label
-                      key={item.value}
-                      className="flex items-center justify-between py-1 px-1.5 rounded hover:bg-muted/40 cursor-pointer text-xs group"
-                    >
-                      <div className="flex items-center gap-2 min-w-0 pr-2">
-                        <Checkbox
-                          checked={isChecked}
-                          onCheckedChange={() => toggleCountry(item.value)}
-                        />
-                        <span
-                          className={`truncate ${
-                            isChecked ? "font-semibold text-foreground" : "text-muted-foreground group-hover:text-foreground"
-                          }`}
-                        >
-                          {item.label}
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
-                        {item.count > 1000 ? `${(item.count / 1000).toFixed(1)}k` : item.count}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-
-              {filteredCountries.length > 6 && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllCountries(!showAllCountries)}
-                  className="text-xs text-primary hover:underline font-medium pt-1"
-                >
-                  {showAllCountries
-                    ? "Show less"
-                    : `+ Show ${filteredCountries.length - 6} more`}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Job Title & Seniority Section */}
-        <div className="p-3.5 space-y-2.5">
-          <div
-            className="flex items-center justify-between cursor-pointer select-none font-medium text-xs uppercase tracking-wider text-muted-foreground"
-            onClick={() => toggleSection("seniority")}
-          >
-            <span className="flex items-center gap-1.5">
-              <Sparkles className="size-3.5 text-amber-400" />
-              Role & Seniority
-              {(filters.jobTitles?.length || 0) > 0 && (
-                <Badge variant="secondary" className="text-[10px] h-4 px-1">
-                  {filters.jobTitles?.length}
-                </Badge>
-              )}
-            </span>
-            {openSections.seniority ? (
-              <ChevronUp className="size-3.5" />
-            ) : (
-              <ChevronDown className="size-3.5" />
-            )}
-          </div>
-
-          {openSections.seniority && (
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {seniorityOptions.map((opt) => {
-                const isSelected = filters.jobTitles?.includes(opt.value);
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => toggleJobTitleKeyword(opt.value)}
-                    className={`text-xs px-2.5 py-1 rounded-full border transition-all ${
-                      isSelected
-                        ? "bg-primary text-primary-foreground border-primary font-medium shadow-sm"
-                        : "bg-muted/40 text-muted-foreground border-border/60 hover:border-primary/50 hover:text-foreground"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Company Size (# Employees) Section */}
-        <div className="p-3.5 space-y-2.5">
-          <div
-            className="flex items-center justify-between cursor-pointer select-none font-medium text-xs uppercase tracking-wider text-muted-foreground"
-            onClick={() => toggleSection("teamSize")}
-          >
-            <span className="flex items-center gap-1.5">
-              <Users2 className="size-3.5 text-emerald-400" />
-              Employee Count
-              {(filters.teamSizes?.length || 0) > 0 && (
-                <Badge variant="secondary" className="text-[10px] h-4 px-1">
-                  {filters.teamSizes?.length}
-                </Badge>
-              )}
-            </span>
-            {openSections.teamSize ? (
-              <ChevronUp className="size-3.5" />
-            ) : (
-              <ChevronDown className="size-3.5" />
-            )}
-          </div>
-
-          {openSections.teamSize && (
-            <div className="grid grid-cols-2 gap-1.5 pt-1">
-              {(facets?.teamSizes || []).map((item) => {
-                const isChecked = filters.teamSizes?.includes(item.value);
-                return (
-                  <button
-                    key={item.value}
-                    type="button"
-                    onClick={() => toggleTeamSize(item.value)}
-                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs text-left transition-all ${
-                      isChecked
-                        ? "bg-primary/10 border-primary text-primary font-semibold"
-                        : "bg-muted/30 border-border/50 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                    }`}
-                  >
-                    <span className="truncate">{item.label}</span>
-                    <span className="text-[10px] opacity-70 ml-1">
-                      {item.count > 1000 ? `${(item.count / 1000).toFixed(0)}k` : item.count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Revenue Range Section */}
-        <div className="p-3.5 space-y-2.5">
-          <div
-            className="flex items-center justify-between cursor-pointer select-none font-medium text-xs uppercase tracking-wider text-muted-foreground"
-            onClick={() => toggleSection("revenue")}
-          >
-            <span className="flex items-center gap-1.5">
-              <DollarSign className="size-3.5 text-emerald-500" />
-              Annual Revenue
-              {(filters.revenueRanges?.length || 0) > 0 && (
-                <Badge variant="secondary" className="text-[10px] h-4 px-1">
-                  {filters.revenueRanges?.length}
-                </Badge>
-              )}
-            </span>
-            {openSections.revenue ? (
-              <ChevronUp className="size-3.5" />
-            ) : (
-              <ChevronDown className="size-3.5" />
-            )}
-          </div>
-
-          {openSections.revenue && (
-            <div className="grid grid-cols-2 gap-1.5 pt-1">
-              {(facets?.revenueRanges || []).map((item) => {
-                const isChecked = filters.revenueRanges?.includes(item.value);
-                return (
-                  <button
-                    key={item.value}
-                    type="button"
-                    onClick={() => toggleRevenue(item.value)}
-                    className={`flex items-center justify-between px-2 py-1.5 rounded-lg border text-xs text-left transition-all ${
-                      isChecked
-                        ? "bg-primary/10 border-primary text-primary font-semibold"
-                        : "bg-muted/30 border-border/50 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                    }`}
-                  >
-                    <span className="truncate">{item.label}</span>
-                    <span className="text-[10px] opacity-70 ml-1">
-                      {item.count > 1000 ? `${(item.count / 1000).toFixed(0)}k` : item.count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Contact Data Availability Section */}
-        <div className="p-3.5 space-y-3">
-          <div
-            className="flex items-center justify-between cursor-pointer select-none font-medium text-xs uppercase tracking-wider text-muted-foreground"
-            onClick={() => toggleSection("contactData")}
-          >
-            <span className="flex items-center gap-1.5">
-              <Mail className="size-3.5 text-sky-400" />
-              Contact Availability
-            </span>
-            {openSections.contactData ? (
-              <ChevronUp className="size-3.5" />
-            ) : (
-              <ChevronDown className="size-3.5" />
-            )}
-          </div>
-
-          {openSections.contactData && (
-            <div className="space-y-2 pt-1">
-              <label className="flex items-center justify-between py-1 cursor-pointer">
-                <span className="text-xs text-foreground flex items-center gap-1.5 font-medium">
-                  <Briefcase className="size-3.5 text-primary" />
-                  Has Work Email
-                </span>
-                <Switch
-                  checked={!!filters.hasWorkEmail}
-                  onCheckedChange={(c) => onChange({ ...filters, hasWorkEmail: c, page: 1 })}
-                />
-              </label>
-
-              <label className="flex items-center justify-between py-1 cursor-pointer">
-                <span className="text-xs text-foreground flex items-center gap-1.5">
-                  <User className="size-3.5 text-sky-400" />
-                  Has Personal Email
-                </span>
-                <Switch
-                  checked={!!filters.hasPersonalEmail}
-                  onCheckedChange={(c) => onChange({ ...filters, hasPersonalEmail: c, page: 1 })}
-                />
-              </label>
-
-              <label className="flex items-center justify-between py-1 cursor-pointer">
-                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                  <Mail className="size-3.5 text-muted-foreground" />
-                  Has Any Email
-                </span>
-                <Switch
-                  checked={!!filters.hasEmail}
-                  onCheckedChange={(c) => onChange({ ...filters, hasEmail: c, page: 1 })}
-                />
-              </label>
-
-              <label className="flex items-center justify-between py-1 cursor-pointer">
-                <span className="text-xs text-foreground flex items-center gap-1.5">
-                  <Phone className="size-3.5 text-muted-foreground" />
-                  Has Direct Phone
-                </span>
-                <Switch
-                  checked={!!filters.hasPhone}
-                  onCheckedChange={(c) => onChange({ ...filters, hasPhone: c, page: 1 })}
-                />
-              </label>
-
-              <label className="flex items-center justify-between py-1 cursor-pointer">
-                <span className="text-xs text-foreground flex items-center gap-1.5">
-                  <Linkedin className="size-3.5 text-muted-foreground" />
-                  Has LinkedIn URL
-                </span>
-                <Switch
-                  checked={!!filters.hasLinkedin}
-                  onCheckedChange={(c) => onChange({ ...filters, hasLinkedin: c, page: 1 })}
-                />
-              </label>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Sticky Bottom Apply Button */}
-      <div className={cn("p-3 border-t border-border/70 bg-card/80 backdrop-blur-sm shrink-0", !mobileExpanded && "hidden lg:block")}>
-        <Button
+function FilterSection({
+  title,
+  count = 0,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  count?: number;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = React.useState(defaultOpen || count > 0);
+  const id = React.useId();
+  return (
+    <section className="px-2 py-2">
+      <h3>
+        <button
           type="button"
-          onClick={() => {
-            setMobileExpanded(false);
-            onApply();
-          }}
-          disabled={isLoading}
-          className="w-full font-semibold shadow-md gap-2 h-10 bg-primary text-primary-foreground hover:bg-primary/90 transition-all cursor-pointer"
+          aria-expanded={open}
+          aria-controls={id}
+          onClick={() => setOpen((o) => !o)}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-[13px] font-medium text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring"
         >
-          <Filter className="size-4" />
-          {isLoading ? "Filtering leads..." : "Filter Leads"}
-          {totalResults !== undefined && (
-            <span className="ml-auto text-xs bg-white/20 px-2 py-0.5 rounded-full font-normal">
-              {totalResults.toLocaleString()}
-            </span>
-          )}
-        </Button>
+          <span className="flex-1">{title}</span>
+          {count > 0 ? (
+            <Badge variant="solid" aria-label={`${count} selected`}>
+              {count}
+            </Badge>
+          ) : null}
+          <ChevronDown
+            className={cn("size-4 text-subtle-foreground transition-transform", open && "rotate-180")}
+            aria-hidden
+          />
+        </button>
+      </h3>
+      <div id={id} hidden={!open} className="pb-2 pt-1">
+        {children}
       </div>
-    </aside>
+    </section>
+  );
+}
+
+const VISIBLE = 8;
+
+function OptionList({
+  name,
+  items,
+  selected,
+  onToggle,
+  searchable,
+}: {
+  name: string;
+  items: (Pick<DirectoryFacetItem, "value" | "label"> & { count?: number })[];
+  selected: string[];
+  onToggle: (value: string) => void;
+  searchable?: boolean;
+}) {
+  const [q, setQ] = React.useState("");
+  const [expanded, setExpanded] = React.useState(false);
+
+  if (items.length === 0) {
+    return <p className="px-2 py-1.5 text-xs text-muted-foreground">No options in the directory yet.</p>;
+  }
+
+  const needle = q.trim().toLowerCase();
+  const matches = items.filter((i) => !needle || i.label.toLowerCase().includes(needle));
+  // Selected values stay at the top so they are easy to find and remove.
+  const ordered = [...matches.filter((i) => selected.includes(i.value)), ...matches.filter((i) => !selected.includes(i.value))];
+  const limit = Math.max(VISIBLE, selected.length);
+  const shown = expanded || needle ? ordered : ordered.slice(0, limit);
+  const hidden = ordered.length - shown.length;
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {searchable && items.length > VISIBLE ? (
+        <div className="px-2 pb-1">
+          <Input
+            type="search"
+            aria-label={`Search ${name.toLowerCase()} options`}
+            placeholder={`Search ${name.toLowerCase()}`}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className="h-8 text-[13px]"
+          />
+        </div>
+      ) : null}
+      <ul className={cn("flex flex-col", expanded && "max-h-72 overflow-y-auto")} aria-label={name}>
+        {shown.map((item) => {
+          const checked = selected.includes(item.value);
+          return (
+            <li key={item.value}>
+              <label className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] transition-colors hover:bg-muted">
+                <Checkbox checked={checked} onCheckedChange={() => onToggle(item.value)} />
+                <span className={cn("min-w-0 flex-1 truncate", checked ? "text-foreground" : "text-muted-foreground")}>
+                  {item.label}
+                </span>
+                {typeof item.count === "number" ? (
+                  <span className="tabular shrink-0 text-xs text-subtle-foreground">{formatCount(item.count)}</span>
+                ) : null}
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+      {shown.length === 0 ? <p className="px-2 py-1.5 text-xs text-muted-foreground">No matches for “{q}”.</p> : null}
+      {!needle && ordered.length > limit ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="self-start rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring"
+        >
+          {expanded ? "Show fewer" : `Show ${hidden.toLocaleString()} more`}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function ContactToggle({
+  id,
+  label,
+  checked,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const inputId = `${React.useId()}-${id}`;
+  return (
+    <li className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 hover:bg-muted">
+      <Label htmlFor={inputId} className="flex-1 cursor-pointer font-normal text-muted-foreground">
+        {label}
+      </Label>
+      <Switch id={inputId} size="sm" checked={checked} onCheckedChange={onChange} />
+    </li>
   );
 }

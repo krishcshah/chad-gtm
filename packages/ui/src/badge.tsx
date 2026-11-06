@@ -3,37 +3,42 @@ import * as React from "react";
 import { cn } from "./utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-medium tracking-tight transition-colors whitespace-nowrap shadow-2xs",
+  "inline-flex h-5 items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-[11.5px] font-medium leading-none",
   {
     variants: {
       variant: {
-        default: "border-zinc-700/80 bg-zinc-800 text-zinc-100",
-        secondary: "border-zinc-800/80 bg-zinc-900/80 text-zinc-400",
-        success: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 font-semibold",
-        warning: "border-amber-500/30 bg-amber-500/10 text-amber-400 font-semibold",
-        destructive: "border-rose-500/30 bg-rose-500/10 text-rose-400 font-semibold",
-        info: "border-sky-500/30 bg-sky-500/10 text-sky-400 font-semibold",
-        outline: "border-zinc-800 bg-transparent text-zinc-400",
+        neutral: "bg-muted text-muted-foreground ring-1 ring-inset ring-border",
+        brand: "bg-brand-soft text-brand-text",
+        success: "bg-success-soft text-success-text",
+        warning: "bg-warning-soft text-warning-text",
+        destructive: "bg-destructive-soft text-destructive-text",
+        info: "bg-info-soft text-info-text",
+        outline: "text-muted-foreground ring-1 ring-inset ring-border-strong",
+        solid: "bg-primary text-primary-foreground",
+        /** @deprecated aliases */
+        default: "bg-muted text-foreground ring-1 ring-inset ring-border",
+        secondary: "bg-muted text-muted-foreground ring-1 ring-inset ring-border",
       },
     },
-    defaultVariants: { variant: "default" },
+    defaultVariants: { variant: "neutral" },
   },
 );
 
-export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {
+export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement>, VariantProps<typeof badgeVariants> {
+  /** Leading status dot in the badge's colour. */
   dot?: boolean;
 }
 
 export function Badge({ className, variant, dot, children, ...props }: BadgeProps) {
   return (
-    <div className={cn(badgeVariants({ variant }), className)} {...props}>
-      {dot && <span className="size-1.5 rounded-full bg-current shrink-0" aria-hidden />}
+    <span className={cn(badgeVariants({ variant }), className)} {...props}>
+      {dot && <span className="size-1.5 shrink-0 rounded-full bg-current" aria-hidden />}
       {children}
-    </div>
+    </span>
   );
 }
 
-/** Map domain statuses → badge variants, used across the whole app. */
+/** Map domain statuses to badge variants, used across the whole app. */
 export function statusVariant(status: string): BadgeProps["variant"] {
   switch (status) {
     case "active":
@@ -43,26 +48,41 @@ export function statusVariant(status: string): BadgeProps["variant"] {
     case "ok":
     case "replied":
     case "contacted":
+    case "connected":
+    case "healthy":
+    case "approved":
+    case "resolved":
       return "success";
     case "scheduled":
     case "queued":
     case "pending":
     case "processing":
     case "new":
+    case "open":
       return "info";
+    case "warming":
+    case "warning":
+    case "needs_attention":
+    case "waiting":
+      return "warning";
     case "paused":
     case "draft":
     case "untested":
-      return "secondary";
+      return "neutral";
     case "failed":
     case "bounced":
     case "unsubscribed":
     case "blocked":
+    case "error":
+    case "rejected":
       return "destructive";
     case "archived":
     case "cancelled":
+    case "closed":
       return "outline";
     default:
-      return "secondary";
+      return "neutral";
   }
 }
+
+export { badgeVariants };

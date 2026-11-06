@@ -1,385 +1,380 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  cn,
+} from "@smartreach/ui";
 import {
   chartScale,
   formatChartDate,
   formatRangeDate,
   formatTick,
-  seriesPeak,
   xLabelIndexes,
   type AnalyticsPointView,
 } from "@/lib/analytics-range";
 
-const SERIES = [
-  { key: "sent", label: "Sent", color: "var(--primary)", dash: undefined },
-  { key: "contacted", label: "Contacted", color: "var(--info)", dash: "6 4" },
-  { key: "replies", label: "Replies", color: "var(--success)", dash: "2 3" },
-  { key: "bounces", label: "Bounces", color: "var(--warning)", dash: "9 3 2 3" },
-] as const;
+export type AnalyticsSeriesKey = "sent" | "contacted" | "replies" | "bounces";
 
-function buildSmoothPath(pts: { x: number; y: number }[], yZero?: number): string {
-  if (pts.length === 0) return "";
-  if (pts.length === 1) return `M ${pts[0]!.x} ${pts[0]!.y}`;
-  if (pts.length === 2) return `M ${pts[0]!.x} ${pts[0]!.y} L ${pts[1]!.x} ${pts[1]!.y}`;
+/** Colour follows the metric, never its position, so a metric looks the same on every chart. */
+export const ANALYTICS_SERIES: Record<AnalyticsSeriesKey, { label: string; color: string; dash?: string }> = {
+  sent: { label: "Emails sent", color: "var(--chart-1)" },
+  contacted: { label: "Leads contacted", color: "var(--chart-2)", dash: "5 4" },
+  replies: { label: "Replies", color: "var(--chart-3)" },
+  bounces: { label: "Bounces", color: "var(--chart-4)", dash: "5 4" },
+};
 
+const ALL_SERIES: AnalyticsSeriesKey[] = ["sent", "contacted", "replies", "bounces"];
+
+const PAD_TOP = 12;
+const PAD_BOTTOM = 8;
+
+/** Monotone cubic path: smooth, but never overshoots the data or dips below zero. */
+function monotonePath(pts: { x: number; y: number }[]): string {
   const n = pts.length;
-  // Calculate slopes (secants)
-  const d: number[] = new Array(n - 1);
-  const m: number[] = new Array(n);
-
+  if (n === 0) return "";
+  if (n === 1) return `M ${pts[0]!.x} ${pts[0]!.y}`;
+  const slopes: number[] = [];
   for (let i = 0; i < n - 1; i++) {
     const dx = pts[i + 1]!.x - pts[i]!.x;
-    d[i] = dx === 0 ? 0 : (pts[i + 1]!.y - pts[i]!.y) / dx;
+    slopes.push(dx === 0 ? 0 : (pts[i + 1]!.y - pts[i]!.y) / dx);
   }
-
-  // Initial tangents
-  m[0] = d[0]!;
+  const tangents: number[] = new Array(n).fill(0);
+  tangents[0] = slopes[0]!;
+  tangents[n - 1] = slopes[n - 2]!;
   for (let i = 1; i < n - 1; i++) {
-    if (d[i - 1]! * d[i]! <= 0) {
-      // Local extremum or flat: tangent must be 0 to prevent overshoot!
-      m[i] = 0;
-    } else {
-      m[i] = (d[i - 1]! + d[i]!) / 2;
-    }
+    const a = slopes[i - 1]!;
+    const b = slopes[i]!;
+    tangents[i] = a * b <= 0 ? 0 : (a + b) / 2;
   }
-  m[n - 1] = d[n - 2]!;
-
-  // Fritsch-Carlson clamping to guarantee strict monotonicity (no overshoot/undershoot)
   for (let i = 0; i < n - 1; i++) {
-    if (d[i] === 0) {
-      m[i] = 0;
-      m[i + 1] = 0;
-    } else {
-      const alpha = m[i]! / d[i]!;
-      const beta = m[i + 1]! / d[i]!;
-      const dist = alpha * alpha + beta * beta;
-      if (dist > 9) {
-        const tau = 3 / Math.sqrt(dist);
-        m[i] = tau * alpha * d[i]!;
-        m[i + 1] = tau * beta * d[i]!;
-      }
+    const s = slopes[i]!;
+    if (s === 0) {
+      tangents[i] = 0;
+      tangents[i + 1] = 0;
+      continue;
+    }
+    const a = tangents[i]! / s;
+    const b = tangents[i + 1]! / s;
+    const h = a * a + b * b;
+    if (h > 9) {
+      const t = 3 / Math.sqrt(h);
+      tangents[i] = t * a * s;
+      tangents[i + 1] = t * b * s;
     }
   }
-
-  let path = `M ${pts[0]!.x.toFixed(1)} ${pts[0]!.y.toFixed(1)}`;
+  let d = `M ${pts[0]!.x.toFixed(1)} ${pts[0]!.y.toFixed(1)}`;
   for (let i = 0; i < n - 1; i++) {
-    const p1 = pts[i]!;
-    const p2 = pts[i + 1]!;
-    const dx = (p2.x - p1.x) / 3;
-
-    let cp1y = p1.y + m[i]! * dx;
-    let cp2y = p2.y - m[i + 1]! * dx;
-
-    // Strict clamp: never go below 0 (yZero) and never overshoot monotonic bounds
-    if (yZero !== undefined) {
-      cp1y = Math.min(cp1y, yZero);
-      cp2y = Math.min(cp2y, yZero);
-    }
-    const minY = Math.min(p1.y, p2.y);
-    const maxY = Math.max(p1.y, p2.y);
-    cp1y = Math.max(minY, Math.min(maxY, cp1y));
-    cp2y = Math.max(minY, Math.min(maxY, cp2y));
-
-    const cp1x = p1.x + dx;
-    const cp2x = p2.x - dx;
-
-    path += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+    const p = pts[i]!;
+    const q = pts[i + 1]!;
+    const dx = (q.x - p.x) / 3;
+    const lo = Math.min(p.y, q.y);
+    const hi = Math.max(p.y, q.y);
+    const c1 = Math.max(lo, Math.min(hi, p.y + tangents[i]! * dx));
+    const c2 = Math.max(lo, Math.min(hi, q.y - tangents[i + 1]! * dx));
+    d += ` C ${(p.x + dx).toFixed(1)} ${c1.toFixed(1)}, ${(q.x - dx).toFixed(1)} ${c2.toFixed(1)}, ${q.x.toFixed(1)} ${q.y.toFixed(1)}`;
   }
-  return path;
+  return d;
+}
+
+function useElementSize<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      setSize({ width: Math.max(1, Math.round(rect.width)), height: Math.max(1, Math.round(rect.height)) });
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, size] as const;
 }
 
 /**
- * Daily series chart with smooth Bézier interpolation, responsive layout,
- * and an interactive date-hover crosshair with bold dots and metric tooltips.
+ * Daily line chart for analytics. One shared y-axis, so only put metrics of
+ * the same scale together (volume in one chart, replies and bounces in another).
+ * Hover or use the arrow keys on the plot to read exact values.
  */
 export function AnalyticsSeriesChart({
   points,
   from,
   to,
+  series = ALL_SERIES,
+  className,
 }: {
   points: AnalyticsPointView[];
   from: string;
   to: string;
+  series?: AnalyticsSeriesKey[];
+  className?: string;
 }) {
-  const plotRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(0);
-  const [height, setHeight] = useState(0);
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const [plotRef, { width, height }] = useElementSize<HTMLDivElement>();
+  const [active, setActive] = useState<number | null>(null);
+  const tooltipId = useId();
 
-  useEffect(() => {
-    const plot = plotRef.current;
-    if (!plot) return;
-    const measure = () => {
-      const rect = plot.getBoundingClientRect();
-      setWidth(Math.max(1, Math.round(rect.width)));
-      setHeight(Math.max(1, Math.round(rect.height)));
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(plot);
-    return () => observer.disconnect();
-  }, []);
-
-  const peak = seriesPeak(points);
-  const { max, ticks } = chartScale(peak);
   const count = points.length;
-  const labels = xLabelIndexes(count);
-  const caption = `Daily sent, contacted, replies, and bounces from ${formatRangeDate(from)} to ${formatRangeDate(to)}.`;
-  const padY = 14;
+  const peak = points.reduce((max, p) => Math.max(max, ...series.map((key) => p[key])), 0);
+  const scale = chartScale(peak);
+  const max = scale.max;
+  // Counts are whole numbers, so skip a fractional middle tick (e.g. 2.5 on a 0–5 axis).
+  const ticks = scale.ticks.filter((t) => Number.isInteger(t));
+  const labelIndexes = xLabelIndexes(count);
+  const names = series.map((key) => ANALYTICS_SERIES[key].label.toLowerCase());
+  const caption = `Daily ${names.join(", ")} from ${formatRangeDate(from)} to ${formatRangeDate(to)}.`;
 
-  function xAt(index: number) {
-    if (count <= 1) return width / 2;
-    return (index / (count - 1)) * width;
-  }
-
-  function yAt(value: number) {
-    const span = Math.max(height - padY * 2, 1);
+  const xAt = (i: number) => (count <= 1 ? width / 2 : (i / (count - 1)) * width);
+  const yAt = (value: number) => {
+    const span = Math.max(height - PAD_TOP - PAD_BOTTOM, 1);
     const t = max <= 0 ? 0 : Math.min(1, Math.max(0, value / max));
-    return padY + (1 - t) * span;
+    return PAD_TOP + (1 - t) * span;
+  };
+
+  const point = active !== null ? points[active] : undefined;
+  const ready = width > 0 && height > 0;
+
+  // Keep the tooltip inside the card: beside the crosshair when it fits, otherwise clamped.
+  // It may extend left over the y-axis column (36px + 12px gap) but never past the plot's right edge.
+  const tipRef = useRef<HTMLDivElement>(null);
+  const [tipWidth, setTipWidth] = useState(176);
+  useLayoutEffect(() => {
+    if (tipRef.current) setTipWidth(tipRef.current.offsetWidth);
+  }, [active, series.length]);
+  let tipLeft = 0;
+  if (active !== null) {
+    const x = xAt(active);
+    const maxLeft = width - tipWidth;
+    tipLeft = x + 12 <= maxLeft ? x + 12 : x - 12 - tipWidth;
+    tipLeft = Math.max(-48, Math.min(tipLeft, maxLeft));
   }
 
-  const hoveredPoint = hoverIndex !== null ? points[hoverIndex] : null;
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (count === 0) return;
+    const current = active ?? -1;
+    let next: number | null = null;
+    if (event.key === "ArrowRight") next = Math.min(count - 1, current + 1);
+    else if (event.key === "ArrowLeft") next = Math.max(0, current < 0 ? count - 1 : current - 1);
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = count - 1;
+    else if (event.key === "Escape") {
+      setActive(null);
+      return;
+    }
+    if (next !== null) {
+      event.preventDefault();
+      setActive(next);
+    }
+  }
 
   return (
-    <figure aria-label={caption} className="min-w-0">
+    <figure className={cn("min-w-0", className)}>
       <figcaption className="sr-only">{caption}</figcaption>
-      <div className="flex gap-2">
-        <div className="relative h-52 w-12 shrink-0 sm:h-64" aria-hidden="true">
-          {height > 0
+
+      {series.length > 1 ? (
+        <ul className="mb-4 flex flex-wrap gap-x-4 gap-y-1.5 text-[13px] text-muted-foreground">
+          {series.map((key) => {
+            const s = ANALYTICS_SERIES[key];
+            return (
+              <li key={key} className="flex items-center gap-2">
+                <svg width="20" height="8" aria-hidden className="shrink-0">
+                  <line x1="1" y1="4" x2="19" y2="4" stroke={s.color} strokeWidth="2" strokeDasharray={s.dash} strokeLinecap="round" />
+                </svg>
+                {s.label}
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+
+      <div className="flex gap-3">
+        {/* Y axis */}
+        <div className="relative h-48 w-9 shrink-0 sm:h-60" aria-hidden>
+          {ready
             ? ticks.map((tick) => (
                 <span
                   key={tick}
-                  className="absolute right-0 -translate-y-1/2 text-[11px] tabular-nums text-muted-foreground"
-                  style={{ top: `${(yAt(tick) / height) * 100}%` }}
+                  className="tabular absolute right-0 -translate-y-1/2 text-xs text-subtle-foreground"
+                  style={{ top: yAt(tick) }}
                 >
                   {formatTick(tick)}
                 </span>
               ))
             : null}
         </div>
+
+        {/* Plot */}
         <div
           ref={plotRef}
-          className="relative h-52 min-w-0 flex-1 cursor-crosshair sm:h-64"
-          onPointerMove={(e) => {
+          role="group"
+          tabIndex={count > 0 ? 0 : -1}
+          aria-label={`${caption} Use the left and right arrow keys to read each day.`}
+          aria-describedby={point ? tooltipId : undefined}
+          onKeyDown={onKeyDown}
+          onBlur={() => setActive(null)}
+          onPointerMove={(event) => {
             if (count === 0) return;
-            const rect = e.currentTarget.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const frac = Math.max(0, Math.min(1, mouseX / rect.width));
-            const idx = Math.min(Math.max(0, Math.round(frac * (count - 1))), count - 1);
-            setHoverIndex(idx);
+            const rect = event.currentTarget.getBoundingClientRect();
+            const frac = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0;
+            setActive(Math.min(count - 1, Math.max(0, Math.round(frac * (count - 1)))));
           }}
-          onPointerLeave={() => setHoverIndex(null)}
+          onPointerLeave={() => setActive(null)}
+          className="relative h-48 min-w-0 flex-1 rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring sm:h-60"
         >
-          {width > 0 && height > 0 ? (
-            <svg
-              width={width}
-              height={height}
-              viewBox={`0 0 ${width} ${height}`}
-              role="presentation"
-              aria-hidden="true"
-              className="block overflow-visible"
-            >
+          {ready ? (
+            <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden className="block overflow-visible">
               {ticks.map((tick) => (
                 <line
                   key={tick}
-                  x1="0"
+                  x1={0}
                   x2={width}
                   y1={yAt(tick)}
                   y2={yAt(tick)}
                   stroke="var(--border)"
-                  strokeWidth="1"
+                  strokeWidth={1}
+                  strokeDasharray={tick === 0 ? undefined : "2 4"}
                 />
               ))}
-              {SERIES.map((series) => {
-                const pts = points.map((point, index) => ({
-                  x: xAt(index),
-                  y: yAt(point[series.key]),
-                }));
+
+              {series.map((key) => {
+                const s = ANALYTICS_SERIES[key];
+                const pts = points.map((p, i) => ({ x: xAt(i), y: yAt(p[key]) }));
                 return (
                   <path
-                    key={series.key}
+                    key={key}
+                    d={monotonePath(pts)}
                     fill="none"
-                    stroke={series.color}
-                    strokeWidth="2.5"
+                    stroke={s.color}
+                    strokeWidth={2}
+                    strokeDasharray={s.dash}
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    strokeDasharray={series.dash}
-                    d={buildSmoothPath(pts, yAt(0))}
                   />
                 );
               })}
+
               {count === 1
-                ? SERIES.map((series) => (
-                    <circle
-                      key={series.key}
-                      cx={xAt(0)}
-                      cy={yAt(points[0]?.[series.key] ?? 0)}
-                      r="4"
-                      fill={series.color}
-                    />
+                ? series.map((key) => (
+                    <circle key={key} cx={xAt(0)} cy={yAt(points[0]![key])} r={4} fill={ANALYTICS_SERIES[key].color} />
                   ))
                 : null}
 
-              {/* Hover vertical crosshair line and bold circular dots */}
-              {hoverIndex !== null && hoveredPoint && (
-                <g className="transition-opacity duration-150">
+              {point && active !== null ? (
+                <g>
                   <line
-                    x1={xAt(hoverIndex)}
-                    x2={xAt(hoverIndex)}
-                    y1={padY - 4}
-                    y2={height - padY + 4}
-                    stroke="var(--foreground)"
-                    strokeOpacity="0.2"
-                    strokeDasharray="3 3"
-                    strokeWidth="1.5"
+                    x1={xAt(active)}
+                    x2={xAt(active)}
+                    y1={PAD_TOP}
+                    y2={height - PAD_BOTTOM}
+                    stroke="var(--border-strong)"
+                    strokeWidth={1}
                   />
-                  {SERIES.map((series) => {
-                    const cx = xAt(hoverIndex);
-                    const cy = yAt(hoveredPoint[series.key]);
-                    return (
-                      <g key={series.key}>
-                        <circle
-                          cx={cx}
-                          cy={cy}
-                          r="7"
-                          fill={series.color}
-                          fillOpacity="0.2"
-                        />
-                        <circle
-                          cx={cx}
-                          cy={cy}
-                          r="4.5"
-                          fill={series.color}
-                          stroke="var(--card)"
-                          strokeWidth="2"
-                        />
-                      </g>
-                    );
-                  })}
+                  {series.map((key) => (
+                    <circle
+                      key={key}
+                      cx={xAt(active)}
+                      cy={yAt(point[key])}
+                      r={4}
+                      fill={ANALYTICS_SERIES[key].color}
+                      stroke="var(--card)"
+                      strokeWidth={2}
+                    />
+                  ))}
                 </g>
-              )}
+              ) : null}
             </svg>
           ) : null}
 
-          {/* Interactive Tooltip Card */}
-          {hoverIndex !== null && hoveredPoint && width > 0 && (
+          {point && active !== null && ready ? (
             <div
-              className="pointer-events-none absolute top-2 z-20 min-w-[10rem] -translate-x-1/2 rounded-lg border border-border bg-popover/95 p-2.5 text-popover-foreground shadow-lg backdrop-blur transition-all duration-75"
-              style={{
-                left: `${Math.max(16, Math.min(width - 16, xAt(hoverIndex)))}px`,
-                transform:
-                  hoverIndex > count * 0.65
-                    ? "translateX(-95%)"
-                    : hoverIndex < count * 0.35
-                      ? "translateX(-5%)"
-                      : "translateX(-50%)",
-              }}
+              ref={tipRef}
+              id={tooltipId}
+              role="status"
+              className="pointer-events-none absolute top-0 z-10 min-w-40 rounded-lg border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md"
+              style={{ left: tipLeft }}
             >
-              <p className="border-b border-border/60 pb-1 text-xs font-semibold">
-                {formatChartDate(hoveredPoint.date)}
-              </p>
-              <div className="mt-1.5 space-y-1 text-xs">
-                {SERIES.map((series) => (
-                  <div key={series.key} className="flex items-center justify-between gap-3">
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
-                      <span
-                        className="inline-block h-2 w-2 rounded-full"
-                        style={{ backgroundColor: series.color }}
-                      />
-                      {series.label}
-                    </span>
-                    <span className="font-semibold tabular-nums">
-                      {hoveredPoint[series.key].toLocaleString()}
-                    </span>
+              <p className="font-medium text-foreground">{formatChartDate(point.date)}</p>
+              <dl className="mt-1.5 flex flex-col gap-1">
+                {series.map((key) => (
+                  <div key={key} className="flex items-center justify-between gap-4">
+                    <dt className="flex items-center gap-1.5 text-muted-foreground">
+                      <span className="size-2 rounded-full" style={{ backgroundColor: ANALYTICS_SERIES[key].color }} aria-hidden />
+                      {ANALYTICS_SERIES[key].label}
+                    </dt>
+                    <dd className="tabular font-medium text-foreground">{point[key].toLocaleString()}</dd>
                   </div>
                 ))}
-              </div>
+              </dl>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
-      <div className="relative ml-14 mt-1 h-5" aria-hidden="true">
-        {labels.map((index) => {
-          const point = points[index];
-          if (!point) return null;
-          const atStart = index === 0;
-          const atEnd = index === count - 1;
+
+      {/* X axis */}
+      <div className="relative ml-12 mt-2 h-4" aria-hidden>
+        {labelIndexes.map((i) => {
+          const p = points[i];
+          if (!p) return null;
+          const first = i === 0 && count > 1;
+          const last = i === count - 1 && count > 1;
           return (
             <span
-              key={point.date}
-              className="absolute top-0 whitespace-nowrap text-[11px] tabular-nums text-muted-foreground"
+              key={p.date}
+              className="tabular absolute top-0 whitespace-nowrap text-xs text-subtle-foreground"
               style={{
-                left: `${count <= 1 ? 50 : (index / (count - 1)) * 100}%`,
-                transform: atStart && count > 1 ? "none" : atEnd ? "translateX(-100%)" : "translateX(-50%)",
+                left: `${count <= 1 ? 50 : (i / (count - 1)) * 100}%`,
+                transform: first ? "none" : last ? "translateX(-100%)" : "translateX(-50%)",
               }}
             >
-              {formatChartDate(point.date)}
+              {formatChartDate(p.date)}
             </span>
           );
         })}
       </div>
-      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-[13px]">
-        {SERIES.map((series) => (
-          <li key={series.key} className="flex items-center gap-2">
-            <svg width="28" height="8" aria-hidden="true" className="shrink-0">
-              <line
-                x1="1"
-                y1="4"
-                x2="27"
-                y2="4"
-                stroke={series.color}
-                strokeWidth="2"
-                strokeDasharray={series.dash}
-                strokeLinecap="round"
-              />
-            </svg>
-            <span>{series.label}</span>
-          </li>
-        ))}
-      </ul>
-      <details className="mt-4">
-        <summary className="cursor-pointer rounded text-[13px] font-medium text-muted-foreground hover:text-foreground">
-          View daily numbers
-        </summary>
-        <div className="mt-3 max-h-64 overflow-auto rounded-lg border border-border/70">
-          <table className="w-full min-w-[20rem] border-collapse text-left text-sm">
-            <caption className="sr-only">{caption}</caption>
-            <thead className="sticky top-0 bg-card">
-              <tr className="border-b border-border/70 text-muted-foreground">
-                <th scope="col" className="px-3 py-2 font-medium">
-                  Date
-                </th>
-                <th scope="col" className="px-3 py-2 text-right font-medium">
-                  Sent
-                </th>
-                <th scope="col" className="px-3 py-2 text-right font-medium">
-                  Contacted
-                </th>
-                <th scope="col" className="px-3 py-2 text-right font-medium">
-                  Replies
-                </th>
-                <th scope="col" className="px-3 py-2 text-right font-medium">
-                  Bounces
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {points.map((point) => (
-                <tr key={point.date} className="border-b border-border/50 last:border-0">
-                  <th scope="row" className="whitespace-nowrap px-3 py-1.5 font-medium">
-                    {formatChartDate(point.date)}
-                  </th>
-                  <td className="px-3 py-1.5 text-right tabular-nums">{point.sent}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">{point.contacted}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">{point.replies}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">{point.bounces}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </details>
     </figure>
+  );
+}
+
+/** Every day in the range as a table: the accessible, exact view of the charts. */
+export function AnalyticsDailyTable({ points, from, to }: { points: AnalyticsPointView[]; from: string; to: string }) {
+  return (
+    <div className="max-h-80 overflow-y-auto">
+      <Table>
+        <caption className="sr-only">
+          Daily numbers from {formatRangeDate(from)} to {formatRangeDate(to)}.
+        </caption>
+        <TableHeader className="sticky top-0 z-[1] bg-card">
+          <TableRow className="hover:bg-transparent">
+            <TableHead scope="col">Date</TableHead>
+            {ALL_SERIES.map((key) => (
+              <TableHead key={key} scope="col" className="text-right">
+                {ANALYTICS_SERIES[key].label}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {[...points].reverse().map((p) => (
+            <TableRow key={p.date}>
+              <TableCell className="whitespace-nowrap font-medium">{formatChartDate(p.date)}</TableCell>
+              {ALL_SERIES.map((key) => (
+                <TableCell key={key} className="tabular text-right text-muted-foreground">
+                  {p[key].toLocaleString()}
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }

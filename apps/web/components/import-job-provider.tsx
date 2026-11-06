@@ -3,7 +3,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CheckCircle2, Loader2, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { Button, Progress } from "@smartreach/ui";
 import { toast } from "sonner";
 import {
   deleteImportJob,
@@ -73,7 +74,7 @@ export function ImportJobProvider({ children }: { children: React.ReactNode }) {
             currentJob.updatedAt = Date.now();
             await saveImportJob(currentJob);
             setActiveJob({ ...currentJob });
-            toast.info("Lead import was cancelled");
+            toast.info("Import stopped");
             break;
           }
 
@@ -97,7 +98,7 @@ export function ImportJobProvider({ children }: { children: React.ReactNode }) {
             currentJob.updatedAt = Date.now();
             await saveImportJob(currentJob);
             setActiveJob({ ...currentJob });
-            toast.error(res.error || "Import encountered an error");
+            toast.error(res.error || "Import failed");
             break;
           }
 
@@ -133,7 +134,7 @@ export function ImportJobProvider({ children }: { children: React.ReactNode }) {
         currentJob.updatedAt = Date.now();
         await saveImportJob(currentJob);
         setActiveJob({ ...currentJob });
-        toast.error("Lead import encountered an error");
+        toast.error("Import failed", { description: "Open the import page to see how far it got." });
       } finally {
         isProcessingRef.current = false;
       }
@@ -228,41 +229,32 @@ export function ImportJobProvider({ children }: { children: React.ReactNode }) {
     >
       {children}
 
-      {/* Sleek Floating Background Import Progress Widget */}
-      {showFloatingWidget && activeJob && (
-        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-lg border border-primary/30 bg-card/95 p-3.5 shadow-2xl backdrop-blur-md transition-all animate-in slide-in-from-bottom-5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Loader2 className="size-4 animate-spin text-primary" />
-          </div>
-          <div className="min-w-0 pr-1 max-w-[220px] sm:max-w-xs">
-            <div className="flex items-center gap-1.5">
-              <span className="truncate text-xs font-semibold text-foreground">
-                {activeJob.listName}
-              </span>
-              <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.2 text-[10px] font-medium text-primary">
-                {percent}%
-              </span>
-            </div>
-            <div className="mt-1 flex items-center gap-2">
-              <div className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full bg-primary transition-all duration-300"
-                  style={{ width: `${percent}%` }}
-                />
-              </div>
-              <span className="text-[10px] text-muted-foreground tabular-nums">
-                {activeJob.processedRows.toLocaleString()} / {activeJob.totalRows.toLocaleString()}
-              </span>
-            </div>
-          </div>
-          <Link
-            href="/leads/import"
-            className="shrink-0 rounded-lg border border-border bg-muted/80 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted"
-          >
-            View
-          </Link>
-        </div>
-      )}
+      {showFloatingWidget && activeJob ? <ImportProgressDock job={activeJob} percent={percent} /> : null}
     </ImportJobContext.Provider>
+  );
+}
+
+/** Small progress card pinned to the corner while an import runs on another page. */
+function ImportProgressDock({ job, percent }: { job: StoredImportJob; percent: number }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-x-4 bottom-4 z-50 rounded-xl border border-border bg-popover p-3.5 text-popover-foreground shadow-lg sm:inset-x-auto sm:right-5 sm:bottom-5 sm:w-80"
+    >
+      <div className="flex items-center gap-3">
+        <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-medium">Importing into {job.listName}</p>
+          <p className="tabular text-xs text-subtle-foreground">
+            {job.processedRows.toLocaleString()} of {job.totalRows.toLocaleString()} rows · {percent}%
+          </p>
+        </div>
+        <Button variant="outline" size="xs" asChild>
+          <Link href="/leads/import">View</Link>
+        </Button>
+      </div>
+      <Progress value={percent} className="mt-3" aria-label="Import progress" />
+    </div>
   );
 }

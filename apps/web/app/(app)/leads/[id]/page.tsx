@@ -1,9 +1,12 @@
 import { notFound } from "next/navigation";
 import { requireWorkspace } from "@/lib/session";
 import { getLeadList, listLeads, listTags } from "@/lib/queries";
+import { Page } from "@/components/layout/page";
 import { LeadTable, type LeadRow } from "./lead-table";
 
 export const dynamic = "force-dynamic";
+
+export const metadata = { title: "Lead list" };
 
 export default async function LeadListPage({
   params,
@@ -31,15 +34,18 @@ export default async function LeadListPage({
   ]);
 
   return (
-    <LeadTable
-      listName={list.name}
-      listId={id}
-      totalCount={Number(list.totalLeads ?? 0)}
-      initialRows={items as unknown as LeadRow[]}
-      initialCursor={nextCursor}
-      initialSearch={sp.search ?? ""}
-      initialStatus={sp.status ?? ""}
-      tags={tags.map((t) => ({ id: t.id, name: t.name, color: t.color }))}
-    />
+    <Page width="wide">
+      <LeadTable
+        key={id}
+        listName={list.name}
+        listId={id}
+        totalCount={Number(list.totalLeads ?? 0)}
+        initialRows={items as unknown as LeadRow[]}
+        initialCursor={nextCursor}
+        initialSearch={sp.search ?? ""}
+        initialStatus={sp.status ?? ""}
+        tags={tags.map((t) => ({ id: t.id, name: t.name, color: t.color }))}
+      />
+    </Page>
   );
 }

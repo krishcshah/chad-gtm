@@ -1,235 +1,127 @@
 "use client";
-import { format, formatDistanceToNow } from "date-fns";
-import { ChevronDown, ChevronRight, ChevronUp, Inbox, RefreshCw, SendHorizonal, X } from "lucide-react";
+
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { toast } from "sonner";
-import { UNIBOX_REPLY_TAGS, type UniboxReplyTag } from "@smartreach/shared";
-import {
-  Button,
-  EmptyState,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Textarea,
-  cn,
-} from "@smartreach/ui";
+import { RefreshCw } from "lucide-react";
+import type { UniboxReplyTag } from "@smartreach/shared";
+import { Badge, Button, PageHeader, cn, toast } from "@smartreach/ui";
 import { getUniboxThread, sendUniboxReply, setUniboxReplyTag, syncUniboxRepliesAction } from "@/lib/actions";
-import { messagePreview, prepareMessageBody, resolveBubbleSide, threadDayKey, threadDayLabel } from "@/lib/message-body";
 import { groupUniboxConversations } from "@/lib/unibox-conversations";
 import type { UniboxThreadMessage } from "@/lib/unibox-thread";
-import { EmailBody } from "./message-body";
+import { ConversationList, type ListConversation } from "./conversation-list";
+import { ConversationView, NoConversation } from "./conversation-view";
+import { InboxFolders, type ViewCounts } from "./inbox-filters";
+import { isTypingTarget, mergeThread, replyAsMessage, type InboxView, type ReplyRow } from "./inbox-utils";
+import { ReplyComposer } from "./reply-composer";
 
-const TAG_LABEL: Record<UniboxReplyTag, string> = {
-  out_of_office: "Out of office",
-  not_interested: "Not interested",
-  interested: "Interested",
-  meeting_booked: "Meeting booked",
-  won: "Won",
-  lost: "Lost",
-};
-
-function tagLabel(tag: string): string {
-  return TAG_LABEL[tag as UniboxReplyTag] ?? tag;
-}
-
-interface ReplyRow {
-  id: string;
-  leadId: string | null;
-  campaignId: string | null;
-  fromName: string; fromEmail: string; subject: string; snippet: string;
-  bodyText: string; bodyHtml: string; receivedAt: string; readAt: string | null;
-  tag: string | null;
-  agentStatus?: string | null;
-  agentSummary?: string | null;
-  campaignName: string | null; senderEmail: string | null; senderName: string | null;
-}
+/** New replies are written by the background sync; reload the list this often while the tab is visible. */
+const POLL_MS = 60_000;
 
 interface ThreadState {
   replyId: string;
   messages: UniboxThreadMessage[];
 }
 
-function sortAscending(messages: UniboxThreadMessage[]): UniboxThreadMessage[] {
-  return [...messages].sort((a, b) => {
-    const ta = Date.parse(a.sentAt) || 0;
-    const tb = Date.parse(b.sentAt) || 0;
-    if (ta !== tb) return ta - tb;
-    return a.id.localeCompare(b.id);
-  });
-}
-
-/** Fetched transcript wins on id; keep optimistic rows the server has not returned yet. */
-function mergeThread(fetched: UniboxThreadMessage[], optimistic: UniboxThreadMessage[]): UniboxThreadMessage[] {
-  const map = new Map<string, UniboxThreadMessage>();
-  for (const m of optimistic) map.set(m.id, m);
-  for (const m of fetched) map.set(m.id, m);
-  return sortAscending([...map.values()]);
-}
-
-function senderLabel(m: UniboxThreadMessage): string {
-  if (resolveBubbleSide(m) === "right") return m.fromName || "You";
-  if (m.direction === "campaign" || m.fromRole === "automation") return m.fromName || m.fromEmail || "Campaign";
-  return m.fromName || m.fromEmail || "Lead";
-}
-
-function roleHint(m: UniboxThreadMessage): string {
-  if (m.fromRole === "agent") return "Sent by agent";
-  if (m.direction === "campaign" || m.fromRole === "automation") return "Campaign";
-  return "";
-}
-
-function clockTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return format(d, "h:mm a");
-}
-
-function replyAsMessage(r: ReplyRow): UniboxThreadMessage {
-  return {
-    id: `inbound:${r.id}`,
-    direction: "inbound",
-    fromRole: "lead",
-    fromName: r.fromName || "",
-    fromEmail: r.fromEmail,
-    subject: r.subject || null,
-    bodyHtml: r.bodyHtml || "",
-    bodyText: r.bodyText || r.snippet || "",
-    sentAt: r.receivedAt,
-    tag: (r.tag as UniboxReplyTag | null) ?? null,
-  };
-}
-
-function getTagBadgeClass(tag: string | null): string {
-  if (!tag) return "";
-  switch (tag) {
-    case "interested":
-    case "won":
-      return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
-    case "meeting_booked":
-      return "bg-sky-500/10 text-sky-400 border-sky-500/20";
-    case "out_of_office":
-      return "bg-amber-500/10 text-amber-400 border-amber-500/20";
-    case "not_interested":
-    case "lost":
-      return "bg-rose-500/10 text-rose-400 border-rose-500/20";
-    default:
-      return "bg-zinc-800 text-zinc-300 border-zinc-700";
-  }
-}
-
-function ThreadBubble({ m }: { m: UniboxThreadMessage }) {
-  const right = resolveBubbleSide(m) === "right";
-  const rich = prepareMessageBody({ html: m.bodyHtml, text: m.bodyText }).kind === "html";
-  const time = clockTime(m.sentAt);
-  const hint = roleHint(m);
-  const initial = (senderLabel(m).trim()[0] || "?").toUpperCase();
-  const bubble = rich
-    ? ""
-    : right
-      ? "rounded-lg bg-zinc-800/90 border border-zinc-700/80 px-4 py-3 text-zinc-100 shadow-sm"
-      : m.direction === "campaign" || m.fromRole === "automation"
-        ? "rounded-lg border border-zinc-800/80 bg-zinc-900/70 px-4 py-3 text-foreground shadow-sm"
-        : "rounded-lg border border-zinc-800/80 bg-zinc-950/90 px-4 py-3 text-foreground shadow-sm";
-
-  return (
-    <div className={`flex w-full items-end gap-2.5 ${right ? "justify-end" : "justify-start"}`}>
-      {!right ? (
-        <span className="mb-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-lg bg-zinc-800 border border-zinc-700/80 text-[11px] font-semibold text-zinc-300 shadow-xs" aria-hidden>
-          {initial}
-        </span>
-      ) : null}
-      <article className={`flex min-w-0 flex-col gap-1.5 ${right ? "items-end" : "items-start"} ${rich ? "max-w-[min(96%,58rem)]" : "max-w-[min(92%,50rem)]"}`}>
-        <p className={`flex items-baseline gap-2 text-[11px] text-muted-foreground ${right ? "flex-row-reverse" : ""}`}>
-          <span className="truncate font-medium text-foreground">{senderLabel(m)}</span>
-          {hint && hint !== senderLabel(m) ? (
-            <span
-              className={
-                m.fromRole === "agent"
-                  ? "rounded-md border border-brand-400/25 bg-brand-400/10 px-1.5 py-px text-[10px] font-medium text-brand-300"
-                  : "rounded-md bg-zinc-800 px-1.5 py-px text-[10px] font-medium text-zinc-400"
-              }
-            >
-              {hint}
-            </span>
-          ) : null}
-          {time ? <time dateTime={m.sentAt} className="text-zinc-500">{time}</time> : null}
-        </p>
-        <div className={bubble}>
-          <EmailBody html={m.bodyHtml || null} text={m.bodyText || null} tone={right && !rich ? "inverse" : "default"} />
-        </div>
-      </article>
-    </div>
-  );
-}
-
-function ThreadTranscript({ messages }: { messages: UniboxThreadMessage[] }) {
-  const nodes: React.ReactNode[] = [];
-  let lastDay = "";
-  for (const m of messages) {
-    const key = threadDayKey(m.sentAt);
-    if (key !== lastDay) {
-      lastDay = key;
-      const label = threadDayLabel(m.sentAt);
-      if (label) {
-        nodes.push(
-          <div key={`day-${key}`} className="flex items-center gap-3 py-1">
-            <div className="h-px flex-1 bg-border" />
-            <span className="shrink-0 rounded-lg border border-border bg-background px-2.5 py-0.5 text-[11px] font-medium text-foreground/80">
-              {label}
-            </span>
-            <div className="h-px flex-1 bg-border" />
-          </div>,
-        );
-      }
-    }
-    nodes.push(<ThreadBubble key={m.id} m={m} />);
-  }
-  return <>{nodes}</>;
+function matchesQuery(c: ListConversation, q: string): boolean {
+  if (!q) return true;
+  const r = c.latest;
+  return [r.fromName, r.fromEmail, r.subject, r.snippet, r.campaignName]
+    .filter(Boolean)
+    .some((v) => String(v).toLowerCase().includes(q));
 }
 
 export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]; initialTag?: string }) {
   const router = useRouter();
   const [rows, setRows] = useState<ReplyRow[]>(initial);
-
-  useEffect(() => {
-    setRows(initial);
-  }, [initial]);
-
   const [tagFilter, setTagFilter] = useState(initialTag);
-  const conversations = useMemo(() => groupUniboxConversations(rows), [rows]);
-  const [activeId, setActiveId] = useState<string | null>(() => groupUniboxConversations(initial)[0]?.latest.id ?? null);
-  const [body, setBody] = useState("");
+  const [view, setView] = useState<InboxView>("all");
+  const [query, setQuery] = useState("");
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [composerCollapsed, setComposerCollapsed] = useState(false);
+  const [thread, setThread] = useState<ThreadState | null>(null);
+  const [threadLoading, setThreadLoading] = useState(false);
   const [pending, start] = useTransition();
   const [tagPending, startTag] = useTransition();
   const [refreshing, startRefresh] = useTransition();
-  const [thread, setThread] = useState<ThreadState | null>(null);
-  const [threadLoading, setThreadLoading] = useState(false);
-  const [showQuotedPreview, setShowQuotedPreview] = useState(false);
-  const [composerCollapsed, setComposerCollapsed] = useState(false);
+
   const fetchGen = useRef(0);
   const scrollerRef = useRef<HTMLDivElement>(null);
-  const bottomAnchorRef = useRef<HTMLDivElement>(null);
-  const unread = conversations.filter((c) => c.unread).length;
-  const activeConversation =
-    conversations.find((c) => activeId != null && (c.latest.id === activeId || c.memberIds.includes(activeId))) ?? null;
-  const messages = thread?.replyId === activeId ? thread.messages : [];
-
-  const scrollToBottom = (instant = false) => {
-    requestAnimationFrame(() => {
-      if (scrollerRef.current) {
-        scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight;
-      }
-      bottomAnchorRef.current?.scrollIntoView({ behavior: instant ? "auto" : "smooth", block: "end" });
-    });
-  };
+  const searchRef = useRef<HTMLInputElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const didAutoSelect = useRef(false);
 
   useEffect(() => {
     setRows(initial);
     setTagFilter(initialTag);
   }, [initial, initialTag]);
+
+  /* ─── Derived lists ─────────────────────────────────────────────── */
+
+  const conversations = useMemo<ListConversation[]>(() => {
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    return groupUniboxConversations(rows).map((c) => ({
+      ...c,
+      needsYou: c.memberIds.some((id) => byId.get(id)?.agentStatus === "escalated"),
+    }));
+  }, [rows]);
+
+  const counts: ViewCounts = useMemo(
+    () => ({
+      all: conversations.length,
+      unread: conversations.filter((c) => c.unread).length,
+      needs_you: conversations.filter((c) => c.needsYou).length,
+    }),
+    [conversations],
+  );
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return conversations.filter((c) => {
+      if (view === "unread" && !c.unread) return false;
+      if (view === "needs_you" && !c.needsYou) return false;
+      return matchesQuery(c, q);
+    });
+  }, [conversations, query, view]);
+
+  const activeConversation =
+    conversations.find((c) => activeId != null && (c.latest.id === activeId || c.memberIds.includes(activeId))) ?? null;
+  const messages = thread?.replyId === activeId ? thread.messages : [];
+  const latestId = activeConversation?.latest.id ?? null;
+  const draftKey = activeConversation?.key ?? "";
+  const body = drafts[draftKey] ?? "";
+
+  const setDraft = useCallback((key: string, value: string) => {
+    setDrafts((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  /* ─── Selection ─────────────────────────────────────────────────── */
+
+  // Open the newest conversation on tablet and desktop. On phones the list comes first.
+  useEffect(() => {
+    if (didAutoSelect.current) return;
+    didAutoSelect.current = true;
+    const wide = typeof window !== "undefined" && window.matchMedia?.("(min-width: 768px)").matches;
+    const first = conversations[0];
+    if (wide && first) setActiveId(first.latest.id);
+    // On phones the thread gets the screen; the reply box opens on demand.
+    if (!wide) setComposerCollapsed(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const select = useCallback((replyId: string) => {
+    setActiveId(replyId);
+  }, []);
+
+  // Scroll only the transcript. scrollIntoView would also scroll the clipped page frame.
+  const scrollToBottom = (instant = false) => {
+    requestAnimationFrame(() => {
+      const el = scrollerRef.current;
+      if (el) el.scrollTo({ top: el.scrollHeight, behavior: instant ? "auto" : "smooth" });
+    });
+  };
+
+  /* ─── Thread loading ────────────────────────────────────────────── */
 
   useEffect(() => {
     if (!activeId) {
@@ -247,9 +139,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
       const fetched = res.ok && res.data?.messages ? res.data.messages : [];
       setThread((prev) => {
         const optimistic =
-          prev?.replyId === activeId
-            ? prev.messages.filter((m) => !fetched.some((f) => f.id === m.id))
-            : [];
+          prev?.replyId === activeId ? prev.messages.filter((m) => !fetched.some((f) => f.id === m.id)) : [];
         return { replyId: activeId, messages: mergeThread(fetched, optimistic) };
       });
       setThreadLoading(false);
@@ -260,15 +150,63 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
     };
   }, [activeId]);
 
+  // A new reply arrived in the open conversation (poll or sync): reload its transcript quietly.
+  // Only when the same conversation got a newer reply; switching conversations is handled above.
+  const seenLatest = useRef<{ key: string; latest: string } | null>(null);
+  const activeKey = activeConversation?.key ?? null;
+  useEffect(() => {
+    const prev = seenLatest.current;
+    seenLatest.current = activeKey && latestId ? { key: activeKey, latest: latestId } : null;
+    if (!activeId || !activeKey || !latestId || !prev) return;
+    if (prev.key !== activeKey || prev.latest === latestId) return;
+    const key = activeId;
+    (async () => {
+      const res = await getUniboxThread({ replyId: key });
+      if (!res.ok || !res.data?.messages) return;
+      const fetched = res.data.messages;
+      setThread((current) => {
+        if (current?.replyId !== key) return current;
+        const optimistic = current.messages.filter(
+          (m) => m.id.startsWith("operator:pending:") && !fetched.some((f) => f.id === m.id),
+        );
+        return { replyId: key, messages: mergeThread(fetched, optimistic) };
+      });
+    })();
+  }, [activeId, activeKey, latestId]);
+
+  // The open conversation left the list (re-tagged out of the filter, or gone after a reload).
+  // Drop the selection so phones are not left on an empty pane with no way back.
+  useEffect(() => {
+    if (activeId && !activeConversation) setActiveId(null);
+  }, [activeId, activeConversation]);
+
   useEffect(() => {
     scrollToBottom(true);
     const timer = setTimeout(() => scrollToBottom(true), 60);
     return () => clearTimeout(timer);
   }, [activeId, messages.length, composerCollapsed]);
 
-  const send = (row: ReplyRow) => {
-    const text = body.trim();
-    if (!text) { toast.error("Write a message first"); return; }
+  /* ─── Polling ───────────────────────────────────────────────────── */
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") router.refresh();
+    }, POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [router]);
+
+  /* ─── Actions ───────────────────────────────────────────────────── */
+
+  const send = () => {
+    if (!activeConversation || !activeId || pending) return;
+    const row = activeConversation.latest;
+    const convKey = activeConversation.key;
+    const threadKey = activeId;
+    const text = (drafts[convKey] ?? "").trim();
+    if (!text) {
+      toast.error("Write a message first");
+      return;
+    }
     const tempId = `operator:pending:${crypto.randomUUID()}`;
     const optimistic: UniboxThreadMessage = {
       id: tempId,
@@ -281,27 +219,26 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
       bodyText: text,
       sentAt: new Date().toISOString(),
     };
-    setBody("");
-    setThread((prev) => {
-      const base = prev?.replyId === row.id ? prev.messages : [];
-      return { replyId: row.id, messages: mergeThread([optimistic], base) };
-    });
+    setDraft(convKey, "");
+    setThread((prev) => ({
+      replyId: threadKey,
+      messages: mergeThread([optimistic], prev?.replyId === threadKey ? prev.messages : []),
+    }));
     start(async () => {
       const res = await sendUniboxReply({ replyId: row.id, body: text });
       if (res.ok && res.data?.message) {
         const message = res.data.message;
         toast.success(res.message ?? "Reply sent");
         setThread((prev) => {
-          const base = (prev?.replyId === row.id ? prev.messages : []).filter((m) => m.id !== tempId);
-          return { replyId: row.id, messages: mergeThread([message], base) };
+          if (prev?.replyId !== threadKey) return prev;
+          return { replyId: threadKey, messages: mergeThread([message], prev.messages.filter((m) => m.id !== tempId)) };
         });
         router.refresh();
       } else {
-        setThread((prev) => ({
-          replyId: row.id,
-          messages: (prev?.replyId === row.id ? prev.messages : []).filter((m) => m.id !== tempId),
-        }));
-        setBody(text);
+        setThread((prev) =>
+          prev?.replyId === threadKey ? { replyId: threadKey, messages: prev.messages.filter((m) => m.id !== tempId) } : prev,
+        );
+        setDraft(convKey, text);
         toast.error(res.ok ? "Send failed" : res.error);
       }
     });
@@ -313,9 +250,11 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
         const syncRes = await syncUniboxRepliesAction();
         if (syncRes.ok && syncRes.data && syncRes.data.found > 0) {
           toast.success(`Found ${syncRes.data.found} new ${syncRes.data.found === 1 ? "reply" : "replies"}`);
+        } else if (syncRes.ok) {
+          toast("No new replies");
         }
       } catch {
-        // Fallback silently if sync fails or IMAP is not configured
+        // Mailbox sync is best effort (IMAP may not be configured); still reload what is stored.
       }
 
       if (activeId) {
@@ -337,8 +276,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
     });
   };
 
-  const onTagFilter = (value: string) => {
-    const tag = value === "all" ? "" : value;
+  const onTagFilter = (tag: string) => {
     setTagFilter(tag);
     router.replace(tag ? `/unibox?tag=${encodeURIComponent(tag)}` : "/unibox");
   };
@@ -353,7 +291,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
       const next = res.data?.tag ?? tag;
       setRows((prev) => prev.map((row) => (row.id === replyId ? { ...row, tag: next } : row)));
       setThread((prev) => {
-        if (!prev || prev.replyId !== replyId) return prev;
+        if (!prev) return prev;
         return {
           ...prev,
           messages: prev.messages.map((m) =>
@@ -366,355 +304,166 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
     });
   };
 
+  const clearFilters = () => {
+    setQuery("");
+    setView("all");
+    if (tagFilter) onTagFilter("");
+  };
+
+  /* ─── Keyboard ──────────────────────────────────────────────────── */
+
+  const keyState = useRef({ visible, activeConversation, activeId });
+  keyState.current = { visible, activeConversation, activeId };
+  const lastKey = useRef<{ key: string; at: number }>({ key: "", at: 0 });
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (isTypingTarget(e.target)) return;
+      const prev = lastKey.current;
+      lastKey.current = { key: e.key.toLowerCase(), at: Date.now() };
+      // "g" starts the app's go-to shortcuts; leave the next key to them.
+      if (prev.key === "g" && Date.now() - prev.at < 900) return;
+
+      const { visible: list, activeConversation: current, activeId: id } = keyState.current;
+      const key = e.key.toLowerCase();
+      if (key === "/") {
+        e.preventDefault();
+        searchRef.current?.focus();
+        return;
+      }
+      if (key === "j" || key === "k") {
+        if (list.length === 0) return;
+        e.preventDefault();
+        const index = current ? list.findIndex((c) => c.key === current.key) : -1;
+        const nextIndex = key === "j" ? Math.min(list.length - 1, index + 1) : Math.max(0, index < 0 ? 0 : index - 1);
+        const next = list[nextIndex];
+        if (!next) return;
+        setActiveId(next.latest.id);
+        document
+          .querySelector(`[data-conversation="${CSS.escape(next.key)}"]`)
+          ?.scrollIntoView({ block: "nearest" });
+        return;
+      }
+      if (key === "r" && id) {
+        e.preventDefault();
+        setComposerCollapsed(false);
+        requestAnimationFrame(() => composerRef.current?.focus());
+        return;
+      }
+      if (e.key === "Escape" && id && !window.matchMedia("(min-width: 768px)").matches) {
+        setActiveId(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  /* ─── Render ────────────────────────────────────────────────────── */
+
+  const r = activeConversation?.latest ?? null;
+  const shown = r && !threadLoading && messages.length === 0 ? [replyAsMessage(r)] : messages;
+  // Same rule as the list's "Needs you" badge: any reply in the conversation may be the escalated one.
+  const escalatedRow = activeConversation?.needsYou
+    ? (rows.find((row) => activeConversation.memberIds.includes(row.id) && row.agentStatus === "escalated") ?? null)
+    : null;
+
   return (
-    <div className="unibox-root flex h-[calc(100dvh-6.5rem)] min-h-[580px] max-h-[920px] flex-col gap-3.5 w-full max-w-none overflow-hidden flex-1">
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary shadow-xs">
-            <Inbox className="size-5" aria-hidden />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight">UniBox</h1>
-              <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-500">
-                <span className="size-1.5 rounded-lg bg-emerald-500 animate-pulse" />
-                Live Sync
-              </span>
-              <span className="inline-flex items-center rounded-lg border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
-                {unread} unread
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground hidden sm:block">
-              Unified prospect responses & live outreach thread manager.
-            </p>
-          </div>
+    <>
+      {/* Phones: one compact row so the list gets the screen. */}
+      <div className={cn("flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3 sm:hidden", activeId && "hidden")}>
+        <h1 className="text-xl font-semibold tracking-[-0.025em]">Inbox</h1>
+        <Button variant="outline" size="sm" onClick={refresh} loading={refreshing}>
+          {refreshing ? null : <RefreshCw aria-hidden />}
+          Check for replies
+        </Button>
+      </div>
+      <div className={cn("hidden shrink-0 border-b border-border px-6 pb-5 pt-6 lg:px-8", activeId ? "md:block" : "sm:block")}>
+        <PageHeader
+          title="Inbox"
+          description="Every reply from your leads, across all mailboxes. The agent answers most of them; the ones it cannot are marked Needs you."
+          meta={
+            counts.unread > 0 ? <Badge variant="neutral">{counts.unread.toLocaleString()} unread</Badge> : null
+          }
+          actions={
+            <Button variant="outline" size="sm" onClick={refresh} loading={refreshing}>
+              {refreshing ? null : <RefreshCw aria-hidden />}
+              Check for new replies
+            </Button>
+          }
+        />
+      </div>
+
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <InboxFolders view={view} onView={setView} tag={tagFilter} onTag={onTagFilter} counts={counts} />
+
+        <div
+          className={cn(
+            "min-h-0 w-full shrink-0 flex-col border-r border-border bg-card md:w-80 lg:w-96",
+            activeId ? "hidden md:flex" : "flex",
+          )}
+        >
+          <ConversationList
+            ref={searchRef}
+            conversations={visible}
+            totalCount={conversations.length}
+            activeKey={activeConversation?.key ?? null}
+            onSelect={select}
+            query={query}
+            onQuery={setQuery}
+            view={view}
+            onView={setView}
+            tag={tagFilter}
+            onTag={onTagFilter}
+            counts={counts}
+            onClearFilters={clearFilters}
+          />
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={refresh}
-            disabled={refreshing}
-            className="h-8 gap-1.5 text-xs font-medium shadow-xs"
-          >
-            <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
-            {refreshing ? "Refreshing…" : "Refresh Inbox"}
-          </Button>
-        </div>
-      </header>
-
-      <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-lg border border-border/70 bg-card shadow-xs">
-        <div className={`w-full md:w-[300px] lg:w-[330px] shrink-0 min-h-0 flex flex-col border-r border-border/60 ${activeId ? "hidden md:flex" : "flex"}`}>
-          {/* List Sub-header with Filter & Count */}
-          <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/30 px-3.5 py-2.5 shrink-0">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Threads ({conversations.length})
-            </span>
-            <div className="flex items-center gap-1.5">
-              <Select value={tagFilter || "all"} onValueChange={onTagFilter}>
-                <SelectTrigger className="h-7 w-[9rem] bg-background text-xs" aria-label="Filter by reply tag">
-                  <SelectValue placeholder="All tags" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="text-xs">All tags</SelectItem>
-                  {UNIBOX_REPLY_TAGS.map((tag) => (
-                    <SelectItem key={tag} value={tag} className="text-xs">{tagLabel(tag)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto divide-y divide-border/40">
-            {conversations.length === 0 && (
-              <EmptyState
-                icon={Inbox}
-                title={tagFilter ? "No replies with this tag" : "No replies yet"}
-                description={
-                  tagFilter
-                    ? "Choose another tag, or show every reply."
-                    : "When prospects reply to your campaigns, conversations appear here in Unibox."
-                }
-                className="m-4 border-0 bg-transparent py-10"
-              />
-            )}
-            {conversations.map((c) => {
-              const r = c.latest;
-              const name = r.fromName || r.fromEmail.split("@")[0];
-              const initial = (name.trim()[0] || "?").toUpperCase();
-              const isUnread = c.unread;
-              const isActive = activeConversation?.key === c.key;
-              return (
-                <button
-                  key={c.key}
-                  type="button"
-                  onClick={() => setActiveId(r.id)}
-                  className={`group flex w-full items-start gap-3 px-3.5 py-3 text-left transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
-                    isActive
-                      ? "bg-zinc-800/60 border-l-2 border-l-brand-400"
-                      : "hover:bg-zinc-900/40 border-l-2 border-l-transparent"
-                  } ${isUnread ? "bg-white/[0.02]" : ""}`}
-                >
-                  <div className="relative mt-0.5 shrink-0">
-                    <span className="flex size-8 items-center justify-center rounded-lg bg-zinc-800 border border-zinc-700/80 text-[11px] font-semibold text-zinc-200">
-                      {initial}
-                    </span>
-                    {isUnread && (
-                      <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-lg bg-emerald-500 ring-2 ring-zinc-950" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1.5 mb-0.5">
-                      <span className={`truncate text-xs ${isUnread ? "font-bold text-white" : "font-medium text-zinc-200"}`}>
-                        {name}
-                      </span>
-                      <span className="shrink-0 text-[10px] text-zinc-500">
-                        {r.receivedAt ? formatDistanceToNow(new Date(r.receivedAt), { addSuffix: true }) : ""}
-                      </span>
-                    </div>
-                    <div className={`truncate text-xs mb-1 ${isUnread ? "font-medium text-zinc-300" : "text-zinc-400"}`}>
-                      {r.subject || "(no subject)"}
-                    </div>
-                    <p className="line-clamp-1 text-[11px] text-zinc-500 group-hover:text-zinc-400 transition-colors">
-                      {messagePreview(r.snippet || r.bodyText)}
-                    </p>
-                    {c.tag || r.agentStatus === "escalated" || r.agentStatus === "replied" ? (
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                        {r.agentStatus === "escalated" ? (
-                          <span className="inline-flex items-center rounded-md border border-amber-400/25 bg-amber-400/10 px-1.5 py-px text-[9px] font-semibold text-amber-300" title={r.agentSummary || undefined}>
-                            Needs you
-                          </span>
-                        ) : r.agentStatus === "replied" ? (
-                          <span className="inline-flex items-center rounded-md border border-brand-400/25 bg-brand-400/10 px-1.5 py-px text-[9px] font-semibold text-brand-300" title={r.agentSummary || undefined}>
-                            Agent replied
-                          </span>
-                        ) : null}
-                        {c.tag ? (
-                          <span className={`inline-flex items-center rounded-md border px-1.5 py-px text-[9px] font-medium ${getTagBadgeClass(c.tag)}`}>
-                            {tagLabel(c.tag)}
-                          </span>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className={`flex-1 min-w-0 w-full flex min-h-0 flex-col bg-card/40 ${activeId ? "flex" : "hidden md:flex"}`}>
-          {activeConversation ? (
-            (() => {
-              const r = activeConversation.latest;
-              if (!r) {
-                return (
-                  <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
-                    Select a conversation to read and reply.
-                  </div>
-                );
+        <div className={cn("min-h-0 min-w-0 flex-1 flex-col", activeId ? "flex" : "hidden md:flex")}>
+          {activeConversation && r ? (
+            <ConversationView
+              ref={scrollerRef}
+              reply={r}
+              escalation={escalatedRow ? { summary: escalatedRow.agentSummary ?? null } : null}
+              tag={activeConversation.tag}
+              messages={shown}
+              loading={threadLoading && messages.length === 0}
+              tagPending={tagPending}
+              onTag={(tag) => applyTag(activeConversation.tagReplyId, tag)}
+              onBack={() => setActiveId(null)}
+              composer={
+                <ReplyComposer
+                  ref={composerRef}
+                  recipientName={r.fromName || r.fromEmail}
+                  recipientEmail={r.fromEmail}
+                  senderLabel={r.senderName || r.senderEmail}
+                  body={body}
+                  onBodyChange={(value) => setDraft(draftKey, value)}
+                  onSend={send}
+                  sending={pending}
+                  collapsed={composerCollapsed}
+                  onCollapsedChange={(collapsed) => {
+                    setComposerCollapsed(collapsed);
+                    if (!collapsed) {
+                      requestAnimationFrame(() => composerRef.current?.focus());
+                      setTimeout(() => scrollToBottom(), 50);
+                    }
+                  }}
+                  quote={{
+                    fromName: r.fromName,
+                    fromEmail: r.fromEmail,
+                    receivedAt: r.receivedAt,
+                    text: r.bodyText || r.snippet || "",
+                  }}
+                />
               }
-              const name = r.fromName || r.fromEmail;
-              const shown = !threadLoading && messages.length === 0 ? [replyAsMessage(r)] : messages;
-              return (
-                <>
-                  <div className="flex flex-col sm:flex-row sm:items-start justify-between border-b border-border/60 px-3.5 sm:px-5 py-3 sm:py-4 gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 mb-1.5 md:hidden">
-                        <button
-                          type="button"
-                          onClick={() => setActiveId(null)}
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-primary"
-                        >
-                          ← Back to Threads
-                        </button>
-                      </div>
-                      <p className="truncate font-semibold text-sm sm:text-base">{r.subject || "(no subject)"}</p>
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {name} {"<"}{r.fromEmail}{">"}
-                        {r.senderEmail ? ` → ${r.senderEmail}` : ""}
-                      </p>
-                      {r.campaignName && <span className="mt-1.5 inline-block rounded-lg bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">{r.campaignName}</span>}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
-                      <Select
-                        value={activeConversation.tag ?? "none"}
-                        onValueChange={(value) =>
-                          applyTag(activeConversation.tagReplyId, value === "none" ? null : (value as UniboxReplyTag))
-                        }
-                        disabled={tagPending}
-                      >
-                        <SelectTrigger className="h-8 w-[9.5rem] sm:w-[11.5rem] text-xs" aria-label="Reply tag">
-                          <SelectValue placeholder="No tag" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No tag</SelectItem>
-                          {UNIBOX_REPLY_TAGS.map((tag) => (
-                            <SelectItem key={tag} value={tag}>{tagLabel(tag)}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <button type="button" aria-label="Back to conversations" onClick={() => setActiveId(null)} className="hidden md:flex rounded-lg p-1.5 text-muted-foreground hover:bg-accent"><X className="size-4" /></button>
-                    </div>
-                  </div>
-                  <div ref={scrollerRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 pt-3 pb-12 sm:px-4 sm:pb-16">
-                    {threadLoading && messages.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Loading conversation…</p>
-                    ) : (
-                      <>
-                        <ThreadTranscript messages={shown} />
-                        <div ref={bottomAnchorRef} className="h-2 shrink-0" aria-hidden />
-                      </>
-                    )}
-                  </div>
-                  <div className="border-t border-border/60 bg-muted/20 p-3 sm:p-4 shrink-0 transition-all duration-200">
-                    {composerCollapsed ? (
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => {
-                          setComposerCollapsed(false);
-                          setTimeout(() => scrollToBottom(), 50);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            setComposerCollapsed(false);
-                          }
-                        }}
-                        className="group flex items-center justify-between rounded-lg border border-zinc-800/80 bg-zinc-950/60 px-4 py-3 shadow-xs cursor-pointer hover:bg-zinc-900/40 hover:border-zinc-700 transition-all card-shine"
-                      >
-                        <div className="flex items-center gap-2.5 text-xs text-muted-foreground truncate">
-                          <SendHorizonal className="size-3.5 shrink-0 text-muted-foreground group-hover:text-primary transition-colors" />
-                          <span className="font-medium text-foreground truncate">Reply to {name}</span>
-                          <span className="hidden sm:inline text-muted-foreground/80 truncate">&lt;{r.fromEmail}&gt;</span>
-                          {body.trim() ? (
-                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary shrink-0">
-                              Draft saved
-                            </span>
-                          ) : (
-                            <span className="text-[11px] text-muted-foreground/70 hidden md:inline truncate">
-                              Click to write reply…
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setComposerCollapsed(false);
-                            setTimeout(() => scrollToBottom(), 50);
-                          }}
-                          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
-                          title="Expand composer"
-                          aria-label="Expand composer"
-                        >
-                          <ChevronUp className="size-4" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/90 shadow-sm card-shine overflow-hidden">
-                        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border/50 bg-muted/20 px-3.5 py-2 text-[11px] text-muted-foreground">
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
-                            <span className="flex items-center gap-1 truncate">
-                              <span className="font-semibold text-foreground/70">From:</span>
-                              <span className="font-medium text-foreground">{r.senderName || r.senderEmail}</span>
-                            </span>
-                            <span className="flex items-center gap-1 truncate">
-                              <span className="font-semibold text-foreground/70">To:</span>
-                              <span className="font-medium text-foreground">{name}</span>
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="hidden text-[10px] text-muted-foreground/60 sm:inline">⌘+Enter to send</span>
-                            <button
-                              type="button"
-                              onClick={() => setComposerCollapsed(true)}
-                              className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                              title="Collapse composer"
-                              aria-label="Collapse composer"
-                            >
-                              <ChevronDown className="size-3.5" />
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="p-3">
-                          <Textarea
-                            id="unibox-reply"
-                            rows={3}
-                            value={body}
-                            onChange={(e) => setBody(e.target.value)}
-                            onKeyDown={(e) => {
-                              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                                e.preventDefault();
-                                send(r);
-                              }
-                            }}
-                            placeholder={`Write your email reply to ${name.split(" ")[0]}…`}
-                            className="min-h-[75px] max-h-[180px] resize-y border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-                          />
-                        </div>
-
-                        <div className="border-t border-border/40 bg-muted/10 px-3.5 py-2">
-                          <button
-                            type="button"
-                            onClick={() => setShowQuotedPreview(!showQuotedPreview)}
-                            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-                          >
-                            <ChevronRight className={cn("size-3.5 transition-transform", showQuotedPreview && "rotate-90")} />
-                            <span>{showQuotedPreview ? "Hide quoted message" : "Show quoted message"}</span>
-                          </button>
-
-                          {showQuotedPreview ? (
-                            <div className="mt-2 rounded-lg border-l-2 border-primary/40 bg-muted/40 p-2.5 text-xs text-muted-foreground">
-                              <p className="font-medium text-foreground/80">
-                                On {r.receivedAt ? format(new Date(r.receivedAt), "EEE, MMM d, yyyy 'at' h:mm a") : "earlier"} {r.fromName || r.fromEmail} &lt;{r.fromEmail}&gt; wrote:
-                              </p>
-                              <p className="mt-1 line-clamp-6 whitespace-pre-wrap font-mono text-[11px] text-muted-foreground/90">
-                                {r.bodyText || r.snippet || "(No content)"}
-                              </p>
-                            </div>
-                          ) : null}
-                        </div>
-
-                        <div className="flex items-center justify-between border-t border-border/50 bg-muted/20 px-3.5 py-2">
-                          <div className="flex items-center gap-2">
-                            <Button onClick={() => send(r)} disabled={pending || !body.trim()} size="sm">
-                              <SendHorizonal className="size-4" />
-                              {pending ? "Sending email…" : "Send email"}
-                            </Button>
-                            {body.trim() ? (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setBody("")}
-                                className="text-xs text-muted-foreground hover:text-destructive"
-                              >
-                                Discard
-                              </Button>
-                            ) : null}
-                          </div>
-                          <span className="text-[11px] text-muted-foreground">
-                            Thread headers preserved
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </>
-              );
-            })()
+            />
           ) : (
-            <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
-              Select a conversation to read and reply.
-            </div>
+            <NoConversation />
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 }

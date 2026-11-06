@@ -12,6 +12,7 @@ import { PageTracker } from "@/components/page-tracker";
 import { countOpenAgentRequests } from "@/lib/autopilot-actions";
 import { approvalRequired, isApprovedToSend } from "@/lib/approval";
 import { ApprovalBanner } from "./approval-banner";
+import { isAdmin } from "@/lib/admin";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
@@ -68,7 +69,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {showApprovalBanner && <ApprovalBanner emailOnApprove={emailOnApprove} />}
             {children}
           </AppMainContent>
-          <CommandPalette />
+          <CommandPalette isAdmin={isAdmin(user)} />
         </AppShell>
       </ImportJobProvider>
     </SidebarProvider>

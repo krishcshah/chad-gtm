@@ -1,6 +1,8 @@
 "use client";
 
-import { Button, ErrorState } from "@smartreach/ui";
+import Link from "next/link";
+import { Button, StatePanel } from "@smartreach/ui";
+import { Page } from "@/components/layout/page";
 
 export default function AppError({
   error,
@@ -9,33 +11,49 @@ export default function AppError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  const denied =
-    /permission|forbidden|unauthorized|access denied/i.test(error.message ?? "");
-
-  if (denied) {
-    return (
-      <div className="py-8">
-        <ErrorState
-          title="Access denied"
-          description="You do not have permission to view this page. Sign in with an allowed account, or go back to the dashboard."
-          onRetry={reset}
-        />
-        <div className="mt-4 flex justify-center">
-          <Button variant="outline" size="sm" asChild>
-            <a href="/dashboard">Back to dashboard</a>
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  const denied = /permission|forbidden|unauthorized|access denied/i.test(error.message ?? "");
 
   return (
-    <div className="py-8">
-      <ErrorState
-        title="Could not load this page"
-        description={error.message || "An unexpected error occurred while rendering this screen."}
-        onRetry={reset}
+    <Page width="narrow">
+      <StatePanel
+        kind={denied ? "permission" : "error"}
+        title={denied ? "You don't have access to this page" : "This page didn't load"}
+        description={
+          denied
+            ? "This account isn't allowed to open it. Go back to your overview, or sign in with an account that has access."
+            : "Something went wrong while loading it. Try again; if it keeps happening, go back to your overview."
+        }
+        action={
+          <div className="flex flex-col items-center gap-3">
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {denied ? (
+                <>
+                  <Button asChild size="sm">
+                    <Link href="/dashboard">Go to overview</Link>
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={reset}>
+                    Try again
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button type="button" size="sm" onClick={reset}>
+                    Try again
+                  </Button>
+                  <Button asChild variant="outline" size="sm">
+                    <Link href="/dashboard">Go to overview</Link>
+                  </Button>
+                </>
+              )}
+            </div>
+            {error.digest ? (
+              <p className="text-xs text-subtle-foreground">
+                Reference: <span className="font-mono">{error.digest}</span>
+              </p>
+            ) : null}
+          </div>
+        }
       />
-    </div>
+    </Page>
   );
 }

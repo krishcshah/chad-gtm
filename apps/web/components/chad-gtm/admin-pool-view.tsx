@@ -1,131 +1,436 @@
 "use client";
 
-import { useState, useTransition, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
+import { Download, Mail, Pause, Play, Search, SearchX, Upload } from "lucide-react";
+import { timeAgo } from "@smartreach/shared";
 import {
-  Mail,
-  ShieldCheck,
-  Upload,
-  Play,
-  Pause,
-  Loader2,
-  FileSpreadsheet,
-  Layers,
-  HeartPulse,
-  Download,
-} from "lucide-react";
-import { Button } from "@smartreach/ui";
-import { toast } from "sonner";
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Badge,
+  Button,
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  EmptyState,
+  Input,
+  Progress,
+  SegmentedControl,
+  Stat,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  statusVariant,
+  toast,
+} from "@smartreach/ui";
 import { parseCsvText } from "@/lib/csv";
 import {
+  getSystemMailboxPoolStats,
   importSystemMailboxesCsv,
   toggleSystemMailboxStatus,
   type SystemMailboxPoolStats,
 } from "@/lib/admin-gtm-actions";
 
-export function AdminMailboxPoolView({
-  initialStats,
-}: {
-  initialStats: SystemMailboxPoolStats;
-}) {
-  const [stats, setStats] = useState<SystemMailboxPoolStats>(initialStats);
-  const [isPending, startTransition] = useTransition();
-  const [uploading, setUploading] = useState(false);
-  const [showUploader, setShowUploader] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+type Mailbox = SystemMailboxPoolStats["mailboxes"][number];
+type StatusFilter = "all" | "active" | "paused" | "failed";
 
-  const handleToggle = (senderId: string, currentStatus: string) => {
-    const nextStatus = currentStatus === "active" ? "paused" : "active";
-    startTransition(async () => {
-      const res = await toggleSystemMailboxStatus(senderId, nextStatus);
+function withCount(label: string, count: number) {
+  return (
+    <>
+      {label}
+      <span className="tabular text-subtle-foreground">{count.toLocaleString()}</span>
+    </>
+  );
+}
+
+/** CSV header (lower-cased) to import field. Matches public/example_senders.csv. */
+const HEADER_MAP: Record<string, string> = {
+  "sender name": "senderName",
+  email: "email",
+  "smtp host": "smtpHost",
+  "smtp port": "smtpPort",
+  "smtp username": "smtpUsername",
+  "smtp password": "smtpPassword",
+  "smtp security": "smtpSecurity",
+  "imap host": "imapHost",
+  "imap port": "imapPort",
+  "imap username": "imapUsername",
+  "imap password": "imapPassword",
+  "daily limit": "dailyLimit",
+  "hourly limit": "hourlyLimit",
+  timezone: "timezone",
+  signature: "signature",
+};
+
+/** Average sent today per active mailbox, bucketed by the server. */
+const UTILIZATION = {
+  green: { short: "Healthy", label: "Under 30 is healthy", tone: "success" as const },
+  yellow: { short: "Near capacity", label: "30 to 49 is near capacity", tone: "neutral" as const },
+  red: { short: "Over capacity", label: "50 or more is over capacity", tone: "destructive" as const },
+};
+
+function connectionVariant(status: string) {
+  if (status === "ok") return "success" as const;
+  if (status === "failed") return "destructive" as const;
+  return "neutral" as const;
+}
+
+/** Shared sending pool: capacity, the mailbox table, pause/resume and CSV import. */
+export function AdminMailboxPoolView({ initialStats }: { initialStats: SystemMailboxPoolStats }) {
+  const [stats, setStats] = useState<SystemMailboxPoolStats>(initialStats);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
+  const util = UTILIZATION[stats.utilizationStatus] ?? UTILIZATION.green;
+
+  const counts = useMemo(() => {
+    const c = { all: stats.mailboxes.length, active: 0, paused: 0, failed: 0 };
+    for (const m of stats.mailboxes) {
+      if (m.status === "active") c.active++;
+      else if (m.status === "paused") c.paused++;
+      else if (m.status === "failed") c.failed++;
+    }
+    return c;
+  }, [stats.mailboxes]);
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return stats.mailboxes.filter((m) => {
+      if (statusFilter !== "all" && m.status !== statusFilter) return false;
+      if (!q) return true;
+      return m.email.toLowerCase().includes(q) || m.senderName.toLowerCase().includes(q);
+    });
+  }, [stats.mailboxes, search, statusFilter]);
+
+  const refreshStats = async () => {
+    try {
+      setStats(await getSystemMailboxPoolStats());
+    } catch {
+      // Keep the current numbers; a reload will pick up the import.
+    }
+  };
+
+  const handleToggle = async (mailbox: Mailbox) => {
+    const nextStatus = mailbox.status === "active" ? "paused" : "active";
+    setBusyId(mailbox.id);
+    try {
+      const res = await toggleSystemMailboxStatus(mailbox.id, nextStatus);
       if (res.ok) {
-        toast.success(`Mailbox ${nextStatus === "active" ? "activated" : "paused"}`);
+        toast.success(nextStatus === "active" ? `${mailbox.email} is active again.` : `${mailbox.email} is paused.`);
+        // Adjust counts from the mailbox's previous status: resuming a failed
+        // mailbox must not lower the paused count.
+        const was = mailbox.status;
         setStats((prev) => ({
           ...prev,
-          mailboxes: prev.mailboxes.map((m) =>
-            m.id === senderId ? { ...m, status: nextStatus } : m
+          mailboxes: prev.mailboxes.map((m) => (m.id === mailbox.id ? { ...m, status: nextStatus } : m)),
+          activeMailboxes: Math.max(
+            0,
+            prev.activeMailboxes + (nextStatus === "active" ? 1 : 0) - (was === "active" ? 1 : 0),
           ),
-          activeMailboxes:
-            nextStatus === "active" ? prev.activeMailboxes + 1 : prev.activeMailboxes - 1,
-          pausedMailboxes:
-            nextStatus === "paused" ? prev.pausedMailboxes + 1 : prev.pausedMailboxes - 1,
+          pausedMailboxes: Math.max(
+            0,
+            prev.pausedMailboxes + (nextStatus === "paused" ? 1 : 0) - (was === "paused" ? 1 : 0),
+          ),
         }));
+        // Activation re-tests SMTP and IMAP; pull the fresh connection status and capacity numbers.
+        if (nextStatus === "active") void refreshStats();
       } else {
-        toast.error(res.error || "Failed to update status");
+        toast.error(res.error || "Could not update the mailbox.");
         // A failed activation test marks the mailbox failed; show that.
         if (nextStatus === "active") {
           setStats((prev) => ({
             ...prev,
-            mailboxes: prev.mailboxes.map((m) =>
-              m.id === senderId ? { ...m, status: "failed" } : m
-            ),
+            mailboxes: prev.mailboxes.map((m) => (m.id === mailbox.id ? { ...m, status: "failed" } : m)),
           }));
         }
       }
-    });
+    } catch {
+      toast.error("Could not update the mailbox. Try again.");
+    } finally {
+      setBusyId(null);
+    }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <p className="max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
+          Shared mailboxes that approved accounts send from. The target is {stats.targetPacePerMailbox} emails a day
+          per mailbox, which keeps domain reputation safe.
+        </p>
+        <Button onClick={() => setImportOpen(true)} className="shrink-0">
+          <Upload />
+          Import mailboxes
+        </Button>
+      </div>
+
+      {stats.recommendToAdd > 0 ? (
+        <Alert variant="warning">
+          <AlertTitle>
+            Add about {stats.recommendToAdd.toLocaleString()} more {stats.recommendToAdd === 1 ? "mailbox" : "mailboxes"}
+          </AlertTitle>
+          <AlertDescription>
+            The pool should have {stats.recommendedTotalMailboxes.toLocaleString()} active mailboxes and{" "}
+            {stats.activeMailboxes.toLocaleString()} are active. Active campaigns need{" "}
+            {stats.totalDailyDemand.toLocaleString()} emails a day at up to {stats.targetPacePerMailbox} per mailbox.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <Card className="grid grid-cols-2 gap-px overflow-hidden bg-border lg:grid-cols-4 [&>*]:bg-card">
+        <Stat
+          bare
+          label="Active mailboxes"
+          value={stats.activeMailboxes.toLocaleString()}
+          hint={`${stats.totalMailboxes.toLocaleString()} in the pool, ${stats.pausedMailboxes.toLocaleString()} paused`}
+        />
+        <Stat bare label="Sent today" value={stats.emailsSentToday.toLocaleString()} hint="Across the shared pool" />
+        <Stat
+          bare
+          label="Sent per mailbox"
+          value={stats.averageEmailsPerMailbox.toLocaleString()}
+          delta={{ value: util.short, tone: util.tone }}
+          hint={`Today, per active mailbox. ${util.label}.`}
+        />
+        <Stat
+          bare
+          label="Daily demand"
+          value={stats.totalDailyDemand.toLocaleString()}
+          hint="Emails a day needed by active campaigns"
+        />
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Mailboxes</CardTitle>
+          <CardDescription>Pause a mailbox to stop it sending. Resuming runs a live SMTP and IMAP login test first.</CardDescription>
+        </CardHeader>
+
+        {stats.mailboxes.length > 0 ? (
+          <div className="flex flex-col gap-3 px-5 pt-4 sm:flex-row sm:items-center">
+            <div className="relative w-full sm:max-w-xs">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle-foreground"
+                aria-hidden
+              />
+              <Input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search name or email"
+                aria-label="Search mailboxes"
+                className="pl-9"
+              />
+            </div>
+            <div className="max-w-full overflow-x-auto">
+              <SegmentedControl
+                size="sm"
+                aria-label="Filter mailboxes by status"
+                value={statusFilter}
+                onValueChange={setStatusFilter}
+                options={[
+                  { value: "all", label: withCount("All", counts.all) },
+                  { value: "active", label: withCount("Active", counts.active) },
+                  { value: "paused", label: withCount("Paused", counts.paused) },
+                  { value: "failed", label: withCount("Failed", counts.failed) },
+                ]}
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {stats.mailboxes.length === 0 ? (
+          <EmptyState
+            compact
+            icon={Mail}
+            title="No shared mailboxes yet"
+            description="Import a CSV of mailboxes to start the pool. Each one is login-tested before it sends."
+            action={
+              <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
+                <Upload />
+                Import mailboxes
+              </Button>
+            }
+          />
+        ) : visible.length === 0 ? (
+          <EmptyState
+            compact
+            icon={SearchX}
+            title="No mailboxes match these filters"
+            action={
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setSearch("");
+                  setStatusFilter("all");
+                }}
+              >
+                Clear filters
+              </Button>
+            }
+          />
+        ) : (
+          <div className="mt-4 border-t border-border">
+            <Table className="min-w-[860px]">
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Mailbox</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Connection</TableHead>
+                  <TableHead className="text-right">Health</TableHead>
+                  <TableHead className="w-[22%]">Sent today</TableHead>
+                  <TableHead>Last sync</TableHead>
+                  <TableHead className="text-right">
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {visible.map((m) => {
+                  const pct = m.dailyLimit > 0 ? Math.min(100, Math.round((m.todaySent / m.dailyLimit) * 100)) : 0;
+                  const healthTone =
+                    m.health >= 90 ? "text-success-text" : m.health >= 70 ? "text-warning-text" : "text-destructive-text";
+                  return (
+                    <TableRow key={m.id}>
+                      <TableCell className="max-w-[260px]">
+                        <div className="truncate font-medium">{m.senderName || m.email}</div>
+                        <div className="truncate text-xs text-muted-foreground">{m.email}</div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={statusVariant(m.status)} dot className="capitalize">
+                          {m.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1.5">
+                          <Badge variant={connectionVariant(m.smtpStatus)}>SMTP {m.smtpStatus}</Badge>
+                          <Badge variant={connectionVariant(m.imapStatus)}>IMAP {m.imapStatus}</Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell className={`tabular text-right font-medium ${healthTone}`}>{m.health}%</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Progress
+                            value={pct}
+                            className="flex-1"
+                            aria-label={`${m.todaySent} of ${m.dailyLimit} sent today`}
+                          />
+                          <span className="tabular w-14 shrink-0 text-right text-xs text-muted-foreground">
+                            {m.todaySent} / {m.dailyLimit}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-muted-foreground">
+                        {m.lastSyncAt ? (
+                          <time suppressHydrationWarning dateTime={m.lastSyncAt}>
+                            {timeAgo(m.lastSyncAt)}
+                          </time>
+                        ) : (
+                          "Never"
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          loading={busyId === m.id}
+                          disabled={busyId !== null && busyId !== m.id}
+                          onClick={() => handleToggle(m)}
+                          aria-label={`${m.status === "active" ? "Pause" : "Resume"} ${m.email}`}
+                        >
+                          {busyId === m.id ? null : m.status === "active" ? <Pause /> : <Play />}
+                          {m.status === "active" ? "Pause" : "Resume"}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </Card>
+
+      <ImportMailboxesDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImported={async () => {
+          setImportOpen(false);
+          await refreshStats();
+        }}
+      />
+    </div>
+  );
+}
+
+function ImportMailboxesDialog({
+  open,
+  onOpenChange,
+  onImported,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onImported: () => void | Promise<void>;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setUploading(true);
     try {
-      const text = await file.text();
-      const parsed = parseCsvText(text);
-
+      const parsed = parseCsvText(await file.text());
       if (parsed.rows.length === 0) {
-        toast.error("CSV contains no rows.");
+        toast.error("That CSV has no rows.");
         return;
       }
-
-      // Map rows
-      const headerMap: Record<string, string> = {
-        "sender name": "senderName",
-        email: "email",
-        "smtp host": "smtpHost",
-        "smtp port": "smtpPort",
-        "smtp username": "smtpUsername",
-        "smtp password": "smtpPassword",
-        "smtp security": "smtpSecurity",
-        "imap host": "imapHost",
-        "imap port": "imapPort",
-        "imap username": "imapUsername",
-        "imap password": "imapPassword",
-        "daily limit": "dailyLimit",
-        "hourly limit": "hourlyLimit",
-        timezone: "timezone",
-        signature: "signature",
-      };
 
       const mappedRows = parsed.rows.map((r) => {
         const out: Record<string, any> = {};
         for (const [k, v] of Object.entries(r)) {
-          const field = headerMap[k.toLowerCase().trim()];
+          const field = HEADER_MAP[k.toLowerCase().trim()];
           if (field) out[field] = v;
         }
         return out;
       });
 
       const res = await importSystemMailboxesCsv(mappedRows);
-      if (res.ok) {
-        if (res.activated > 0) {
-          toast.success(`${res.activated} shared mailbox${res.activated === 1 ? "" : "es"} passed the SMTP and IMAP login test and are active.`);
-        }
-        for (const m of res.inactive) {
-          toast.warning(`Row ${m.row} (${m.email}) saved as inactive: ${m.error}`);
-        }
-        for (const f of res.failed) {
-          toast.error(`Row ${f.row} not imported: ${f.error}`);
-        }
-        if (res.imported === 0 && res.failed.length === 0) {
-          toast.error("Nothing was imported.");
-        }
-        setShowUploader(false);
-      } else {
-        toast.error("Import failed");
+      if (!res.ok) {
+        toast.error("Import failed. Nothing was saved.");
+        return;
       }
+      if (res.activated > 0) {
+        toast.success(
+          `${res.activated} ${res.activated === 1 ? "mailbox passed" : "mailboxes passed"} the SMTP and IMAP login test and ${res.activated === 1 ? "is" : "are"} active.`,
+        );
+      }
+      for (const m of res.inactive) {
+        toast.warning(`Row ${m.row} (${m.email}) saved as inactive: ${m.error}`);
+      }
+      for (const f of res.failed) {
+        toast.error(`Row ${f.row} not imported: ${f.error}`);
+      }
+      if (res.imported === 0 && res.failed.length === 0) {
+        toast.error("Nothing was imported.");
+      }
+      await onImported();
     } catch (err: any) {
-      toast.error(err?.message || "Error reading file.");
+      toast.error(err?.message || "Could not read that file.");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -133,260 +438,52 @@ export function AdminMailboxPoolView({
   };
 
   return (
-    <div className="space-y-6 font-sans">
-      {/* Recommendation Banner */}
-      <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/90 p-5 flex flex-wrap items-center justify-between gap-4 card-shine shadow-xs">
-        <div className="flex items-start gap-3.5">
-          <div className="size-9 rounded-lg border border-zinc-700/80 bg-zinc-900 flex items-center justify-center text-white shrink-0 mt-0.5 shadow-xs">
-            <Layers className="size-4 text-emerald-400" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-white">
-                Capacity Engine Telemetry
-              </h3>
-              <span className="rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-2.5 py-0.5 text-[10px] font-semibold text-zinc-300">
-                Active: {stats.activeMailboxes} / {stats.recommendedTotalMailboxes}
-              </span>
-            </div>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              {stats.recommendToAdd > 0
-                ? `Recommended to provision ${stats.recommendToAdd} additional mailboxes for current GTM demand (${stats.totalDailyDemand} emails/day) at 30/day pace.`
-                : `Fleet capacity is optimal. Current demand is safely distributed within healthy mailbox thresholds.`}
-            </p>
-          </div>
+    <Dialog open={open} onOpenChange={(o) => !uploading && onOpenChange(o)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Import shared mailboxes</DialogTitle>
+          <DialogDescription>
+            Upload a CSV with one mailbox per row. Each mailbox is tested with a real SMTP and IMAP login. Mailboxes
+            that pass go live in the shared pool; ones that fail are saved as inactive so you can fix and resume them.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="rounded-lg bg-muted/60 p-3 text-[13px] text-muted-foreground">
+          <p className="font-medium text-foreground">Columns</p>
+          <p className="mt-1 leading-relaxed">
+            sender name, email, smtp host, smtp port, smtp username, smtp password, smtp security, imap host, imap port,
+            imap username, imap password, daily limit, hourly limit, timezone, signature
+          </p>
+          <a
+            href="/example_senders.csv"
+            download="example_senders.csv"
+            className="mt-2 inline-flex items-center gap-1.5 font-medium text-foreground underline decoration-border-strong underline-offset-4 hover:decoration-foreground"
+          >
+            <Download className="size-4" aria-hidden />
+            Download example CSV
+          </a>
         </div>
 
-        <Button
-          type="button"
-          onClick={() => setShowUploader(!showUploader)}
-          size="sm"
-          className="rounded-lg bg-white text-black font-semibold text-xs hover:bg-zinc-200 h-9 px-4 shadow-xs transition-all active:scale-[0.98]"
-        >
-          <Upload className="size-3.5 mr-1.5" /> Bulk Import Mailboxes
-        </Button>
-      </div>
+        <input
+          type="file"
+          accept=".csv,text/csv"
+          ref={fileInputRef}
+          onChange={handleFile}
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden
+        />
 
-      {/* CSV Uploader Drawer */}
-      {showUploader && (
-        <div className="rounded-lg border border-dashed border-zinc-700/80 bg-zinc-950/90 p-6 text-center space-y-3.5 card-shine shadow-md">
-          <FileSpreadsheet className="mx-auto size-8 text-zinc-300" />
-          <div>
-            <h4 className="text-sm font-semibold text-white tracking-tight">
-              Bulk Provision Shared Mailboxes (CSV)
-            </h4>
-            <p className="text-xs text-zinc-400 max-w-md mx-auto mt-0.5">
-              Mailboxes uploaded here are automatically flagged as <code>isSystemPool = true</code> and provisioned for autonomous dispatch.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
-            <input
-              type="file"
-              accept=".csv"
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-            <Button
-              type="button"
-              disabled={uploading}
-              onClick={() => fileInputRef.current?.click()}
-              className="rounded-lg bg-white text-black text-xs font-semibold hover:bg-zinc-200 transition-all active:scale-[0.98]"
-            >
-              {uploading ? (
-                <>
-                  <Loader2 className="size-3.5 animate-spin mr-1.5" /> Ingesting & Encrypting...
-                </>
-              ) : (
-                <>
-                  <Upload className="size-3.5 mr-1.5" /> Select Mailboxes CSV
-                </>
-              )}
-            </Button>
-            <a
-              href="/example_senders.csv"
-              download="example_senders.csv"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700/80 bg-zinc-900/60 px-3 py-2 text-xs font-medium text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors"
-            >
-              <Download className="size-3.5" /> Download Example CSV
-            </a>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setShowUploader(false)}
-              className="rounded-lg text-xs border-zinc-800 hover:border-zinc-700"
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Live Pool Status KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {/* Total Mailboxes */}
-        <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-1.5 card-shine shadow-xs">
-          <span className="text-xs font-medium text-zinc-400 flex items-center gap-1.5">
-            <Mail className="size-3.5 text-zinc-300" /> System Mailboxes
-          </span>
-          <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white">{stats.totalMailboxes}</div>
-          <div className="flex items-center gap-2 text-xs text-zinc-500">
-            <span className="text-emerald-400 font-medium">{stats.activeMailboxes} active</span>
-            <span>•</span>
-            <span>{stats.pausedMailboxes} paused</span>
-          </div>
-        </div>
-
-        {/* Dynamic Capacity Utilization Gauge */}
-        <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-1.5 card-shine shadow-xs">
-          <span className="text-xs font-medium text-zinc-400 flex items-center gap-1.5">
-            <HeartPulse className="size-3.5 text-zinc-300" /> Fleet Utilization
-          </span>
-          <div className="flex items-center gap-2">
-            <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-              {stats.averageEmailsPerMailbox} <span className="text-xs font-normal text-zinc-500">sent/box</span>
-            </div>
-          </div>
-          <div className="pt-0.5">
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-0.5 text-[10px] font-semibold border ${
-                stats.utilizationStatus === "green"
-                  ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
-                  : stats.utilizationStatus === "yellow"
-                  ? "border-amber-500/20 bg-amber-500/10 text-amber-400"
-                  : "border-rose-500/20 bg-rose-500/10 text-rose-400"
-              }`}
-            >
-              <span
-                className={`size-1.5 rounded-lg ${
-                  stats.utilizationStatus === "green"
-                    ? "bg-emerald-400"
-                    : stats.utilizationStatus === "yellow"
-                    ? "bg-amber-400"
-                    : "bg-rose-400 animate-pulse"
-                }`}
-              />
-              {stats.utilizationStatus === "green"
-                ? "Healthy (<30/day)"
-                : stats.utilizationStatus === "yellow"
-                ? "Near Capacity (30-49/day)"
-                : "Critical (≥50/day)"}
-            </span>
-          </div>
-        </div>
-
-        {/* Today's Emails Sent */}
-        <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-1.5 card-shine shadow-xs">
-          <span className="text-xs font-medium text-zinc-400 flex items-center gap-1.5">
-            <Mail className="size-3.5 text-zinc-300" /> Dispatched Today
-          </span>
-          <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-            {stats.emailsSentToday.toLocaleString()}
-          </div>
-          <p className="text-xs text-zinc-500">Across shared pool fleet</p>
-        </div>
-
-        {/* Active Demand */}
-        <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-1.5 card-shine shadow-xs">
-          <span className="text-xs font-medium text-zinc-400 flex items-center gap-1.5">
-            <ShieldCheck className="size-3.5 text-zinc-300" /> Target Sending Pace
-          </span>
-          <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-            {stats.targetPacePerMailbox} <span className="text-xs font-normal text-zinc-500">max/day</span>
-          </div>
-          <p className="text-xs text-zinc-500">Preserves domain reputation</p>
-        </div>
-      </div>
-
-      {/* Mailbox Fleet Table */}
-      <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/90 overflow-hidden shadow-xs card-shine">
-        <div className="flex items-center justify-between border-b border-zinc-800/80 px-4 py-3 bg-zinc-950">
-          <div className="flex items-center gap-2">
-            <Mail className="size-4 text-zinc-300" />
-            <h3 className="text-xs font-semibold text-white tracking-tight">
-              System Mailbox Fleet ({stats.mailboxes.length})
-            </h3>
-          </div>
-          <span className="text-[11px] text-zinc-400 font-medium">Shared Pool Pool</span>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="border-b border-zinc-800/80 bg-zinc-900/40 text-[11px] font-semibold text-zinc-400">
-              <tr>
-                <th className="px-4 py-2.5">Sender</th>
-                <th className="px-4 py-2.5">Email Address</th>
-                <th className="px-4 py-2.5">Health</th>
-                <th className="px-4 py-2.5">Sent Today</th>
-                <th className="px-4 py-2.5">Daily Cap</th>
-                <th className="px-4 py-2.5">Status</th>
-                <th className="px-4 py-2.5 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800/60">
-              {stats.mailboxes.length > 0 ? (
-                stats.mailboxes.map((m) => (
-                  <tr key={m.id} className="hover:bg-zinc-900/40 transition-colors">
-                    <td className="px-4 py-3 font-medium text-white">{m.senderName}</td>
-                    <td className="px-4 py-3 text-zinc-400 font-mono text-xs">{m.email}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center rounded-lg px-2 py-0.5 text-[10px] font-semibold border ${
-                        m.health >= 90
-                          ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
-                          : m.health >= 70
-                          ? "border-amber-500/20 bg-amber-500/10 text-amber-400"
-                          : "border-rose-500/20 bg-rose-500/10 text-rose-400"
-                      }`}>
-                        {m.health}%
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 font-semibold text-white">
-                      {m.todaySent} / {m.dailyLimit}
-                    </td>
-                    <td className="px-4 py-3 text-zinc-500">{m.dailyLimit}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex items-center rounded-lg px-2.5 py-0.5 text-[10px] font-semibold border ${
-                          m.status === "active"
-                            ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
-                            : "border-zinc-800 bg-zinc-900 text-zinc-400"
-                        }`}
-                      >
-                        {m.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleToggle(m.id, m.status)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/60 px-2.5 py-1 text-xs font-medium text-zinc-300 hover:text-white hover:border-zinc-700 transition-colors cursor-pointer"
-                      >
-                        {m.status === "active" ? (
-                          <>
-                            <Pause className="size-3" /> Pause
-                          </>
-                        ) : (
-                          <>
-                            <Play className="size-3" /> Resume
-                          </>
-                        )}
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-xs text-zinc-500">
-                    No shared pool mailboxes found. Upload a CSV to initialize the fleet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={uploading}>
+            Cancel
+          </Button>
+          <Button loading={uploading} onClick={() => fileInputRef.current?.click()}>
+            {uploading ? null : <Upload />}
+            {uploading ? "Testing and importing" : "Choose CSV file"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

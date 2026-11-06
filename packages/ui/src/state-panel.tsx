@@ -48,22 +48,22 @@ export function StatePanel({
     <div
       role="alert"
       className={cn(
-        "flex flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-card/40 py-16 px-6 text-center",
+        "flex flex-col items-center justify-center rounded-xl border border-dashed border-border-strong px-6 py-16 text-center",
         className,
       )}
     >
       <div
         className={cn(
-          "mb-4 flex size-12 items-center justify-center rounded-xl border",
+          "mb-4 flex size-10 items-center justify-center rounded-lg",
           kind === "permission"
-            ? "border-warning/30 bg-warning/10 text-warning-foreground"
-            : "border-destructive/30 bg-destructive/10 text-destructive",
+            ? "bg-warning-soft text-warning-text"
+            : "bg-destructive-soft text-destructive-text",
         )}
       >
         <Icon className="size-5" aria-hidden />
       </div>
-      <h3 className="text-sm font-semibold">{title ?? d.title}</h3>
-      <p className="mt-1 max-w-sm text-[13px] text-muted-foreground">
+      <h3 className="text-[15px] font-semibold tracking-[-0.01em]">{title ?? d.title}</h3>
+      <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-muted-foreground">
         {description ?? d.description}
       </p>
       {action ? <div className="mt-5">{action}</div> : null}

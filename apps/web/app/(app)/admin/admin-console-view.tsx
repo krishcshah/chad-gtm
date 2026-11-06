@@ -1,169 +1,142 @@
 "use client";
 
-import { useState } from "react";
-import { BarChart3, Mail, Database, LifeBuoy, ShieldAlert } from "lucide-react";
-import { AdminSupportView } from "./admin-support-view";
-import { AdminDataRemovalView } from "./admin-data-removal-view";
-import { AdminAnalyticsView } from "./admin-analytics-view";
+import { useMemo, useState } from "react";
+import { Badge, ErrorState, Tabs, TabsContent, TabsList, TabsTrigger } from "@smartreach/ui";
 import { AdminMailboxPoolView } from "@/components/chad-gtm/admin-pool-view";
-import { AdminDirectoryView } from "./admin-directory-view";
 import type { SupportTicketDTO } from "@/lib/support-types";
 import type { DataRemovalRequestDTO } from "@/lib/data-removal";
+import type { BugReportDTO } from "@/lib/bug-reports";
 import type { AdminAnalyticsPayload } from "@/lib/admin-analytics";
 import type { SystemMailboxPoolStats } from "@/lib/admin-gtm-actions";
-import type { DirectoryStatsDTO } from "./admin-directory-view";
+import type { AccountApprovalsPayload } from "@/lib/account-approvals";
+import { AdminApprovalsView } from "./admin-approvals-view";
+import { AdminAnalyticsView } from "./admin-analytics-view";
+import { AdminDirectoryView, type DirectoryStatsDTO } from "./admin-directory-view";
+import { AdminSupportView } from "./admin-support-view";
+import { AdminBugReportsView } from "./admin-bug-reports-view";
+import { AdminDataRemovalView } from "./admin-data-removal-view";
+import { parseAdminTab, type AdminTab } from "./admin-tabs";
 
+/**
+ * Admin sections as underline tabs. The active tab is mirrored to `?tab=` so
+ * it survives reloads and can be linked. Every panel stays mounted (hidden when
+ * inactive) so changes made in one tab are not lost when switching away.
+ */
 export function AdminConsoleView({
+  initialTab = "approvals",
+  initialApprovals,
   initialAnalytics,
   initialSupportTickets,
+  initialBugReports,
   initialDataRemovals,
   initialPoolStats,
   initialDirectoryStats,
 }: {
+  initialTab?: AdminTab;
+  initialApprovals: AccountApprovalsPayload;
   initialAnalytics: AdminAnalyticsPayload;
   initialSupportTickets: SupportTicketDTO[];
+  /** null when the bug reports could not be loaded. */
+  initialBugReports: BugReportDTO[] | null;
   initialDataRemovals: DataRemovalRequestDTO[];
   initialPoolStats: SystemMailboxPoolStats;
   initialDirectoryStats: DirectoryStatsDTO;
 }) {
-  const [activeTab, setActiveTab] = useState<
-    "mailboxes" | "directory" | "analytics" | "support" | "compliance"
-  >("mailboxes");
+  const [tab, setTab] = useState<AdminTab>(initialTab);
+  const [counts, setCounts] = useState({
+    approvals: initialApprovals.pending.length,
+    support: initialSupportTickets.filter((t) => t.status === "open").length,
+    bugs: (initialBugReports ?? []).filter((r) => r.status === "open").length,
+    requests: initialDataRemovals.filter((r) => r.status === "pending").length,
+  });
+
+  // Stable callbacks so child effects that report their counts do not re-run on every render.
+  const { onApprovals, onSupport, onBugs, onRequests } = useMemo(() => {
+    const update = (key: keyof typeof counts) => (n: number) =>
+      setCounts((prev) => (prev[key] === n ? prev : { ...prev, [key]: n }));
+    return {
+      onApprovals: update("approvals"),
+      onSupport: update("support"),
+      onBugs: update("bugs"),
+      onRequests: update("requests"),
+    };
+  }, []);
+
+  const changeTab = (value: string) => {
+    const next = parseAdminTab(value);
+    setTab(next);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", next);
+      window.history.replaceState(window.history.state, "", url.toString());
+    } catch {
+      // URL sync is a convenience; ignore failures.
+    }
+  };
+
+  const tabs: { value: AdminTab; label: string; count?: number; countLabel?: string }[] = [
+    { value: "approvals", label: "Approvals", count: counts.approvals, countLabel: "waiting" },
+    { value: "users", label: "Users" },
+    { value: "mailboxes", label: "Mailbox pool" },
+    { value: "directory", label: "Lead directory" },
+    { value: "support", label: "Support", count: counts.support, countLabel: "open" },
+    { value: "bugs", label: "Bug reports", count: counts.bugs, countLabel: "open" },
+    { value: "requests", label: "Data requests", count: counts.requests, countLabel: "pending" },
+  ];
 
   return (
-    <div className="space-y-6 font-sans">
-      {/* Sleek Segmented Pill Navigation */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-zinc-800/80 pb-4">
-        <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-zinc-950/90 border border-zinc-800/80 shadow-xs card-shine">
-          {/* Tab 1: Mailboxes */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("mailboxes")}
-            className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-medium tracking-tight transition-all cursor-pointer ${
-              activeTab === "mailboxes"
-                ? "bg-zinc-800 text-white shadow-xs font-semibold"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            <Mail className="size-3.5 text-zinc-300" />
-            <span>Mailboxes</span>
-            <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                activeTab === "mailboxes"
-                  ? "bg-zinc-700 text-white"
-                  : "bg-zinc-900 text-zinc-400"
-              }`}
-            >
-              {initialPoolStats.activeMailboxes} active
-            </span>
-          </button>
+    <Tabs value={tab} onValueChange={changeTab}>
+      <TabsList aria-label="Admin sections">
+        {tabs.map((t) => (
+          <TabsTrigger key={t.value} value={t.value}>
+            {t.label}
+            {t.count ? (
+              <Badge variant={t.value === "approvals" ? "warning" : "neutral"} className="tabular">
+                {t.count}
+                <span className="sr-only"> {t.countLabel}</span>
+              </Badge>
+            ) : null}
+          </TabsTrigger>
+        ))}
+      </TabsList>
 
-          {/* Tab 2: Directory */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("directory")}
-            className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-medium tracking-tight transition-all cursor-pointer ${
-              activeTab === "directory"
-                ? "bg-zinc-800 text-white shadow-xs font-semibold"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            <Database className="size-3.5 text-zinc-300" />
-            <span>Directory</span>
-            <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                activeTab === "directory"
-                  ? "bg-zinc-700 text-white"
-                  : "bg-zinc-900 text-zinc-400"
-              }`}
-            >
-              {initialDirectoryStats.totalLeads.toLocaleString()} leads
-            </span>
-          </button>
-
-          {/* Tab 3: Analytics */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("analytics")}
-            className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-medium tracking-tight transition-all cursor-pointer ${
-              activeTab === "analytics"
-                ? "bg-zinc-800 text-white shadow-xs font-semibold"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            <BarChart3 className="size-3.5 text-zinc-300" />
-            <span>Analytics</span>
-            <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                activeTab === "analytics"
-                  ? "bg-zinc-700 text-white"
-                  : "bg-zinc-900 text-zinc-400"
-              }`}
-            >
-              {initialAnalytics.kpis.totalUsers} users
-            </span>
-          </button>
-
-          {/* Tab 4: Support */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("support")}
-            className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-medium tracking-tight transition-all cursor-pointer ${
-              activeTab === "support"
-                ? "bg-zinc-800 text-white shadow-xs font-semibold"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            <LifeBuoy className="size-3.5 text-zinc-300" />
-            <span>Support</span>
-            <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                activeTab === "support"
-                  ? "bg-zinc-700 text-white"
-                  : "bg-zinc-900 text-zinc-400"
-              }`}
-            >
-              {initialSupportTickets.length}
-            </span>
-          </button>
-
-          {/* Tab 5: Compliance */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("compliance")}
-            className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-medium tracking-tight transition-all cursor-pointer ${
-              activeTab === "compliance"
-                ? "bg-zinc-800 text-white shadow-xs font-semibold"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            <ShieldAlert className="size-3.5 text-zinc-300" />
-            <span>Compliance</span>
-            <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                activeTab === "compliance"
-                  ? "bg-zinc-700 text-white"
-                  : "bg-zinc-900 text-zinc-400"
-              }`}
-            >
-              {initialDataRemovals.length}
-            </span>
-          </button>
-        </div>
-      </div>
-
-      {/* Tab Panels */}
-      {activeTab === "mailboxes" ? (
-        <AdminMailboxPoolView initialStats={initialPoolStats} />
-      ) : activeTab === "directory" ? (
-        <AdminDirectoryView initialStats={initialDirectoryStats} />
-      ) : activeTab === "analytics" ? (
+      <Panel value="approvals">
+        <AdminApprovalsView initial={initialApprovals} onPendingCountChange={onApprovals} />
+      </Panel>
+      <Panel value="users">
         <AdminAnalyticsView initialAnalytics={initialAnalytics} />
-      ) : activeTab === "support" ? (
-        <AdminSupportView initialTickets={initialSupportTickets} />
-      ) : (
-        <AdminDataRemovalView initialRequests={initialDataRemovals} />
-      )}
-    </div>
+      </Panel>
+      <Panel value="mailboxes">
+        <AdminMailboxPoolView initialStats={initialPoolStats} />
+      </Panel>
+      <Panel value="directory">
+        <AdminDirectoryView initialStats={initialDirectoryStats} />
+      </Panel>
+      <Panel value="support">
+        <AdminSupportView initialTickets={initialSupportTickets} onOpenCountChange={onSupport} />
+      </Panel>
+      <Panel value="bugs">
+        {initialBugReports ? (
+          <AdminBugReportsView initialReports={initialBugReports} onOpenCountChange={onBugs} />
+        ) : (
+          <ErrorState
+            title="Bug reports did not load"
+            description="The rest of the admin console works. Reload the page to try again."
+            onRetry={() => window.location.reload()}
+          />
+        )}
+      </Panel>
+      <Panel value="requests">
+        <AdminDataRemovalView initialRequests={initialDataRemovals} onPendingCountChange={onRequests} />
+      </Panel>
+    </Tabs>
+  );
+}
+
+function Panel({ value, children }: { value: AdminTab; children: React.ReactNode }) {
+  return (
+    <TabsContent value={value} forceMount className="mt-6 data-[state=inactive]:hidden">
+      {children}
+    </TabsContent>
   );
 }

@@ -1,31 +1,39 @@
 import { requireWorkspace } from "@/lib/session";
-import { listUserTickets, listAllTicketsForAdmin } from "@/lib/support";
+import { listAllTicketsForAdmin, listUserTickets } from "@/lib/support";
+import { TICKET_CATEGORIES, type TicketCategory } from "@/lib/support-types";
 import { isAdmin } from "@/lib/admin";
 import { SupportHubView } from "@/components/support/support-hub-view";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Support & Feedback Center · AutoGTM",
-  description: "Report bugs, request features, share suggestions, or contact the core engineering team.",
+  title: "Support",
+  description: "Report a problem, ask a question or suggest an improvement.",
 };
 
-export default async function SupportPage() {
+function categoryParam(value: string | string[] | undefined): TicketCategory | null {
+  const v = Array.isArray(value) ? value[0] : value;
+  return TICKET_CATEGORIES.some((c) => c.id === v) ? (v as TicketCategory) : null;
+}
+
+export default async function SupportPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { user } = await requireWorkspace();
+  const params = await searchParams;
   const userIsAdmin = isAdmin(user);
 
-  // If user is admin, fetch all tickets universally; otherwise fetch user's tickets
-  const tickets = userIsAdmin
-    ? await listAllTicketsForAdmin(user)
-    : await listUserTickets(user.id);
+  // Admins see every ticket; everyone else sees their own.
+  const tickets = userIsAdmin ? await listAllTicketsForAdmin(user) : await listUserTickets(user.id);
 
   return (
-    <div className="page-stack">
-      <SupportHubView
-        tickets={tickets}
-        isAdminUser={userIsAdmin}
-        userEmail={user.email || ""}
-      />
-    </div>
+    <SupportHubView
+      tickets={tickets}
+      isAdminUser={userIsAdmin}
+      userEmail={user.email || ""}
+      initialCreateCategory={categoryParam(params.new)}
+    />
   );
 }

@@ -1,26 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { ArrowRight, Check, RotateCcw, X } from "lucide-react";
 import {
-  Check,
-  X,
-  Sparkles,
-  Cpu,
-  ArrowRight,
-  RotateCcw,
-  CheckCircle2,
-  Mail,
-  Eye,
-  Sliders,
-  Terminal,
-  ChevronRight,
-  User,
-  Building2,
-  Briefcase,
-} from "lucide-react";
-import { Button } from "@smartreach/ui";
+  Alert,
+  Button,
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  SegmentedControl,
+} from "@smartreach/ui";
 import type { CalibrationProfile } from "@/lib/chad-gtm-actions";
 import type { EmailCalibrationSample } from "@/components/chad-gtm/swipe-card";
+import { WorkingPanel } from "./working-panel";
 
 interface CalibrationRefinementViewProps {
   isRefining: boolean;
@@ -32,14 +25,11 @@ interface CalibrationRefinementViewProps {
   onRecalibrate: () => void;
 }
 
-const REFINEMENT_TICKER_MESSAGES = [
-  "Analyzing tone contrast across approved vs rejected samples...",
-  "Extracting winning hook patterns, length preferences, and cadence...",
-  "Eliminating generic sales fluff, pleasantries, and aggressive CTAs...",
-  "Synthesizing customized AI dispatch directives for each prospect...",
-  "Locking calibrated voice profile into autonomous outbound engine...",
-];
-
+/**
+ * Guided setup, step 4 (result): the voice we learned from the reviewed
+ * samples and the rewritten emails. Shows only what the model returned;
+ * nothing is filled in when refinement failed.
+ */
 export function CalibrationRefinementView({
   isRefining,
   profile,
@@ -49,329 +39,146 @@ export function CalibrationRefinementView({
   onProceedToLaunch,
   onRecalibrate,
 }: CalibrationRefinementViewProps) {
-  const [tickerIndex, setTickerIndex] = useState(0);
-  const [selectedPreviewTab, setSelectedPreviewTab] = useState<number>(0); // 0 = template, 1+ = sample index
+  const [preview, setPreview] = useState("template");
 
-  useEffect(() => {
-    if (!isRefining) return;
-    const interval = setInterval(() => {
-      setTickerIndex((i) => (i + 1) % REFINEMENT_TICKER_MESSAGES.length);
-    }, 1100);
-    return () => clearInterval(interval);
-  }, [isRefining]);
-
-  // Loading Screen: "Adjusting copy to your preferences..."
   if (isRefining) {
     return (
-      <div className="mx-auto max-w-2xl py-12 px-4 space-y-6 font-sans text-center">
-        {/* Top Tag */}
-        <div className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3.5 py-1 text-xs font-medium text-zinc-300">
-          <Cpu className="size-3.5 text-emerald-400 animate-pulse" />
-          Calibration Engine // Refinement Pipeline
-        </div>
-
-        {/* Headline */}
-        <div className="space-y-2">
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-            Adjusting copy to your preferences...
-          </h2>
-          <p className="text-xs sm:text-sm text-zinc-400 max-w-lg mx-auto leading-relaxed">
-            Our neural model is analyzing what you approved ({approvedCount}) and rejected ({rejectedCount}) to eliminate fluff and lock in your preferred tone.
-          </p>
-        </div>
-
-        {/* Live Telemetry Progress Card */}
-        <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/90 p-6 space-y-4 text-left card-shine shadow-xl">
-          <div className="flex items-center justify-between text-xs text-zinc-400 border-b border-zinc-800/80 pb-3 font-medium">
-            <div className="flex items-center gap-2">
-              <span className="size-2 bg-emerald-400 rounded-lg animate-pulse" />
-              <span>Synthesizing Preference Matrix</span>
-            </div>
-            <span className="text-zinc-500">Stage 04B // Voice Lock</span>
-          </div>
-
-          {/* Current Operation Ticker */}
-          <div className="flex items-start gap-3 py-2">
-            <div className="size-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white shrink-0 mt-0.5">
-              <Terminal className="size-4 text-zinc-300" />
-            </div>
-            <div className="space-y-1">
-              <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block">
-                Active Operation
-              </span>
-              <p className="text-xs sm:text-sm font-semibold text-white tracking-tight">
-                {REFINEMENT_TICKER_MESSAGES[tickerIndex]}
-              </p>
-            </div>
-          </div>
-
-          {/* Progress Bar */}
-          <div className="space-y-2 pt-2">
-            <div className="h-2 w-full bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800">
-              <div
-                className="h-full bg-emerald-500 rounded-lg transition-all duration-300"
-                style={{
-                  width: `${((tickerIndex + 1) / REFINEMENT_TICKER_MESSAGES.length) * 100}%`,
-                }}
-              />
-            </div>
-            <div className="flex items-center justify-between text-xs text-zinc-500 font-medium">
-              <span>Approved Samples: {approvedCount}</span>
-              <span>Discarded: {rejectedCount}</span>
-              <span className="text-zinc-300 font-semibold">{Math.round(((tickerIndex + 1) / REFINEMENT_TICKER_MESSAGES.length) * 100)}% Complete</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <WorkingPanel
+        title="Rewriting your emails"
+        description={`We're comparing the ${approvedCount} ${approvedCount === 1 ? "email" : "emails"} you approved with the ${rejectedCount} you rejected, then adjusting tone, length and the call to action to match.`}
+      />
     );
   }
 
-  // Refined Results Review Screen
-  const sampleList = refinedSamples.length > 0 ? refinedSamples : [];
-  const currentPreviewSample =
-    selectedPreviewTab > 0 && sampleList[selectedPreviewTab - 1]
-      ? sampleList[selectedPreviewTab - 1]
-      : null;
+  const samples = refinedSamples.slice(0, 2);
+  const hasTemplate = !!(profile?.calibratedSubjectTemplate || profile?.calibratedBodyTemplate);
+  const options = [
+    ...(hasTemplate ? [{ value: "template", label: "Template" }] : []),
+    ...samples.map((_, i) => ({ value: String(i), label: `Example ${i + 1}` })),
+  ];
+  const active = options.some((o) => o.value === preview) ? preview : options[0]?.value;
+  const sample = active && active !== "template" ? samples[Number(active)] : null;
+
+  const dos = profile?.dos ?? [];
+  const donts = profile?.donts ?? [];
+  const adjustments = profile?.keyAdjustments ?? [];
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 font-sans">
-      {/* Header Banner */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-xs text-emerald-400 font-semibold flex items-center gap-1.5">
-              <span className="size-1.5 rounded-lg bg-emerald-400 animate-pulse" />
-              Voice Calibrated // Preferences Locked
-            </span>
-            <span className="text-xs text-zinc-500">
-              {approvedCount} approved · {rejectedCount} filtered
-            </span>
+    <Card>
+      <CardHeader>
+        <CardTitle>Your email voice</CardTitle>
+        <CardDescription>
+          Learned from {approvedCount} approved and {rejectedCount} rejected samples. Every email in the campaign
+          follows it and is personalized for its recipient.
+        </CardDescription>
+      </CardHeader>
+
+      <div className="mt-5 divide-y divide-border border-t border-border">
+        {!profile ? (
+          <div className="p-5">
+            <Alert variant="warning">
+              We couldn&apos;t learn a voice from your feedback this time. The emails you approved will be used as
+              written. You can review the samples again to retry.
+            </Alert>
           </div>
-          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white mt-1">
-            Copy Calibrated to Your Preferences
-          </h2>
-          <p className="text-xs sm:text-sm text-zinc-400 mt-0.5 max-w-2xl">
-            The autonomous engine analyzed your swipe feedback and refined the outbound copy. All upcoming emails will follow these exact parameters.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onRecalibrate}
-            className="rounded-lg text-xs font-medium border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-white"
-          >
-            <RotateCcw className="size-3 mr-1.5" /> Re-swipe
-          </Button>
-          <Button
-            type="button"
-            onClick={onProceedToLaunch}
-            className="rounded-lg text-xs font-semibold bg-white hover:bg-zinc-200 text-black shadow-xs transition-all active:scale-[0.98]"
-          >
-            Set Velocity & Launch <ChevronRight className="size-3.5 ml-1" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Main Grid: 2 Columns (Learnings & Rules vs Refined Copy Preview) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column: What AI Learned & Adjusted (5 cols) */}
-        <div className="lg:col-span-5 space-y-4">
-          {/* Calibrated Tone Profile Card */}
-          <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-3.5 card-shine shadow-xs">
-            <div className="flex items-center justify-between border-b border-zinc-800/60 pb-2.5">
-              <span className="text-xs font-semibold text-zinc-400 flex items-center gap-1.5">
-                <Sliders className="size-3.5 text-zinc-300" /> Calibrated Voice
-              </span>
-              <span className="text-[10px] font-semibold text-emerald-400 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5">
-                Active
-              </span>
-            </div>
-
-            <div>
-              <span className="text-[11px] text-zinc-500 font-medium block">
-                Target Tone
-              </span>
-              <p className="text-sm font-semibold text-white tracking-tight mt-0.5">
-                {profile?.voiceTone || "Direct, Technical Peer-to-Peer"}
-              </p>
-            </div>
-
-            <p className="text-xs text-zinc-400 leading-relaxed border-t border-zinc-800/60 pt-2.5">
-              "{profile?.analysisSummary || "Adjusted model to prioritize concise value hooks while eliminating fluffy greetings."}"
-            </p>
-          </div>
-
-          {/* Key Adjustments Made */}
-          <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-3 card-shine shadow-xs">
-            <span className="text-xs font-semibold text-zinc-300 block border-b border-zinc-800/60 pb-2">
-              Key Adjustments Applied
-            </span>
-            <ul className="space-y-2">
-              {(profile?.keyAdjustments || [
-                "Eliminated introductory pleasantries in favor of immediate value hooks",
-                "Trimmed body word count for rapid mobile readability",
-                "Replaced calendar links with low-pressure curiosity questions",
-              ]).map((adj, i) => (
-                <li key={i} className="flex items-start gap-2.5 text-xs text-zinc-300 leading-relaxed">
-                  <CheckCircle2 className="size-4 text-emerald-400 shrink-0 mt-0.5" />
-                  <span>{adj}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Rules: Do's & Don'ts */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-            {/* Do's */}
-            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-4 space-y-2">
-              <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
-                <Check className="size-3.5" /> Reinforced
-              </span>
-              <ul className="space-y-1.5 text-xs text-zinc-300">
-                {(profile?.dos || [
-                  "Lead with operational bottleneck",
-                  "Reference recipient industry context",
-                  "Keep under 65 words",
-                ]).map((d, i) => (
-                  <li key={i} className="flex items-start gap-1.5">
-                    <span className="text-emerald-400 font-bold">•</span>
-                    <span>{d}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Don'ts */}
-            <div className="rounded-lg border border-rose-500/20 bg-rose-500/[0.04] p-4 space-y-2">
-              <span className="text-xs font-semibold text-rose-400 flex items-center gap-1.5">
-                <X className="size-3.5" /> Eliminated
-              </span>
-              <ul className="space-y-1.5 text-xs text-zinc-400">
-                {(profile?.donts || [
-                  "No 'Hope this email finds you well'",
-                  "No aggressive 30-min meeting demands",
-                  "No corporate jargon or fluff",
-                ]).map((d, i) => (
-                  <li key={i} className="flex items-start gap-1.5">
-                    <span className="text-rose-400 font-bold">•</span>
-                    <span>{d}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column: Interactive Calibrated Copy Preview (7 cols) */}
-        <div className="lg:col-span-7 rounded-lg border border-zinc-800/80 bg-zinc-950/90 p-6 space-y-4 card-shine shadow-xl">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 pb-3">
-            <div className="flex items-center gap-2">
-              <Mail className="size-4 text-zinc-300" />
-              <h3 className="text-xs font-semibold text-white tracking-tight">
-                Calibrated Outbound Copy
+        ) : (
+          <>
+            <section className="flex flex-col gap-3 p-5" aria-labelledby="voice-summary">
+              <h3 id="voice-summary" className="text-sm font-semibold">
+                {profile.voiceTone || "Your tone"}
               </h3>
-            </div>
+              {profile.analysisSummary && (
+                <p className="text-sm leading-relaxed text-muted-foreground">{profile.analysisSummary}</p>
+              )}
+              {adjustments.length > 0 && (
+                <ul className="mt-1 flex list-disc flex-col gap-1.5 pl-5 text-[13px] marker:text-subtle-foreground">
+                  {adjustments.map((a, i) => (
+                    <li key={i}>{a}</li>
+                  ))}
+                </ul>
+              )}
+            </section>
 
-            {/* Preview View Selector */}
-            <div className="flex items-center gap-1.5 text-xs bg-zinc-900/60 p-1 rounded-lg border border-zinc-800/80">
-              <button
-                type="button"
-                onClick={() => setSelectedPreviewTab(0)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
-                  selectedPreviewTab === 0
-                    ? "bg-zinc-800 text-white shadow-xs"
-                    : "text-zinc-400 hover:text-white"
-                }`}
-              >
-                Template
-              </button>
-              {sampleList.slice(0, 2).map((s, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setSelectedPreviewTab(idx + 1)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
-                    selectedPreviewTab === idx + 1
-                      ? "bg-zinc-800 text-white shadow-xs"
-                      : "text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  Lead #{idx + 1}
-                </button>
-              ))}
-            </div>
-          </div>
+            {(dos.length > 0 || donts.length > 0) && (
+              <section className="grid sm:grid-cols-2 sm:divide-x sm:divide-border" aria-label="Writing rules">
+                <RuleList title="Keep doing" items={dos} tone="do" />
+                <RuleList title="Avoid" items={donts} tone="dont" />
+              </section>
+            )}
+          </>
+        )}
 
-          {/* If Sample Preview Tab Selected: Show Prospect Metadata */}
-          {currentPreviewSample && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-3 text-xs text-zinc-300">
-              <div className="flex items-center gap-2">
-                <User className="size-3.5 text-zinc-400" />
-                <span className="font-semibold text-white">{currentPreviewSample.recipientName}</span>
-                <span className="text-zinc-500">({currentPreviewSample.recipientTitle})</span>
-              </div>
-              <div className="flex items-center gap-2 text-zinc-400">
-                <Building2 className="size-3.5 text-zinc-500" />
-                <span>{currentPreviewSample.recipientCompany}</span>
-              </div>
+        {options.length > 0 && (
+          <section className="flex flex-col gap-3 p-5" aria-labelledby="voice-preview">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 id="voice-preview" className="text-sm font-semibold">
+                Preview
+              </h3>
+              {options.length > 1 && (
+                <SegmentedControl
+                  size="sm"
+                  aria-label="Choose what to preview"
+                  value={active!}
+                  onValueChange={setPreview}
+                  options={options}
+                />
+              )}
             </div>
-          )}
-
-          {/* Subject Line Box */}
-          <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-4 space-y-1">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 block">
-              Calibrated Subject Line
-            </span>
-            <p className="text-xs sm:text-sm font-semibold text-white tracking-tight">
-              {currentPreviewSample
-                ? currentPreviewSample.subject
-                : profile?.calibratedSubjectTemplate || "Quick question re: {{company}} workflow"}
-            </p>
-          </div>
-
-          {/* Body Box */}
-          <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-4 space-y-2 min-h-[180px]">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 block">
-              Personalized Email Body
-            </span>
-            <div className="whitespace-pre-line text-xs sm:text-sm font-sans text-zinc-300 leading-relaxed">
-              {currentPreviewSample
-                ? currentPreviewSample.bodyText
-                : profile?.calibratedBodyTemplate ||
-                  "Hi {{first_name}},\n\nSaw your team at {{company}} scaling operations.\n\nOpen to a brief 4-minute demo this Thursday?\n\nBest,\n{{sender_name}}"}
-            </div>
-          </div>
-
-          {/* Dynamic AI Dispatch Notice */}
-          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-3.5 text-xs text-zinc-300 space-y-1">
-            <div className="flex items-center gap-1.5 text-white font-semibold">
-              <Sparkles className="size-3.5 text-emerald-400" />
-              Dynamic On-the-Fly Personalization Active
-            </div>
-            <p className="leading-relaxed text-zinc-400 text-xs">
-              Every dispatched email will be dynamically customized to the prospect's company and industry using this calibrated prompt directive.
-            </p>
-          </div>
-        </div>
+            <article className="rounded-lg border border-border bg-muted/40 p-4">
+              {sample ? (
+                <p className="mb-2 text-xs text-subtle-foreground">
+                  To {sample.recipientName}
+                  {sample.recipientTitle ? `, ${sample.recipientTitle}` : ""}
+                  {sample.recipientCompany ? ` at ${sample.recipientCompany}` : ""}
+                </p>
+              ) : (
+                <p className="mb-2 text-xs text-subtle-foreground">
+                  Placeholders in double braces are filled in for each lead.
+                </p>
+              )}
+              <p className="text-sm font-medium">{sample ? sample.subject : profile?.calibratedSubjectTemplate}</p>
+              <p className="mt-2 whitespace-pre-line text-[13px] leading-relaxed text-muted-foreground">
+                {sample ? sample.bodyText : profile?.calibratedBodyTemplate}
+              </p>
+            </article>
+          </section>
+        )}
       </div>
 
-      {/* Bottom Launch Button Bar */}
-      <div className="pt-4 border-t border-zinc-800/80 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <span className="text-xs text-zinc-500">
-          Preferences saved to session · Ready for sending velocity configuration
-        </span>
-        <Button
-          type="button"
-          onClick={onProceedToLaunch}
-          size="lg"
-          className="rounded-lg h-11 px-8 bg-white hover:bg-zinc-200 text-black font-semibold text-xs tracking-tight shadow-sm gap-2 w-full sm:w-auto transition-all active:scale-[0.98]"
-        >
-          Proceed to Daily Velocity & Launch <ArrowRight className="size-3.5 ml-1" />
+      <div className="flex flex-col-reverse gap-2 border-t border-border px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <Button variant="outline" onClick={onRecalibrate}>
+          <RotateCcw />
+          Review samples again
+        </Button>
+        <Button onClick={onProceedToLaunch}>
+          Continue to launch
+          <ArrowRight />
         </Button>
       </div>
+    </Card>
+  );
+}
+
+function RuleList({ title, items, tone }: { title: string; items: string[]; tone: "do" | "dont" }) {
+  const Icon = tone === "do" ? Check : X;
+  return (
+    <div className="p-5">
+      <h4 className="text-xs text-muted-foreground">{title}</h4>
+      {items.length === 0 ? (
+        <p className="mt-2 text-[13px] text-subtle-foreground">Nothing specific.</p>
+      ) : (
+        <ul className="mt-2 flex flex-col gap-1.5">
+          {items.map((d, i) => (
+            <li key={i} className="flex items-start gap-2 text-[13px]">
+              <Icon
+                className={tone === "do" ? "mt-0.5 size-4 shrink-0 text-success-text" : "mt-0.5 size-4 shrink-0 text-destructive-text"}
+                aria-hidden
+              />
+              <span>{d}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

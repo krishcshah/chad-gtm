@@ -1,56 +1,37 @@
 "use client";
 
-import {
-  memo,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  useTransition,
-  type MutableRefObject,
-  type RefObject,
-} from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { toast } from "sonner";
+import { ArrowDown, ArrowUp, Bold, Eye, Italic, List, Mail, Plus, Send, Trash2, X } from "lucide-react";
 import {
   Alert,
-  Badge,
+  AlertDescription,
+  AlertTitle,
   Button,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+  ConfirmDialog,
   EmptyState,
+  Field,
   Input,
+  Kbd,
   Label,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  SectionHeader,
+  SegmentedControl,
+  Separator,
   Switch,
   Textarea,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
   cn,
 } from "@smartreach/ui";
-import { STANDARD_LEAD_FIELDS } from "@smartreach/shared";
-import {
-  Bold,
-  ChevronDown,
-  ChevronUp,
-  Eye,
-  Italic,
-  Link2,
-  List,
-  Mail,
-  Plus,
-  Sparkles,
-  Trash2,
-} from "lucide-react";
 import { previewSequenceStep, saveCampaignSequence } from "@/lib/actions";
-import { EmailBody } from "../../unibox/message-body";
 import { AiDynamicScriptCard } from "@/components/ai/ai-dynamic-script-card";
 import { AiAssistantPopover } from "@/components/ai/ai-assistant-popover";
 import { ManualEmailPreviewDialog } from "@/components/email/manual-email-preview-dialog";
@@ -67,346 +48,23 @@ import {
   stepsFromDto,
   toSavePayload,
   validateDraft,
-  waitLabel,
   type DraftStep,
   type DraftVariant,
   type StepSource,
-  type StepType,
 } from "@/lib/sequence-draft";
+import { LinkButton, SpinButton, VariableChips, VariablePicker } from "./sequence/insert-tools";
+import { StepPreviewDialog, type PreviewData } from "./sequence/preview-dialog";
+import { StepList } from "./sequence/step-list";
+import { SAMPLE_LEAD, fallbackCopy, insertAt, isDenied, type Caret } from "./sequence/utils";
+import { VisualBody, type VisualHandle } from "./sequence/visual-body";
 
-const PRIMARY_VARS = ["first_name", "last_name", "company", "email"] as const;
+const SUBJECT_MAX = 500;
 
-const SAMPLE_LEAD: Record<string, string> = {
-  email: "jordan@northwind.example",
-  first_name: "Jordan",
-  last_name: "Lee",
-  company: "Northwind",
-  website: "northwind.example",
-  linkedin: "linkedin.com/in/jordanlee",
-  job_title: "Head of Sales",
-  location: "Austin",
-  phone: "+1 512 555 0148",
-  industry: "Software",
-};
-
-type Caret = { start: number; end: number };
-
-function isDenied(message: string) {
-  return /permission|forbidden|unauthorized|access denied/i.test(message);
-}
-
-function fieldLabel(key: string): string {
-  return STANDARD_LEAD_FIELDS.find((field) => field.key === key)?.label ?? key;
-}
-
-function fallbackCopy(templateName: string | null, hasTemplate: boolean): string {
-  if (templateName) {
-    return `With no steps saved, sends use the ${templateName} template.`;
-  }
-  if (hasTemplate) {
-    return "With no steps saved, sends use this campaign’s template.";
-  }
-  return "With no steps saved, there is no template to fall back to. Add a step, or attach a template when you build the campaign.";
-}
-
-function insertAt(value: string, caret: Caret, token: string): { value: string; caret: Caret } {
-  const start = Math.max(0, Math.min(caret.start, value.length));
-  const end = Math.max(start, Math.min(caret.end, value.length));
-  const next = value.slice(0, start) + token + value.slice(end);
-  const pos = start + token.length;
-  return { value: next, caret: { start: pos, end: pos } };
-}
-
-function safeUrl(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  const withProtocol = /^[a-z][a-z0-9+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`;
-  try {
-    const url = new URL(withProtocol);
-    if (url.protocol !== "http:" && url.protocol !== "https:" && url.protocol !== "mailto:") return null;
-    return url.toString();
-  } catch {
-    return null;
-  }
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-type VisualHandle = {
-  insertText: (text: string) => void;
-  command: (command: "bold" | "italic" | "insertUnorderedList") => void;
-  link: (url: string) => void;
-};
-
-const VisualBody = memo(
-  function VisualBody({
-    mountKey,
-    initialHtml,
-    labelledBy,
-    onChangeRef,
-    handleRef,
-  }: {
-    mountKey: string;
-    initialHtml: string;
-    labelledBy: string;
-    onChangeRef: RefObject<(html: string, text: string) => void>;
-    handleRef: MutableRefObject<VisualHandle | null>;
-  }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const placeholderRef = useRef<HTMLParagraphElement>(null);
-  const rangeRef = useRef<Range | null>(null);
-
-  const emit = () => {
-    const el = ref.current;
-    if (!el) return;
-    const html = el.innerHTML;
-    const text = (el.innerText || "").replace(/\u00a0/g, " ").replace(/\n{3,}/g, "\n\n").trim();
-    if (placeholderRef.current) {
-      placeholderRef.current.hidden = plainFromHtml(html).length > 0 || text.length > 0;
-    }
-    onChangeRef.current(html, text);
-  };
-
-  const remember = () => {
-    const sel = window.getSelection();
-    const el = ref.current;
-    if (!sel || !sel.rangeCount || !el) return;
-    const range = sel.getRangeAt(0);
-    if (el.contains(range.commonAncestorContainer)) rangeRef.current = range.cloneRange();
-  };
-
-  const focusWithRange = () => {
-    const el = ref.current;
-    if (!el) return;
-    el.focus();
-    const range = rangeRef.current;
-    if (!range) return;
-    const sel = window.getSelection();
-    sel?.removeAllRanges();
-    sel?.addRange(range);
-  };
-
-  useLayoutEffect(() => {
-    if (ref.current) ref.current.innerHTML = initialHtml;
-    // Hydrate once per step/variant. Typing stays in the DOM so the caret does not jump.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  handleRef.current = {
-    insertText(text: string) {
-      focusWithRange();
-      const ok = document.execCommand("insertText", false, text);
-      if (!ok && ref.current) {
-        ref.current.appendChild(document.createTextNode(text));
-      }
-      emit();
-      remember();
-    },
-    command(command) {
-      focusWithRange();
-      document.execCommand(command);
-      emit();
-      remember();
-    },
-    link(url: string) {
-      focusWithRange();
-      const sel = window.getSelection();
-      if (!sel || sel.isCollapsed) {
-        document.execCommand(
-          "insertHTML",
-          false,
-          `<a href="${escapeHtml(url)}">${escapeHtml(url)}</a>`,
-        );
-      } else {
-        document.execCommand("createLink", false, url);
-      }
-      emit();
-      remember();
-    },
-  };
-
-  return (
-    <div
-      className={cn(
-        "relative rounded-lg border border-border bg-background/60 shadow-sm",
-        "focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/50",
-      )}
-    >
-      <p
-        ref={placeholderRef}
-        hidden={plainFromHtml(initialHtml).length > 0}
-        className="pointer-events-none absolute left-3 top-2 text-sm text-muted-foreground/80"
-      >
-        Hi {"{{first_name}}"}, I noticed {"{{company}}"}…
-      </p>
-      <div
-        ref={ref}
-        className="sequence-body min-h-48 px-3 py-2 text-sm"
-        contentEditable
-        role="textbox"
-        aria-multiline="true"
-        aria-labelledby={labelledBy}
-        suppressContentEditableWarning
-        onInput={emit}
-        onKeyUp={remember}
-        onMouseUp={remember}
-        onBlur={remember}
-      />
-    </div>
-  );
-  },
-  (prev, next) => prev.mountKey === next.mountKey,
-);
-
-function VarChips({
-  onInsert,
-  idPrefix,
-}: {
-  onInsert: (token: string) => void;
-  idPrefix: string;
-}) {
-  const [custom, setCustom] = useState("");
-  const [customError, setCustomError] = useState<string | null>(null);
-  const customId = `${idPrefix}-custom-var`;
-
-  const insertCustom = () => {
-    const key = custom.trim();
-    if (!/^[A-Za-z][A-Za-z0-9_.]*$/.test(key)) {
-      setCustomError("Use letters, numbers, dots, or underscores. Start with a letter.");
-      return;
-    }
-    setCustomError(null);
-    onInsert(`{{${key}}}`);
-    setCustom("");
-  };
-
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {PRIMARY_VARS.map((key) => (
-        <button
-          key={key}
-          type="button"
-          className="rounded-lg border border-border bg-muted/50 px-2 py-1 font-mono text-xs text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={() => onInsert(`{{${key}}}`)}
-        >
-          {`{{${key}}}`}
-          <span className="sr-only">, {fieldLabel(key)}</span>
-        </button>
-      ))}
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button type="button" variant="ghost" size="sm">
-            More variables
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-80">
-          <p className="text-sm font-medium">Merge variables</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Lead columns become {"{{variables}}"}. Fallbacks look like {"{{first_name | \"there\"}}"}.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {STANDARD_LEAD_FIELDS.map((field) => (
-              <button
-                key={field.key}
-                type="button"
-                className="rounded-lg border border-border bg-muted/50 px-2 py-1 font-mono text-xs hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                onClick={() => onInsert(`{{${field.key}}}`)}
-              >
-                {`{{${field.key}}}`}
-                <span className="sr-only">, {field.label}</span>
-              </button>
-            ))}
-          </div>
-          <div className="mt-3 space-y-2">
-            <Label htmlFor={customId}>Custom column</Label>
-            <div className="flex gap-2">
-              <Input
-                id={customId}
-                value={custom}
-                onChange={(e) => setCustom(e.target.value)}
-                placeholder="icebreaker"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    insertCustom();
-                  }
-                }}
-              />
-              <Button type="button" variant="secondary" onClick={insertCustom}>
-                Insert
-              </Button>
-            </div>
-            {customError ? (
-              <p role="alert" className="text-xs text-destructive">
-                {customError}
-              </p>
-            ) : null}
-          </div>
-        </PopoverContent>
-      </Popover>
-    </div>
-  );
-}
-
-function SpinButton({ onInsert }: { onInsert: (token: string) => void }) {
-  const [a, setA] = useState("Hi");
-  const [b, setB] = useState("Hello");
-  const [open, setOpen] = useState(false);
-  const [spinError, setSpinError] = useState<string | null>(null);
-  const aId = useId();
-  const bId = useId();
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" aria-label="Insert spin">
-          {"{a|b}"}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-72">
-        <p className="text-sm font-medium">Insert a spin</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {"{Hi|Hello}"} picks one phrase when the email is prepared. Preview shows one option.
-        </p>
-        <div className="mt-3 space-y-2">
-          <Label htmlFor={aId}>Option A</Label>
-          <Input id={aId} value={a} onChange={(e) => setA(e.target.value)} />
-          <Label htmlFor={bId}>Option B</Label>
-          <Input id={bId} value={b} onChange={(e) => setB(e.target.value)} />
-          {spinError ? (
-            <p role="alert" className="text-xs text-destructive">
-              {spinError}
-            </p>
-          ) : null}
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => {
-              const left = a.replace(/[{}|]/g, "").trim();
-              const right = b.replace(/[{}|]/g, "").trim();
-              if (!left || !right) {
-                setSpinError("Enter two different phrases.");
-                return;
-              }
-              setSpinError(null);
-              onInsert(`{${left}|${right}}`);
-              setOpen(false);
-            }}
-          >
-            Insert spin
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
+/**
+ * Campaign sequence editor: steps with calendar-day waits, an optional A/B
+ * variant per step, subject and body (formatted + plain text), variables,
+ * spins, AI helpers, previews and a single replace-all save.
+ */
 export function SequenceEditor({
   campaignId,
   initialSteps,
@@ -424,24 +82,22 @@ export function SequenceEditor({
   const [savedKey, setSavedKey] = useState(() => payloadKey(toSavePayload(campaignId, stepsFromDto(initialSteps))));
   const [error, setError] = useState<string | null>(null);
   const [denied, setDenied] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
-  const [removeArmed, setRemoveArmed] = useState(false);
+  const [removeOpen, setRemoveOpen] = useState(false);
   const [samples, setSamples] = useState(SAMPLE_LEAD);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [manualPreviewOpen, setManualPreviewOpen] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewDenied, setPreviewDenied] = useState(false);
-  const [previewData, setPreviewData] = useState<{
-    subject: string;
-    bodyHtml: string;
-    bodyText: string;
-  } | null>(null);
-  const [linkUrl, setLinkUrl] = useState("https://");
-  const [linkError, setLinkError] = useState<string | null>(null);
+  const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [pending, start] = useTransition();
   const [previewPending, startPreview] = useTransition();
   const [bodyMode, setBodyMode] = useState<"formatted" | "plain">("formatted");
+  /** Bumped when content is replaced from outside the editor (AI), to remount the formatted body. */
+  const [bodyRevision, setBodyRevision] = useState(0);
 
+  const sectionRef = useRef<HTMLElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const [isMac, setIsMac] = useState(true);
   const subjectRef = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const subjectCaret = useRef<Caret>({ start: 0, end: 0 });
@@ -449,14 +105,12 @@ export function SequenceEditor({
   const visualRef = useRef<VisualHandle | null>(null);
   const visualChangeRef = useRef<(html: string, text: string) => void>(() => {});
   const delayId = useId();
-  const typeId = useId();
-  const subjectId = useId();
   const bodyLabelId = useId();
-  const plainId = useId();
+  const bodyHintId = useId();
   const pauseId = useId();
 
   visualChangeRef.current = (html, text) => {
-    const plain = text.replace(/\u00a0/g, " ").trim();
+    const plain = text.replace(/ /g, " ").trim();
     const bodyHtml = plain.length === 0 && plainFromHtml(html).length === 0 ? "" : html;
     setSteps((prev) =>
       prev.map((item, index) => {
@@ -466,24 +120,18 @@ export function SequenceEditor({
           ...item,
           variants: item.variants.map((itemVariant, vi) =>
             vi === variantAt
-              ? {
-                  ...itemVariant,
-                  bodyHtml,
-                  ...(itemVariant.plainEdited ? {} : { bodyText: plain }),
-                }
+              ? { ...itemVariant, bodyHtml, ...(itemVariant.plainEdited ? {} : { bodyText: plain }) }
               : itemVariant,
           ),
         };
       }),
     );
-    setStatus(null);
   };
 
   const step = steps[selected] ?? null;
-  const variant = step?.variants[Math.min(variantIndex, (step?.variants.length ?? 1) - 1)] ?? null;
   const activeVariantIndex = step ? Math.min(variantIndex, step.variants.length - 1) : 0;
+  const variant = step?.variants[activeVariantIndex] ?? null;
   const dirty = payloadKey(toSavePayload(campaignId, steps)) !== savedKey;
-  const atMax = steps.length >= MAX_SEQUENCE_STEP_COUNT;
   const fallback = fallbackCopy(templateName, hasTemplate);
 
   const stepKey = step?.key;
@@ -492,25 +140,20 @@ export function SequenceEditor({
     if (seenStepKey.current === stepKey) return;
     seenStepKey.current = stepKey;
     setVariantIndex(0);
-    setRemoveArmed(false);
   }, [stepKey]);
 
   const patchStep = (index: number, patch: Partial<DraftStep>) => {
     setSteps((prev) => prev.map((item, i) => (i === index ? { ...item, ...patch } : item)));
-    setStatus(null);
   };
 
   const patchVariant = (index: number, patch: Partial<DraftVariant>) => {
     setSteps((prev) =>
-      prev.map((item, i) => {
-        if (i !== selected) return item;
-        return {
-          ...item,
-          variants: item.variants.map((v, vi) => (vi === index ? { ...v, ...patch } : v)),
-        };
-      }),
+      prev.map((item, i) =>
+        i !== selected
+          ? item
+          : { ...item, variants: item.variants.map((v, vi) => (vi === index ? { ...v, ...patch } : v)) },
+      ),
     );
-    setStatus(null);
   };
 
   const placeCaret = (el: HTMLInputElement | HTMLTextAreaElement | null, caret: Caret) => {
@@ -538,9 +181,15 @@ export function SequenceEditor({
   };
 
   const insertBody = (token: string) => {
-    const plainFocused = document.activeElement === textRef.current;
-    if (plainFocused) insertPlain(token);
+    if (bodyMode === "plain") insertPlain(token);
     else visualRef.current?.insertText(token);
+  };
+
+  const selectStep = (index: number) => {
+    setSelected(index);
+    if (typeof window !== "undefined" && window.matchMedia?.("(max-width: 1023px)").matches) {
+      requestAnimationFrame(() => editorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
   };
 
   const onAddStep = () => {
@@ -551,8 +200,18 @@ export function SequenceEditor({
     }
     setError(null);
     setSteps(result.steps);
-    setSelected(result.steps.length - 1);
-    setStatus(null);
+    selectStep(result.steps.length - 1);
+  };
+
+  const onRemoveStep = () => {
+    const next = removeStep(steps, selected);
+    setSteps(next);
+    setSelected(Math.min(selected, Math.max(0, next.length - 1)));
+  };
+
+  const onMoveStep = (direction: -1 | 1) => {
+    setSteps(moveStep(steps, selected, direction));
+    setSelected(selected + direction);
   };
 
   const onSave = () => {
@@ -569,7 +228,6 @@ export function SequenceEditor({
         const message = res.ok ? "The sequence could not be saved." : res.error;
         setDenied(isDenied(message));
         setError(message);
-        setStatus(null);
         return;
       }
       const next = stepsFromDto(res.data.steps);
@@ -578,10 +236,8 @@ export function SequenceEditor({
       setSelected((index) => Math.min(index, Math.max(0, next.length - 1)));
       setError(null);
       setDenied(false);
-      setStatus(
-        next.length === 0
-          ? "Sequence cleared. This campaign will send from its template."
-          : "Sequence saved.",
+      toast.success(
+        next.length === 0 ? "Sequence cleared. This campaign will send from its template." : "Sequence saved",
       );
     });
   };
@@ -600,7 +256,7 @@ export function SequenceEditor({
         sampleVars,
       });
       if (!res.ok || !res.data) {
-        const message = res.ok ? "Preview could not be built." : res.error;
+        const message = res.ok ? "The preview could not be built." : res.error;
         setPreviewDenied(isDenied(message));
         setPreviewError(message);
         setPreviewData(null);
@@ -612,686 +268,508 @@ export function SequenceEditor({
     });
   };
 
+  // Cmd/Ctrl+S saves; leaving the page with unsaved edits asks first.
+  const saveRef = useRef(onSave);
+  saveRef.current = onSave;
+  const canSave = dirty && !pending;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && sectionRef.current?.offsetParent != null) {
+        if (!canSave) return;
+        e.preventDefault();
+        saveRef.current();
+      }
+    };
+    const onUnload = (e: BeforeUnloadEvent) => {
+      if (!dirty) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    setIsMac(/mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent));
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("beforeunload", onUnload);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("beforeunload", onUnload);
+    };
+  }, [canSave, dirty]);
+
+  const stepTitle = selected === 0 ? "First email" : `Follow-up ${selected}`;
+  const ai = Boolean(variant?.aiGenerateOnTheFly);
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 max-w-2xl">
-          <h2 className="text-lg font-semibold tracking-tight">Sequence</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Each step waits a number of calendar days, then sends variant A, or an equal A/B split.
-            {" "}
-            {fallback}
-          </p>
-        </div>
-        <p className="text-sm tabular-nums text-muted-foreground">
-          {steps.length} / {MAX_SEQUENCE_STEP_COUNT} steps
-        </p>
-      </div>
-
-      {denied ? (
-        <Alert variant="warning">
-          You do not have permission to change this sequence. Your edits are still on this page.
-        </Alert>
-      ) : error ? (
-        <Alert variant="destructive">{error}</Alert>
-      ) : null}
-      {status ? (
-        <p role="status" className="text-sm text-success-foreground">
-          {status}
-        </p>
-      ) : null}
-
-      {steps.length === 0 ? (
-        <EmptyState
-          icon={Mail}
-          title="No sequence steps"
-          description={`${fallback} Add a step to write the first email, then follow-ups after a calendar-day wait. Two variants on a step send at an equal split.`}
-          action={
-            <Button type="button" size="sm" onClick={onAddStep}>
-              <Plus /> Add first step
-            </Button>
+    <TooltipProvider delayDuration={200}>
+      <section ref={sectionRef} className="flex flex-col gap-5" aria-label="Sequence editor">
+        <SectionHeader
+          title="Sequence"
+          description="Each step waits a number of calendar days after the one before it, then sends. Add a second variant to a step to split leads evenly between two versions."
+          actions={
+            <span className="tabular text-[13px] text-muted-foreground">
+              {steps.length} of {MAX_SEQUENCE_STEP_COUNT} steps
+            </span>
           }
         />
-      ) : (
-        <div className="grid items-start gap-4 lg:grid-cols-[16.5rem_minmax(0,1fr)]">
-          <div className="min-w-0 space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-medium">Steps</h3>
-              <Button type="button" size="sm" variant="outline" onClick={onAddStep} disabled={atMax}>
-                <Plus /> Add
+
+        {denied ? (
+          <Alert variant="warning">
+            <AlertTitle>You do not have permission to change this sequence.</AlertTitle>
+            <AlertDescription>Your edits are still on this page.</AlertDescription>
+          </Alert>
+        ) : error ? (
+          <Alert variant="destructive">{error}</Alert>
+        ) : null}
+
+        {steps.length === 0 ? (
+          <EmptyState
+            icon={Mail}
+            title="No sequence steps"
+            description={`${fallback} Add a step to write the first email, then follow-ups that wait a few days.`}
+            action={
+              <Button type="button" onClick={onAddStep}>
+                <Plus /> Add first step
               </Button>
+            }
+          />
+        ) : step && variant ? (
+          <div className="grid items-start gap-6 lg:grid-cols-[17rem_minmax(0,1fr)]">
+            <div className="min-w-0 lg:sticky lg:top-6">
+              <StepList steps={steps} selected={selected} onSelect={selectStep} onAdd={onAddStep} />
             </div>
-            {atMax ? (
-              <p className="text-xs text-muted-foreground">
-                {MAX_SEQUENCE_STEP_COUNT} steps is the maximum.
-              </p>
-            ) : null}
-            <ol aria-label="Sequence steps" className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
-              {steps.map((item, index) => {
-                const current = index === selected;
-                const subject = item.variants[0]?.subject?.trim() || "No subject";
-                return (
-                  <li key={item.key} className="min-w-[13rem] shrink-0 lg:min-w-0">
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      aria-current={current ? "step" : undefined}
-                      onClick={() => setSelected(index)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          setSelected(index);
-                        }
-                      }}
-                      className={cn(
-                        "flex w-full cursor-pointer flex-col gap-1.5 rounded-lg border p-3 text-left text-sm transition-colors",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        current
-                          ? "border-primary/40 bg-accent text-accent-foreground shadow-xs"
-                          : "border-border bg-card hover:bg-accent/40",
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">
-                          {index === 0 ? "Initial" : `Follow-up ${index}`}
-                        </span>
-                        <span className="text-[11px] font-medium text-muted-foreground">
-                          Step {index + 1}
-                        </span>
-                      </div>
 
-                      {index === 0 ? (
-                        <span className="text-xs text-muted-foreground">Sends immediately</span>
-                      ) : (
-                        <div
-                          className="flex items-center gap-1.5 text-xs text-muted-foreground"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <span>Wait</span>
-                          <input
-                            type="number"
-                            min={0}
-                            max={365}
-                            aria-label={`Step ${index + 1} wait days`}
-                            value={item.delayDays}
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value, 10);
-                              patchStep(index, {
-                                delayDays: clampDelayDays(Number.isNaN(val) ? 0 : val),
-                              });
-                            }}
-                            className="w-12 rounded border border-border bg-background px-1.5 py-0.5 text-center font-mono text-xs text-foreground focus:ring-1 focus:ring-primary"
-                          />
-                          <span>days</span>
-                        </div>
-                      )}
-
-                      <span className="truncate text-xs font-medium text-foreground/90">{subject}</span>
-
-                      <div
-                        className="mt-1 flex items-center justify-between gap-1 border-t border-border/40 pt-1.5"
-                        onClick={(e) => e.stopPropagation()}
+            <div ref={editorRef} className="min-w-0 scroll-mt-20">
+              <Card>
+                <CardHeader
+                  actions={
+                    <>
+                      <IconButton
+                        label={`Move step ${selected + 1} earlier`}
+                        disabled={selected === 0}
+                        onClick={() => onMoveStep(-1)}
                       >
-                        <div className="flex items-center gap-1">
-                          {item.variants.map((v, vi) => (
-                            <button
-                              key={v.key}
-                              type="button"
-                              onClick={() => {
-                                setSelected(index);
-                                setVariantIndex(vi);
-                              }}
-                              className={cn(
-                                "h-5 rounded px-2 text-[10px] font-medium transition-colors",
-                                current && vi === activeVariantIndex
-                                  ? "bg-primary text-primary-foreground font-semibold"
-                                  : "bg-muted text-muted-foreground hover:bg-muted/80",
-                              )}
-                            >
-                              {v.label}
-                            </button>
-                          ))}
+                        <ArrowUp />
+                      </IconButton>
+                      <IconButton
+                        label={`Move step ${selected + 1} later`}
+                        disabled={selected === steps.length - 1}
+                        onClick={() => onMoveStep(1)}
+                      >
+                        <ArrowDown />
+                      </IconButton>
+                      <IconButton label={`Remove step ${selected + 1}`} onClick={() => setRemoveOpen(true)}>
+                        <Trash2 />
+                      </IconButton>
+                    </>
+                  }
+                >
+                  <CardTitle>{stepTitle}</CardTitle>
+                  <CardDescription>
+                    Step {selected + 1} of {steps.length}
+                  </CardDescription>
+                </CardHeader>
+
+                <CardContent className="flex flex-col gap-6">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor={delayId}>{selected === 0 ? "Wait before sending" : "Wait after the previous step"}</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id={delayId}
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        max={365}
+                        value={step.delayDays}
+                        aria-describedby={`${delayId}-hint`}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          patchStep(selected, { delayDays: clampDelayDays(Number.isNaN(val) ? 0 : val) });
+                        }}
+                        className="tabular w-24"
+                      />
+                      <span className="text-[13px] text-muted-foreground">calendar days</span>
+                    </div>
+                    <p id={`${delayId}-hint`} className="text-xs leading-relaxed text-muted-foreground">
+                      {selected === 0
+                        ? "0 sends in the lead’s next open sending slot."
+                        : `Counted from when step ${selected} was sent to the lead.`}
+                    </p>
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      {step.variants.length > 1 ? (
+                        <SegmentedControl
+                          aria-label="Variant"
+                          value={variant.label}
+                          onValueChange={(label) => setVariantIndex(label === "B" ? 1 : 0)}
+                          options={step.variants.map((v) => ({
+                            value: v.label,
+                            label: (
+                              <>
+                                Variant {v.label}
+                                {v.pausedAt ? <span className="text-subtle-foreground">Paused</span> : null}
+                              </>
+                            ),
+                          }))}
+                        />
+                      ) : (
+                        <p className="text-[13px] text-muted-foreground">Every lead gets this version.</p>
+                      )}
+                      {step.variants.length < 2 ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            patchStep(selected, addVariant(step));
+                            setVariantIndex(1);
+                          }}
+                        >
+                          <Plus /> Add variant B
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            patchStep(selected, removeVariant(step, activeVariantIndex));
+                            setVariantIndex(0);
+                          }}
+                        >
+                          <X /> Remove variant {variant.label}
+                        </Button>
+                      )}
+                    </div>
+                    {step.variants.length > 1 ? (
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          id={pauseId}
+                          size="sm"
+                          checked={Boolean(variant.pausedAt)}
+                          aria-describedby={`${pauseId}-hint`}
+                          onCheckedChange={(checked) =>
+                            patchVariant(activeVariantIndex, { pausedAt: checked ? new Date().toISOString() : null })
+                          }
+                        />
+                        <div>
+                          <label htmlFor={pauseId} className="cursor-pointer text-[13px] font-medium">
+                            Pause variant {variant.label}
+                          </label>
+                          <p id={`${pauseId}-hint`} className="text-xs text-muted-foreground">
+                            A paused variant stops going to new leads.
+                          </p>
                         </div>
-                        {item.variants.length < 2 ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelected(index);
-                              patchStep(index, addVariant(item));
-                              setVariantIndex(1);
-                            }}
-                            className="flex items-center gap-0.5 text-[11px] font-medium text-muted-foreground hover:text-foreground"
-                          >
-                            <Plus className="h-3 w-3" /> A/B
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelected(index);
-                              patchStep(index, removeVariant(item, 1));
-                              setVariantIndex(0);
-                            }}
-                            className="text-[10px] font-medium text-destructive hover:underline"
-                          >
-                            Remove B
-                          </button>
-                        )}
                       </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          </div>
-
-          {step && variant ? (
-            <div className="min-w-0 space-y-5 rounded-lg border border-border bg-card p-4 sm:p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="font-medium">Step {selected + 1}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {selected === 0
-                      ? "Calendar days before the first email. 0 sends on the lead’s next open slot."
-                      : "Calendar days after the previous step is sent."}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Move step ${selected + 1} earlier`}
-                    disabled={selected === 0}
-                    onClick={() => {
-                      setSteps(moveStep(steps, selected, -1));
-                      setSelected(selected - 1);
-                    }}
-                  >
-                    <ChevronUp />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Move step ${selected + 1} later`}
-                    disabled={selected === steps.length - 1}
-                    onClick={() => {
-                      setSteps(moveStep(steps, selected, 1));
-                      setSelected(selected + 1);
-                    }}
-                  >
-                    <ChevronDown />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive"
-                    onClick={() => {
-                      if (!removeArmed) {
-                        setRemoveArmed(true);
-                        return;
-                      }
-                      const next = removeStep(steps, selected);
-                      setSteps(next);
-                      setSelected(Math.min(selected, Math.max(0, next.length - 1)));
-                      setRemoveArmed(false);
-                    }}
-                  >
-                    <Trash2 /> {removeArmed ? "Confirm remove" : "Remove"}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between gap-3 border-b border-border/60 pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-sm">
-                    {selected === 0 ? "Initial Email" : `Follow-up ${selected}`}
-                  </span>
-                  {step.variants.length > 1 && (
-                    <Badge variant="outline" className="text-xs">
-                      Variant {variant.label}
-                    </Badge>
-                  )}
-                  {variant.pausedAt && (
-                    <Badge variant="secondary" className="text-xs text-amber-500">
-                      Paused
-                    </Badge>
-                  )}
-                </div>
-                {step.variants.length > 1 && (
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      id={pauseId}
-                      checked={Boolean(variant.pausedAt)}
-                      aria-label={`Pause variant ${variant.label}`}
-                      onCheckedChange={(checked) =>
-                        patchVariant(activeVariantIndex, {
-                          pausedAt: checked ? new Date().toISOString() : null,
-                        })
-                      }
-                    />
-                    <Label htmlFor={pauseId} className="text-xs text-muted-foreground">
-                      Pause variant {variant.label}
-                    </Label>
+                    ) : null}
                   </div>
-                )}
-              </div>
 
-              {variant.aiGenerateOnTheFly ? (
-                <div className="rounded-lg border border-primary/25 bg-primary/[0.04] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-start sm:items-center gap-3">
-                    <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <Sparkles className="size-4" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-foreground">
-                        Manual email composition is collapsed & hidden
-                      </p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        "Write scripts on the fly" is active for Variant {variant.label}. Each recipient will receive an AI-synthesized subject and email generated at dispatch-time using their live company & lead attributes.
-                      </p>
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="text-xs shrink-0 w-full sm:w-auto"
-                    onClick={() =>
-                      patchVariant(activeVariantIndex, { aiGenerateOnTheFly: false })
-                    }
-                  >
-                    Turn off to edit manually
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <Label htmlFor={subjectId}>Subject</Label>
+                  {ai ? (
+                    <Alert
+                      variant="info"
+                      action={
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => setManualPreviewOpen(true)}
-                          className="h-6 px-2 text-[11px] gap-1 text-primary border-primary/30 hover:bg-primary/5"
+                          onClick={() => patchVariant(activeVariantIndex, { aiGenerateOnTheFly: false })}
                         >
-                          <Eye className="size-3" /> Preview Email
+                          Write it myself
                         </Button>
-                        <AiAssistantPopover
-                          subject={variant.subject}
-                          bodyText={variant.bodyText}
-                          onApply={(improved) => {
-                            patchVariant(activeVariantIndex, {
-                              subject: improved.subject,
-                              bodyText: improved.bodyText,
-                              bodyHtml: improved.bodyHtml || `<p>${improved.bodyText.replace(/\n/g, "<br>")}</p>`,
-                              plainEdited: true,
-                            });
-                          }}
-                        />
-                      </div>
-                      <span className={cn("text-xs tabular-nums", variant.subject.length > 500 ? "text-destructive" : "text-muted-foreground")}>
-                        {variant.subject.length}/500
-                      </span>
-                    </div>
-                    <Input
-                      ref={subjectRef}
-                      id={subjectId}
-                      value={variant.subject}
-                      placeholder="Quick question, {{first_name}}"
-                      onChange={(e) => patchVariant(activeVariantIndex, { subject: e.target.value })}
-                      onSelect={(e) => {
-                        const el = e.currentTarget;
-                        subjectCaret.current = { start: el.selectionStart ?? 0, end: el.selectionEnd ?? 0 };
-                      }}
-                    />
-                    <VarChips idPrefix={`${subjectId}-vars`} onInsert={insertSubject} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <p id={bodyLabelId} className="text-sm font-medium">
-                          {bodyMode === "formatted" ? "Formatted body" : "Plain-text version"}
-                        </p>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setManualPreviewOpen(true)}
-                          className="h-6 px-2 text-[11px] gap-1 text-primary hover:bg-primary/5"
-                        >
-                          <Eye className="size-3" /> Preview Email
-                        </Button>
-                      </div>
-                      {bodyMode === "formatted" ? (
-                        <div role="toolbar" aria-label="Body formatting" className="flex flex-wrap gap-1">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label="Bold"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => visualRef.current?.command("bold")}
-                          >
-                            <Bold />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label="Italic"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => visualRef.current?.command("italic")}
-                          >
-                            <Italic />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label="Bulleted list"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => visualRef.current?.command("insertUnorderedList")}
-                          >
-                            <List />
-                          </Button>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label="Insert link"
-                                onMouseDown={(e) => e.preventDefault()}
-                              >
-                                <Link2 />
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent align="end" className="w-72">
-                              <Label htmlFor={`${bodyLabelId}-link`}>Link URL</Label>
-                              <Input
-                                id={`${bodyLabelId}-link`}
-                                className="mt-2"
-                                value={linkUrl}
-                                onChange={(e) => setLinkUrl(e.target.value)}
-                                placeholder="https://"
-                              />
-                              {linkError ? (
-                                <p role="alert" className="mt-2 text-xs text-destructive">
-                                  {linkError}
-                                </p>
-                              ) : null}
-                              <Button
-                                type="button"
-                                size="sm"
-                                className="mt-3"
-                                onClick={() => {
-                                  const url = safeUrl(linkUrl);
-                                  if (!url) {
-                                    setLinkError("Enter an http, https, or mailto link.");
-                                    return;
-                                  }
-                                  setLinkError(null);
-                                  visualRef.current?.link(url);
-                                }}
-                              >
-                                Add link
-                              </Button>
-                            </PopoverContent>
-                          </Popover>
-                          <SpinButton onInsert={(token) => visualRef.current?.insertText(token)} />
-                        </div>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="text-xs"
-                          onClick={() =>
-                            patchVariant(activeVariantIndex, {
-                              bodyText: plainFromHtml(variant.bodyHtml),
-                              plainEdited: false,
-                            })
-                          }
-                        >
-                          Match formatted body
-                        </Button>
-                      )}
-                    </div>
-
-                    <div className="rounded-lg border border-border bg-background shadow-xs focus-within:ring-2 focus-within:ring-ring">
-                      {bodyMode === "formatted" ? (
-                        <div className="p-1">
-                          <VisualBody
-                            key={`${step.key}:${variant.key}`}
-                            mountKey={`${step.key}:${variant.key}`}
-                            initialHtml={variant.bodyHtml}
-                            labelledBy={bodyLabelId}
-                            handleRef={visualRef}
-                            onChangeRef={visualChangeRef}
-                          />
-                        </div>
-                      ) : (
-                        <Textarea
-                          ref={textRef}
-                          id={plainId}
-                          rows={8}
-                          value={variant.bodyText}
-                          className="w-full border-0 bg-transparent p-4 font-mono text-sm shadow-none focus-visible:ring-0"
-                          placeholder={"Hi {{first_name}},\n\nI noticed {{company}}."}
-                          onChange={(e) =>
-                            patchVariant(activeVariantIndex, { bodyText: e.target.value, plainEdited: true })
-                          }
+                      }
+                    >
+                      <AlertTitle>AI writes variant {variant.label} for each lead</AlertTitle>
+                      <AlertDescription>
+                        The subject and body are written when the email is sent, from the lead’s details and your
+                        instructions below.
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <>
+                      <Field
+                        label="Subject"
+                        error={variant.subject.length > SUBJECT_MAX ? `Keep the subject under ${SUBJECT_MAX} characters.` : undefined}
+                        action={
+                          <div className="flex items-center gap-2">
+                            {variant.subject.length > SUBJECT_MAX * 0.8 ? (
+                              <span className="tabular text-xs text-subtle-foreground">
+                                {variant.subject.length}/{SUBJECT_MAX}
+                              </span>
+                            ) : null}
+                            <VariablePicker onInsert={insertSubject} label="Variable" />
+                          </div>
+                        }
+                      >
+                        <Input
+                          ref={subjectRef}
+                          value={variant.subject}
+                          placeholder="Quick question, {{first_name}}"
+                          autoComplete="off"
+                          onChange={(e) => patchVariant(activeVariantIndex, { subject: e.target.value })}
                           onSelect={(e) => {
                             const el = e.currentTarget;
-                            textCaret.current = { start: el.selectionStart ?? 0, end: el.selectionEnd ?? 0 };
+                            subjectCaret.current = { start: el.selectionStart ?? 0, end: el.selectionEnd ?? 0 };
                           }}
                         />
-                      )}
+                      </Field>
 
-                      {/* Single compose footer with VarChips and bottom-right Formatted / Plain text toggle */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 bg-muted/20 px-3 py-2">
-                        <VarChips idPrefix={`${bodyLabelId}-vars`} onInsert={insertBody} />
-                        <div className="flex items-center rounded-lg border border-border bg-background p-0.5 text-xs">
-                          <button
-                            type="button"
-                            onClick={() => setBodyMode("formatted")}
-                            className={cn(
-                              "rounded px-2.5 py-1 text-xs font-medium transition-colors",
-                              bodyMode === "formatted"
-                                ? "bg-primary text-primary-foreground shadow-xs"
-                                : "text-muted-foreground hover:text-foreground",
-                            )}
-                          >
-                            Formatted
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (!variant.plainEdited && variant.bodyHtml.trim()) {
-                                patchVariant(activeVariantIndex, {
-                                  bodyText: plainFromHtml(variant.bodyHtml),
-                                });
+                      <div className="flex flex-col gap-2" role="group" aria-labelledby={bodyLabelId}>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span id={bodyLabelId} className="text-[13px] font-medium leading-none">
+                            Body
+                          </span>
+                          <SegmentedControl
+                            size="sm"
+                            aria-label="Body format"
+                            value={bodyMode}
+                            onValueChange={(mode) => {
+                              if (mode === "plain" && !variant.plainEdited && variant.bodyHtml.trim()) {
+                                patchVariant(activeVariantIndex, { bodyText: plainFromHtml(variant.bodyHtml) });
                               }
-                              setBodyMode("plain");
+                              setBodyMode(mode);
                             }}
-                            className={cn(
-                              "rounded px-2.5 py-1 text-xs font-medium transition-colors",
-                              bodyMode === "plain"
-                                ? "bg-primary text-primary-foreground shadow-xs"
-                                : "text-muted-foreground hover:text-foreground",
-                            )}
-                          >
-                            Plain text
-                          </button>
+                            options={[
+                              { value: "formatted", label: "Formatted" },
+                              { value: "plain", label: "Plain text" },
+                            ]}
+                          />
                         </div>
+
+                        <div className="overflow-hidden rounded-md border border-border-strong bg-card shadow-xs transition-[border-color,box-shadow] focus-within:border-brand focus-within:ring-[3px] focus-within:ring-ring">
+                          <div
+                            role="toolbar"
+                            aria-label="Body tools"
+                            className="flex flex-wrap items-center gap-0.5 border-b border-border bg-muted/40 px-1.5 py-1"
+                          >
+                            {bodyMode === "formatted" ? (
+                              <>
+                                <IconButton label="Bold" keepFocus onClick={() => visualRef.current?.command("bold")}>
+                                  <Bold />
+                                </IconButton>
+                                <IconButton label="Italic" keepFocus onClick={() => visualRef.current?.command("italic")}>
+                                  <Italic />
+                                </IconButton>
+                                <IconButton
+                                  label="Bulleted list"
+                                  keepFocus
+                                  onClick={() => visualRef.current?.command("insertUnorderedList")}
+                                >
+                                  <List />
+                                </IconButton>
+                                <LinkButton onInsert={(url) => visualRef.current?.link(url)} />
+                                <SpinButton onInsert={insertBody} />
+                              </>
+                            ) : (
+                              <>
+                                <SpinButton onInsert={insertBody} />
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="xs"
+                                  className="ml-auto"
+                                  onClick={() =>
+                                    patchVariant(activeVariantIndex, {
+                                      bodyText: plainFromHtml(variant.bodyHtml),
+                                      plainEdited: false,
+                                    })
+                                  }
+                                >
+                                  Copy from formatted body
+                                </Button>
+                              </>
+                            )}
+                          </div>
+
+                          {bodyMode === "formatted" ? (
+                            <VisualBody
+                              key={`${step.key}:${variant.key}:${bodyRevision}`}
+                              mountKey={`${step.key}:${variant.key}:${bodyRevision}`}
+                              initialHtml={variant.bodyHtml}
+                              labelledBy={bodyLabelId}
+                              describedBy={bodyHintId}
+                              handleRef={visualRef}
+                              onChangeRef={visualChangeRef}
+                            />
+                          ) : (
+                            <Textarea
+                              ref={textRef}
+                              rows={10}
+                              value={variant.bodyText}
+                              aria-labelledby={bodyLabelId}
+                              aria-describedby={bodyHintId}
+                              className="rounded-none border-0 bg-transparent px-3 py-3 shadow-none hover:border-0 focus-visible:ring-0"
+                              placeholder={"Hi {{first_name}},\n\nI noticed {{company}}…"}
+                              onChange={(e) =>
+                                patchVariant(activeVariantIndex, { bodyText: e.target.value, plainEdited: true })
+                              }
+                              onSelect={(e) => {
+                                const el = e.currentTarget;
+                                textCaret.current = { start: el.selectionStart ?? 0, end: el.selectionEnd ?? 0 };
+                              }}
+                            />
+                          )}
+
+                          <div className="border-t border-border bg-muted/40 px-3 py-2">
+                            <VariableChips onInsert={insertBody} />
+                          </div>
+                        </div>
+
+                        <p id={bodyHintId} className="text-xs leading-relaxed text-muted-foreground">
+                          {bodyMode === "plain"
+                            ? "Sent alongside the formatted body, for mail apps that cannot show formatting."
+                            : "Variables like {{company}} are filled from each lead. {Hi|Hello} rotates between phrases."}
+                        </p>
                       </div>
-                    </div>
+                    </>
+                  )}
 
-                    <p className="text-xs text-muted-foreground">
-                      Type {"{Hi|Hello}"} in the body to rotate a phrase. Variables use {"{{company}}"}.
-                    </p>
-                  </div>
-                </>
-              )}
+                  <AiDynamicScriptCard
+                    enabled={variant.aiGenerateOnTheFly ?? false}
+                    onEnabledChange={(enabled) => patchVariant(activeVariantIndex, { aiGenerateOnTheFly: enabled })}
+                    instruction={variant.aiPrompt ?? ""}
+                    onInstructionChange={(val) => patchVariant(activeVariantIndex, { aiPrompt: val })}
+                    fallbackSubject={variant.subject}
+                    fallbackBody={variant.bodyText}
+                    campaignId={campaignId}
+                  />
+                </CardContent>
 
-              {/* AI Dynamic Scripts on the Fly */}
-              <AiDynamicScriptCard
-                enabled={variant.aiGenerateOnTheFly ?? false}
-                onEnabledChange={(enabled) =>
-                  patchVariant(activeVariantIndex, { aiGenerateOnTheFly: enabled })
-                }
-                instruction={variant.aiPrompt ?? ""}
-                onInstructionChange={(val) =>
-                  patchVariant(activeVariantIndex, { aiPrompt: val })
-                }
-                fallbackSubject={variant.subject}
-                fallbackBody={variant.bodyText}
-                campaignId={campaignId}
-              />
-
-              {/* Manual Email Preview Dialog with Live Lead Interpolation and Test Mail */}
-              <ManualEmailPreviewDialog
-                open={manualPreviewOpen}
-                onOpenChange={setManualPreviewOpen}
-                subject={variant.subject}
-                bodyText={variant.bodyText}
-                bodyHtml={variant.bodyHtml}
-                campaignId={campaignId}
-              />
-
-              <details className="rounded-lg border border-border bg-background/40 px-3 py-2">
-                <summary className="cursor-pointer text-sm font-medium">Sample lead for preview</summary>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {STANDARD_LEAD_FIELDS.map((field) => (
-                    <div key={field.key} className="space-y-1.5">
-                      <Label htmlFor={`sample-${field.key}`}>{field.label}</Label>
-                      <Input
-                        id={`sample-${field.key}`}
-                        value={samples[field.key] ?? ""}
-                        onChange={(e) => setSamples((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                <CardFooter className="flex-wrap justify-between">
+                  <div>
+                    {!ai ? (
+                      <AiAssistantPopover
+                        subject={variant.subject}
+                        bodyText={variant.bodyText}
+                        onApply={(improved) => {
+                          patchVariant(activeVariantIndex, {
+                            subject: improved.subject,
+                            bodyText: improved.bodyText,
+                            bodyHtml: improved.bodyHtml || `<p>${improved.bodyText.replace(/\n/g, "<br>")}</p>`,
+                            plainEdited: true,
+                          });
+                          setBodyRevision((n) => n + 1);
+                        }}
                       />
-                    </div>
-                  ))}
-                </div>
-              </details>
-
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setPreviewOpen(true);
-                    runPreview();
-                  }}
-                  disabled={previewPending}
-                >
-                  <Eye /> {previewPending ? "Building preview…" : "Preview step"}
-                </Button>
-              </div>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setPreviewOpen(true);
+                        runPreview();
+                      }}
+                    >
+                      <Eye /> Preview
+                    </Button>
+                    {!ai ? (
+                      <Button type="button" variant="outline" size="sm" onClick={() => setManualPreviewOpen(true)}>
+                        <Send /> Send a test
+                      </Button>
+                    ) : null}
+                  </div>
+                </CardFooter>
+              </Card>
             </div>
-          ) : null}
+
+            <ManualEmailPreviewDialog
+              open={manualPreviewOpen}
+              onOpenChange={setManualPreviewOpen}
+              subject={variant.subject}
+              bodyText={variant.bodyText}
+              bodyHtml={variant.bodyHtml}
+              campaignId={campaignId}
+            />
+            <ConfirmDialog
+              open={removeOpen}
+              onOpenChange={setRemoveOpen}
+              destructive
+              title={`Remove step ${selected + 1}?`}
+              description={`“${stepTitle}” and its variants are removed from this draft. Leads are not affected until you save the sequence.`}
+              confirmLabel="Remove step"
+              onConfirm={onRemoveStep}
+            />
+          </div>
+        ) : null}
+
+        <div
+          className={cn(
+            "sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-popover px-4 py-3",
+            dirty ? "border-border-strong shadow-lg" : "border-border shadow-xs",
+          )}
+        >
+          <p className="flex items-center gap-2 text-[13px] text-muted-foreground" aria-live="polite">
+            {dirty ? <span className="size-2 shrink-0 rounded-full bg-warning" aria-hidden /> : null}
+            {dirty
+              ? steps.length === 0
+                ? "Unsaved. Saving removes every step and sends from the template."
+                : "You have unsaved changes"
+              : steps.length === 0
+                ? "Using the campaign template"
+                : "All changes saved"}
+          </p>
+          <div className="flex items-center gap-3">
+            <span className="hidden items-center gap-1 text-xs text-subtle-foreground sm:flex" aria-hidden>
+              <Kbd>{isMac ? "⌘" : "Ctrl"}</Kbd>
+              <Kbd>S</Kbd>
+            </span>
+            <Button type="button" onClick={onSave} disabled={!dirty} loading={pending}>
+              {steps.length === 0 ? "Save and use template" : "Save sequence"}
+            </Button>
+          </div>
         </div>
-      )}
 
-      <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-lg sm:border">
-        <p className="text-sm text-muted-foreground" aria-live="polite">
-          {dirty
-            ? steps.length === 0
-              ? "Unsaved. Saving clears the sequence and uses the template."
-              : "Unsaved changes"
-            : steps.length === 0
-              ? "Using the campaign template"
-              : "All changes saved"}
-        </p>
-        <Button type="button" onClick={onSave} disabled={!dirty || pending}>
-          {pending ? "Saving…" : steps.length === 0 ? "Save and use template" : "Save sequence"}
-        </Button>
-      </div>
-
-      <PreviewDialog
-        open={previewOpen}
-        onOpenChange={setPreviewOpen}
-        pending={previewPending}
-        error={previewError}
-        denied={previewDenied}
-        data={previewData}
-        stepNumber={(step ? selected : 0) + 1}
-        variantLabel={variant?.label ?? "A"}
-        onRefresh={runPreview}
-      />
-    </div>
+        <StepPreviewDialog
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          pending={previewPending}
+          error={previewError}
+          denied={previewDenied}
+          data={previewData}
+          stepNumber={(step ? selected : 0) + 1}
+          variantLabel={variant?.label ?? "A"}
+          samples={samples}
+          onSamplesChange={setSamples}
+          onRefresh={runPreview}
+        />
+      </section>
+    </TooltipProvider>
   );
 }
 
-function PreviewDialog({
-  open,
-  onOpenChange,
-  pending,
-  error,
-  denied,
-  data,
-  stepNumber,
-  variantLabel,
-  onRefresh,
+/** Icon-only button with a tooltip. `keepFocus` stops it stealing focus from the body editor. */
+function IconButton({
+  label,
+  onClick,
+  disabled,
+  keepFocus,
+  children,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  pending: boolean;
-  error: string | null;
-  denied: boolean;
-  data: { subject: string; bodyHtml: string; bodyText: string } | null;
-  stepNumber: number;
-  variantLabel: string;
-  onRefresh: () => void;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  keepFocus?: boolean;
+  children: React.ReactNode;
 }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
-            Preview step {stepNumber} · Variant {variantLabel}
-          </DialogTitle>
-          <DialogDescription>
-            Variables and spins are filled the way a send is prepared. Each refresh can pick a different spin.
-          </DialogDescription>
-        </DialogHeader>
-        {denied ? (
-          <Alert variant="warning">You do not have permission to preview this step.</Alert>
-        ) : null}
-        {error && !denied ? <Alert variant="destructive">{error}</Alert> : null}
-        {pending ? <p className="text-sm text-muted-foreground">Building preview…</p> : null}
-        {data ? (
-          <div className="space-y-3">
-            <div>
-              <p className="text-xs text-muted-foreground">Subject</p>
-              <p className="font-medium">{data.subject || "Empty subject"}</p>
-            </div>
-            <div>
-              <p className="mb-1 text-xs text-muted-foreground">Formatted body</p>
-              {data.bodyHtml.trim() ? (
-                <EmailBody html={data.bodyHtml} text={data.bodyText} />
-              ) : (
-                <p className="text-sm text-muted-foreground">No formatted body. The plain-text version is what sends.</p>
-              )}
-            </div>
-            <div>
-              <p className="mb-1 text-xs text-muted-foreground">Plain text</p>
-              <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                {data.bodyText.trim() ? data.bodyText : "Empty plain-text body."}
-              </p>
-            </div>
-          </div>
-        ) : null}
-        <Button type="button" variant="outline" size="sm" onClick={onRefresh} disabled={pending}>
-          Refresh preview
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label={label}
+          disabled={disabled}
+          onMouseDown={keepFocus ? (e) => e.preventDefault() : undefined}
+          onClick={onClick}
+        >
+          {children}
         </Button>
-      </DialogContent>
-    </Dialog>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }

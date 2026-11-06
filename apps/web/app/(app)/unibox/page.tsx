@@ -1,12 +1,14 @@
+import type { Metadata } from "next";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { UNIBOX_REPLY_TAGS, type UniboxReplyTag } from "@smartreach/shared";
 import { getDb } from "@/lib/db";
 import { requireWorkspace } from "@/lib/session";
+import { Page } from "@/components/layout/page";
 import { UniboxClient } from "./unibox-client";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "UniBox" };
+export const metadata: Metadata = { title: "Inbox" };
 
 function parseTag(raw: string | undefined): UniboxReplyTag | null {
   if (!raw) return null;
@@ -64,6 +66,10 @@ export default async function UniboxPage({
     .limit(200);
 
   return (
-    <UniboxClient initial={JSON.parse(JSON.stringify(rows))} initialTag={tag ?? ""} />
+    // A fixed height (not flex-1, which grows with content) keeps the panes scrolling on their
+    // own and the reply box in view. On phones the app header takes 3.5rem.
+    <Page full className="h-[calc(100dvh-3.5rem)] flex-none overflow-hidden lg:h-dvh">
+      <UniboxClient initial={JSON.parse(JSON.stringify(rows))} initialTag={tag ?? ""} />
+    </Page>
   );
 }

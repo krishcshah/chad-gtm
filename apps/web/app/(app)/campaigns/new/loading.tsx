@@ -1,9 +1,10 @@
 import { WizardSkeleton } from "@smartreach/ui";
+import { Page } from "@/components/layout/page";
 
 export default function Loading() {
   return (
-    <div className="mx-auto max-w-3xl p-6 lg:p-10">
+    <Page>
       <WizardSkeleton />
-    </div>
+    </Page>
   );
 }

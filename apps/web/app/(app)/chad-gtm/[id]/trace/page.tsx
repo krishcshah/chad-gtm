@@ -2,12 +2,13 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { getAgentTraceAction } from "@/lib/agent-actions";
 import { AgentTraceView } from "@/components/chad-gtm/agent-trace-view";
+import { Page } from "@/components/layout/page";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Agent Trace — AutoGTM",
-  description: "Step-by-step execution trace for an AutoGTM agent run.",
+  title: "Research trace",
+  description: "Every step the agent took while researching and setting up an autopilot run.",
 };
 
 export default async function AgentTracePage({
@@ -22,8 +23,8 @@ export default async function AgentTracePage({
   if (!data) notFound();
 
   return (
-    <div className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
+    <Page>
       <AgentTraceView data={data} />
-    </div>
+    </Page>
   );
 }

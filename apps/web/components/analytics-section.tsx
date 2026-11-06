@@ -2,16 +2,21 @@
 
 import { useEffect, useId, useState } from "react";
 import Link from "next/link";
-import { AlertCircle, BarChart3, Calendar, TrendingUp } from "lucide-react";
+import { BarChart3, ChevronDown } from "lucide-react";
 import {
-  AnalyticsBodySkeleton,
-  Badge,
+  Alert,
   Button,
   Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
   CardContent,
   EmptyState,
+  Field,
   Input,
-  Label,
+  SegmentedControl,
+  Skeleton,
+  Stat,
   StatePanel,
   cn,
 } from "@smartreach/ui";
@@ -32,7 +37,7 @@ import {
   type AnalyticsProblem,
   type AnalyticsSummaryView,
 } from "@/lib/analytics-range";
-import { AnalyticsSeriesChart } from "./analytics-series-chart";
+import { AnalyticsDailyTable, AnalyticsSeriesChart } from "./analytics-series-chart";
 
 type FetchState =
   | { status: "idle" }
@@ -40,6 +45,13 @@ type FetchState =
   | { status: "ready"; summary: AnalyticsSummaryView; points: AnalyticsPointView[] }
   | { status: "problem"; problem: AnalyticsProblem };
 
+type RangeOption = `${(typeof ANALYTICS_PRESETS)[number]["days"]}` | "custom";
+
+/**
+ * Date range, headline numbers and daily charts for all campaigns (no
+ * campaignId) or one campaign. The first render uses data loaded on the
+ * server by AnalyticsSectionLoader; range changes refetch on the client.
+ */
 export function AnalyticsSection({
   campaignId,
   today,
@@ -66,9 +78,6 @@ export function AnalyticsSection({
   hideKpis?: boolean;
 }) {
   const headingId = useId();
-  const errorId = useId();
-  const fromId = useId();
-  const toId = useId();
   const [from, setFrom] = useState(initialFrom);
   const [to, setTo] = useState(initialTo);
   const [draftFrom, setDraftFrom] = useState(initialFrom);
@@ -77,6 +86,13 @@ export function AnalyticsSection({
   const [retry, setRetry] = useState(0);
   const [fetchState, setFetchState] = useState<FetchState>({ status: "idle" });
   const [announcement, setAnnouncement] = useState("");
+
+  const matchedPreset = ANALYTICS_PRESETS.find((p) => {
+    const r = rangeEndingOn(today, p.days);
+    return r.from === from && r.to === to;
+  });
+  const [customOpen, setCustomOpen] = useState(!matchedPreset || Boolean(initialRangeError));
+  const rangeValue: RangeOption = customOpen || !matchedPreset ? "custom" : (String(matchedPreset.days) as RangeOption);
 
   const showingInitial = from === initialFrom && to === initialTo && retry === 0 && !rangeError;
   const summary = showingInitial ? initialSummary : fetchState.status === "ready" ? fetchState.summary : null;
@@ -90,11 +106,7 @@ export function AnalyticsSection({
     if (rangeError || showingInitial) return;
     let cancelled = false;
     setFetchState({ status: "loading" });
-    const input = {
-      from,
-      to,
-      ...(campaignId ? { campaignId } : {}),
-    };
+    const input = { from, to, ...(campaignId ? { campaignId } : {}) };
     (async () => {
       try {
         const [summaryRes, seriesRes] = await Promise.all([
@@ -110,21 +122,14 @@ export function AnalyticsSection({
           });
           return;
         }
-        setFetchState({
-          status: "ready",
-          summary: summaryRes.data,
-          points: seriesRes.data.points,
-        });
+        setFetchState({ status: "ready", summary: summaryRes.data, points: seriesRes.data.points });
       } catch (error) {
         if (cancelled) return;
         if (isNextRedirect(error)) throw error;
         const message = error instanceof Error ? error.message : "Could not load analytics.";
         setFetchState({
           status: "problem",
-          problem: {
-            kind: isPermissionMessage(message) ? "permission" : "error",
-            message,
-          },
+          problem: { kind: isPermissionMessage(message) ? "permission" : "error", message },
         });
       }
     })();
@@ -177,112 +182,95 @@ export function AnalyticsSection({
     setTo(toKey);
   }
 
-  const ChartTitle = heading ? "h3" : "h2";
+  function onRangeChange(value: RangeOption) {
+    if (value === "custom") {
+      setCustomOpen(true);
+      return;
+    }
+    setCustomOpen(false);
+    const range = rangeEndingOn(today, Number(value));
+    commit(range.from, range.to);
+  }
+
+  const rangeLabel = `${formatRangeDate(from)} to ${formatRangeDate(to)}`;
 
   return (
-    <section className="space-y-3" aria-labelledby={heading ? headingId : undefined}>
+    <section className="flex flex-col gap-6" aria-labelledby={heading ? headingId : undefined} aria-label={heading ? undefined : "Analytics"}>
       <p className="sr-only" aria-live="polite">
         {announcement}
       </p>
 
-      {/* Info-Dense Executive Header & Range Filter Bar */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-card/50 p-3.5 backdrop-blur shadow-2xs lg:flex-row lg:items-center lg:justify-between">
-        {/* Left: Heading, Description & Active Range Badge */}
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 id={heading ? headingId : undefined} className="text-base font-semibold tracking-tight text-foreground flex items-center gap-1.5">
-              <TrendingUp className="size-4 text-primary" aria-hidden />
-              {heading || "Campaign Outreach & Delivery Trajectory"}
-            </h2>
-            <Badge variant="outline" className="text-[11px] font-mono text-muted-foreground border-border/60 bg-background/50">
-              {rangeError ? "UTC" : `${formatRangeDate(from)} – ${formatRangeDate(to)}`}
-            </Badge>
-          </div>
-          {description && (
-            <p className="mt-0.5 text-xs text-muted-foreground line-clamp-1">
-              {description}
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            {heading ? (
+              <h2 id={headingId} className="text-[15px] font-semibold tracking-[-0.01em]">
+                {heading}
+              </h2>
+            ) : null}
+            {description ? <p className="mt-1 text-[13px] text-muted-foreground">{description}</p> : null}
+            <p className={cn("text-[13px] text-muted-foreground", (heading || description) && "mt-1")}>
+              {rangeError ? "Choose a valid date range." : rangeLabel}
+              <span className="text-subtle-foreground"> · UTC</span>
             </p>
-          )}
+          </div>
+          <SegmentedControl<RangeOption>
+            aria-label="Date range"
+            value={rangeValue}
+            onValueChange={onRangeChange}
+            options={[
+              ...ANALYTICS_PRESETS.map((p) => ({ value: String(p.days) as RangeOption, label: p.label })),
+              { value: "custom", label: "Custom" },
+            ]}
+            className="self-start sm:self-auto"
+          />
         </div>
 
-        {/* Right: Info-dense inline controls */}
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          {/* Segmented Preset Switcher */}
-          <div role="group" aria-label="Quick ranges" className="inline-flex items-center rounded-lg border border-border/60 bg-muted/40 p-0.5 shadow-2xs">
-            {ANALYTICS_PRESETS.map((preset) => {
-              const range = rangeEndingOn(today, preset.days);
-              const active = !rangeError && from === range.from && to === range.to && draftFrom === from && draftTo === to;
-              return (
-                <button
-                  key={preset.days}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => commit(range.from, range.to)}
-                  className={cn(
-                    "rounded-md px-2.5 py-1 text-xs font-medium transition-all",
-                    active
-                      ? "bg-background text-foreground font-semibold shadow-xs"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {preset.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Compact Inline Date Range Picker */}
+        {customOpen ? (
           <form
             aria-label="Custom date range"
-            className="flex items-center gap-1.5"
+            className="flex flex-wrap items-end gap-3"
             onSubmit={(event) => {
               event.preventDefault();
               commit(draftFrom, draftTo);
             }}
           >
-            <div className="flex items-center rounded-lg border border-border/60 bg-background/80 px-2.5 py-1 shadow-2xs">
-              <Calendar className="size-3.5 text-muted-foreground mr-1.5 shrink-0" />
-              <input
-                id={fromId}
+            <Field label="From" className="w-[calc(50%-0.375rem)] sm:w-44">
+              <Input
                 type="date"
                 name="from"
-                aria-label="Start date"
                 value={draftFrom}
+                max={today}
                 required
                 autoComplete="off"
                 aria-invalid={rangeError ? true : undefined}
-                className="w-28 border-0 bg-transparent p-0 text-xs font-mono text-foreground focus:outline-none [color-scheme:light] dark:[color-scheme:dark]"
                 onChange={(event) => setDraftFrom(event.target.value)}
+                className="tabular"
               />
-              <span className="mx-1 text-muted-foreground text-xs">→</span>
-              <input
-                id={toId}
+            </Field>
+            <Field label="To" className="w-[calc(50%-0.375rem)] sm:w-44">
+              <Input
                 type="date"
                 name="to"
-                aria-label="End date"
                 value={draftTo}
+                max={today}
                 required
                 autoComplete="off"
                 aria-invalid={rangeError ? true : undefined}
-                className="w-28 border-0 bg-transparent p-0 text-xs font-mono text-foreground focus:outline-none [color-scheme:light] dark:[color-scheme:dark]"
                 onChange={(event) => setDraftTo(event.target.value)}
+                className="tabular"
               />
-            </div>
-            <Button type="submit" size="sm" variant="secondary" className="h-7 text-xs font-medium px-2.5 shadow-2xs">
+            </Field>
+            <Button type="submit" variant="outline">
               Apply
             </Button>
           </form>
-        </div>
+        ) : null}
+
+        {rangeError ? <Alert variant="destructive">{rangeError}</Alert> : null}
       </div>
 
-      {rangeError && (
-        <div id={errorId} role="alert" className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          <AlertCircle className="size-3.5 shrink-0" />
-          <span>{rangeError}</span>
-        </div>
-      )}
-
-      {loading ? <AnalyticsBodySkeleton /> : null}
+      {loading ? <AnalyticsSectionSkeleton hideKpis={hideKpis} /> : null}
 
       {!loading && problem ? (
         <StatePanel
@@ -290,7 +278,7 @@ export function AnalyticsSection({
           title={problem.kind === "permission" ? "Access denied" : "Could not load analytics"}
           description={
             problem.kind === "permission"
-              ? "You do not have permission to view these analytics. Sign in with an allowed account, or go back to the dashboard."
+              ? "You do not have permission to view these numbers. Sign in with an allowed account."
               : problem.message
           }
           action={
@@ -299,7 +287,7 @@ export function AnalyticsSection({
                 Try again
               </Button>
               <Button variant="ghost" size="sm" asChild>
-                <Link href="/dashboard">Back to dashboard</Link>
+                <Link href="/dashboard">Back to overview</Link>
               </Button>
             </div>
           }
@@ -308,115 +296,182 @@ export function AnalyticsSection({
 
       {!loading && !problem && !rangeError && summary && points ? (
         <>
-          {!hideKpis && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-              <Kpi label="Leads Contacted" value={formatCount(summary.leadsContacted)} hint="Emails delivered" />
-              <Kpi
-                label="Open Rate"
-                value={formatAnalyticsRate(summary.openRate)}
-                hint={`${summary.openCount ?? 0} opens`}
-                highlight={summary.openRate && summary.openRate > 0 ? "emerald" : undefined}
-              />
-              <Kpi
-                label="Click Rate"
-                value={formatAnalyticsRate(summary.clickRate)}
-                hint={`${summary.clickCount ?? 0} clicks`}
-                highlight={summary.clickRate && summary.clickRate > 0 ? "emerald" : undefined}
-              />
-              <Kpi
-                label="Reply Rate"
-                value={formatAnalyticsRate(summary.replyRate)}
-                hint={plural(summary.replyCount, "unique reply", "unique replies")}
-                highlight="emerald"
-              />
-              <Kpi
-                label="Bounce Rate"
-                value={formatAnalyticsRate(summary.bounceRate)}
-                hint={plural(summary.bounceCount, "bounce", "bounces")}
-                highlight={summary.bounceCount > 0 ? "destructive" : undefined}
-              />
-            </div>
-          )}
+          {!hideKpis ? <StatStrip summary={summary} points={points} /> : null}
 
-          <Card>
-            <CardContent className="p-4 pt-4 sm:p-5 sm:pt-5">
-              <ChartTitle className="text-[15px] font-medium">Activity by day</ChartTitle>
-              {chartEmpty ? (
-                <EmptyState
-                  icon={BarChart3}
-                  title="No activity in this range"
-                  description={
-                    noActivity
-                      ? `Nothing was sent, contacted, replied, or bounced from ${formatRangeDate(from)} to ${formatRangeDate(to)}.`
-                      : "No daily breakdown for this range."
-                  }
-                  className="border-0 bg-transparent px-2 py-10"
-                />
-              ) : (
-                <div className="mt-4">
-                  <AnalyticsSeriesChart points={points} from={from} to={to} />
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {chartEmpty ? (
+            <Card>
+              <EmptyState
+                compact
+                icon={BarChart3}
+                title="No activity in this range"
+                description={
+                  noActivity
+                    ? `Nothing was sent, replied to or bounced between ${formatRangeDate(from)} and ${formatRangeDate(to)}. Try a longer range.`
+                    : "There is no daily breakdown for this range."
+                }
+                action={
+                  campaignId ? undefined : (
+                    <Button asChild variant="outline" size="sm">
+                      <Link href="/campaigns">Go to campaigns</Link>
+                    </Button>
+                  )
+                }
+              />
+            </Card>
+          ) : (
+            <>
+              <div className="grid gap-6 lg:grid-cols-2">
+                <Card className="min-w-0">
+                  <CardHeader>
+                    <CardTitle>Sending volume</CardTitle>
+                    <CardDescription>Emails sent, including follow-ups, and unique leads contacted per day.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <AnalyticsSeriesChart points={points} from={from} to={to} series={["sent", "contacted"]} />
+                  </CardContent>
+                </Card>
+                <Card className="min-w-0">
+                  <CardHeader>
+                    <CardTitle>Replies and bounces</CardTitle>
+                    <CardDescription>Leads who replied and emails that bounced, per day.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <AnalyticsSeriesChart points={points} from={from} to={to} series={["replies", "bounces"]} />
+                  </CardContent>
+                </Card>
+              </div>
+              <DailyNumbers points={points} from={from} to={to} />
+            </>
+          )}
         </>
       ) : null}
     </section>
   );
 }
 
-function Kpi({
+function StatStrip({ summary, points }: { summary: AnalyticsSummaryView; points: AnalyticsPointView[] }) {
+  const sent = points.reduce((total, p) => total + p.sent, 0);
+  return (
+    <div className="@container">
+      <Card className="grid grid-cols-2 gap-px overflow-hidden bg-border @lg:grid-cols-3 @4xl:grid-cols-6 [&>*]:bg-card">
+      <Stat bare label="Emails sent" value={formatCount(sent)} hint="Including follow-ups" />
+      <Stat bare label="Leads contacted" value={formatCount(summary.leadsContacted)} hint="Unique leads emailed" />
+      <Stat
+        bare
+        label="Replies"
+        value={formatCount(summary.replyCount)}
+        hint={`${formatAnalyticsRate(summary.replyRate)} reply rate`}
+      />
+      <Stat
+        bare
+        label="Bounces"
+        value={formatCount(summary.bounceCount)}
+        hint={`${formatAnalyticsRate(summary.bounceRate)} bounce rate`}
+      />
+      <RateStat label="Open rate" rate={summary.openRate} count={summary.openCount} noun={["open", "opens"]} />
+      <RateStat label="Click rate" rate={summary.clickRate} count={summary.clickCount} noun={["click", "clicks"]} />
+      </Card>
+    </div>
+  );
+}
+
+/** Opens and clicks may be untracked. Then the value is a dash, never a zero or an estimate. */
+function RateStat({
   label,
-  value,
-  hint,
-  highlight,
+  rate,
+  count,
+  noun,
 }: {
   label: string;
-  value: string;
-  hint?: string;
-  highlight?: "emerald" | "destructive";
+  rate: number | null;
+  count?: number;
+  noun: [string, string];
 }) {
+  if (rate == null) {
+    return (
+      <Stat
+        bare
+        label={label}
+        value={
+          <>
+            <span aria-hidden>{formatAnalyticsRate(null)}</span>
+            <span className="sr-only">Not tracked</span>
+          </>
+        }
+        hint="Not tracked"
+      />
+    );
+  }
   return (
-    <Card className={cn(
-      "border-border/70 transition-colors",
-      highlight === "emerald" && "border-emerald-500/30 bg-emerald-500/[0.02]",
-      highlight === "destructive" && "border-destructive/30 bg-destructive/[0.02]"
-    )}>
-      <CardContent className="p-4">
-        <dl>
-          <dt className="text-[13px] text-muted-foreground">{label}</dt>
-          <dd className={cn(
-            "mt-1 text-2xl font-semibold tracking-tight tabular-nums",
-            highlight === "emerald" && "text-emerald-400",
-            highlight === "destructive" && "text-destructive"
-          )}>
-            {value}
-          </dd>
-          {hint ? <dd className="mt-0.5 text-[11px] tabular-nums text-muted-foreground">{hint}</dd> : null}
-        </dl>
-      </CardContent>
+    <Stat
+      bare
+      label={label}
+      value={formatAnalyticsRate(rate)}
+      hint={count != null ? plural(count, noun[0], noun[1]) : undefined}
+    />
+  );
+}
+
+function DailyNumbers({ points, from, to }: { points: AnalyticsPointView[]; from: string; to: string }) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  return (
+    <Card>
+      <CardHeader
+        className="pb-5"
+        actions={
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-expanded={open}
+            aria-controls={open ? panelId : undefined}
+            onClick={() => setOpen((v) => !v)}
+          >
+            {open ? "Hide" : "Show"}
+            <ChevronDown className={cn("transition-transform", open && "rotate-180")} aria-hidden />
+          </Button>
+        }
+      >
+        <CardTitle>Daily numbers</CardTitle>
+        <CardDescription>The exact figures behind both charts, newest day first.</CardDescription>
+      </CardHeader>
+      {open ? (
+        <div id={panelId} className="border-t border-border">
+          <AnalyticsDailyTable points={points} from={from} to={to} />
+        </div>
+      ) : null}
     </Card>
   );
 }
 
-/** Opens and clicks are not tracked. The value is an em dash, not a zero or an estimate. */
-function UntrackedKpi({ label }: { label: string }) {
+/** Placeholder shaped like the stat strip and the two chart cards. */
+export function AnalyticsSectionSkeleton({ hideKpis = false }: { hideKpis?: boolean }) {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <dl>
-          <dt className="text-[13px] text-muted-foreground">{label}</dt>
-          <dd className="mt-1">
-            <span className="text-2xl font-semibold tracking-tight" aria-hidden="true">
-              {formatAnalyticsRate(null)}
-            </span>
-            <span className="sr-only">Not tracked</span>
-            <span className="mt-0.5 block text-[11px] text-muted-foreground" aria-hidden="true">
-              Not tracked
-            </span>
-          </dd>
-        </dl>
-      </CardContent>
-    </Card>
+    <div className="flex flex-col gap-6" aria-busy="true">
+      {!hideKpis ? (
+        <div className="@container">
+        <Card className="grid grid-cols-2 gap-px overflow-hidden bg-border @lg:grid-cols-3 @4xl:grid-cols-6 [&>*]:bg-card">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex flex-col gap-3 p-5">
+              <Skeleton className="h-3.5 w-20" />
+              <Skeleton className="h-6 w-14" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+          ))}
+        </Card>
+        </div>
+      ) : null}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <Card key={i} className="flex flex-col gap-4 p-5">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-3.5 w-64 max-w-full" />
+            <Skeleton className="h-48 w-full sm:h-60" />
+          </Card>
+        ))}
+      </div>
+      <span className="sr-only">Loading analytics</span>
+    </div>
   );
 }

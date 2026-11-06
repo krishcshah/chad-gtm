@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2 } from "lucide-react";
 import { leadListRenameSchema } from "@smartreach/validation";
 import {
   Alert,
@@ -21,6 +20,15 @@ import { bulkDeleteLeads, deleteLead, deleteLeadList, renameLeadList } from "@/l
 import { isNextRedirect, isPermissionError } from "@/lib/lead-form";
 
 type LeadRef = { id: string; email: string };
+
+function FormError({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <Alert variant="destructive">
+      <AlertDescription className="mt-0 text-foreground">{message}</AlertDescription>
+    </Alert>
+  );
+}
 
 export function RenameListDialog({
   open,
@@ -47,7 +55,11 @@ export function RenameListDialog({
     const parsed = leadListRenameSchema.safeParse({ name: value });
     if (!parsed.success) {
       setFieldError(parsed.error.issues[0]?.message ?? "Give the list a name");
-      setFormError(parsed.error.issues[0]?.message ?? "Give the list a name");
+      setFormError(null);
+      return;
+    }
+    if (parsed.data.name === name) {
+      onOpenChange(false);
       return;
     }
     setFieldError(null);
@@ -60,9 +72,9 @@ export function RenameListDialog({
             setDenied(true);
             return;
           }
-          const message = res.fieldErrors?.name?.[0] ?? res.error;
-          setFieldError(message);
-          setFormError(res.error);
+          const fieldMessage = res.fieldErrors?.name?.[0];
+          if (fieldMessage) setFieldError(fieldMessage);
+          else setFormError(res.error);
           return;
         }
         onRenamed(parsed.data.name);
@@ -77,21 +89,22 @@ export function RenameListDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100%-2rem)]">
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!pending) onOpenChange(next);
+      }}
+    >
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Rename list</DialogTitle>
-          <DialogDescription>This name is what you see on the Leads page.</DialogDescription>
+          <DialogDescription>Campaigns that use this list keep working; only the name changes.</DialogDescription>
         </DialogHeader>
         {denied ? (
-          <PermissionDenied />
+          <PermissionDenied className="py-10" />
         ) : (
-          <form onSubmit={save} className="space-y-4" noValidate>
-            {formError ? (
-              <Alert variant="destructive">
-                <AlertDescription>{formError}</AlertDescription>
-              </Alert>
-            ) : null}
+          <form onSubmit={save} className="flex flex-col gap-5" noValidate>
+            <FormError message={formError} />
             <Field label="List name" required error={fieldError ?? undefined}>
               <Input
                 autoFocus
@@ -108,9 +121,8 @@ export function RenameListDialog({
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={pending}>
-                {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {pending ? "Saving…" : "Save name"}
+              <Button type="submit" loading={pending}>
+                Save name
               </Button>
             </DialogFooter>
           </form>
@@ -171,35 +183,34 @@ export function DeleteLeadsDialog({
         if (!pending) onOpenChange(next);
       }}
     >
-      <DialogContent className="w-[calc(100%-2rem)]">
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{single ? "Delete lead" : `Delete ${count} leads`}</DialogTitle>
+          <DialogTitle>{single ? "Delete lead" : `Delete ${count.toLocaleString()} leads`}</DialogTitle>
           <DialogDescription>
-            {single
-              ? `Remove ${leads[0]?.email ?? "this lead"} from the list.`
-              : `Remove ${count} selected leads from the list.`}
+            {single ? (
+              <>
+                <span className="font-medium text-foreground">{leads[0]?.email ?? "This lead"}</span> is removed from
+                this list and gets no further emails from it.
+              </>
+            ) : (
+              `The ${count.toLocaleString()} selected leads are removed from this list and get no further emails from it.`
+            )}
           </DialogDescription>
         </DialogHeader>
         {denied ? (
-          <PermissionDenied />
+          <PermissionDenied className="py-10" />
         ) : (
-          <div className="space-y-4">
-            {formError ? (
-              <Alert variant="destructive">
-                <AlertDescription>{formError}</AlertDescription>
-              </Alert>
-            ) : null}
-            <p className="text-sm text-muted-foreground">Deleted leads stay out of this list and future sends.</p>
+          <>
+            <FormError message={formError} />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
                 Cancel
               </Button>
-              <Button type="button" variant="destructive" onClick={confirm} disabled={pending || count === 0}>
-                {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {pending ? "Deleting…" : single ? "Delete lead" : "Delete leads"}
+              <Button type="button" variant="destructive" onClick={confirm} loading={pending} disabled={count === 0}>
+                {single ? "Delete lead" : "Delete leads"}
               </Button>
             </DialogFooter>
-          </div>
+          </>
         )}
       </DialogContent>
     </Dialog>
@@ -210,17 +221,21 @@ export function DeleteListDialog({
   open,
   listId,
   name,
+  leadCount,
   onOpenChange,
   onDeleted,
 }: {
   open: boolean;
   listId: string;
   name: string;
+  /** When known, the dialog says how many leads go with the list. */
+  leadCount?: number;
   onOpenChange: (open: boolean) => void;
   onDeleted: () => void;
 }) {
   const [pending, start] = useTransition();
   const [formError, setFormError] = useState<string | null>(null);
+  const [denied, setDenied] = useState(false);
 
   const confirm = () => {
     if (pending) return;
@@ -229,17 +244,30 @@ export function DeleteListDialog({
       try {
         const res = await deleteLeadList(listId);
         if (!res.ok) {
-          setFormError(res.error || "Failed to delete lead list");
+          if (isPermissionError(res.error)) {
+            setDenied(true);
+            return;
+          }
+          setFormError(res.error || "Could not delete this list");
         } else {
           onOpenChange(false);
           onDeleted();
         }
       } catch (e) {
         if (isNextRedirect(e)) throw e;
-        setFormError(e instanceof Error ? e.message : "Failed to delete lead list");
+        setFormError(e instanceof Error ? e.message : "Could not delete this list");
       }
     });
   };
+
+  const consequence =
+    leadCount === 0
+      ? "The list is empty, so no leads are deleted."
+      : `This also deletes ${
+          leadCount === undefined
+            ? "every lead in it"
+            : `its ${leadCount.toLocaleString()} ${leadCount === 1 ? "lead" : "leads"}`
+        }. Reports for past campaigns keep their totals.`;
 
   return (
     <Dialog
@@ -248,34 +276,27 @@ export function DeleteListDialog({
         if (!pending) onOpenChange(next);
       }}
     >
-      <DialogContent className="w-[calc(100%-2rem)]">
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Delete lead list</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete &ldquo;{name}&rdquo;? This will remove the list and all contacts within it.
-          </DialogDescription>
+          <DialogTitle>Delete &ldquo;{name}&rdquo;?</DialogTitle>
+          <DialogDescription>{consequence}</DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
-          {formError ? (
-            <Alert variant="destructive">
-              <AlertDescription>{formError}</AlertDescription>
-            </Alert>
-          ) : null}
-          <p className="text-xs text-muted-foreground">
-            Any past campaign reports referencing these leads will retain their aggregate stats.
-          </p>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
-              Cancel
-            </Button>
-            <Button type="button" variant="destructive" onClick={confirm} disabled={pending}>
-              {pending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-              {pending ? "Deleting list…" : "Delete list"}
-            </Button>
-          </DialogFooter>
-        </div>
+        {denied ? (
+          <PermissionDenied className="py-10" />
+        ) : (
+          <>
+            <FormError message={formError} />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
+                Cancel
+              </Button>
+              <Button type="button" variant="destructive" onClick={confirm} loading={pending}>
+                Delete list
+              </Button>
+            </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
 }
-

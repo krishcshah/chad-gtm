@@ -1,35 +1,53 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ArrowLeft, ChevronDown, ExternalLink } from "lucide-react";
+import { toast } from "sonner";
+import { formatDate, formatDateTime, timeAgo } from "@smartreach/shared";
 import {
+  Avatar,
+  AvatarFallback,
+  Badge,
   Button,
-  Textarea,
-  Separator,
+  Card,
+  CardContent,
+  CardFooter,
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
+  Kbd,
+  Label,
+  PageHeader,
+  Textarea,
+  cn,
 } from "@smartreach/ui";
-import {
-  ChevronLeft,
-  Send,
-  Loader2,
-  ExternalLink,
-  ShieldCheck,
-  User,
-  Clock,
-  MoreVertical,
-  CheckCircle2,
-  AlertCircle,
-} from "lucide-react";
-import { toast } from "sonner";
-import { formatDate } from "@smartreach/shared";
-import { TicketCategoryBadge } from "./ticket-category-badge";
-import { TicketStatusBadge } from "./ticket-status-badge";
+import { Page } from "@/components/layout/page";
 import { addTicketMessageAction, updateTicketStatusAction } from "@/lib/support-actions";
 import type { SupportTicketDTO, SupportTicketMessageDTO, TicketStatus } from "@/lib/support-types";
+import { TicketCategoryBadge } from "./ticket-category-badge";
+import { TICKET_STATUS_META, TicketStatusBadge, ticketStatusLabel } from "./ticket-status-badge";
+
+const STATUS_ORDER: TicketStatus[] = ["open", "in_progress", "resolved", "closed"];
+
+/** Only http(s) links are rendered as links; older tickets may hold any text in `url`. */
+function safeHttpUrl(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    const u = new URL(value);
+    return u.protocol === "http:" || u.protocol === "https:" ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function initialOf(name: string | null, email: string) {
+  return (name || email || "?").trim().slice(0, 1).toUpperCase();
+}
 
 export function TicketThreadView({
   ticket,
@@ -43,247 +61,210 @@ export function TicketThreadView({
   currentUserId: string;
 }) {
   const router = useRouter();
+  const replyId = useId();
+  const hintId = useId();
   const [replyText, setReplyText] = useState("");
   const [isPending, startTransition] = useTransition();
   const [statusPending, startStatusTransition] = useTransition();
 
-  const handleSendReply = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!replyText.trim()) return;
+  // Seeded tickets always have the description as the first message; older ones may not.
+  const thread: SupportTicketMessageDTO[] =
+    messages.length > 0
+      ? messages
+      : [
+          {
+            id: `${ticket.id}-description`,
+            ticketId: ticket.id,
+            userId: ticket.userId,
+            userName: ticket.userName,
+            userEmail: ticket.userEmail,
+            senderRole: "user",
+            message: ticket.description,
+            createdAt: ticket.createdAt,
+          },
+        ];
 
+  function sendReply() {
+    const text = replyText.trim();
+    if (!text || isPending) return;
     startTransition(async () => {
-      const res = await addTicketMessageAction(ticket.id, replyText.trim());
+      const res = await addTicketMessageAction(ticket.id, text);
       if (res.ok) {
         setReplyText("");
-        toast.success("Reply added to thread.");
+        toast.success("Reply sent");
         router.refresh();
       } else {
-        toast.error(res.error || "Failed to post reply.");
+        toast.error(res.error || "Your reply could not be sent. Try again.");
       }
     });
-  };
+  }
 
-  const handleStatusChange = (newStatus: TicketStatus) => {
+  function changeStatus(next: TicketStatus) {
+    if (next === ticket.status) return;
     startStatusTransition(async () => {
-      const res = await updateTicketStatusAction(ticket.id, newStatus);
+      const res = await updateTicketStatusAction(ticket.id, next);
       if (res.ok) {
-        toast.success(`Status updated to ${newStatus}`);
+        toast.success(`Marked as ${ticketStatusLabel(next).toLowerCase()}`);
         router.refresh();
       } else {
-        toast.error(res.error || "Failed to update status.");
+        toast.error(res.error || "The status could not be changed.");
       }
     });
-  };
+  }
+
+  const pageUrl = safeHttpUrl(ticket.url);
+
+  const replyHint =
+    !isAdminUser && ticket.status === "resolved"
+      ? "Replying reopens this ticket."
+      : isAdminUser && ticket.status === "open"
+        ? "Replying marks this ticket as in progress."
+        : null;
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto font-mono">
-      {/* Top Navigation & Status Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <Link
-              href="/support"
-              className="text-xs text-zinc-500 hover:text-white flex items-center gap-1 uppercase tracking-wider transition-colors"
-            >
-              <ChevronLeft className="size-3.5" /> Back to Support
-            </Link>
-            <span className="text-zinc-700">•</span>
-            <TicketCategoryBadge category={ticket.category} />
+    <Page width="narrow">
+      <PageHeader
+        eyebrow={
+          <Link href="/support" className="inline-flex items-center gap-1.5 hover:text-foreground">
+            <ArrowLeft className="size-4" aria-hidden /> Support
+          </Link>
+        }
+        title={ticket.heading}
+        meta={
+          <>
             <TicketStatusBadge status={ticket.status} />
-          </div>
-
-          <h1 className="text-xl sm:text-2xl font-bold uppercase tracking-wider text-white">
-            {ticket.heading}
-          </h1>
-
-          <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-500 font-sans">
-            <span>Submitted by <strong className="text-zinc-300 font-mono">{ticket.userEmail}</strong></span>
-            <span>•</span>
-            <span className="flex items-center gap-1">
-              <Clock className="size-3" /> {formatDate(ticket.createdAt)}
+            <TicketCategoryBadge category={ticket.category} />
+            <span className="min-w-0 break-words text-xs text-subtle-foreground" suppressHydrationWarning>
+              Opened {formatDate(ticket.createdAt)}
+              {isAdminUser || ticket.userId !== currentUserId ? ` by ${ticket.userEmail}` : ""}
             </span>
-            {ticket.url && (
-              <>
-                <span>•</span>
-                <a
-                  href={ticket.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-zinc-400 hover:text-white hover:underline flex items-center gap-1 font-mono text-[11px]"
-                >
-                  <ExternalLink className="size-3" /> Context URL
-                </a>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Status Switcher & Management */}
-        <div className="flex items-center gap-2 shrink-0">
+            {pageUrl ? (
+              <a
+                href={pageUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                title={pageUrl}
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground underline decoration-border-strong underline-offset-4 hover:text-foreground hover:decoration-foreground"
+              >
+                Page link
+                <ExternalLink className="size-3.5" aria-hidden />
+                <span className="sr-only">(opens in a new tab)</span>
+              </a>
+            ) : null}
+          </>
+        }
+        actions={
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={statusPending}
-                className="rounded-lg border-zinc-800 bg-black text-xs font-mono uppercase tracking-wider text-zinc-300 hover:bg-zinc-900 hover:text-white h-9 px-3 gap-2"
-              >
-                {statusPending ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <>
-                    <span>Status: {ticket.status}</span>
-                    <MoreVertical className="size-3.5 text-zinc-500" />
-                  </>
-                )}
+              <Button variant="outline" loading={statusPending}>
+                Status: {ticketStatusLabel(ticket.status)}
+                <ChevronDown aria-hidden />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="rounded-lg border-zinc-800 bg-black font-mono">
-              <DropdownMenuItem onClick={() => handleStatusChange("open")}>
-                Mark as Open
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleStatusChange("in_progress")}>
-                Mark as Ongoing (In Progress)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleStatusChange("resolved")}>
-                Mark as Resolved
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleStatusChange("closed")}>
-                Mark as Closed
-              </DropdownMenuItem>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Set status</DropdownMenuLabel>
+              <DropdownMenuRadioGroup value={ticket.status} onValueChange={(v) => changeStatus(v as TicketStatus)}>
+                {STATUS_ORDER.map((s) => (
+                  <DropdownMenuRadioItem key={s} value={s}>
+                    {TICKET_STATUS_META[s].label}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
+        }
+      />
 
-          {isAdminUser && (
-            <span className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-[9px] uppercase tracking-widest text-zinc-300">
-              Admin Mode
+      <section aria-label="Conversation" className="flex flex-col gap-3">
+        <h2 className="text-[15px] font-semibold tracking-[-0.01em]">
+          Conversation{" "}
+          <span className="tabular font-normal text-subtle-foreground">{thread.length.toLocaleString()}</span>
+        </h2>
+        <Card>
+          <ol className="divide-y divide-border">
+            {thread.map((msg) => (
+              <MessageItem key={msg.id} message={msg} isMine={msg.userId === currentUserId} />
+            ))}
+          </ol>
+        </Card>
+      </section>
+
+      <Card>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            sendReply();
+          }}
+        >
+          <CardContent className="flex flex-col gap-2">
+            <Label htmlFor={replyId}>{isAdminUser ? "Reply as support" : "Reply"}</Label>
+            <Textarea
+              id={replyId}
+              rows={4}
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                  e.preventDefault();
+                  sendReply();
+                }
+              }}
+              aria-describedby={replyHint ? hintId : undefined}
+              placeholder={isAdminUser ? "Write your answer to the customer" : "Add details or answer our question"}
+              disabled={isPending}
+            />
+            {replyHint ? (
+              <p id={hintId} className="text-xs text-muted-foreground">
+                {replyHint}
+              </p>
+            ) : null}
+          </CardContent>
+          <CardFooter className="justify-between">
+            <span className="hidden items-center gap-1 text-xs text-subtle-foreground sm:inline-flex">
+              <Kbd>Ctrl</Kbd>
+              <Kbd>Enter</Kbd>
+              <span className="ml-1">to send</span>
             </span>
-          )}
-        </div>
-      </div>
-
-      {/* Conversation Thread Stream */}
-      <div className="space-y-4">
-        <div className="text-[11px] uppercase tracking-widest text-zinc-500 font-bold flex items-center gap-2">
-          <span>Conversation History ({messages.length} messages)</span>
-          <div className="h-px flex-1 bg-zinc-900" />
-        </div>
-
-        {messages.map((msg, index) => {
-          const isAdminMsg = msg.senderRole === "admin";
-          const isCurrentUser = msg.userId === currentUserId;
-
-          return (
-            <div
-              key={msg.id}
-              className={`rounded-lg border p-4 sm:p-5 transition-colors ${
-                isAdminMsg
-                  ? "border-zinc-700 bg-zinc-950/80 shadow-sm"
-                  : "border-zinc-800/80 bg-black/70"
-              }`}
-            >
-              {/* Message Header */}
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-900 pb-3 mb-3">
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`flex size-6 items-center justify-center rounded-lg border text-xs ${
-                      isAdminMsg
-                        ? "border-white bg-white text-black font-bold"
-                        : "border-zinc-700 bg-zinc-900 text-zinc-300"
-                    }`}
-                  >
-                    {isAdminMsg ? <ShieldCheck className="size-3.5" /> : <User className="size-3.5" />}
-                  </div>
-
-                  <span className="text-xs font-bold text-white uppercase tracking-wider">
-                    {msg.userName || msg.userEmail}
-                  </span>
-
-                  {isAdminMsg ? (
-                    <span className="rounded-lg border border-white bg-black px-1.5 py-0.2 text-[8px] font-mono tracking-widest text-white uppercase">
-                      Admin / Core Team
-                    </span>
-                  ) : (
-                    <span className="rounded-lg border border-zinc-800 bg-zinc-900 px-1.5 py-0.2 text-[8px] font-mono tracking-widest text-zinc-400 uppercase">
-                      Author
-                    </span>
-                  )}
-                </div>
-
-                <div className="text-[10px] text-zinc-500 font-sans flex items-center gap-1">
-                  <Clock className="size-3" />
-                  {formatDate(msg.createdAt)}
-                  {index === 0 && <span className="ml-1 text-zinc-400 font-mono">(Initial Ticket)</span>}
-                </div>
-              </div>
-
-              {/* Message Body */}
-              <div className="text-xs text-zinc-300 font-sans leading-relaxed whitespace-pre-wrap">
-                {msg.message}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Reply Box */}
-      <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-2">
-            <Send className="size-3.5 text-zinc-400" />
-            <span>Post Reply</span>
-          </div>
-
-          {ticket.status === "resolved" && (
-            <span className="text-[10px] text-zinc-400 font-sans flex items-center gap-1">
-              <AlertCircle className="size-3 text-amber-400" />
-              Replying will automatically reopen this ticket for engineering review.
-            </span>
-          )}
-        </div>
-
-        <form onSubmit={handleSendReply} className="space-y-3">
-          <Textarea
-            rows={4}
-            value={replyText}
-            onChange={(e) => setReplyText(e.target.value)}
-            onKeyDown={(e) => {
-              if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-                e.preventDefault();
-                handleSendReply();
-              }
-            }}
-            placeholder={
-              isAdminUser
-                ? "Write an official response or resolution update as AutoGTM Engineering... (Ctrl+Enter to send)"
-                : "Type your reply or additional details here... (Ctrl+Enter to send)"
-            }
-            className="rounded-lg border-zinc-800 bg-black text-xs text-white placeholder:text-zinc-600 focus:border-white font-mono resize-y"
-          />
-
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
-            <span className="text-[10px] text-zinc-500 font-mono">
-              Press <kbd className="border border-zinc-700 bg-zinc-900 px-1 py-0.5 text-zinc-300">Ctrl</kbd> + <kbd className="border border-zinc-700 bg-zinc-900 px-1 py-0.5 text-zinc-300">Enter</kbd> to dispatch
-            </span>
-
-            <Button
-              type="submit"
-              disabled={isPending || !replyText.trim()}
-              className="rounded-lg bg-white hover:bg-zinc-200 text-black font-semibold text-xs font-mono uppercase tracking-wider h-9 px-5 gap-2 shrink-0"
-            >
-              {isPending ? (
-                <>
-                  <Loader2 className="size-3.5 animate-spin" /> Dispatching...
-                </>
-              ) : (
-                <>
-                  <Send className="size-3.5" /> Send Reply
-                </>
-              )}
+            <Button type="submit" loading={isPending} disabled={!replyText.trim()} className="ml-auto">
+              Send reply
             </Button>
-          </div>
+          </CardFooter>
         </form>
+      </Card>
+    </Page>
+  );
+}
+
+function MessageItem({ message: msg, isMine }: { message: SupportTicketMessageDTO; isMine: boolean }) {
+  const fromSupport = msg.senderRole === "admin";
+  return (
+    <li className="flex gap-3 px-5 py-4">
+      <Avatar className="mt-0.5">
+        <AvatarFallback
+          className={cn(
+            "text-xs font-medium",
+            fromSupport ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+          )}
+        >
+          {initialOf(msg.userName, msg.userEmail)}
+        </AvatarFallback>
+      </Avatar>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="truncate text-sm font-medium">{msg.userName || msg.userEmail}</span>
+          {fromSupport ? <Badge variant="neutral">Support</Badge> : null}
+          {isMine && !fromSupport ? <span className="text-xs text-subtle-foreground">You</span> : null}
+          <time
+            dateTime={msg.createdAt}
+            title={formatDateTime(msg.createdAt)}
+            className="ml-auto shrink-0 text-xs text-subtle-foreground"
+            suppressHydrationWarning
+          >
+            {timeAgo(msg.createdAt)}
+          </time>
+        </div>
+        <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{msg.message}</p>
       </div>
-    </div>
+    </li>
   );
 }

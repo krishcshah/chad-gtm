@@ -1,164 +1,194 @@
-import { requireWorkspace } from "@/lib/session";
-import { getDb, ensureAiColumns } from "@/lib/db";
-import { listUserWorkspaces } from "@/lib/workspaces";
+import { and, count, eq } from "drizzle-orm";
 import { schema } from "@smartreach/database";
-import { APP_NAME } from "@smartreach/shared";
-import { Avatar, AvatarFallback, Card, CardContent, Separator } from "@smartreach/ui";
+import {
+  Avatar,
+  AvatarFallback,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  PageHeader,
+} from "@smartreach/ui";
+import { requireWorkspace } from "@/lib/session";
+import { ensureAiColumns, getDb } from "@/lib/db";
+import { listUserWorkspaces } from "@/lib/workspaces";
+import { listSuppressions, wsCondition } from "@/lib/queries";
+import { Page } from "@/components/layout/page";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { eq, desc } from "drizzle-orm";
-import { ComplianceForms } from "./compliance-forms";
-import { SettingsBlocklistCard } from "./blocklist-card";
-import { WorkspaceSettingsCard } from "./workspace-settings-card";
 import { AiSettingsCard } from "@/components/ai/ai-settings-card";
-import { ShieldCheck, Sparkles, Zap } from "lucide-react";
+import type { BlocklistItem } from "../blocklist/blocklist-dialogs";
+import { SettingsBlocklistCard } from "./blocklist-card";
+import { ComplianceForms } from "./compliance-forms";
+import { DangerZoneCard } from "./danger-zone-card";
 import { DpaCard } from "./dpa-card";
 import { RemoveMyInfoCard } from "./remove-my-info-card";
-import { DangerZoneCard } from "./danger-zone-card";
+import { SettingsNav, type SettingsSection } from "./settings-nav";
+import { WorkspaceSettingsCard } from "./workspace-settings-card";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Settings" };
 
+/** Section ids double as URL anchors: #workspaces (workspace switcher), #postalAddress (inside compliance), #blocklist. */
+const SECTIONS: SettingsSection[] = [
+  { id: "account", label: "Account" },
+  { id: "appearance", label: "Appearance" },
+  { id: "workspaces", label: "Workspaces" },
+  { id: "compliance", label: "Compliance" },
+  { id: "ai", label: "AI" },
+  { id: "dpa", label: "Data processing" },
+  { id: "blocklist", label: "Blocklist" },
+  { id: "data-removal", label: "Data removal" },
+  { id: "delete-account", label: "Delete account" },
+];
+
+type WorkspaceSettingsRow = typeof schema.workspaceSettings.$inferSelect;
+
+async function loadBlocklistSummary(userId: string, workspaceId: string, isDefault: boolean) {
+  const db = getDb();
+  const conds = [eq(schema.suppressions.userId, userId)];
+  const ws = wsCondition(schema.suppressions.workspaceId, workspaceId, isDefault);
+  if (ws) conds.push(ws);
+  const [recentPage, kindCounts] = await Promise.all([
+    listSuppressions(userId, { limit: 5, workspaceId, isDefault }),
+    db
+      .select({ kind: schema.suppressions.kind, n: count() })
+      .from(schema.suppressions)
+      .where(and(...conds))
+      .groupBy(schema.suppressions.kind),
+  ]);
+  const recent: BlocklistItem[] = recentPage.items.map((s) => ({
+    id: s.id,
+    value: s.value,
+    kind: s.kind,
+    reason: s.reason ?? "",
+    source: s.source,
+    createdAt: String(s.createdAt),
+  }));
+  const countOf = (kind: string) => Number(kindCounts.find((r) => r.kind === kind)?.n ?? 0);
+  return { recent, emailCount: countOf("email"), domainCount: countOf("domain") };
+}
+
 export default async function SettingsPage() {
   const { user, workspace } = await requireWorkspace();
-  const workspaces = await listUserWorkspaces(user.id);
-  const initial = (user.name ?? user.email ?? "U").slice(0, 1).toUpperCase();
   const db = getDb();
   await ensureAiColumns(db);
-  let settings: any = null;
-  try {
-    const rows = await db
+
+  const [workspaces, settings, blocklist] = await Promise.all([
+    listUserWorkspaces(user.id),
+    db
       .select()
       .from(schema.workspaceSettings)
       .where(eq(schema.workspaceSettings.userId, user.id))
-      .limit(1);
-    settings = rows[0] ?? null;
-  } catch (err) {
-    console.error("[settings] query error:", err);
-  }
-  const suppressions = await db
-    .select()
-    .from(schema.suppressions)
-    .where(eq(schema.suppressions.userId, user.id))
-    .orderBy(desc(schema.suppressions.createdAt))
-    .limit(200);
+      .limit(1)
+      .then((rows): WorkspaceSettingsRow | null => rows[0] ?? null)
+      .catch((err: unknown) => {
+        console.error("[settings] query error:", err);
+        return null;
+      }),
+    loadBlocklistSummary(user.id, workspace.id, workspace.isDefault).catch((err: unknown) => {
+      console.error("[settings] blocklist query error:", err);
+      return { recent: [] as BlocklistItem[], emailCount: 0, domainCount: 0 };
+    }),
+  ]);
+
+  const displayName = user.name?.trim() || user.email;
+  const initial = (user.name || user.email || "U").trim().slice(0, 1).toUpperCase();
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 p-6 lg:p-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Workspaces, account, compliance, blocklist, appearance, and sending engine.
-        </p>
-      </div>
+    <Page>
+      <PageHeader title="Settings" description="Your account, workspaces, compliance details and data." />
 
-      <WorkspaceSettingsCard workspaces={workspaces} activeWorkspaceId={workspace.id} />
+      <div className="grid gap-10 lg:grid-cols-[176px_minmax(0,1fr)]">
+        <SettingsNav sections={SECTIONS} />
 
-      <Card>
-        <CardContent className="p-6">
-          <h2 className="font-medium">Profile</h2>
-          <div className="mt-4 flex items-center gap-4">
-            <Avatar className="h-12 w-12">
-              <AvatarFallback className="text-base">{initial}</AvatarFallback>
-            </Avatar>
-            <div>
-              <p className="font-medium">{user.name ?? "—"}</p>
-              <p className="text-sm text-muted-foreground">{user.email}</p>
-            </div>
-          </div>
-          <Separator className="my-5" />
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium">Theme</p>
-              <p className="text-sm text-muted-foreground">Dark is optimized for AutoGTM.</p>
-            </div>
-            <ThemeToggle />
-          </div>
-        </CardContent>
-      </Card>
+        <div className="flex min-w-0 max-w-3xl flex-col gap-6">
+          <Section id="account">
+            <Card>
+              <CardHeader>
+                <CardTitle>Account</CardTitle>
+                <CardDescription>The account you sign in with.</CardDescription>
+              </CardHeader>
+              <CardContent className="flex items-center gap-4">
+                <Avatar className="size-11">
+                  <AvatarFallback className="bg-muted text-base font-medium text-muted-foreground">
+                    {initial}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{displayName}</p>
+                  {user.name?.trim() ? (
+                    <p className="truncate text-[13px] text-muted-foreground">{user.email}</p>
+                  ) : null}
+                </div>
+              </CardContent>
+            </Card>
+          </Section>
 
-      <AiSettingsCard
-        initialProvider={settings?.aiProvider ?? "google"}
-        initialModel={settings?.aiModel ?? "gemini-3.8-flash"}
-        hasApiKey={Boolean(settings?.aiApiKeyEnc)}
-      />
+          <Section id="appearance">
+            <Card>
+              <CardHeader>
+                <CardTitle>Appearance</CardTitle>
+                <CardDescription>System follows your device&apos;s light or dark setting.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ThemeToggle />
+              </CardContent>
+            </Card>
+          </Section>
 
-      <ComplianceForms
-        initialSettings={{
-          companyName: settings?.companyName ?? "",
-          postalAddress: settings?.postalAddress ?? "",
-          unsubscribeBaseUrl: settings?.unsubscribeBaseUrl ?? "",
-        }}
-      />
+          <Section id="workspaces">
+            <WorkspaceSettingsCard workspaces={workspaces} activeWorkspaceId={workspace.id} />
+          </Section>
 
-      {/* Blocklist Card inside Settings */}
-      <SettingsBlocklistCard
-        initialSuppressions={suppressions.map((s: { id: string; value: string; kind: string; reason: string; source: string }) => ({
-          id: s.id,
-          value: s.value,
-          kind: s.kind,
-          reason: s.reason,
-          source: s.source,
-        }))}
-      />
+          <Section id="compliance">
+            <ComplianceForms
+              initialSettings={{
+                companyName: settings?.companyName ?? "",
+                postalAddress: settings?.postalAddress ?? "",
+                unsubscribeBaseUrl: settings?.unsubscribeBaseUrl ?? "",
+              }}
+            />
+          </Section>
 
-      <DpaCard />
+          <Section id="ai">
+            <AiSettingsCard
+              initialProvider={settings?.aiProvider ?? "google"}
+              initialModel={settings?.aiModel ?? "gemini-3.8-flash"}
+              hasApiKey={Boolean(settings?.aiApiKeyEnc)}
+            />
+          </Section>
 
-      <RemoveMyInfoCard userEmail={user.email} />
+          <Section id="dpa">
+            <DpaCard />
+          </Section>
 
-      <Card>
-        <CardContent className="p-6">
-          <h2 className="font-medium">Sending engine</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            The background worker processes your queue every ~30s — rotating senders, honoring limits,
-            randomizing delays, retrying failures, and syncing replies over IMAP.
-          </p>
-          <Separator className="my-5" />
-          <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
-            {[
-              ["Queue interval", "30s"],
-              ["Reply sync", "2 min"],
-              ["Batch size", "25"],
-              ["Encryption", "AES-GCM"],
-            ].map(([k, v]) => (
-              <div key={k} className="rounded-lg border bg-card/60 p-3">
-                <dt className="text-xs text-muted-foreground">{k}</dt>
-                <dd className="mt-1 font-medium">{v}</dd>
-              </div>
-            ))}
-          </dl>
-          <p className="mt-4 text-xs text-muted-foreground">
-            Run locally with <code className="font-mono">npm run engine</code>. Set{" "}
-            <code className="font-mono">ENGINE_DRY_RUN=1</code> to process jobs without SMTP.
-          </p>
-        </CardContent>
-      </Card>
+          <Section id="blocklist">
+            <SettingsBlocklistCard
+              recent={blocklist.recent}
+              emailCount={blocklist.emailCount}
+              domainCount={blocklist.domainCount}
+            />
+          </Section>
 
-      {/* Danger Zone: Permanent Account Deletion */}
-      <DangerZoneCard userEmail={user.email} />
+          <Section id="data-removal">
+            <RemoveMyInfoCard userEmail={user.email} />
+          </Section>
 
-      {/* AutoGTM Infrastructure Card */}
-      <div className="rounded-2xl border border-white/10 bg-zinc-950/60 p-5 backdrop-blur-xl">
-        <div className="flex items-center gap-2 text-xs font-bold text-white mb-2">
-          <Sparkles className="size-4 text-cyan-400" />
-          <span>AutoGTM Autonomous Outbound Engine</span>
-        </div>
-        <p className="text-xs text-zinc-400 leading-relaxed max-w-xl">
-          Powered by your selected AI model, the shared verified B2B directory, and managed mailboxes with a safe 30/day delivery pacing.
-        </p>
-        <div className="mt-3 flex items-center gap-4 text-[11px] font-mono text-zinc-500">
-          <span className="flex items-center gap-1.5">
-            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Infrastructure Status: Optimal
-          </span>
-          <span>•</span>
-          <span>Shared Mailbox Pool: 5¢/email</span>
+          <Section id="delete-account">
+            <DangerZoneCard userEmail={user.email} />
+          </Section>
         </div>
       </div>
+    </Page>
+  );
+}
 
-      <p className="text-center text-xs text-zinc-500">
-        AutoGTM · Autonomous Go-To-Market & Cold Outreach Engine
-      </p>
-    </div>
+function Section({ id, children }: { id: string; children: React.ReactNode }) {
+  return (
+    <section id={id} className="scroll-mt-20 lg:scroll-mt-10">
+      {children}
+    </section>
   );
 }

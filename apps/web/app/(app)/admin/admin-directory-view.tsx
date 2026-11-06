@@ -1,27 +1,22 @@
 "use client";
 
-import { useState, useRef, useTransition } from "react";
+import { useRef, useState } from "react";
+import { Download, FileSpreadsheet, Upload, X } from "lucide-react";
 import {
-  Database,
-  Upload,
-  Download,
-  CheckCircle2,
-  AlertCircle,
-  FileSpreadsheet,
-  Loader2,
-  HardDrive,
-  Building,
-  Mail,
-  Users,
-  X,
-} from "lucide-react";
-import { Button } from "@smartreach/ui";
-import { toast } from "sonner";
+  Alert,
+  AlertTitle,
+  Button,
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  Stat,
+  cn,
+  toast,
+} from "@smartreach/ui";
 import { parseCsvText } from "@/lib/csv";
-import {
-  importDirectoryLeadsAction,
-  getDirectoryStatsForAdmin,
-} from "@/lib/admin-gtm-actions";
+import { importDirectoryLeadsAction, getDirectoryStatsForAdmin } from "@/lib/admin-gtm-actions";
 
 export interface DirectoryStatsDTO {
   totalLeads: number;
@@ -32,290 +27,190 @@ export interface DirectoryStatsDTO {
   fileSizeBytes: number;
 }
 
-export function AdminDirectoryView({
-  initialStats,
-}: {
-  initialStats: DirectoryStatsDTO;
-}) {
-  const [stats, setStats] = useState<DirectoryStatsDTO>(initialStats);
-  const [isUploading, setIsUploading] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
-  const [ingestionSummary, setIngestionSummary] = useState<{
-    totalParsed: number;
-    inserted: number;
-    duplicatesSkipped: number;
-    invalidRows: number;
-    totalInDb: number;
-  } | null>(null);
+interface IngestionSummary {
+  totalParsed: number;
+  inserted: number;
+  duplicatesSkipped: number;
+  invalidRows: number;
+  totalInDb: number;
+}
 
+const TEMPLATE_CSV =
+  "first_name,last_name,job_title,company_name,company_website,linkedin_url,industry,country,city,state,team_size,revenue_range,email,phone\n" +
+  "Marcus,Vance,VP of Engineering,Apex Systems,https://apexsystems.com,https://linkedin.com/in/example,Information Technology and Services,United States,San Francisco,CA,51-200,$25M-$50M,marcus.v@apexsystems.com,+1 415 555 0192\n" +
+  "Sarah,Chen,Head of Growth,CloudScale,https://cloudscale.io,https://linkedin.com/in/example,Computer Software,Germany,Berlin,Berlin,11-50,$5M-$10M,sarah.chen@cloudscale.io,+49 30 123456\n";
+
+function formatFileSize(bytes: number) {
+  if (bytes === 0) return "0 MB";
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function downloadTemplate() {
+  const blob = new Blob([TEMPLATE_CSV], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", "autogtm_apollo_leads_template.csv");
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/** The shared B2B lead directory: what is in it and a CSV import. */
+export function AdminDirectoryView({ initialStats }: { initialStats: DirectoryStatsDTO }) {
+  const [stats, setStats] = useState<DirectoryStatsDTO>(initialStats);
+  const [uploading, setUploading] = useState<{ name: string; rows: number | null } | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [summary, setSummary] = useState<IngestionSummary | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return "0 MB";
-    const mb = bytes / (1024 * 1024);
-    return `${mb.toFixed(1)} MB`;
-  };
-
-  const handleDownloadTemplate = () => {
-    const csvContent =
-      "first_name,last_name,job_title,company_name,company_website,linkedin_url,industry,country,city,state,team_size,revenue_range,email,phone\n" +
-      "Marcus,Vance,VP of Engineering,Apex Systems,https://apexsystems.com,https://linkedin.com/in/example,Information Technology and Services,United States,San Francisco,CA,51-200,$25M-$50M,marcus.v@apexsystems.com,+1 415 555 0192\n" +
-      "Sarah,Chen,Head of Growth,CloudScale,https://cloudscale.io,https://linkedin.com/in/example,Computer Software,Germany,Berlin,Berlin,11-50,$5M-$10M,sarah.chen@cloudscale.io,+49 30 123456\n";
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", "autogtm_apollo_leads_template.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   const processFile = async (file: File) => {
-    setIsUploading(true);
-    setIngestionSummary(null);
-
+    if (uploading) return;
+    setUploading({ name: file.name, rows: null });
+    setSummary(null);
     try {
-      const text = await file.text();
-      const parsed = parseCsvText(text);
-
+      const parsed = parseCsvText(await file.text());
       if (parsed.rows.length === 0) {
-        toast.error("CSV contains no rows.");
-        setIsUploading(false);
+        toast.error("That CSV has no rows.");
         return;
       }
-
-      toast.info(`Ingesting ${parsed.rows.length.toLocaleString()} leads into central database...`);
+      setUploading({ name: file.name, rows: parsed.rows.length });
 
       const res = await importDirectoryLeadsAction(parsed.rows);
       if (res.ok && res.result) {
-        setIngestionSummary(res.result);
-        toast.success(
-          `Successfully ingested ${res.result.inserted.toLocaleString()} leads!`
-        );
-
-        // Refresh stats
-        const updated = await getDirectoryStatsForAdmin();
-        setStats(updated);
+        setSummary(res.result);
+        toast.success(`Added ${res.result.inserted.toLocaleString()} leads to the directory.`);
+        try {
+          setStats(await getDirectoryStatsForAdmin());
+        } catch {
+          // Totals refresh on the next page load.
+        }
       } else {
-        toast.error(res.error || "Failed to import leads");
+        toast.error(res.error || "Could not import leads.");
       }
     } catch (err: any) {
-      toast.error(err?.message || "Failed to process CSV file");
+      toast.error(err?.message || "Could not read that CSV file.");
     } finally {
-      setIsUploading(false);
+      setUploading(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) void processFile(file);
-  };
-
   return (
-    <div className="space-y-6 font-sans">
-      {/* Live Directory Telemetry */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Directory Leads */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-2 card-shine shadow-xs">
-          <div className="flex items-center justify-between text-zinc-400 text-xs">
-            <span className="font-medium text-xs text-zinc-400">Apollo B2B Directory</span>
-            <div className="p-2 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-300">
-              <Database className="size-3.5" />
-            </div>
-          </div>
-          <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-            {stats.totalLeads.toLocaleString()}
-          </div>
-          <p className="text-xs text-zinc-500">Indexed B2B prospect records</p>
-        </div>
+    <div className="flex flex-col gap-6">
+      <Card className="grid grid-cols-2 gap-px overflow-hidden bg-border lg:grid-cols-4 [&>*]:bg-card">
+        <Stat
+          bare
+          label="Leads"
+          value={stats.totalLeads.toLocaleString()}
+          hint={`${formatFileSize(stats.fileSizeBytes)} on disk`}
+        />
+        <Stat
+          bare
+          label="Have an email"
+          value={`${stats.verifiedEmailPct}%`}
+          hint={`${stats.verifiedEmailCount.toLocaleString()} leads`}
+        />
+        <Stat bare label="Industries" value={stats.distinctIndustries.toLocaleString()} hint="Used for ICP matching" />
+        <Stat bare label="Countries" value={stats.distinctCountries.toLocaleString()} />
+      </Card>
 
-        {/* Distinct Industries */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-2 card-shine shadow-xs">
-          <div className="flex items-center justify-between text-zinc-400 text-xs">
-            <span className="font-medium text-xs text-zinc-400">Curated Industry Facets</span>
-            <div className="p-2 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-300">
-              <Building className="size-3.5" />
-            </div>
-          </div>
-          <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-            {stats.distinctIndustries.toLocaleString()}
-          </div>
-          <p className="text-xs text-zinc-500">Available for AutoGTM ICP matching</p>
-        </div>
-
-        {/* Verified Email Pct */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-2 card-shine shadow-xs">
-          <div className="flex items-center justify-between text-zinc-400 text-xs">
-            <span className="font-medium text-xs text-zinc-400">Email Coverage</span>
-            <div className="p-2 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-300">
-              <Mail className="size-3.5" />
-            </div>
-          </div>
-          <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-            {stats.verifiedEmailPct}%
-          </div>
-          <p className="text-xs text-zinc-500">
-            {stats.verifiedEmailCount.toLocaleString()} direct corporate emails
-          </p>
-        </div>
-
-        {/* Storage Size */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-5 space-y-2 card-shine shadow-xs">
-          <div className="flex items-center justify-between text-zinc-400 text-xs">
-            <span className="font-medium text-xs text-zinc-400">Database Storage</span>
-            <div className="p-2 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-300">
-              <HardDrive className="size-3.5" />
-            </div>
-          </div>
-          <div className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-            {formatFileSize(stats.fileSizeBytes)}
-          </div>
-          <p className="text-xs text-zinc-500">SQLite WAL high-speed store</p>
-        </div>
-      </div>
-
-      {/* Drag & Drop Bulk CSV Upload Zone */}
-      <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-6 space-y-5 card-shine shadow-xs">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
-          <div>
-            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-              <Upload className="size-4 text-zinc-400" /> Bulk Prospect Ingestion (10k–100k+ Records)
-            </h3>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              Supports exports from Apollo, ZoomInfo, Clay, or standard CSV format. Automatically deduplicates by email.
-            </p>
-          </div>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleDownloadTemplate}
-            className="text-xs rounded-lg border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:text-white hover:bg-zinc-800"
-          >
-            <Download className="size-3.5 mr-1.5" /> Download Standard Template
-          </Button>
-        </div>
-
-        {/* Dropzone */}
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragOver(true);
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={onDrop}
-          className={`rounded-xl border-2 border-dashed p-8 text-center transition-all ${
-            dragOver
-              ? "border-zinc-500 bg-zinc-900/60"
-              : "border-zinc-800 hover:border-zinc-700 bg-zinc-900/20"
-          }`}
+      {summary ? (
+        <Alert
+          variant="success"
+          action={
+            <Button variant="ghost" size="icon-xs" aria-label="Dismiss import summary" onClick={() => setSummary(null)}>
+              <X />
+            </Button>
+          }
         >
-          <input
-            type="file"
-            accept=".csv"
-            ref={fileInputRef}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
+          <AlertTitle>Import finished</AlertTitle>
+          <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-2 text-[13px] sm:grid-cols-4">
+            <SummaryItem label="Rows read" value={summary.totalParsed} />
+            <SummaryItem label="Added" value={summary.inserted} />
+            <SummaryItem label="Already in directory" value={summary.duplicatesSkipped} />
+            <SummaryItem label="Skipped, no email" value={summary.invalidRows} />
+          </dl>
+        </Alert>
+      ) : null}
+
+      <Card>
+        <CardHeader
+          actions={
+            <Button variant="outline" size="sm" onClick={downloadTemplate}>
+              <Download />
+              Download template
+            </Button>
+          }
+        >
+          <CardTitle>Import leads</CardTitle>
+          <CardDescription>
+            Upload a CSV export from Apollo, ZoomInfo, Clay or any other tool. Leads are matched on email, so
+            duplicates are skipped and rows without an email are left out.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!uploading) setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              const file = e.dataTransfer.files?.[0];
               if (file) void processFile(file);
             }}
-            className="hidden"
-          />
-
-          <div className="mx-auto flex size-12 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900/80 text-zinc-300 mb-3 shadow-xs">
-            {isUploading ? (
-              <Loader2 className="size-6 animate-spin text-white" />
-            ) : (
-              <FileSpreadsheet className="size-6" />
+            className={cn(
+              "flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center transition-colors",
+              dragOver ? "border-foreground bg-muted" : "border-border-strong",
             )}
-          </div>
-
-          <h4 className="text-sm font-semibold text-white">
-            {isUploading ? "Ingesting records into SQLite..." : "Drag & drop leads CSV here, or browse"}
-          </h4>
-          <p className="text-xs text-zinc-400 max-w-sm mx-auto mt-1 mb-4">
-            Fast batch insertion with zero UI lockup. Automatically cleans headers and refreshes facet cache.
-          </p>
-
-          <Button
-            type="button"
-            disabled={isUploading}
-            onClick={() => fileInputRef.current?.click()}
-            className="text-xs font-medium rounded-lg bg-white text-black hover:bg-zinc-200 shadow-xs"
           >
-            {isUploading ? (
-              <>
-                <Loader2 className="size-3.5 animate-spin mr-1.5" /> Ingesting Leads...
-              </>
-            ) : (
-              <>
-                <Upload className="size-3.5 mr-1.5" /> Select CSV File
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
-
-      {/* Ingestion Summary Modal / Box */}
-      {ingestionSummary && (
-        <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-5 space-y-4 shadow-xs">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-emerald-400 font-semibold text-xs">
-              <CheckCircle2 className="size-4" /> Ingestion Completed Successfully
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              ref={fileInputRef}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void processFile(file);
+              }}
+              className="sr-only"
+              tabIndex={-1}
+              aria-hidden
+            />
+            <div className="flex size-10 items-center justify-center rounded-lg bg-card text-muted-foreground shadow-xs ring-1 ring-border">
+              <FileSpreadsheet className="size-5" aria-hidden />
             </div>
-            <button
-              type="button"
-              onClick={() => setIngestionSummary(null)}
-              className="text-zinc-500 hover:text-white transition-colors"
-            >
-              <X className="size-4" />
-            </button>
+            <div aria-live="polite">
+              <p className="text-sm font-medium">
+                {uploading
+                  ? uploading.rows === null
+                    ? `Reading ${uploading.name}`
+                    : `Importing ${uploading.rows.toLocaleString()} rows from ${uploading.name}`
+                  : "Drop a CSV file here"}
+              </p>
+              <p className="mt-1 text-[13px] text-muted-foreground">
+                {uploading ? "Large files can take a minute. Keep this tab open." : "One header row, then one lead per row. The template shows the column names."}
+              </p>
+            </div>
+            <Button loading={!!uploading} onClick={() => fileInputRef.current?.click()}>
+              {uploading ? null : <Upload />}
+              {uploading ? "Importing" : "Choose CSV file"}
+            </Button>
           </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-            <div className="rounded-lg bg-zinc-950/80 p-3.5 border border-zinc-800/80">
-              <span className="text-[10px] text-zinc-400 font-medium block">
-                Total Parsed
-              </span>
-              <span className="text-lg font-bold tracking-tight text-white">
-                {ingestionSummary.totalParsed.toLocaleString()}
-              </span>
-            </div>
-
-            <div className="rounded-lg bg-zinc-950/80 p-3.5 border border-zinc-800/80">
-              <span className="text-[10px] text-emerald-400 font-medium block">
-                Inserted
-              </span>
-              <span className="text-lg font-bold tracking-tight text-emerald-400">
-                {ingestionSummary.inserted.toLocaleString()}
-              </span>
-            </div>
-
-            <div className="rounded-lg bg-zinc-950/80 p-3.5 border border-zinc-800/80">
-              <span className="text-[10px] text-amber-400 font-medium block">
-                Duplicates Skipped
-              </span>
-              <span className="text-lg font-bold tracking-tight text-amber-400">
-                {ingestionSummary.duplicatesSkipped.toLocaleString()}
-              </span>
-            </div>
-
-            <div className="rounded-lg bg-zinc-950/80 p-3.5 border border-zinc-800/80">
-              <span className="text-[10px] text-rose-400 font-medium block">
-                Invalid (No Email)
-              </span>
-              <span className="text-lg font-bold tracking-tight text-rose-400">
-                {ingestionSummary.invalidRows.toLocaleString()}
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
+function SummaryItem({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="tabular mt-0.5 font-semibold">{value.toLocaleString()}</dd>
     </div>
   );
 }

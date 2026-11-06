@@ -1,19 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, Check, CheckCheck, Pencil, RotateCcw, X } from "lucide-react";
 import {
-  Check,
-  X,
-  Edit3,
-  Building2,
-  User,
-  Briefcase,
-  ChevronRight,
-  ThumbsUp,
-  RotateCcw,
-  Sparkles,
-} from "lucide-react";
-import { Button } from "@smartreach/ui";
+  Button,
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Field,
+  Input,
+  Kbd,
+  Progress,
+  Textarea,
+} from "@smartreach/ui";
+import { WorkingPanel } from "./working-panel";
 
 export interface EmailCalibrationSample {
   id: string;
@@ -37,18 +44,30 @@ const REJECTION_TAGS = [
   "Wrong persona tone",
 ];
 
+const MAX_DECK_SIZE = 16;
+
+function isTypingTarget(target: EventTarget | null) {
+  const el = target as HTMLElement | null;
+  if (!el) return false;
+  return el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName);
+}
+
+/**
+ * Guided setup, step 4: review sample emails one at a time. Approvals,
+ * rejections (with a reason) and edits teach the writer the client's voice.
+ * New samples are requested mid-deck, conditioned on the feedback so far.
+ */
 export function SwipeCardDeck({
   samples,
   onComplete,
   onRequestMore,
+  onBack,
 }: {
   samples: EmailCalibrationSample[];
   onComplete: (approvedSamples: EmailCalibrationSample[]) => void;
   /** Fetch additional cards conditioned on the swipes so far. */
-  onRequestMore?: (
-    feedback: EmailCalibrationSample[],
-    existingCount: number
-  ) => Promise<EmailCalibrationSample[]>;
+  onRequestMore?: (feedback: EmailCalibrationSample[], existingCount: number) => Promise<EmailCalibrationSample[]>;
+  onBack?: () => void;
 }) {
   const [deck, setDeck] = useState<EmailCalibrationSample[]>(samples);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -59,15 +78,13 @@ export function SwipeCardDeck({
   const [showRejectMenu, setShowRejectMenu] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [adaptiveNote, setAdaptiveNote] = useState("");
+  const cardRef = useRef<HTMLDivElement>(null);
 
-  const MAX_DECK_SIZE = 16;
   const currentCard = deck[currentIndex];
   const isFinished = currentIndex >= deck.length && !isLoadingMore;
+  const reviewed = Math.min(currentIndex, deck.length);
 
-  const maybeExtendDeck = async (
-    updatedDeck: EmailCalibrationSample[],
-    reviewedIndex: number
-  ) => {
+  const maybeExtendDeck = async (updatedDeck: EmailCalibrationSample[], reviewedIndex: number) => {
     if (!onRequestMore) return;
     if (isLoadingMore) return;
     if (updatedDeck.length >= MAX_DECK_SIZE) return;
@@ -86,7 +103,7 @@ export function SwipeCardDeck({
             return [...prev, ...fresh.filter((s) => !prevIds.has(s.id))];
           });
           setAdaptiveNote(
-            `Added ${fresh.length} new sample${fresh.length === 1 ? "" : "s"} conditioned on your feedback.`
+            `Added ${fresh.length} more sample${fresh.length === 1 ? "" : "s"} based on your feedback so far.`,
           );
         }
       }
@@ -97,27 +114,28 @@ export function SwipeCardDeck({
     }
   };
 
+  const advance = (updated: EmailCalibrationSample[]) => {
+    const nextIndex = currentIndex + 1;
+    setDeck(updated);
+    setCurrentIndex(nextIndex);
+    setShowRejectMenu(false);
+    void maybeExtendDeck(updated, nextIndex);
+    cardRef.current?.focus({ preventScroll: true });
+  };
+
   const handleApprove = () => {
     if (!currentCard) return;
     const updated = [...deck];
     updated[currentIndex] = { ...currentCard, approved: true };
-    setDeck(updated);
     setApprovedCount((c) => c + 1);
-    const nextIndex = currentIndex + 1;
-    setCurrentIndex(nextIndex);
-    setShowRejectMenu(false);
-    void maybeExtendDeck(updated, nextIndex);
+    advance(updated);
   };
 
   const handleRejectWithReason = (reason?: string) => {
     if (!currentCard) return;
     const updated = [...deck];
     updated[currentIndex] = { ...currentCard, approved: false, rejectedReason: reason };
-    setDeck(updated);
-    const nextIndex = currentIndex + 1;
-    setCurrentIndex(nextIndex);
-    setShowRejectMenu(false);
-    void maybeExtendDeck(updated, nextIndex);
+    advance(updated);
   };
 
   const handleApproveAll = () => {
@@ -136,9 +154,7 @@ export function SwipeCardDeck({
   const saveEdit = () => {
     if (!editingSample) return;
     const updated = deck.map((s) =>
-      s.id === editingSample.id
-        ? { ...s, subject: editSubject, bodyText: editBody, approved: true }
-        : s
+      s.id === editingSample.id ? { ...s, subject: editSubject, bodyText: editBody, approved: true } : s,
     );
     setDeck(updated);
     setEditingSample(null);
@@ -146,312 +162,232 @@ export function SwipeCardDeck({
       setApprovedCount((c) => c + 1);
       const nextIndex = currentIndex + 1;
       setCurrentIndex(nextIndex);
+      setShowRejectMenu(false);
       void maybeExtendDeck(updated, nextIndex);
     }
   };
 
-  const handleFinish = () => {
-    onComplete(deck);
+  const restart = () => {
+    setCurrentIndex(0);
+    setApprovedCount(0);
+    setShowRejectMenu(false);
   };
 
+  // Keyboard: A approve, R reject, E edit, 1–5 pick a reason, Esc closes the reasons.
+  const keyHandler = useRef<(e: KeyboardEvent) => void>(() => {});
+  keyHandler.current = (e: KeyboardEvent) => {
+    if (e.metaKey || e.ctrlKey || e.altKey || editingSample || !currentCard || isTypingTarget(e.target)) return;
+    const k = e.key.toLowerCase();
+    if (k === "a") {
+      e.preventDefault();
+      handleApprove();
+    } else if (k === "r") {
+      e.preventDefault();
+      setShowRejectMenu(true);
+    } else if (k === "e") {
+      e.preventDefault();
+      startEdit(currentCard);
+    } else if (showRejectMenu && /^[1-5]$/.test(k)) {
+      e.preventDefault();
+      handleRejectWithReason(REJECTION_TAGS[Number(k) - 1]);
+    } else if (showRejectMenu && k === "escape") {
+      setShowRejectMenu(false);
+    }
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => keyHandler.current(e);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const total = deck.length;
+
   return (
-    <div className="mx-auto max-w-2xl space-y-6 font-sans">
-      {/* Header & Calibration Progress */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-zinc-300">
-              Stage 04 // Calibration
-            </span>
-            <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">
-              Tone Alignment
-            </span>
-          </div>
-          <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white mt-1">
-            Voice & Angle Calibration Deck
-          </h2>
-          <p className="text-xs text-zinc-400 mt-0.5">
-            Approve or reject sample copy to lock in your tone before launching outreach.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="text-right">
-            <div className="text-xs font-semibold text-white">
-              {Math.min(currentIndex, deck.length)} of {deck.length} Reviewed
-            </div>
-            <div className="text-[10px] text-zinc-500">{approvedCount} approved</div>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleApproveAll}
-            className="rounded-lg text-xs font-medium border-zinc-700 hover:border-zinc-500 text-white"
-          >
-            <ThumbsUp className="size-3 mr-1.5" /> Approve All
-          </Button>
-        </div>
-      </div>
-
-      {/* Progress Bar */}
-      <div className="h-1 w-full bg-zinc-900 border border-zinc-800">
-        <div
-          className="h-full bg-emerald-500 transition-all duration-300"
-          style={{ width: `${(Math.min(currentIndex, deck.length) / deck.length) * 100}%` }}
-        />
-      </div>
-
-      {adaptiveNote && (
-        <div className="flex items-center gap-2 border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 text-[11px] text-emerald-300">
-          <Sparkles className="size-3 shrink-0" />
-          {adaptiveNote}
-        </div>
-      )}
-
-      {/* Adaptive fetch while the deck is temporarily exhausted */}
+    <>
       {isLoadingMore && !currentCard ? (
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-8 text-center space-y-3">
-          <div className="mx-auto flex size-10 items-center justify-center border border-emerald-500/40 bg-emerald-500/10 text-emerald-400">
-            <Sparkles className="size-5 animate-pulse" />
-          </div>
-          <h3 className="text-sm font-semibold text-white">
-            Calibrating your next samples...
-          </h3>
-          <p className="mx-auto max-w-sm text-xs text-zinc-400">
-            Applying your approvals and rejection reasons to the next batch of prospects.
-          </p>
-        </div>
-      ) : null}
+        <WorkingPanel
+          title="Writing more samples"
+          description="We're using your approvals and rejection reasons to write the next few emails."
+        />
+      ) : !isFinished && currentCard ? (
+        <Card>
+          <CardHeader
+            actions={
+              <Button variant="outline" size="sm" onClick={handleApproveAll}>
+                <CheckCheck />
+                Approve all
+              </Button>
+            }
+          >
+            <CardTitle>Does this sound like you?</CardTitle>
+            <CardDescription>
+              Approve emails you&apos;d send yourself and reject the rest. We rewrite the sequence from your choices.
+            </CardDescription>
+          </CardHeader>
 
-      {/* Main Tinder Card or Completion Screen */}
-      {!isFinished && currentCard ? (
-        <div className="relative">
-          {/* Active Card */}
-          <div className="relative rounded-lg border border-zinc-800 bg-zinc-950 p-5 sm:p-7 shadow-xl">
-            {/* Prospect Metadata Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-2 bg-zinc-900/60 p-3 border border-zinc-800 mb-4">
-              <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <User className="size-3.5 text-zinc-400 shrink-0" />
-                  <span className="text-sm font-semibold text-white">
-                    {currentCard.recipientName}
-                  </span>
-                  <span className="rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-0.5 text-[10px] font-mono text-zinc-300">
-                    {currentCard.recipientTitle}
-                  </span>
+          <div className="px-5 pt-4">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span className="tabular">
+                Email {currentIndex + 1} of {total}
+                {isLoadingMore ? ", writing more…" : ""}
+              </span>
+              <span className="tabular">{approvedCount} approved</span>
+            </div>
+            <Progress
+              value={total > 0 ? (reviewed / total) * 100 : 0}
+              className="mt-2"
+              aria-label={`${reviewed} of ${total} reviewed`}
+            />
+            {adaptiveNote && <p className="mt-2 text-xs text-subtle-foreground">{adaptiveNote}</p>}
+          </div>
+
+          <div
+            ref={cardRef}
+            tabIndex={-1}
+            aria-live="polite"
+            aria-label={`Sample email ${currentIndex + 1} of ${total}`}
+            className="p-5 outline-none"
+          >
+            <article className="rounded-lg border border-border">
+              <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
+                <div className="min-w-0 text-[13px]">
+                  <p>
+                    <span className="text-muted-foreground">To </span>
+                    <span className="font-medium">{currentCard.recipientName}</span>
+                    {currentCard.recipientTitle && (
+                      <span className="text-muted-foreground">, {currentCard.recipientTitle}</span>
+                    )}
+                  </p>
+                  <p className="mt-0.5 text-xs text-subtle-foreground">
+                    {[currentCard.recipientCompany, currentCard.recipientIndustry].filter(Boolean).join(" · ")}
+                  </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
-                  <span className="flex items-center gap-1">
-                    <Building2 className="size-3 text-zinc-500" />
-                    {currentCard.recipientCompany}
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1">
-                    <Briefcase className="size-3 text-zinc-500" />
-                    {currentCard.recipientIndustry}
-                  </span>
+                <Button variant="ghost" size="xs" onClick={() => startEdit(currentCard)}>
+                  <Pencil />
+                  Edit
+                </Button>
+              </header>
+              <div className="px-4 py-4">
+                <p className="text-sm font-semibold">{currentCard.subject}</p>
+                <div className="mt-3 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+                  {currentCard.bodyText}
                 </div>
               </div>
+            </article>
 
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => startEdit(currentCard)}
-                className="rounded-lg text-xs font-medium text-zinc-400 hover:text-white hover:bg-zinc-800"
-              >
-                <Edit3 className="size-3 mr-1" /> Edit Copy
-              </Button>
-            </div>
+            {showRejectMenu && (
+              <fieldset className="mt-4 rounded-lg bg-muted/60 p-4">
+                <legend className="sr-only">Why doesn&apos;t this email work?</legend>
+                <p className="text-[13px] font-medium" aria-hidden>
+                  What&apos;s wrong with it?
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {REJECTION_TAGS.map((tag, i) => (
+                    <Button key={tag} variant="outline" size="sm" onClick={() => handleRejectWithReason(tag)}>
+                      <Kbd className="hidden sm:inline-flex">{i + 1}</Kbd>
+                      {tag}
+                    </Button>
+                  ))}
+                  <Button variant="ghost" size="sm" onClick={() => handleRejectWithReason()}>
+                    Skip reason
+                  </Button>
+                </div>
+              </fieldset>
+            )}
+          </div>
 
-            {/* Email Subject Line */}
-            <div className="bg-zinc-900/40 border border-zinc-800 px-4 py-3 mb-3">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 block mb-1">
-                Subject
-              </span>
-              <p className="text-xs sm:text-sm font-semibold text-white tracking-tight">
-                {currentCard.subject}
+          <div className="flex flex-col gap-3 border-t border-border px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              {onBack && (
+                <Button variant="ghost" size="sm" onClick={onBack}>
+                  <ArrowLeft />
+                  Audience
+                </Button>
+              )}
+              <p className="hidden text-xs text-subtle-foreground lg:block">
+                <Kbd>A</Kbd> approve <Kbd className="ml-2">R</Kbd> reject <Kbd className="ml-2">E</Kbd> edit
               </p>
             </div>
-
-            {/* Email Body */}
-            <div className="bg-zinc-900/40 border border-zinc-800 p-4 min-h-[140px]">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 block mb-2">
-                Body Preview
-              </span>
-              <div className="whitespace-pre-line text-xs sm:text-sm leading-relaxed text-zinc-300 font-sans">
-                {currentCard.bodyText}
-              </div>
-            </div>
-
-            {/* Rejection Tags Selection */}
-            {showRejectMenu && (
-              <div className="mt-4 p-3 bg-zinc-900/80 border border-red-900/50 space-y-2 animate-in fade-in">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-red-400 block">
-                  Why are you rejecting this variation?
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {REJECTION_TAGS.map((tag) => (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => handleRejectWithReason(tag)}
-                      className="rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-[11px] text-zinc-300 hover:border-red-500 hover:text-white hover:bg-red-950/40 transition-colors"
-                    >
-                      {tag}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => handleRejectWithReason()}
-                    className="rounded-lg border border-zinc-800 bg-transparent px-2.5 py-1 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
-                  >
-                    Skip Reason →
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Swipe Action Buttons */}
-            <div className="flex items-center justify-between gap-4 pt-6 mt-4 border-t border-zinc-800">
-              <button
-                type="button"
-                onClick={() => {
-                  if (showRejectMenu) {
-                    handleRejectWithReason();
-                  } else {
-                    setShowRejectMenu(true);
-                  }
-                }}
-                className="group flex flex-1 items-center justify-center gap-2 border border-zinc-800 bg-zinc-900/40 hover:bg-red-950/30 hover:border-red-800/80 py-3 text-xs font-semibold text-zinc-300 hover:text-red-300 transition-all rounded-lg"
+            <div className="grid grid-cols-2 gap-2 sm:flex">
+              <Button
+                variant="outline"
+                onClick={() => (showRejectMenu ? handleRejectWithReason() : setShowRejectMenu(true))}
+                aria-expanded={showRejectMenu}
               >
-                <div className="flex size-6 items-center justify-center border border-zinc-700 group-hover:border-red-500 bg-zinc-800 group-hover:bg-red-500/20 text-zinc-400 group-hover:text-red-400 transition-colors rounded-lg">
-                  <X className="size-3.5" />
-                </div>
-                <span>Reject Variation</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleApprove}
-                className="group flex flex-1 items-center justify-center gap-2 border border-zinc-800 bg-zinc-900/40 hover:bg-emerald-950/30 hover:border-emerald-800/80 py-3 text-xs font-semibold text-zinc-300 hover:text-emerald-300 transition-all rounded-lg"
-              >
-                <div className="flex size-6 items-center justify-center border border-zinc-700 group-hover:border-emerald-500 bg-zinc-800 group-hover:bg-emerald-500/20 text-zinc-400 group-hover:text-emerald-400 transition-colors rounded-lg">
-                  <Check className="size-3.5" />
-                </div>
-                <span>Approve Tone & Angle</span>
-              </button>
+                <X />
+                Reject
+              </Button>
+              <Button onClick={handleApprove}>
+                <Check />
+                Approve
+              </Button>
             </div>
           </div>
-        </div>
+        </Card>
       ) : !isLoadingMore ? (
-        /* Finished Calibration Screen */
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-8 text-center space-y-4 shadow-xl">
-          <div className="mx-auto flex size-12 items-center justify-center border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 rounded-lg">
-            <Check className="size-6" />
-          </div>
-          <div>
-            <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
-              Calibration Deck Completed
-            </h3>
-            <p className="text-xs sm:text-sm text-zinc-400 max-w-md mx-auto mt-1">
-              Reviewed {deck.length} variations · {approvedCount} approved ·{" "}
-              {deck.length - approvedCount} rejected. Ready to analyze feedback and lock in your
-              outbound tone.
-            </p>
-          </div>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-3">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setCurrentIndex(0);
-                setApprovedCount(0);
-                setShowRejectMenu(false);
-              }}
-              className="rounded-lg text-xs font-medium border-zinc-800 hover:border-zinc-700 w-full sm:w-auto h-9"
-            >
-              <RotateCcw className="size-3 mr-1.5" /> Re-swipe
+        <Card>
+          <CardHeader>
+            <CardTitle>All samples reviewed</CardTitle>
+            <CardDescription>
+              Next we rewrite the sequence to match the emails you approved, and steer away from the reasons you gave
+              for rejecting the others.
+            </CardDescription>
+          </CardHeader>
+          <dl className="mt-5 grid grid-cols-2 gap-px overflow-hidden border-y border-border bg-border [&>*]:bg-card">
+            <div className="p-5">
+              <dt className="text-[13px] text-muted-foreground">Approved</dt>
+              <dd className="tabular mt-1 text-[26px] font-semibold leading-none tracking-[-0.03em]">{approvedCount}</dd>
+            </div>
+            <div className="p-5">
+              <dt className="text-[13px] text-muted-foreground">Rejected</dt>
+              <dd className="tabular mt-1 text-[26px] font-semibold leading-none tracking-[-0.03em]">
+                {Math.max(0, total - approvedCount)}
+              </dd>
+            </div>
+          </dl>
+          <div className="flex flex-col-reverse gap-2 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <Button variant="outline" onClick={restart}>
+              <RotateCcw />
+              Review again
             </Button>
-            <Button
-              type="button"
-              onClick={handleFinish}
-              className="rounded-lg text-xs font-semibold bg-white hover:bg-zinc-200 text-black w-full sm:w-auto h-9 transition-all active:scale-[0.98]"
-            >
-              Adjust Copy to My Preferences ({approvedCount} approved){" "}
-              <ChevronRight className="size-3.5 ml-1" />
+            <Button onClick={() => onComplete(deck)}>
+              Rewrite my emails
+              <ArrowRight />
             </Button>
           </div>
-        </div>
+        </Card>
       ) : null}
 
-      {/* Inline Quick-Edit Modal */}
-      {editingSample && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-lg border border-zinc-800 bg-zinc-950 p-6 space-y-4 shadow-2xl font-sans">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                <Edit3 className="size-4 text-emerald-400" /> Edit Cold Email Copy
-              </h3>
-              <button
-                type="button"
-                onClick={() => setEditingSample(null)}
-                className="rounded-lg p-1 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3.5">
-              <div>
-                <label className="text-xs font-medium text-zinc-300 block mb-1.5">
-                  Subject Line
-                </label>
-                <input
-                  type="text"
-                  value={editSubject}
-                  onChange={(e) => setEditSubject(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-800 bg-black/60 px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-white"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-zinc-300 block mb-1.5">
-                  Email Body
-                </label>
-                <textarea
-                  rows={8}
-                  value={editBody}
-                  onChange={(e) => setEditBody(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-800 bg-black/60 p-3 text-xs font-sans text-white focus:outline-none focus:ring-1 focus:ring-white leading-relaxed"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-zinc-800">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setEditingSample(null)}
-                className="rounded-lg text-xs font-medium border-zinc-800 hover:border-zinc-700"
-              >
+      <Dialog open={!!editingSample} onOpenChange={(o) => !o && setEditingSample(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit this email</DialogTitle>
+            <DialogDescription>
+              Saving counts as an approval, and we use your edits as an example of how you write.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="flex flex-col gap-5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveEdit();
+            }}
+          >
+            <Field label="Subject">
+              <Input value={editSubject} onChange={(e) => setEditSubject(e.target.value)} />
+            </Field>
+            <Field label="Body">
+              <Textarea rows={9} value={editBody} onChange={(e) => setEditBody(e.target.value)} />
+            </Field>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditingSample(null)}>
                 Cancel
               </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={saveEdit}
-                className="rounded-lg text-xs font-semibold bg-white text-black hover:bg-zinc-200 transition-all active:scale-[0.98]"
-              >
-                Save & Approve
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+              <Button type="submit">Save and approve</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
