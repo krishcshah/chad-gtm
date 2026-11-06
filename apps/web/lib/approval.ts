@@ -10,7 +10,7 @@ import { getDb } from "./db";
  * Set SIGNUP_APPROVAL_REQUIRED="false" to let every account send immediately.
  */
 export const APPROVAL_REQUIRED_ERROR =
-  "Your account is waiting for approval. We review every new account before it can send from our mailboxes. You'll get an email when you're approved.";
+  "Your account is waiting for approval. We review every new account before it can send from our mailboxes.";
 
 export function approvalRequired(): boolean {
   return (process.env.SIGNUP_APPROVAL_REQUIRED ?? "true").toLowerCase() !== "false";

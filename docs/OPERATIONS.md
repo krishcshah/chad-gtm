@@ -471,7 +471,7 @@ Web = `chadgtm-web`, Engine = `chadgtm-worker`.
 | `NEXT_PUBLIC_APP_URL` | web (browser), engine fallback | no | `BETTER_AUTH_URL` | Inlined at build time |
 | `CRON_SECRET` | web | yes in production | – | Bearer token for `/api/engine/tick`; route is disabled in production without it |
 | `ADMIN_EMAILS` | web | no | – | Comma-separated emails that are admins **once the address is verified**. The main mechanism is `users.role = 'admin'` |
-| `ADMIN_EMAIL` | – | – | – | **No longer read.** Before deploying, give each admin `users.role = 'admin'` (or add a verified address to `ADMIN_EMAILS`); an admin who relied on `ADMIN_EMAIL` or the old hard-coded list loses the admin console otherwise |
+| `ADMIN_EMAIL` | – | – | – | Alias appended to `ADMIN_EMAILS`, same rule: grants admin only to a **verified** email. Without `SYSTEM_SMTP_*` no email is ever verified, so grant the first admin with `DATABASE_URL=... npx tsx scripts/make-admin.ts --email you@company.com [--dry-run]` (sets `users.role = 'admin'` and approves the account) |
 | `SIGNUP_APPROVAL_REQUIRED` | both | no | `true` | `false` lets new accounts send without admin approval. The engine also re-checks it every tick: campaigns of owners who are not approved (approval revoked) are skipped (`owner-not-approved`) |
 | `GEMINI_API_KEY` | both | recommended | – | Research, per-lead copy, reply triage. Without any key, heuristics are used |
 | `GOOGLE_API_KEY` | both | no | – | Alias for `GEMINI_API_KEY` |

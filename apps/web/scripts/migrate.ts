@@ -29,7 +29,10 @@ async function main() {
     // Cast around nested @types/pg duplicates in the monorepo.
     const db = drizzle(pool as any);
     console.log(`[migrate] applying migrations from ${migrationsFolder}`);
-    console.log(`[migrate] target ${url.replace(/:[^:@/]+@/, ":***@")}`);
+    // Only the database name: this runs inside a public Actions log.
+    console.log(`[migrate] target database ${new URL(url).pathname.replace(/^\//, "") || "(default)"}`);
+    // Don't queue behind long-running app queries holding table locks.
+    await pool.query("SET lock_timeout = '15s'");
     await baselineLegacyDatabase(pool);
     await migrate(db, { migrationsFolder });
     console.log("[migrate] ok");
@@ -73,6 +76,6 @@ async function baselineLegacyDatabase(pool: pg.Pool) {
 }
 
 main().catch((err) => {
-  console.error("[migrate] failed:", err);
+  console.error("[migrate] failed:", err instanceof Error ? err.message : String(err));
   process.exit(1);
 });

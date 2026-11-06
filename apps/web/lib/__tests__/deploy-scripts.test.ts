@@ -413,7 +413,8 @@ describe("operations docs", () => {
   it("does not document variables the code no longer reads as working", () => {
     expect(example).not.toMatch(/^#?\s*ENGINE_SYNC_MS=/m);
     expect(ops).not.toMatch(/\| `ENGINE_SYNC_MS` \| engine/);
-    expect(example).not.toMatch(/ADMIN_EMAIL[^S].*still read/);
-    expect(ops).toMatch(/\| `ADMIN_EMAIL` \| – \| – \| – \| \*\*No longer read\.\*\*/);
+    // ADMIN_EMAIL is read again (alias of ADMIN_EMAILS, verified emails only).
+    expect(ops).toMatch(/\| `ADMIN_EMAIL` \|.*verified/);
+    expect(ops).toMatch(/scripts\/make-admin\.ts/);
   });
 });

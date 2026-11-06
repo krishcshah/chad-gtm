@@ -6,7 +6,7 @@ import { lazyDb } from "./db";
 import { env } from "./env";
 import { resolveTrustedOrigins } from "./auth-trusted-origins";
 import { isSystemMailerConfigured, sendSystemEmail } from "@smartreach/email-engine/system-mailer";
-import { buildPasswordResetEmail, buildVerificationEmail } from "./system-emails";
+import { buildExistingAccountEmail, buildPasswordResetEmail, buildVerificationEmail } from "./system-emails";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "./password-rules";
 
 /**
@@ -69,6 +69,15 @@ export const auth = betterAuth({
       ? {
           sendResetPassword: async ({ user, url }: { user: { email: string; name?: string | null }; url: string }) => {
             sendInBackground("password reset", user.email, buildPasswordResetEmail({ name: user.name, url }));
+          },
+          // Sign-up with an address that already has an account: tell the owner
+          // (the UI deliberately shows the same "check your inbox" screen).
+          onExistingUserSignUp: async ({ user }: { user: { email: string; name?: string | null } }) => {
+            sendInBackground(
+              "existing account",
+              user.email,
+              buildExistingAccountEmail({ name: user.name, appUrl: env.APP_URL }),
+            );
           },
         }
       : {}),
