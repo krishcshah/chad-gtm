@@ -4,6 +4,8 @@ import { requireWorkspace } from "@/lib/session";
 import { listCampaigns } from "@/lib/queries";
 import { Badge, Button, Progress, cn } from "@smartreach/ui";
 import { formatDate } from "@smartreach/shared";
+import { getPostalHold } from "@/lib/postal-hold";
+import { PostalHoldNotice } from "../postal-hold-notice";
 import { CampaignActions } from "./campaign-actions";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +14,10 @@ export const metadata = { title: "Campaigns & Target Leads · AutoGTM" };
 
 export default async function CampaignsPage() {
   const { user, workspace } = await requireWorkspace();
-  const campaigns = await listCampaigns(user.id, workspace.id, workspace.isDefault);
+  const [campaigns, postalHold] = await Promise.all([
+    listCampaigns(user.id, workspace.id, workspace.isDefault),
+    getPostalHold(user.id),
+  ]);
 
   return (
     <div className="page-stack space-y-6 max-w-7xl mx-auto font-sans">
@@ -44,6 +49,8 @@ export default async function CampaignsPage() {
           </Link>
         </Button>
       </div>
+
+      <PostalHoldNotice hold={postalHold} />
 
       {campaigns.length === 0 ? (
         <div className="rounded-lg border border-dashed border-zinc-800 bg-zinc-950/40 p-12 text-center space-y-4 card-shine">

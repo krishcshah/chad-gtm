@@ -3,7 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../leads-directory", () => ({
   getDirectoryFacets: () => ({
     totalLeads: 100,
-    industries: ["Restaurants", "Real Estate", "Financial Services", "Hospital & Health Care", "Logistics and Supply Chain"].map(
+    industries: [
+      "Restaurants",
+      "Real Estate",
+      "Financial Services",
+      "Hospital & Health Care",
+      "Logistics and Supply Chain",
+    ].map(
       (value, i) => ({ value, label: value, count: 100 - i }),
     ),
     countries: [],
@@ -13,7 +19,7 @@ vi.mock("../leads-directory", () => ({
 }));
 vi.mock("../gtm-crawler", () => ({ crawlCompanyDomain: vi.fn() }));
 
-import { synthesizeGtmStrategy, type ScrapedCompanyData } from "../chad-gtm-research";
+import { matchIndustriesInNotes, synthesizeGtmStrategy, type ScrapedCompanyData } from "../chad-gtm-research";
 import { assessTargeting } from "../autopilot-policy";
 
 const KEYS = ["OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"] as const;
@@ -135,5 +141,133 @@ describe("synthesizeGtmStrategy targeting provenance (no AI key)", () => {
     const s = await synthesizeGtmStrategy(scraped());
     expect(s.icpProfile.targetingSource).toBe("ai");
     expect(assessTargeting(s.icpProfile).grounded).toBe(true);
+  });
+});
+
+function geminiBody(icpProfile: Record<string, unknown>) {
+  return {
+    candidates: [
+      { content: { parts: [{ text: JSON.stringify({ companyName: "Acme", icpProfile, offers: [] }) }] } },
+    ],
+  };
+}
+
+describe("targeting from the client's notes", () => {
+  beforeEach(() => {
+    for (const k of KEYS) {
+      saved[k] = process.env[k];
+      delete process.env[k];
+    }
+  });
+  afterEach(() => {
+    for (const k of KEYS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+    vi.unstubAllGlobals();
+  });
+
+  const blocked = () => scraped({ fetchFailed: true, combinedCorpus: "", failureReason: "403" });
+
+  it("lets a blocked site leave needs_research when the notes name the audience (AI key set)", async () => {
+    process.env.GEMINI_API_KEY = "test-key";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify(geminiBody({ industries: ["Logistics and Supply Chain"], targetTitles: ["Operations Manager"] })),
+          { status: 200 },
+        ),
+      ),
+    );
+    const s = await synthesizeGtmStrategy(blocked(), "We sell to logistics companies");
+    expect(s.icpProfile.targetingSource).toBe("ai");
+    expect(s.icpProfile.targetingGrounded).toBe(true);
+    expect(assessTargeting(s.icpProfile).grounded).toBe(true);
+  });
+
+  it("still refuses a blocked site with no notes (AI key set)", async () => {
+    process.env.GEMINI_API_KEY = "test-key";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify(geminiBody({ industries: ["Restaurants"], targetTitles: ["Owner"] })), { status: 200 }),
+      ),
+    );
+    const s = await synthesizeGtmStrategy(blocked());
+    expect(s.icpProfile.targetingGrounded).toBe(false);
+    expect(s.icpProfile.targetingIssue).toMatch(/couldn't read your website/);
+  });
+
+  it("falls back to industries the notes name when the model picks none (AI key set)", async () => {
+    process.env.GEMINI_API_KEY = "test-key";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify(geminiBody({ industries: [], targetTitles: [] })), { status: 200 })),
+    );
+    const s = await synthesizeGtmStrategy(blocked(), "dental clinics");
+    expect(s.icpProfile.targetingSource).toBe("heuristic");
+    expect(s.icpProfile.industries).toEqual(["Hospital & Health Care"]);
+    expect(s.icpProfile.targetTitles).toEqual(["Founder", "Owner", "CEO", "President"]);
+    expect(assessTargeting(s.icpProfile).grounded).toBe(true);
+  });
+
+  it("grounds the suggested examples in heuristic mode (no AI key)", async () => {
+    const dental = await synthesizeGtmStrategy(blocked(), "dental clinics");
+    expect(dental.icpProfile.targetingSource).toBe("heuristic");
+    expect(assessTargeting(dental.icpProfile).grounded).toBe(true);
+
+    const logistics = await synthesizeGtmStrategy(scraped(), "logistics companies");
+    expect(logistics.icpProfile.industries).toEqual(["Logistics and Supply Chain"]);
+    expect(assessTargeting(logistics.icpProfile).grounded).toBe(true);
+  });
+});
+
+describe("matchIndustriesInNotes", () => {
+  const directory = [
+    "Restaurants",
+    "Real Estate",
+    "Financial Services",
+    "Hospital & Health Care",
+    "Law Practice",
+    "Medical Practice",
+    "Logistics and Supply Chain",
+    "Logistics And Supply Chain",
+    "Real Estate,Residential Real Estate,Commercial Real Estate",
+    "Health, Wellness and Fitness",
+  ];
+
+  it("matches the examples the UI suggests", () => {
+    expect(matchIndustriesInNotes("dental clinics", directory)).toEqual(["Hospital & Health Care", "Medical Practice"]);
+    expect(matchIndustriesInNotes("logistics companies", directory)).toEqual(["Logistics and Supply Chain"]);
+    expect(matchIndustriesInNotes('"dental clinics" or "logistics companies"', directory)).toContain(
+      "Logistics and Supply Chain",
+    );
+  });
+
+  it("matches one plain mention, plurals and synonyms", () => {
+    expect(matchIndustriesInNotes("restaurant owners", directory)).toEqual(["Restaurants"]);
+    expect(matchIndustriesInNotes("law firms and attorneys", directory)).toEqual(["Law Practice"]);
+    expect(matchIndustriesInNotes("gyms and fitness studios", directory)).toEqual(["Health, Wellness and Fitness"]);
+  });
+
+  it("ignores generic words, compound facets and prototype keys", () => {
+    expect(matchIndustriesInNotes("services for real people", directory)).toEqual([]);
+    expect(matchIndustriesInNotes("constructor toString __proto__", directory)).toEqual([]);
+    expect(matchIndustriesInNotes("", directory)).toEqual([]);
+    expect(matchIndustriesInNotes("real estate agents", directory)).toEqual(["Real Estate"]);
+  });
+
+  it("only returns industries that exist in the directory", () => {
+    expect(matchIndustriesInNotes("dental clinics", ["Restaurants"])).toEqual([]);
+  });
+});
+
+describe("matchIndustriesInNotes generic words", () => {
+  it("does not match on plural generic words like 'institutions' or 'supplies'", () => {
+    const directory = ["Museums and Institutions", "Business Supplies and Equipment", "Restaurants"];
+    expect(matchIndustriesInNotes("financial institutions", directory)).toEqual([]);
+    expect(matchIndustriesInNotes("office supplies", directory)).toEqual([]);
+    expect(matchIndustriesInNotes("museums", directory)).toEqual(["Museums and Institutions"]);
   });
 });

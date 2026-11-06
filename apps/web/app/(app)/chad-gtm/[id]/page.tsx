@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/session";
 import { getDb } from "@/lib/db";
 import { getChadGtmRunAction } from "@/lib/chad-gtm-actions";
 import { buildPlanPreview, loadLaunchContext, runLaunchState } from "@/lib/autopilot-state";
+import { getPostalHold, NO_POSTAL_HOLD } from "@/lib/postal-hold";
 import { MissionControlView, type LaunchView } from "./mission-control-view";
 
 export const dynamic = "force-dynamic";
@@ -28,9 +29,16 @@ export default async function ChadGtmRunPage({
   const ctx = await loadLaunchContext(getDb(), user.id);
   const state = runLaunchState(data.run, ctx);
   const details = state.blockers.find((b) => b.kind === "details");
+  const { isSystemMailerConfigured } = await import("@smartreach/email-engine/system-mailer");
+  // A live run whose campaign the engine is holding for a missing postal address.
+  const postalHold = data.run.campaignId
+    ? await getPostalHold(user.id, { campaignId: data.run.campaignId })
+    : NO_POSTAL_HOLD;
   const launch: LaunchView = {
     phase: state.phase,
     approved: ctx.approved,
+    emailOnApprove: isSystemMailerConfigured(),
+    postalHold,
     reason:
       state.phase === "launch_failed"
         ? state.launchFailure?.message ?? null

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import {
   AlertTriangle,
   ArrowRight,
@@ -23,8 +24,12 @@ import {
 } from "@/lib/autopilot-actions";
 import type { RunPhase } from "@/lib/autopilot-policy";
 import type { PlanPreview } from "@/lib/autopilot-state";
+import { approvalCopy, awaitingApprovalText } from "@/lib/approval-copy";
 
 type Missing = NonNullable<AutopilotOutcome["missing"]>;
+
+/** Manual targeting: the client picks directory industries and titles themselves. */
+export const GUIDED_SETUP_HREF = "/chad-gtm?mode=guided";
 
 /** Badge label + colors per run phase (launcher list and mission control header). */
 export const PHASE_BADGE: Record<RunPhase, { label: string; dot: string; text: string; ring: string }> = {
@@ -187,6 +192,7 @@ export function LaunchStatePanel({
   reason,
   failureCode,
   approved,
+  emailOnApprove = false,
   companyLabel,
   missing,
   identity,
@@ -197,6 +203,8 @@ export function LaunchStatePanel({
   reason?: string | null;
   failureCode?: string | null;
   approved: boolean;
+  /** False when no system mailer is configured: approval is then not emailed. */
+  emailOnApprove?: boolean;
   companyLabel: string;
   missing?: Missing;
   identity?: { companyName: string; postalAddress: string };
@@ -255,6 +263,16 @@ export function LaunchStatePanel({
       <StateCard tone="amber" icon={<Target className="size-4" />} title="We need a hint about your audience">
         <p>{reason}</p>
         {researchRetry}
+        <p className="mt-3 text-xs text-zinc-500">
+          Retrying doesn&apos;t help if your site blocks automated visits. Pick your industries and titles yourself
+          instead:{" "}
+          <Link
+            href={GUIDED_SETUP_HREF}
+            className="inline-flex items-center gap-1 font-medium text-zinc-300 underline decoration-zinc-700 underline-offset-4 hover:decoration-zinc-400"
+          >
+            set up targeting manually (guided setup) <ArrowRight className="size-3" />
+          </Link>
+        </p>
       </StateCard>
     );
   }
@@ -265,8 +283,9 @@ export function LaunchStatePanel({
         <p>
           {approved
             ? "Your account is approved. Review the plan and sample emails below, then launch when you're ready."
-            : reason ||
-              "Your plan is ready. We review every new account before it can send from our mailboxes. You'll get an email when you're approved, and you can launch from this screen."}
+            : reason
+              ? approvalCopy(reason, emailOnApprove)
+              : awaitingApprovalText(emailOnApprove)}
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Button variant="brand" size="lg" onClick={retryLaunch} disabled={pending || !approved}>

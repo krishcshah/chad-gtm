@@ -47,6 +47,44 @@ describe("LaunchStatePanel", () => {
     await unmount();
   });
 
+  it("does not promise an approval email when no system mailer is configured", async () => {
+    const off = await render(
+      <LaunchStatePanel runId="r1" phase="awaiting_approval" approved={false} companyLabel="Acme" onChanged={noop} />,
+    );
+    expect(off.host.textContent).not.toMatch(/email/i);
+    expect(off.host.textContent).toContain("Check back here");
+    await off.unmount();
+
+    const stripped = await render(
+      <LaunchStatePanel
+        runId="r1"
+        phase="awaiting_approval"
+        reason="Your account is waiting for approval. You'll get an email when you're approved."
+        approved={false}
+        emailOnApprove={false}
+        companyLabel="Acme"
+        onChanged={noop}
+      />,
+    );
+    expect(stripped.host.textContent).not.toMatch(/get an email/i);
+    await stripped.unmount();
+
+    const on = await render(
+      <LaunchStatePanel runId="r1" phase="awaiting_approval" approved={false} emailOnApprove companyLabel="Acme" onChanged={noop} />,
+    );
+    expect(on.host.textContent).toContain("You'll get an email when you're approved");
+    await on.unmount();
+  });
+
+  it("links needs_research to guided setup so a blocked site is not a dead end", async () => {
+    const { host, unmount } = await render(
+      <LaunchStatePanel runId="r1" phase="needs_research" reason="We couldn't read your website." approved companyLabel="Acme" onChanged={noop} />,
+    );
+    const link = Array.from(host.querySelectorAll("a")).find((a) => a.textContent?.includes("guided setup"));
+    expect(link?.getAttribute("href")).toBe("/chad-gtm?mode=guided");
+    await unmount();
+  });
+
   it("offers retry research when targeting is not grounded", async () => {
     const { host, unmount } = await render(
       <LaunchStatePanel runId="r1" phase="needs_research" reason="We couldn't work out who to target." approved companyLabel="Acme" onChanged={noop} />,
