@@ -30,12 +30,18 @@ import { toggleChadGtmStatusAction, updateChadGtmVelocityAction } from "@/lib/ch
 import { setBookingUrlAction, setReplyAgentModeAction, type AutopilotOutcome } from "@/lib/autopilot-actions";
 import type { RunPhase } from "@/lib/autopilot-policy";
 import type { PlanPreview } from "@/lib/autopilot-state";
+import type { PostalHoldState } from "@/lib/postal-hold-policy";
 import { LaunchStatePanel, PhaseBadge, PlanPreviewCard } from "../launch-setup";
+import { PostalHoldNotice } from "../../postal-hold-notice";
 
 /** Launch state for a run that may not be live yet (computed on the server). */
 export interface LaunchView {
   phase: RunPhase;
   approved: boolean;
+  /** False without a system mailer: approval is not emailed, so the copy must not promise it. */
+  emailOnApprove: boolean;
+  /** Sends held because the workspace has no postal address (live runs only). */
+  postalHold: PostalHoldState;
   reason: string | null;
   failureCode: string | null;
   missing: NonNullable<AutopilotOutcome["missing"]>;
@@ -234,6 +240,8 @@ export function MissionControlView({
         </Link>
       )}
 
+      {!needsLaunch && <PostalHoldNotice hold={launch.postalHold} scope="campaign" />}
+
       {needsLaunch && (
         <LaunchStatePanel
           runId={runId}
@@ -241,6 +249,7 @@ export function MissionControlView({
           reason={launch.reason}
           failureCode={launch.failureCode}
           approved={launch.approved}
+          emailOnApprove={launch.emailOnApprove}
           companyLabel={run?.companyName || host}
           missing={launch.missing}
           identity={launch.identity}

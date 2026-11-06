@@ -39,9 +39,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const openRequests = await countOpenAgentRequests();
 
   let showApprovalBanner = false;
+  let emailOnApprove = false;
   if (approvalRequired()) {
     try {
       showApprovalBanner = !(await isApprovedToSend(user.id));
+      if (showApprovalBanner) {
+        const { isSystemMailerConfigured } = await import("@smartreach/email-engine/system-mailer");
+        emailOnApprove = isSystemMailerConfigured();
+      }
     } catch (err) {
       console.error("[AppLayout] Failed to check approval:", err);
     }
@@ -60,7 +65,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             openRequests={openRequests}
           />
           <AppMainContent>
-            {showApprovalBanner && <ApprovalBanner />}
+            {showApprovalBanner && <ApprovalBanner emailOnApprove={emailOnApprove} />}
             {children}
           </AppMainContent>
           <CommandPalette />

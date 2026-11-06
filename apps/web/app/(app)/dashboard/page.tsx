@@ -20,6 +20,8 @@ import { Badge, Button } from "@smartreach/ui";
 import { requireWorkspace } from "@/lib/session";
 import { getActiveCampaigns, getDashboardStats, getRecentActivity } from "@/lib/queries";
 import { getDb, ensureChadGtmTables } from "@/lib/db";
+import { getPostalHold } from "@/lib/postal-hold";
+import { PostalHoldNotice } from "../postal-hold-notice";
 import { ActivityFeed } from "./activity-feed";
 import { PerformanceBreakdown } from "./performance-breakdown";
 
@@ -54,7 +56,8 @@ export default async function DashboardPage() {
   const db = getDb();
   await ensureChadGtmTables(db);
 
-  const [stats, activity, activeCampaigns, recentReplies, gtmRuns, [opensRow]] = await Promise.all([
+  const [postalHold, stats, activity, activeCampaigns, recentReplies, gtmRuns, [opensRow]] = await Promise.all([
+    getPostalHold(user.id),
     getDashboardStats(user.id, workspace.id, workspace.isDefault),
     getRecentActivity(user.id, 20),
     getActiveCampaigns(user.id, workspace.id, workspace.isDefault),
@@ -120,6 +123,8 @@ export default async function DashboardPage() {
             </Link>
           </Button>
         </div>
+
+        <PostalHoldNotice hold={postalHold} />
 
         {/* 4 Core Modern KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">

@@ -1,7 +1,12 @@
 import { Clock } from "lucide-react";
+import { approvalBannerText } from "@/lib/approval-copy";
 
-/** Slim notice for accounts that are waiting for admin approval to send. */
-export function ApprovalBanner() {
+/**
+ * Slim notice for accounts that are waiting for admin approval to send.
+ * `emailOnApprove` is false when no system mailer is configured: approval is
+ * then not emailed, so the banner must not promise an email.
+ */
+export function ApprovalBanner({ emailOnApprove }: { emailOnApprove: boolean }) {
   return (
     <div
       role="status"
@@ -10,7 +15,7 @@ export function ApprovalBanner() {
       <Clock className="mt-0.5 size-3.5 shrink-0 text-amber-400" />
       <p>
         <span className="font-semibold text-amber-100">Your account is pending approval.</span>{" "}
-        Set everything up now. Nothing sends until we approve your account, and we&apos;ll email you when we do.
+        {approvalBannerText(emailOnApprove)}
       </p>
     </div>
   );

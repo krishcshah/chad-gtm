@@ -20,6 +20,18 @@ export async function fetchUserDetailAction(targetUserId: string) {
   return await getUserDetailedActivity(user, targetUserId);
 }
 
+/**
+ * Next.js redirect()/notFound() work by throwing. A try/catch that turns every
+ * error into { ok: false, error } would swallow them and show "NEXT_REDIRECT"
+ * instead of sending an expired session to /login, so rethrow those.
+ */
+function rethrowIfNavigation(err: unknown): void {
+  const digest = (err as { digest?: unknown } | null)?.digest;
+  if (typeof digest === "string" && (digest.startsWith("NEXT_REDIRECT") || digest.startsWith("NEXT_HTTP_ERROR_FALLBACK") || digest === "NEXT_NOT_FOUND")) {
+    throw err;
+  }
+}
+
 /** Server-side admin gate for every action below. */
 async function requireAdminUser() {
   const user = await requireUser();
@@ -102,7 +114,15 @@ export async function approveUserAction(targetUserId: string): Promise<ApprovalA
       return { ok: true, emailed: false, warning: "Approved. No system mailer configured, so no email was sent." };
     }
     try {
-      const email = buildApprovalEmail({ name: row.name, appUrl: process.env.APP_URL });
+      // Approval does not launch anything: link the client to their latest run to launch it.
+      const [latestRun] = await db
+        .select({ id: schema.chadGtmRuns.id })
+        .from(schema.chadGtmRuns)
+        .where(eq(schema.chadGtmRuns.userId, targetUserId))
+        .orderBy(desc(schema.chadGtmRuns.createdAt))
+        .limit(1)
+        .catch(() => [] as Array<{ id: string }>);
+      const email = buildApprovalEmail({ name: row.name, appUrl: process.env.APP_URL, runId: latestRun?.id });
       await sendSystemEmail({ to: row.email, ...email });
       return { ok: true, emailed: true };
     } catch (err) {
@@ -110,6 +130,7 @@ export async function approveUserAction(targetUserId: string): Promise<ApprovalA
       return { ok: true, emailed: false, warning: "Approved, but the approval email could not be sent." };
     }
   } catch (err) {
+    rethrowIfNavigation(err);
     return { ok: false, error: err instanceof Error ? err.message : "Could not approve account." };
   }
 }
@@ -130,6 +151,7 @@ export async function revokeUserApprovalAction(targetUserId: string): Promise<Ap
     if (rows.length === 0) return { ok: false, error: "Account not found, or it is an admin." };
     return { ok: true, emailed: false };
   } catch (err) {
+    rethrowIfNavigation(err);
     return { ok: false, error: err instanceof Error ? err.message : "Could not revoke approval." };
   }
 }

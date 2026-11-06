@@ -85,10 +85,23 @@ export default function SignupPage() {
       >
         <div className="space-y-4">
           <AuthNotice>
-            We sent a confirmation link to{" "}
-            <span className="font-medium text-zinc-100">{pendingEmail}</span>. Open it to confirm
-            your email and you&apos;ll be signed in. The link expires in 24 hours.
+            If <span className="font-medium text-zinc-100">{pendingEmail}</span> is new to AutoGTM, we sent it
+            a confirmation link. Open it to confirm your email and you&apos;ll be signed in. The link expires in
+            24 hours.
           </AuthNotice>
+          {/* For privacy the server answers the same way for an address that already
+              has an account, and sends that address no new link. Say so plainly. */}
+          <p data-testid="existing-account-hint" className="text-[12px] leading-relaxed text-zinc-400">
+            Already signed up with this address? No new link is sent for an existing account.{" "}
+            <Link href="/login" className="text-zinc-100 hover:underline font-medium">
+              Sign in
+            </Link>{" "}
+            or{" "}
+            <Link href="/forgot-password" className="text-zinc-100 hover:underline font-medium">
+              reset your password
+            </Link>{" "}
+            instead.
+          </p>
           <Button
             type="button"
             variant="outline"
@@ -96,12 +109,13 @@ export default function SignupPage() {
             onClick={resend}
             disabled={resendState === "sending" || resendState === "sent"}
           >
-            {resendState === "sending"
-              ? "Sending…"
-              : resendState === "sent"
-                ? "Sent. Check your inbox"
-                : "Resend the link"}
+            {resendState === "sending" ? "Sending…" : resendState === "sent" ? "Requested" : "Resend the link"}
           </Button>
+          {resendState === "sent" && (
+            <p className="text-center text-[11px] text-zinc-500">
+              If this address still needs confirming, a new link is on its way. Nothing arrived? Sign in instead.
+            </p>
+          )}
           {resendState === "error" && (
             <p className="text-center text-[11px] text-rose-400">
               Couldn&apos;t resend right now. Wait a minute and try again.

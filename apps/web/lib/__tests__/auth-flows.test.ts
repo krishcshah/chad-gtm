@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { authLinkErrorMessage, firstParam, verifiedRedirectTarget } from "../auth-redirects";
 import { validateNewPassword } from "../password-rules";
 import {
+  approvalLaunchUrl,
   buildApprovalEmail,
+  buildExistingAccountEmail,
   buildPasswordResetEmail,
   buildVerificationEmail,
   escapeHtml,
@@ -56,10 +58,38 @@ describe("system emails", () => {
     expect(reset.text).toContain("Hi Dana,");
     expect(reset.text).toContain("https://a.test/r");
     const approved = buildApprovalEmail({ name: "Dana", appUrl: "https://autogtm.tech/" });
-    expect(approved.text).toContain("https://autogtm.tech/dashboard");
+    expect(approved.text).toContain("https://autogtm.tech/chad-gtm");
     const noUrl = buildApprovalEmail({ name: null, appUrl: "" });
     expect(noUrl.text).toContain("Hi there,");
     expect(noUrl.text).not.toContain("undefined");
+  });
+});
+
+describe("approval email copy", () => {
+  it("does not claim campaigns are sending and links to the run to launch it", () => {
+    const mail = buildApprovalEmail({ name: "Dana", appUrl: "https://autogtm.tech", runId: "run_123" });
+    expect(mail.text).toContain("Your AutoGTM account is approved.");
+    expect(mail.text).toMatch(/Open AutoGTM to review your plan and launch your campaign/);
+    expect(mail.text).not.toMatch(/can now send/i);
+    expect(mail.text).toContain("https://autogtm.tech/chad-gtm/run_123");
+    expect(mail.html).toContain('href="https://autogtm.tech/chad-gtm/run_123"');
+    expect(mail.text).not.toContain("/dashboard");
+  });
+
+  it("falls back to the launcher and rejects odd run ids", () => {
+    expect(approvalLaunchUrl("https://a.test/", null)).toBe("https://a.test/chad-gtm");
+    expect(approvalLaunchUrl("https://a.test", "../x?y")).toBe("https://a.test/chad-gtm");
+    expect(approvalLaunchUrl("", "run_1")).toBe("");
+  });
+});
+
+describe("existing-account sign-up email", () => {
+  it("points to sign in and password reset", () => {
+    const mail = buildExistingAccountEmail({ name: "Dana", appUrl: "https://autogtm.tech/" });
+    expect(mail.subject).toMatch(/already have/);
+    expect(mail.text).toContain("https://autogtm.tech/login");
+    expect(mail.text).toContain("https://autogtm.tech/forgot-password");
+    expect(buildExistingAccountEmail({ appUrl: "" }).text).toMatch(/Forgot password/);
   });
 });
 
