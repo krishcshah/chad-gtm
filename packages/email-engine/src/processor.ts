@@ -7,14 +7,15 @@
  * backoff, and recovers jobs stuck in "processing" after a crash.
  */
 import {
+  applyComplianceFooter,
   buildUnsubscribeApiUrl,
+  buildUnsubscribeUrl,
   createUnsubscribeToken,
   listUnsubscribeHeaders,
-  matchesSuppression,
   schema,
 } from "@smartreach/database";
-import { addSeconds, nowIso, randomBetween } from "@smartreach/shared";
-import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
+import { addSeconds, randomBetween } from "@smartreach/shared";
+import { and, asc, eq, lte } from "drizzle-orm";
 import type { EngineDb, JobRow, SenderRow } from "./db-port";
 import { makeTransport } from "./mailer";
 import {
@@ -22,13 +23,24 @@ import {
   recordSend,
   releaseSendSlot,
   reserveSendSlot,
-  HARD_MAX_PER_SENDER_PER_DAY,
+  senderDailyCap,
 } from "./rotation";
 import { isEngineDryRun, workerOwnsJob } from "./queue-mode";
 import { advanceSequenceAfterSend, loadCampaignSequenceSteps } from "./sequence";
+import { appUrl, appUrlReadyForLiveSend, engineBatchSize } from "./env";
+import { isSuppressedFor } from "./suppression";
+import { classifySmtpError, failureBlamesSender } from "./smtp-errors";
+import { completeBodies } from "./body-format";
+import { recordHardBounce } from "./bounces";
 
-const BATCH = Number(process.env.ENGINE_BATCH_SIZE ?? 25);
 const STUCK_AFTER_MS = 3 * 60_000;
+/** How long a job waits when it cannot legally go out yet (no postal address / APP_URL). */
+const HOLD_SEC = 3600;
+
+export const POSTAL_ADDRESS_HOLD_REASON =
+  "Held: add your business postal address in Settings. Every cold email must show it (CAN-SPAM).";
+export const APP_URL_HOLD_REASON =
+  "Held: the engine has no public APP_URL, so the unsubscribe link would not work.";
 
 export interface ProcessResult {
   sent: number;
@@ -36,6 +48,8 @@ export interface ProcessResult {
   retried: number;
   recovered: number;
   skipped: number;
+  /** Jobs held back because they could not legally go out yet. */
+  held: number;
 }
 
 export function injectEmailTracking(
@@ -52,7 +66,9 @@ export function injectEmailTracking(
   const trackedHtml = html.replace(
     /<a\b([^>]*?)href=(["'])(https?:\/\/[^"'\s>]+)\2([^>]*)>/gi,
     (match, prefix, quote, originalUrl, suffix) => {
-      if (originalUrl.includes("/api/track/")) {
+      // Never wrap our own tracking or unsubscribe links: the opt-out must
+      // work directly, without a redirect through the click tracker.
+      if (originalUrl.includes("/api/track/") || /\/(?:api\/)?unsubscribe\b/i.test(originalUrl)) {
         return match;
       }
       const trackingUrl = `${cleanBaseUrl}/api/track/click?jid=${encodeURIComponent(jobId)}&url=${encodeURIComponent(originalUrl)}`;
@@ -74,15 +90,8 @@ export function injectEmailTracking(
   return `${trackedHtml}\n${openPixel}`;
 }
 
-const trackingAppUrl = (
-  process.env.APP_URL ||
-  process.env.NEXT_PUBLIC_APP_URL ||
-  process.env.BETTER_AUTH_URL ||
-  "https://smart-reach-staging.vercel.app"
-).replace(/\/+$/, "");
-
 /** Claim due jobs: conditional CAS update makes it safe across overlapping workers. */
-export async function claimDueJobs(db: EngineDb, now = new Date(), limit = BATCH): Promise<JobRow[]> {
+export async function claimDueJobs(db: EngineDb, now = new Date(), limit = engineBatchSize()): Promise<JobRow[]> {
   const dryRun = isEngineDryRun();
   const due: JobRow[] = await db
     .select()
@@ -134,7 +143,90 @@ export async function recoverStuckJobs(db: EngineDb, now = new Date()): Promise<
   return stuck.length;
 }
 
-export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "retry" | "failed" | "skipped"> {
+export type JobOutcome = "sent" | "retry" | "failed" | "skipped" | "held";
+
+/**
+ * Final bodies for a cold sequence email: both parts filled in, then the
+ * compliance footer (company, postal address, unsubscribe link) on each.
+ * Pure — the processor adds tracking to the HTML afterwards.
+ */
+export function buildOutgoingBodies(input: {
+  text: string;
+  html: string;
+  companyName: string;
+  postalAddress: string;
+  unsubUrl: string;
+}): { text: string; html: string } {
+  const parts = completeBodies(input.text, input.html);
+  return applyComplianceFooter(parts, {
+    companyName: input.companyName,
+    postalAddress: input.postalAddress,
+    unsubUrl: input.unsubUrl,
+  });
+}
+
+/** Sender identity for the footer: workspace settings, else the autopilot run. */
+async function loadComplianceInfo(
+  db: EngineDb,
+  campaign: { id: string; userId: string },
+): Promise<{ companyName: string; postalAddress: string }> {
+  const settingsRows: { companyName?: string; postalAddress?: string }[] = await db
+    .select({
+      companyName: schema.workspaceSettings.companyName,
+      postalAddress: schema.workspaceSettings.postalAddress,
+    })
+    .from(schema.workspaceSettings)
+    .where(eq(schema.workspaceSettings.userId, campaign.userId))
+    .limit(1);
+  const postalAddress = String(settingsRows[0]?.postalAddress ?? "").trim();
+  let companyName = String(settingsRows[0]?.companyName ?? "").trim();
+  if (!companyName) {
+    const runs: { companyName?: string }[] = await db
+      .select({ companyName: schema.chadGtmRuns.companyName })
+      .from(schema.chadGtmRuns)
+      .where(eq(schema.chadGtmRuns.campaignId, campaign.id))
+      .limit(1);
+    companyName = String(runs[0]?.companyName ?? "").trim();
+  }
+  return { companyName, postalAddress };
+}
+
+/** Put the job back in the queue with a visible reason (nothing is sent). */
+async function holdJob(db: EngineDb, job: JobRow, reason: string, seconds = HOLD_SEC): Promise<void> {
+  const nowS = new Date().toISOString();
+  await db
+    .update(schema.emailJobs)
+    .set({
+      status: "pending",
+      scheduledFor: addSeconds(new Date(), seconds).toISOString(),
+      processingAt: null,
+      lastError: reason,
+      updatedAt: nowS,
+    })
+    .where(eq(schema.emailJobs.id, job.id));
+}
+
+/**
+ * The job's mailbox is gone or disabled: drop the unsent job and hand the
+ * lead back to the scheduler, which re-renders it for another mailbox (the
+ * sticky-sender rule allows a switch only in this case).
+ */
+async function releaseToScheduler(db: EngineDb, job: JobRow, reason: string): Promise<void> {
+  const nowS = new Date().toISOString();
+  const deleted: { id: string }[] = await db
+    .delete(schema.emailJobs)
+    .where(and(eq(schema.emailJobs.id, job.id), eq(schema.emailJobs.status, "processing")))
+    .returning({ id: schema.emailJobs.id });
+  if (deleted.length === 0) return;
+  await db
+    .update(schema.campaignLeads)
+    .set({ status: "queued", scheduledFor: nowS, lastError: reason, updatedAt: nowS })
+    .where(and(eq(schema.campaignLeads.id, job.campaignLeadId), eq(schema.campaignLeads.status, "scheduled")));
+}
+
+const UNSENDABLE_LEAD_STATUSES = new Set(["bounced", "unsubscribed", "blocked"]);
+
+export async function processJob(db: EngineDb, job: JobRow): Promise<JobOutcome> {
   const nowS = new Date().toISOString();
 
   // Load sender + campaign (fresh, to honor just-paused states)
@@ -155,45 +247,64 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
       .where(eq(schema.emailJobs.id, job.id));
     return "skipped";
   }
-  // Lead replied (or was deleted) since scheduling → cancel
+  // Lead replied, bounced, opted out (or was deleted) since scheduling → cancel
   const leads = await db.select().from(schema.leads).where(eq(schema.leads.id, job.leadId)).limit(1);
   const lead = leads[0];
-  if (!lead || lead.deletedAt || (campaign.stopOnReply && lead.status === "replied")) {
+  if (
+    !lead ||
+    lead.deletedAt ||
+    UNSENDABLE_LEAD_STATUSES.has(String(lead.status)) ||
+    (campaign.stopOnReply && lead.status === "replied")
+  ) {
     await cancelJobChain(db, job, "lead-no-longer-sendable");
     return "skipped";
   }
 
-  // F15: re-check suppression at send time
-  const suppressionRows: { value: string }[] = await db
-    .select({ value: schema.suppressions.value })
-    .from(schema.suppressions)
-    .where(eq(schema.suppressions.userId, campaign.userId));
-  if (matchesSuppression(job.toEmail, suppressionRows.map((r) => r.value))) {
+  // F15: re-check suppression at send time — this user's list plus global
+  // opt-outs (unsubscribe / bounce / complaint) recorded under any user.
+  if (await isSuppressedFor(db, campaign.userId, job.toEmail)) {
     await cancelJobChain(db, job, "suppressed");
     return "skipped";
   }
 
-  // Sender died since scheduling → requeue for the scheduler to reassign
+  // Mailbox gone or disabled since scheduling → back to the scheduler
   if (!sender || sender.status !== "active") {
-    await db
-      .update(schema.emailJobs)
-      .set({ status: "pending", scheduledFor: addSeconds(new Date(), 600).toISOString(), processingAt: null, updatedAt: nowS })
-      .where(eq(schema.emailJobs.id, job.id));
+    await releaseToScheduler(db, job, "sender-unavailable");
     return "skipped";
+  }
+
+  // Compliance: no postal address → nothing goes out.
+  const compliance = await loadComplianceInfo(db, campaign);
+  if (!compliance.postalAddress) {
+    await holdJob(db, job, POSTAL_ADDRESS_HOLD_REASON);
+    return "held";
+  }
+  const dryRun = isEngineDryRun();
+  if (!dryRun && !appUrlReadyForLiveSend()) {
+    console.error(`[processor] ${APP_URL_HOLD_REASON} Set APP_URL (e.g. https://autogtm.tech) and restart.`);
+    await holdJob(db, job, APP_URL_HOLD_REASON, 600);
+    return "held";
   }
 
   let reserved = false;
 
   try {
-    // Send bodies as enqueued. RFC 8058 List-Unsubscribe headers are added
-    // below; {{unsubscribe_url}} is resolved at schedule time when the
-    // template includes it.
-    const textBody = job.bodyText || "";
-    const rawHtml = job.bodyHtml || job.bodyText || "";
-    const htmlBody = injectEmailTracking(rawHtml, job.id, trackingAppUrl, {
+    // Links are built now (not at import time) from the configured APP_URL.
+    const baseUrl = appUrl();
+    const unsubToken = createUnsubscribeToken(campaign.userId, job.toEmail);
+    const unsubPageUrl = buildUnsubscribeUrl(baseUrl, unsubToken);
+    const unsubApiUrl = buildUnsubscribeApiUrl(baseUrl, unsubToken);
+    const bodies = buildOutgoingBodies({
+      text: job.bodyText || "",
+      html: job.bodyHtml || "",
+      companyName: compliance.companyName,
+      postalAddress: compliance.postalAddress,
+      unsubUrl: unsubPageUrl,
+    });
+    const textBody = bodies.text;
+    const htmlBody = injectEmailTracking(bodies.html, job.id, baseUrl, {
       trackOpens: campaign.trackOpens ?? true,
     });
-    const dryRun = isEngineDryRun();
 
     // Dry-run: prove enqueue→process path without live SMTP
     if (dryRun) {
@@ -232,10 +343,10 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
     // Atomic capacity reservation immediately before the network call. The
     // scheduler checks this too, but jobs can sit in the queue for hours; the
     // conditional upsert makes the cap safe even with overlapping workers.
-    const senderCap = Math.min(
-      sender.dailyLimit ?? HARD_MAX_PER_SENDER_PER_DAY,
-      campaign.maxEmailsPerSenderPerDay ?? HARD_MAX_PER_SENDER_PER_DAY,
-      HARD_MAX_PER_SENDER_PER_DAY,
+    // The cap includes the new-mailbox ramp (10/day, +5/day, up to 30).
+    const senderCap = senderDailyCap(
+      sender as SenderRow & { createdAt?: string },
+      campaign.maxEmailsPerSenderPerDay,
     );
     const reservation = await reserveSendSlot(db, {
       userId: campaign.userId,
@@ -263,8 +374,7 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
     const transporter = makeTransport(sender);
     let info;
     try {
-      const unsubToken = createUnsubscribeToken(campaign.userId, job.toEmail);
-      const unsubApiUrl = buildUnsubscribeApiUrl(trackingAppUrl, unsubToken);
+      // RFC 8058 one-click: List-Unsubscribe points at the POST endpoint.
       const unsubHeaders = listUnsubscribeHeaders(unsubApiUrl);
 
       let inReplyTo: string | undefined;
@@ -350,24 +460,28 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
         console.error("[processor] failed to release send reservation:", releaseErr);
       }
     }
+    const failure = classifySmtpError(err);
     const attempts = job.attempts + 1;
-    const message: string = err?.response || err?.message || "Send failed";
-    const code: number | undefined = err?.responseCode;
-    const permanent = !!code && code >= 500 && code < 600 && code !== 521 && code !== 542; // 5xx usually permanent (mailbox rejected);
-    // 4xx (rate limit, greylisting, timeout) → retry
-    const willRetry = !permanent && campaign.retryFailed && attempts < job.maxAttempts;
+    const message = failure.message;
+    // 4xx (rate limit, greylisting, timeout) and mailbox problems → retry;
+    // permanent 5xx for this recipient/message → fail the job.
+    const willRetry = !failure.permanent && campaign.retryFailed && attempts < job.maxAttempts;
 
-    // penalize sender health; mark failed below threshold
-    const health = Math.max(0, (sender.health ?? 100) - (permanent ? 25 : 10));
-    await db
-      .update(schema.senderAccounts)
-      .set({
-        health,
-        smtpStatus: "failed",
-        status: health < 50 ? "failed" : sender.status,
-        updatedAt: nowS,
-      })
-      .where(eq(schema.senderAccounts.id, sender.id));
+    // Only a broken MAILBOX (bad credentials, unreachable server) counts
+    // against the sender. Recipient- and content-level rejections never do.
+    if (failureBlamesSender(failure)) {
+      const definiteAuth = failure.kind === "auth" && failure.code !== 454;
+      const health = Math.max(0, (sender.health ?? 100) - (failure.kind === "auth" ? 25 : 10));
+      await db
+        .update(schema.senderAccounts)
+        .set({
+          health,
+          smtpStatus: "failed",
+          status: definiteAuth || health < 50 ? "failed" : sender.status,
+          updatedAt: nowS,
+        })
+        .where(eq(schema.senderAccounts.id, sender.id));
+    }
 
     if (willRetry) {
       const backoffSec = randomBetween(300, 900) * attempts; // 5–15 min × attempt
@@ -393,6 +507,27 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
       return "retry";
     }
 
+    if (failure.hardBounce) {
+      // The address does not exist: suppress it for every client and stop
+      // the rest of this lead's sequence. The mailbox is fine.
+      await recordHardBounce(db, {
+        email: job.toEmail,
+        leadId: job.leadId,
+        jobId: job.id,
+        campaignId: campaign.id,
+        ownerUserId: lead.userId || campaign.userId,
+        workspaceId: lead.workspaceId ?? null,
+        status: failure.enhanced || String(failure.code ?? "5.0.0"),
+        diagnostic: message,
+        via: "smtp",
+      });
+      await db
+        .update(schema.emailJobs)
+        .set({ attempts, processingAt: null, updatedAt: nowS })
+        .where(eq(schema.emailJobs.id, job.id));
+      return "failed";
+    }
+
     await db
       .update(schema.emailJobs)
       .set({ status: "failed", attempts, lastError: message, processingAt: null, updatedAt: nowS })
@@ -401,14 +536,6 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<"sent" | "r
       .update(schema.campaignLeads)
       .set({ status: "failed", attempts, lastError: message, updatedAt: nowS })
       .where(eq(schema.campaignLeads.id, job.campaignLeadId));
-    await db
-      .update(schema.leads)
-      .set({ status: permanent ? "bounced" : "contacted", updatedAt: nowS })
-      .where(eq(schema.leads.id, job.leadId));
-    await db
-      .update(schema.emailJobs)
-      .set({ status: "bounced" })
-      .where(and(eq(schema.emailJobs.id, job.id), sql`${permanent ? 1 : 0} = 1`));
     await db.insert(schema.activityLogs).values({
       id: crypto.randomUUID(),
       userId: campaign.userId,
@@ -433,7 +560,7 @@ async function cancelJobChain(db: EngineDb, job: JobRow, reason: string) {
 }
 
 export async function processTick(db: EngineDb, now = new Date()): Promise<ProcessResult> {
-  const result: ProcessResult = { sent: 0, failed: 0, retried: 0, recovered: 0, skipped: 0 };
+  const result: ProcessResult = { sent: 0, failed: 0, retried: 0, recovered: 0, skipped: 0, held: 0 };
   result.recovered = await recoverStuckJobs(db, now);
   const jobs = await claimDueJobs(db, now);
   for (const job of jobs) {
@@ -442,6 +569,7 @@ export async function processTick(db: EngineDb, now = new Date()): Promise<Proce
       if (r === "sent") result.sent++;
       else if (r === "retry") result.retried++;
       else if (r === "failed") result.failed++;
+      else if (r === "held") result.held++;
       else result.skipped++;
     } catch (err) {
       console.error(`[processor] job ${job.id} crashed:`, err);

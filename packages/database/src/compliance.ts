@@ -91,6 +91,43 @@ export function listUnsubscribeHeaders(unsubUrl: string): Record<string, string>
   };
 }
 
+/** Collapse whitespace and drop tags so "already contains X" checks are robust. */
+function flatten(s: string): string {
+  return s
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/** Lines of a postal address (newlines or commas in a single-line paste are kept as typed). */
+function addressLines(address: string): string[] {
+  return address
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+}
+
+/** True when the body already shows this postal address (any whitespace / tags). */
+export function hasPostalAddress(body: string, postalAddress: string): boolean {
+  const addr = flatten(addressLines(postalAddress).join(" "));
+  if (!addr) return false;
+  return flatten(body).includes(addr);
+}
+
+/** True when the body already carries a working unsubscribe link. */
+export function hasUnsubscribeLink(body: string, unsubUrl?: string): boolean {
+  if (!body) return false;
+  if (unsubUrl && body.includes(unsubUrl)) return true;
+  // Token links resolved from {{unsubscribe_url}} (any base, page or one-click API).
+  if (/\/(?:api\/)?unsubscribe\?token=[^\s"'<>]+/i.test(body)) return true;
+  // HTML-escaped query separators ("&amp;") still contain the path.
+  return /\/(?:api\/)?unsubscribe\?(?:[^"'\s<>]*&amp;)?token=/i.test(body);
+}
+
 export function ensurePostalFooter(
   body: string,
   opts: { postalAddress: string; companyName?: string; asHtml: boolean },
@@ -98,17 +135,18 @@ export function ensurePostalFooter(
   const address = opts.postalAddress.trim();
   if (!address) return body;
   const company = (opts.companyName ?? "").trim();
+  const lines = addressLines(address);
   if (opts.asHtml) {
     const marker = "data-sr-postal";
-    if (body.includes(marker)) return body;
-    const block = `<p ${marker}="1" style="margin-top:24px;font-size:12px;color:#666;">${
+    if (body.includes(marker) || hasPostalAddress(body, address)) return body;
+    const block = `<p ${marker}="1" style="margin-top:24px;font-size:12px;line-height:1.5;color:#666;">${
       company ? `${escapeHtml(company)}<br/>` : ""
-    }${escapeHtml(address).replace(/\n/g, "<br/>")}</p>`;
-    return `${body}\n${block}`;
+    }${lines.map(escapeHtml).join("<br/>")}</p>`;
+    return insertBeforeBodyEnd(body, block);
   }
-  const marker = "-- physical address --";
-  if (body.includes(marker)) return body;
-  return `${body}\n\n${marker}\n${company ? company + "\n" : ""}${address}`;
+  // Legacy marker from older footers: never append twice.
+  if (body.includes("-- physical address --") || hasPostalAddress(body, address)) return body;
+  return `${body.replace(/\s+$/, "")}\n\n--\n${company ? company + "\n" : ""}${lines.join("\n")}`;
 }
 
 export function ensureUnsubscribeFooter(
@@ -119,14 +157,74 @@ export function ensureUnsubscribeFooter(
   if (!url) return body;
   if (opts.asHtml) {
     const marker = "data-sr-unsub";
-    if (body.includes(marker)) return body;
-    return `${body}\n<p ${marker}="1" style="margin-top:16px;font-size:12px;color:#666;"><a href="${escapeAttr(
-      url,
-    )}">Unsubscribe</a></p>`;
+    if (body.includes(marker) || hasUnsubscribeLink(body, url)) return body;
+    return insertBeforeBodyEnd(
+      body,
+      `<p ${marker}="1" style="margin-top:8px;font-size:12px;color:#666;">Don't want these emails? <a href="${escapeAttr(
+        url,
+      )}">Unsubscribe</a></p>`,
+    );
   }
-  const marker = "Unsubscribe:";
-  if (body.includes(marker)) return body;
-  return `${body}\n\n${marker} ${url}`;
+  if (hasUnsubscribeLink(body, url)) return body;
+  return `${body.replace(/\s+$/, "")}\n\nDon't want these emails? Unsubscribe: ${url}`;
+}
+
+export interface ComplianceFooterOptions {
+  /** Sender company (the client the email is sent on behalf of). */
+  companyName?: string;
+  /** Physical postal address (CAN-SPAM). Required: callers must not send without it. */
+  postalAddress: string;
+  /** Recipient-specific unsubscribe page URL. */
+  unsubUrl: string;
+}
+
+/**
+ * Add the visible compliance footer — company, postal address, unsubscribe
+ * link — to BOTH parts of a cold email so text and HTML say the same thing.
+ * Each piece is skipped when that part already contains it (e.g. a template
+ * that resolved {{unsubscribe_url}}), so it never appears twice.
+ */
+export function applyComplianceFooter(
+  parts: { text: string; html: string },
+  opts: ComplianceFooterOptions,
+): { text: string; html: string } {
+  const postal = { postalAddress: opts.postalAddress, companyName: opts.companyName };
+  let text = ensurePostalFooter(parts.text, { ...postal, asHtml: false });
+  text = ensureUnsubscribeFooter(text, { unsubUrl: opts.unsubUrl, asHtml: false });
+  let html = ensurePostalFooter(parts.html, { ...postal, asHtml: true });
+  html = ensureUnsubscribeFooter(html, { unsubUrl: opts.unsubUrl, asHtml: true });
+  return { text, html };
+}
+
+function insertBeforeBodyEnd(html: string, block: string): string {
+  if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, `${block}</body>`);
+  return `${html}\n${block}`;
+}
+
+/**
+ * Opt-outs that follow the PERSON, not the client: the pool mailboxes are
+ * shared, so an unsubscribe, hard bounce or complaint recorded under any user
+ * blocks sends for every user. Manual and import suppressions stay per user.
+ */
+export const GLOBAL_SUPPRESSION_SOURCES = ["unsubscribe", "bounce", "complaint"] as const;
+
+export function isGlobalSuppressionSource(source: string | null | undefined): boolean {
+  return (GLOBAL_SUPPRESSION_SOURCES as readonly string[]).includes(String(source ?? ""));
+}
+
+/** Suppression values that could match an email: the address and its "@domain". */
+export function suppressionCandidates(email: string): string[] {
+  const n = normalizeEmail(email);
+  const d = domainSuppressionValue(emailDomain(n));
+  return d ? [n, d] : [n];
+}
+
+/** Rows that apply to `userId`: their own rows, plus everyone's global opt-outs. */
+export function applicableSuppressionValues(
+  rows: { value: string; userId: string; source?: string | null }[],
+  userId: string,
+): string[] {
+  return rows.filter((r) => r.userId === userId || isGlobalSuppressionSource(r.source)).map((r) => r.value);
 }
 
 function escapeHtml(s: string): string {

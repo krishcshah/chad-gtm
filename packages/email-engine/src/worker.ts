@@ -10,6 +10,7 @@ import { processTick } from "./processor";
 import { syncTick } from "./sync-replies";
 import { replyAgentTick } from "./reply-agent";
 import type { EngineDb } from "./db-port";
+import { heartbeatStats, writeHeartbeat } from "./heartbeat";
 
 export interface EngineTickOptions {
   withSync?: boolean;
@@ -48,9 +49,11 @@ export function startWorkerLoop(db: EngineDb, options: WorkerLoopOptions = {}): 
     try {
       const r = await engineTick(db, { withSync: ticks % syncEvery === syncEvery - 1 });
       ticks++;
+      await writeHeartbeat(db, { ok: true, stats: heartbeatStats(r) });
       options.onTick?.(r);
     } catch (err) {
       console.error("[worker] tick failed:", err);
+      await writeHeartbeat(db, { ok: false, error: String((err as Error)?.message || err) });
     } finally {
       running = false;
     }
