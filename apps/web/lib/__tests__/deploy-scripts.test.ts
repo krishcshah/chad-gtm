@@ -442,6 +442,19 @@ describe("migration 0012 foreign keys", () => {
   });
 });
 
+describe("deploy snapshots vs the web type check", () => {
+  // deploy-remote.sh parks the previous install as <dir>.prev inside the
+  // checkout. next build type-checks everything apps/web/tsconfig.json
+  // includes, so a parked apps/web/node_modules.prev broke the first real
+  // deploy (pg-types' index.test-d.ts imports 'tsd').
+  it("excludes apps/web/node_modules.prev from apps/web/tsconfig.json", () => {
+    const tsconfig = JSON.parse(fs.readFileSync(path.join(scriptsDir, "..", "apps", "web", "tsconfig.json"), "utf8"));
+    expect(tsconfig.exclude).toContain("node_modules.prev");
+    const deploy = fs.readFileSync(path.join(scriptsDir, "deploy-remote.sh"), "utf8");
+    expect(deploy).toContain('snapshot_dir "$d" "$d.prev"');
+  });
+});
+
 describe("operations docs", () => {
   const ops = fs.readFileSync(path.join(repoRoot, "docs/OPERATIONS.md"), "utf8");
   const example = fs.readFileSync(path.join(repoRoot, ".env.example"), "utf8");
