@@ -1,5 +1,22 @@
 import type { NextConfig } from "next";
 
+/**
+ * Baseline security headers for every route. No CSP on purpose: inline
+ * scripts/styles from Next and third-party widgets would need a nonce setup.
+ */
+export const SECURITY_HEADERS: Array<{ key: string; value: string }> = [
+  { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "X-Frame-Options", value: "DENY" },
+  {
+    key: "Permissions-Policy",
+    value:
+      "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), hid=(), " +
+      "midi=(), magnetometer=(), gyroscope=(), accelerometer=(), display-capture=(), browsing-topics=()",
+  },
+];
+
 const nextConfig: NextConfig = {
   // Production (`npm run build`) writes `.next`, which Vercel expects.
   // Local isolation from a concurrent `next dev` uses `build:isolated`
@@ -26,8 +43,13 @@ const nextConfig: NextConfig = {
   ],
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: false },
+  poweredByHeader: false,
   async headers() {
     return [
+      {
+        source: "/:path*",
+        headers: SECURITY_HEADERS,
+      },
       {
         source: "/:path*(ico|svg|png)",
         headers: [

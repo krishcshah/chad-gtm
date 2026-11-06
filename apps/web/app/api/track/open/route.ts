@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { getDb } from "@/lib/db";
 
@@ -16,25 +16,6 @@ export async function GET(req: Request) {
 
     if (jid) {
       const db = getDb();
-      // Ensure email_tracking_events table exists
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS email_tracking_events (
-          id text PRIMARY KEY,
-          user_id text NOT NULL,
-          campaign_id text,
-          job_id text,
-          lead_id text,
-          type text NOT NULL,
-          target_url text,
-          ip text,
-          user_agent text,
-          created_at text NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS email_tracking_user_type_idx ON email_tracking_events(user_id, type, created_at);
-        CREATE INDEX IF NOT EXISTS email_tracking_campaign_type_idx ON email_tracking_events(campaign_id, type, created_at);
-        CREATE INDEX IF NOT EXISTS email_tracking_job_idx ON email_tracking_events(job_id, type);
-      `).catch(() => {});
-
       const [job] = await db
         .select({
           id: schema.emailJobs.id,
