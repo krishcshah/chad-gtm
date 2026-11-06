@@ -2,9 +2,11 @@
 """Manual deploy of AutoGTM to the Oracle VM.
 
 Runs the same steps as .github/workflows/deploy.yml: take the shared deploy
-lock, fast-forward /home/ubuntu/chad-gtm to origin/main, then
-scripts/deploy-remote.sh (npm ci -> pg_dump -> db:migrate -> build ->
-pm2 reload chadgtm-web/chadgtm-worker -> health check).
+lock, fetch origin/main without touching the checkout, then run
+scripts/deploy-remote.sh from the fetched commit (preflight incl. env/database
+check -> fast-forward -> npm ci -> pg_dump -> db:migrate -> build ->
+pm2 reload chadgtm-web/chadgtm-worker -> health check). A failure before the
+reload restores the previous commit, node_modules and .next.
 
 Usage:
     SERVER_HOST=<vm ip or name> python3 scripts/deploy_remote_chadgtm.py
@@ -28,19 +30,28 @@ LOCK_FILE=/home/ubuntu/.openoutreach-deploy.lock
 # Same lock as SmartReach's deploy, so two builds never run at once on the VM.
 exec 9>>"$LOCK_FILE"
 echo "==> waiting for deploy lock $LOCK_FILE"
-flock -w 1800 9 || { echo "!! could not get the deploy lock within 30 minutes" >&2; exit 1; }
+# 10 min wait + a worst-case deploy (~25 min) stays well inside command_timeout (55m).
+flock -w 600 9 || { echo "!! could not get the deploy lock within 10 minutes" >&2; exit 1; }
 export DEPLOY_LOCK_HELD=1
 cd "$APP_DIR"
 branch="$(git rev-parse --abbrev-ref HEAD)"
 [ "$branch" = "main" ] || { echo "!! $APP_DIR is on branch $branch, expected main" >&2; exit 1; }
 # Old deploys ran npm install, which rewrote the lockfile; drop that drift.
 git checkout -- package-lock.json 2>/dev/null || true
-PREVIOUS_SHA="$(git rev-parse --short=12 HEAD)"
-export PREVIOUS_SHA
-# data/leads.db.gz is no longer tracked, so the pull deletes it: unpack it first if it is the only copy.
+# data/leads.db.gz is no longer tracked, so moving to main deletes it: unpack it first if it is the only copy.
 if [ ! -s data/leads.db ] && [ -s data/leads.db.gz ]; then gunzip -k data/leads.db.gz; fi
-git pull --ff-only origin main
-exec bash scripts/deploy-remote.sh
+# Fetch only: the checkout (and so the code the running processes restart
+# into) stays as it is until deploy-remote.sh's preflight has passed.
+git fetch --quiet origin main
+TARGET_SHA="$(git rev-parse FETCH_HEAD)"
+export TARGET_SHA APP_DIR
+DEPLOY_SCRIPTS_DIR="$(mktemp -d)/scripts"
+export DEPLOY_SCRIPTS_DIR
+git archive "$TARGET_SHA" scripts/deploy-remote.sh scripts/check-deploy-env.mjs | tar -x -C "${DEPLOY_SCRIPTS_DIR%/scripts}"
+rc=0
+bash "$DEPLOY_SCRIPTS_DIR/deploy-remote.sh" || rc=$?
+rm -rf "${DEPLOY_SCRIPTS_DIR%/scripts}"
+exit "$rc"
 '''
 
 
@@ -65,7 +76,8 @@ def main() -> int:
         'bash -s',
     ]
     print(f'Deploying origin/main to {user}@{host}:/home/ubuntu/chad-gtm ...', flush=True)
-    # Output streams straight to this terminal so progress and pm2 logs are visible.
+    # Output streams straight to this terminal. Application logs are never printed;
+    # read them on the VM with pm2 logs.
     res = subprocess.run(cmd, input=BOOTSTRAP.replace('\r', '').encode('utf-8'))
     if res.returncode == 0:
         print('Deploy finished.')

@@ -1322,291 +1322,507 @@ ALTER TABLE "verifications" ADD COLUMN IF NOT EXISTS "updated_at" timestamp with
 ALTER TABLE "workspace_settings" ALTER COLUMN "ai_model" SET DEFAULT 'gemini-3.8-flash';
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "activity_logs" ADD CONSTRAINT "activity_logs_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "activity_logs_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"activity_logs"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "activity_logs" ADD CONSTRAINT "activity_logs_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "agent_knowledge" ADD CONSTRAINT "agent_knowledge_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "agent_knowledge_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"agent_knowledge"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "agent_knowledge" ADD CONSTRAINT "agent_knowledge_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "agent_knowledge" ADD CONSTRAINT "agent_knowledge_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "agent_knowledge_workspace_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"agent_knowledge"') AND c.confrelid = to_regclass('"public"."workspaces"') AND cardinality(c.conkey) = 1 AND a.attname = 'workspace_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "agent_knowledge" ADD CONSTRAINT "agent_knowledge_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "agent_requests" ADD CONSTRAINT "agent_requests_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "agent_requests_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"agent_requests"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "agent_requests" ADD CONSTRAINT "agent_requests_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "agent_requests" ADD CONSTRAINT "agent_requests_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "agent_requests_workspace_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"agent_requests"') AND c.confrelid = to_regclass('"public"."workspaces"') AND cardinality(c.conkey) = 1 AND a.attname = 'workspace_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "agent_requests" ADD CONSTRAINT "agent_requests_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "agent_requests" ADD CONSTRAINT "agent_requests_run_id_chad_gtm_runs_id_fk" FOREIGN KEY ("run_id") REFERENCES "public"."chad_gtm_runs"("id") ON DELETE set null ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "agent_requests_run_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"agent_requests"') AND c.confrelid = to_regclass('"public"."chad_gtm_runs"') AND cardinality(c.conkey) = 1 AND a.attname = 'run_id' AND ra.attname = 'id' AND c.confdeltype = 'n' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "agent_requests" ADD CONSTRAINT "agent_requests_run_id_chad_gtm_runs_id_fk" FOREIGN KEY ("run_id") REFERENCES "public"."chad_gtm_runs"("id") ON DELETE set null ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "agent_requests" ADD CONSTRAINT "agent_requests_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE set null ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "agent_requests_campaign_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"agent_requests"') AND c.confrelid = to_regclass('"public"."campaigns"') AND cardinality(c.conkey) = 1 AND a.attname = 'campaign_id' AND ra.attname = 'id' AND c.confdeltype = 'n' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "agent_requests" ADD CONSTRAINT "agent_requests_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE set null ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "agent_requests" ADD CONSTRAINT "agent_requests_reply_id_replies_id_fk" FOREIGN KEY ("reply_id") REFERENCES "public"."replies"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "agent_requests_reply_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"agent_requests"') AND c.confrelid = to_regclass('"public"."replies"') AND cardinality(c.conkey) = 1 AND a.attname = 'reply_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "agent_requests" ADD CONSTRAINT "agent_requests_reply_id_replies_id_fk" FOREIGN KEY ("reply_id") REFERENCES "public"."replies"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "agent_requests" ADD CONSTRAINT "agent_requests_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE set null ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "agent_requests_lead_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"agent_requests"') AND c.confrelid = to_regclass('"public"."leads"') AND cardinality(c.conkey) = 1 AND a.attname = 'lead_id' AND ra.attname = 'id' AND c.confdeltype = 'n' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "agent_requests" ADD CONSTRAINT "agent_requests_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE set null ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "agent_runs_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"agent_runs"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "agent_runs_workspace_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"agent_runs"') AND c.confrelid = to_regclass('"public"."workspaces"') AND cardinality(c.conkey) = 1 AND a.attname = 'workspace_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "agent_steps" ADD CONSTRAINT "agent_steps_run_id_agent_runs_id_fk" FOREIGN KEY ("run_id") REFERENCES "public"."agent_runs"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "agent_steps_run_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"agent_steps"') AND c.confrelid = to_regclass('"public"."agent_runs"') AND cardinality(c.conkey) = 1 AND a.attname = 'run_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "agent_steps" ADD CONSTRAINT "agent_steps_run_id_agent_runs_id_fk" FOREIGN KEY ("run_id") REFERENCES "public"."agent_runs"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "ai_generations" ADD CONSTRAINT "ai_generations_run_id_agent_runs_id_fk" FOREIGN KEY ("run_id") REFERENCES "public"."agent_runs"("id") ON DELETE set null ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "ai_generations_run_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"ai_generations"') AND c.confrelid = to_regclass('"public"."agent_runs"') AND cardinality(c.conkey) = 1 AND a.attname = 'run_id' AND ra.attname = 'id' AND c.confdeltype = 'n' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "ai_generations" ADD CONSTRAINT "ai_generations_run_id_agent_runs_id_fk" FOREIGN KEY ("run_id") REFERENCES "public"."agent_runs"("id") ON DELETE set null ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "ai_generations" ADD CONSTRAINT "ai_generations_step_id_agent_steps_id_fk" FOREIGN KEY ("step_id") REFERENCES "public"."agent_steps"("id") ON DELETE set null ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "ai_generations_step_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"ai_generations"') AND c.confrelid = to_regclass('"public"."agent_steps"') AND cardinality(c.conkey) = 1 AND a.attname = 'step_id' AND ra.attname = 'id' AND c.confdeltype = 'n' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "ai_generations" ADD CONSTRAINT "ai_generations_step_id_agent_steps_id_fk" FOREIGN KEY ("step_id") REFERENCES "public"."agent_steps"("id") ON DELETE set null ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "ai_generations" ADD CONSTRAINT "ai_generations_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "ai_generations_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"ai_generations"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "ai_generations" ADD CONSTRAINT "ai_generations_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "b2b_database_access" ADD CONSTRAINT "b2b_database_access_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "b2b_database_access_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"b2b_database_access"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "b2b_database_access" ADD CONSTRAINT "b2b_database_access_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "support_tickets" ADD CONSTRAINT "support_tickets_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "support_tickets_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"support_tickets"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "support_tickets" ADD CONSTRAINT "support_tickets_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "support_tickets" ADD CONSTRAINT "support_tickets_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE set null ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "support_tickets_workspace_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"support_tickets"') AND c.confrelid = to_regclass('"public"."workspaces"') AND cardinality(c.conkey) = 1 AND a.attname = 'workspace_id' AND ra.attname = 'id' AND c.confdeltype = 'n' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "support_tickets" ADD CONSTRAINT "support_tickets_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE set null ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "campaign_leads" ADD CONSTRAINT "campaign_leads_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "campaign_leads_campaign_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"campaign_leads"') AND c.confrelid = to_regclass('"public"."campaigns"') AND cardinality(c.conkey) = 1 AND a.attname = 'campaign_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "campaign_leads" ADD CONSTRAINT "campaign_leads_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "campaign_leads" ADD CONSTRAINT "campaign_leads_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "campaign_leads_lead_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"campaign_leads"') AND c.confrelid = to_regclass('"public"."leads"') AND cardinality(c.conkey) = 1 AND a.attname = 'lead_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "campaign_leads" ADD CONSTRAINT "campaign_leads_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "campaign_senders" ADD CONSTRAINT "campaign_senders_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "campaign_senders_campaign_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"campaign_senders"') AND c.confrelid = to_regclass('"public"."campaigns"') AND cardinality(c.conkey) = 1 AND a.attname = 'campaign_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "campaign_senders" ADD CONSTRAINT "campaign_senders_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "campaign_senders" ADD CONSTRAINT "campaign_senders_sender_id_sender_accounts_id_fk" FOREIGN KEY ("sender_id") REFERENCES "public"."sender_accounts"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "campaign_senders_sender_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"campaign_senders"') AND c.confrelid = to_regclass('"public"."sender_accounts"') AND cardinality(c.conkey) = 1 AND a.attname = 'sender_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "campaign_senders" ADD CONSTRAINT "campaign_senders_sender_id_sender_accounts_id_fk" FOREIGN KEY ("sender_id") REFERENCES "public"."sender_accounts"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "campaigns" ADD CONSTRAINT "campaigns_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "campaigns_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"campaigns"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "campaigns" ADD CONSTRAINT "campaigns_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "campaigns" ADD CONSTRAINT "campaigns_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "campaigns_workspace_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"campaigns"') AND c.confrelid = to_regclass('"public"."workspaces"') AND cardinality(c.conkey) = 1 AND a.attname = 'workspace_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "campaigns" ADD CONSTRAINT "campaigns_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "campaigns" ADD CONSTRAINT "campaigns_lead_list_id_lead_lists_id_fk" FOREIGN KEY ("lead_list_id") REFERENCES "public"."lead_lists"("id") ON DELETE restrict ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "campaigns_lead_list_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"campaigns"') AND c.confrelid = to_regclass('"public"."lead_lists"') AND cardinality(c.conkey) = 1 AND a.attname = 'lead_list_id' AND ra.attname = 'id' AND c.confdeltype = 'r' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "campaigns" ADD CONSTRAINT "campaigns_lead_list_id_lead_lists_id_fk" FOREIGN KEY ("lead_list_id") REFERENCES "public"."lead_lists"("id") ON DELETE restrict ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "campaigns" ADD CONSTRAINT "campaigns_template_id_email_templates_id_fk" FOREIGN KEY ("template_id") REFERENCES "public"."email_templates"("id") ON DELETE restrict ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "campaigns_template_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"campaigns"') AND c.confrelid = to_regclass('"public"."email_templates"') AND cardinality(c.conkey) = 1 AND a.attname = 'template_id' AND ra.attname = 'id' AND c.confdeltype = 'r' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "campaigns" ADD CONSTRAINT "campaigns_template_id_email_templates_id_fk" FOREIGN KEY ("template_id") REFERENCES "public"."email_templates"("id") ON DELETE restrict ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "chad_gtm_runs" ADD CONSTRAINT "chad_gtm_runs_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "chad_gtm_runs_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"chad_gtm_runs"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "chad_gtm_runs" ADD CONSTRAINT "chad_gtm_runs_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "chad_gtm_runs" ADD CONSTRAINT "chad_gtm_runs_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "chad_gtm_runs_workspace_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"chad_gtm_runs"') AND c.confrelid = to_regclass('"public"."workspaces"') AND cardinality(c.conkey) = 1 AND a.attname = 'workspace_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "chad_gtm_runs" ADD CONSTRAINT "chad_gtm_runs_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "chad_gtm_runs" ADD CONSTRAINT "chad_gtm_runs_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE set null ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "chad_gtm_runs_campaign_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"chad_gtm_runs"') AND c.confrelid = to_regclass('"public"."campaigns"') AND cardinality(c.conkey) = 1 AND a.attname = 'campaign_id' AND ra.attname = 'id' AND c.confdeltype = 'n' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "chad_gtm_runs" ADD CONSTRAINT "chad_gtm_runs_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE set null ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "data_removal_requests" ADD CONSTRAINT "data_removal_requests_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "data_removal_requests_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"data_removal_requests"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'n' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "data_removal_requests" ADD CONSTRAINT "data_removal_requests_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "email_jobs" ADD CONSTRAINT "email_jobs_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "email_jobs_campaign_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"email_jobs"') AND c.confrelid = to_regclass('"public"."campaigns"') AND cardinality(c.conkey) = 1 AND a.attname = 'campaign_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "email_jobs" ADD CONSTRAINT "email_jobs_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "email_jobs" ADD CONSTRAINT "email_jobs_campaign_lead_id_campaign_leads_id_fk" FOREIGN KEY ("campaign_lead_id") REFERENCES "public"."campaign_leads"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "email_jobs_campaign_lead_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"email_jobs"') AND c.confrelid = to_regclass('"public"."campaign_leads"') AND cardinality(c.conkey) = 1 AND a.attname = 'campaign_lead_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "email_jobs" ADD CONSTRAINT "email_jobs_campaign_lead_id_campaign_leads_id_fk" FOREIGN KEY ("campaign_lead_id") REFERENCES "public"."campaign_leads"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "email_jobs" ADD CONSTRAINT "email_jobs_sender_id_sender_accounts_id_fk" FOREIGN KEY ("sender_id") REFERENCES "public"."sender_accounts"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "email_jobs_sender_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"email_jobs"') AND c.confrelid = to_regclass('"public"."sender_accounts"') AND cardinality(c.conkey) = 1 AND a.attname = 'sender_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "email_jobs" ADD CONSTRAINT "email_jobs_sender_id_sender_accounts_id_fk" FOREIGN KEY ("sender_id") REFERENCES "public"."sender_accounts"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "email_jobs" ADD CONSTRAINT "email_jobs_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "email_jobs_lead_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"email_jobs"') AND c.confrelid = to_regclass('"public"."leads"') AND cardinality(c.conkey) = 1 AND a.attname = 'lead_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "email_jobs" ADD CONSTRAINT "email_jobs_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "email_templates" ADD CONSTRAINT "email_templates_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "email_templates_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"email_templates"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "email_templates" ADD CONSTRAINT "email_templates_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "email_tracking_events" ADD CONSTRAINT "email_tracking_events_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "email_tracking_events_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"email_tracking_events"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "email_tracking_events" ADD CONSTRAINT "email_tracking_events_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "email_tracking_events" ADD CONSTRAINT "email_tracking_events_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "email_tracking_events_campaign_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"email_tracking_events"') AND c.confrelid = to_regclass('"public"."campaigns"') AND cardinality(c.conkey) = 1 AND a.attname = 'campaign_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "email_tracking_events" ADD CONSTRAINT "email_tracking_events_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "email_tracking_events" ADD CONSTRAINT "email_tracking_events_job_id_email_jobs_id_fk" FOREIGN KEY ("job_id") REFERENCES "public"."email_jobs"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "email_tracking_events_job_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"email_tracking_events"') AND c.confrelid = to_regclass('"public"."email_jobs"') AND cardinality(c.conkey) = 1 AND a.attname = 'job_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "email_tracking_events" ADD CONSTRAINT "email_tracking_events_job_id_email_jobs_id_fk" FOREIGN KEY ("job_id") REFERENCES "public"."email_jobs"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "email_tracking_events" ADD CONSTRAINT "email_tracking_events_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE set null ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "email_tracking_events_lead_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"email_tracking_events"') AND c.confrelid = to_regclass('"public"."leads"') AND cardinality(c.conkey) = 1 AND a.attname = 'lead_id' AND ra.attname = 'id' AND c.confdeltype = 'n' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "email_tracking_events" ADD CONSTRAINT "email_tracking_events_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE set null ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "lead_lists" ADD CONSTRAINT "lead_lists_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "lead_lists_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"lead_lists"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "lead_lists" ADD CONSTRAINT "lead_lists_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "lead_lists" ADD CONSTRAINT "lead_lists_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "lead_lists_workspace_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"lead_lists"') AND c.confrelid = to_regclass('"public"."workspaces"') AND cardinality(c.conkey) = 1 AND a.attname = 'workspace_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "lead_lists" ADD CONSTRAINT "lead_lists_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "lead_tags" ADD CONSTRAINT "lead_tags_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "lead_tags_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"lead_tags"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "lead_tags" ADD CONSTRAINT "lead_tags_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "leads" ADD CONSTRAINT "leads_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "leads_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"leads"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "leads" ADD CONSTRAINT "leads_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "leads" ADD CONSTRAINT "leads_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "leads_workspace_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"leads"') AND c.confrelid = to_regclass('"public"."workspaces"') AND cardinality(c.conkey) = 1 AND a.attname = 'workspace_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "leads" ADD CONSTRAINT "leads_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "leads" ADD CONSTRAINT "leads_list_id_lead_lists_id_fk" FOREIGN KEY ("list_id") REFERENCES "public"."lead_lists"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "leads_list_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"leads"') AND c.confrelid = to_regclass('"public"."lead_lists"') AND cardinality(c.conkey) = 1 AND a.attname = 'list_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "leads" ADD CONSTRAINT "leads_list_id_lead_lists_id_fk" FOREIGN KEY ("list_id") REFERENCES "public"."lead_lists"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "page_views" ADD CONSTRAINT "page_views_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "page_views_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"page_views"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "page_views" ADD CONSTRAINT "page_views_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "page_views" ADD CONSTRAINT "page_views_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE set null ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "page_views_workspace_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"page_views"') AND c.confrelid = to_regclass('"public"."workspaces"') AND cardinality(c.conkey) = 1 AND a.attname = 'workspace_id' AND ra.attname = 'id' AND c.confdeltype = 'n' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "page_views" ADD CONSTRAINT "page_views_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE set null ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "replies" ADD CONSTRAINT "replies_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "replies_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"replies"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "replies" ADD CONSTRAINT "replies_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "replies" ADD CONSTRAINT "replies_sender_id_sender_accounts_id_fk" FOREIGN KEY ("sender_id") REFERENCES "public"."sender_accounts"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "replies_sender_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"replies"') AND c.confrelid = to_regclass('"public"."sender_accounts"') AND cardinality(c.conkey) = 1 AND a.attname = 'sender_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "replies" ADD CONSTRAINT "replies_sender_id_sender_accounts_id_fk" FOREIGN KEY ("sender_id") REFERENCES "public"."sender_accounts"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "replies" ADD CONSTRAINT "replies_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE set null ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "replies_lead_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"replies"') AND c.confrelid = to_regclass('"public"."leads"') AND cardinality(c.conkey) = 1 AND a.attname = 'lead_id' AND ra.attname = 'id' AND c.confdeltype = 'n' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "replies" ADD CONSTRAINT "replies_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE set null ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "replies" ADD CONSTRAINT "replies_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE set null ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "replies_campaign_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"replies"') AND c.confrelid = to_regclass('"public"."campaigns"') AND cardinality(c.conkey) = 1 AND a.attname = 'campaign_id' AND ra.attname = 'id' AND c.confdeltype = 'n' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "replies" ADD CONSTRAINT "replies_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE set null ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "sender_accounts" ADD CONSTRAINT "sender_accounts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "sender_accounts_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"sender_accounts"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "sender_accounts" ADD CONSTRAINT "sender_accounts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "sender_accounts" ADD CONSTRAINT "sender_accounts_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "sender_accounts_workspace_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"sender_accounts"') AND c.confrelid = to_regclass('"public"."workspaces"') AND cardinality(c.conkey) = 1 AND a.attname = 'workspace_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "sender_accounts" ADD CONSTRAINT "sender_accounts_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "sequence_step_variants" ADD CONSTRAINT "sequence_step_variants_step_id_sequence_steps_id_fk" FOREIGN KEY ("step_id") REFERENCES "public"."sequence_steps"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "sequence_step_variants_step_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"sequence_step_variants"') AND c.confrelid = to_regclass('"public"."sequence_steps"') AND cardinality(c.conkey) = 1 AND a.attname = 'step_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "sequence_step_variants" ADD CONSTRAINT "sequence_step_variants_step_id_sequence_steps_id_fk" FOREIGN KEY ("step_id") REFERENCES "public"."sequence_steps"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "sequence_steps" ADD CONSTRAINT "sequence_steps_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "sequence_steps_campaign_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"sequence_steps"') AND c.confrelid = to_regclass('"public"."campaigns"') AND cardinality(c.conkey) = 1 AND a.attname = 'campaign_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "sequence_steps" ADD CONSTRAINT "sequence_steps_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "subscriptions_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"subscriptions"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "support_ticket_messages" ADD CONSTRAINT "support_ticket_messages_ticket_id_support_tickets_id_fk" FOREIGN KEY ("ticket_id") REFERENCES "public"."support_tickets"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "support_ticket_messages_ticket_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"support_ticket_messages"') AND c.confrelid = to_regclass('"public"."support_tickets"') AND cardinality(c.conkey) = 1 AND a.attname = 'ticket_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "support_ticket_messages" ADD CONSTRAINT "support_ticket_messages_ticket_id_support_tickets_id_fk" FOREIGN KEY ("ticket_id") REFERENCES "public"."support_tickets"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "support_ticket_messages" ADD CONSTRAINT "support_ticket_messages_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "support_ticket_messages_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"support_ticket_messages"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "support_ticket_messages" ADD CONSTRAINT "support_ticket_messages_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "suppressions" ADD CONSTRAINT "suppressions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "suppressions_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"suppressions"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "suppressions" ADD CONSTRAINT "suppressions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "suppressions" ADD CONSTRAINT "suppressions_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "suppressions_workspace_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"suppressions"') AND c.confrelid = to_regclass('"public"."workspaces"') AND cardinality(c.conkey) = 1 AND a.attname = 'workspace_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "suppressions" ADD CONSTRAINT "suppressions_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "unibox_messages" ADD CONSTRAINT "unibox_messages_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "unibox_messages_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"unibox_messages"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "unibox_messages" ADD CONSTRAINT "unibox_messages_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "unibox_messages" ADD CONSTRAINT "unibox_messages_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "unibox_messages_workspace_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"unibox_messages"') AND c.confrelid = to_regclass('"public"."workspaces"') AND cardinality(c.conkey) = 1 AND a.attname = 'workspace_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "unibox_messages" ADD CONSTRAINT "unibox_messages_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "unibox_messages" ADD CONSTRAINT "unibox_messages_reply_id_replies_id_fk" FOREIGN KEY ("reply_id") REFERENCES "public"."replies"("id") ON DELETE set null ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "unibox_messages_reply_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"unibox_messages"') AND c.confrelid = to_regclass('"public"."replies"') AND cardinality(c.conkey) = 1 AND a.attname = 'reply_id' AND ra.attname = 'id' AND c.confdeltype = 'n' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "unibox_messages" ADD CONSTRAINT "unibox_messages_reply_id_replies_id_fk" FOREIGN KEY ("reply_id") REFERENCES "public"."replies"("id") ON DELETE set null ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "unibox_messages" ADD CONSTRAINT "unibox_messages_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE set null ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "unibox_messages_lead_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"unibox_messages"') AND c.confrelid = to_regclass('"public"."leads"') AND cardinality(c.conkey) = 1 AND a.attname = 'lead_id' AND ra.attname = 'id' AND c.confdeltype = 'n' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "unibox_messages" ADD CONSTRAINT "unibox_messages_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE set null ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "unibox_messages" ADD CONSTRAINT "unibox_messages_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE set null ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "unibox_messages_campaign_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"unibox_messages"') AND c.confrelid = to_regclass('"public"."campaigns"') AND cardinality(c.conkey) = 1 AND a.attname = 'campaign_id' AND ra.attname = 'id' AND c.confdeltype = 'n' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "unibox_messages" ADD CONSTRAINT "unibox_messages_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE set null ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "unibox_messages" ADD CONSTRAINT "unibox_messages_sender_id_sender_accounts_id_fk" FOREIGN KEY ("sender_id") REFERENCES "public"."sender_accounts"("id") ON DELETE set null ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "unibox_messages_sender_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"unibox_messages"') AND c.confrelid = to_regclass('"public"."sender_accounts"') AND cardinality(c.conkey) = 1 AND a.attname = 'sender_id' AND ra.attname = 'id' AND c.confdeltype = 'n' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "unibox_messages" ADD CONSTRAINT "unibox_messages_sender_id_sender_accounts_id_fk" FOREIGN KEY ("sender_id") REFERENCES "public"."sender_accounts"("id") ON DELETE set null ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "usage_counters" ADD CONSTRAINT "usage_counters_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "usage_counters_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"usage_counters"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "usage_counters" ADD CONSTRAINT "usage_counters_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "workspace_settings" ADD CONSTRAINT "workspace_settings_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "workspace_settings_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"workspace_settings"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "workspace_settings" ADD CONSTRAINT "workspace_settings_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "workspace_settings" ADD CONSTRAINT "workspace_settings_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "workspace_settings_workspace_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"workspace_settings"') AND c.confrelid = to_regclass('"public"."workspaces"') AND cardinality(c.conkey) = 1 AND a.attname = 'workspace_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "workspace_settings" ADD CONSTRAINT "workspace_settings_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "workspaces" ADD CONSTRAINT "workspaces_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "workspaces_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"workspaces"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "workspaces" ADD CONSTRAINT "workspaces_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "accounts" ADD CONSTRAINT "accounts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "accounts_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"accounts"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "accounts" ADD CONSTRAINT "accounts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "sessions" ADD CONSTRAINT "sessions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ -- Skip when an equivalent FK already exists under another name (e.g. the "sessions_user_id_fkey" a runtime self-heal created).
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1] JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = c.confkey[1] WHERE c.contype = 'f' AND c.conrelid = to_regclass('"sessions"') AND c.confrelid = to_regclass('"public"."users"') AND cardinality(c.conkey) = 1 AND a.attname = 'user_id' AND ra.attname = 'id' AND c.confdeltype = 'c' AND c.confupdtype = 'a') THEN
+  ALTER TABLE "sessions" ADD CONSTRAINT "sessions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ END IF;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "activity_logs_user_idx" ON "activity_logs" USING btree ("user_id","created_at");

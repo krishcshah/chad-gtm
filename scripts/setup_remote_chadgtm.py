@@ -15,6 +15,8 @@ What it does on the VM (never touches /home/ubuntu/smart-reach):
     ONLY if they do not exist (mode 600) - it never overwrites or copies env files;
   - creates /home/ubuntu/backups (mode 700);
   - reports whether data/leads.db is present (ship it with scripts/stream_leads_db_to_vm.py);
+  - runs scripts/check-deploy-env.mjs: web, worker and migrations must all use the
+    chadgtm database (the VM's engine .env was once copied from SmartReach);
   - with --install-backup-cron, adds the nightly scripts/backup-db.sh crontab line once.
 
 It does not start or reload any process; deploy with scripts/deploy_remote_chadgtm.py.
@@ -50,6 +52,13 @@ else
   echo "==> created an empty packages/email-engine/.env (engine falls back to apps/web/.env.local)"
 fi
 chmod 600 apps/web/.env.local packages/email-engine/.env
+# The engine .env on this VM was once copied from SmartReach. The deploy refuses
+# to run unless web, worker and migrations all resolve the chadgtm database and
+# share their secrets; report it now (names only, never values).
+if [ -f scripts/check-deploy-env.mjs ] && command -v node >/dev/null; then
+  { pm2 jlist 2>/dev/null || echo "[]"; } | node scripts/check-deploy-env.mjs --app-dir "$APP_DIR" --pm2-jlist - \
+    || echo "!! fix the env files before deploying (docs/OPERATIONS.md, 'Deploy environment check')"
+fi
 
 mkdir -p /home/ubuntu/backups
 chmod 700 /home/ubuntu/backups
