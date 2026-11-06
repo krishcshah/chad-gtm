@@ -529,6 +529,10 @@ export const replies = pgTable(
     /** One-line explanation of what the agent decided and why. */
     agentSummary: text("agent_summary"),
     agentHandledAt: text("agent_handled_at"),
+    /** How many times the agent has tried this reply (retry budget). */
+    agentAttempts: integer("agent_attempts").notNull().default(0),
+    /** ISO time the agent claimed it (to recover replies stuck in processing). */
+    agentClaimedAt: text("agent_claimed_at"),
     createdAt: createdAt(),
   },
   (t) => [
@@ -1073,6 +1077,20 @@ export const agentRequests = pgTable(
     index("agent_requests_reply_idx").on(t.replyId),
   ],
 );
+
+/**
+ * Engine liveness. Each worker process upserts its row every tick so the web
+ * app (/api/health, admin) can tell when sending has stopped.
+ */
+export const engineHeartbeats = pgTable("engine_heartbeats", {
+  /** "worker:<hostname>:<pid-agnostic name>" */
+  id: text("id").primaryKey(),
+  lastTickAt: text("last_tick_at").notNull(),
+  lastOkAt: text("last_ok_at"),
+  lastError: text("last_error"),
+  stats: jsonb("stats").$type<Record<string, unknown>>().notNull().default({}),
+  updatedAt: updatedAt(),
+});
 
 /* ─── Re-export auth tables so drizzle sees the whole graph ────────────── */
 export * from "./schema-auth";

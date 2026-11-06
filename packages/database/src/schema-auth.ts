@@ -23,6 +23,11 @@ export const users = pgTable(
     emailVerified: boolean("email_verified").notNull().default(false),
     image: text("image"),
     role: text("role").notNull().default("user"),
+    /**
+     * When an admin approved this account to send from the shared pool.
+     * NULL = pending approval (see apps/web/lib/approval.ts).
+     */
+    approvedAt: timestamp("approved_at", { withTimezone: true, mode: "date" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
