@@ -19,7 +19,7 @@ import {
   type DsnResult,
   type HeaderMap,
 } from "./inbound-classify";
-import { recordHardBounce } from "./bounces";
+import { flagSenderPolicyBlock, recordCampaignStop, recordHardBounce } from "./bounces";
 import { addSuppression } from "./suppression";
 
 export interface SyncResult {
@@ -672,8 +672,12 @@ async function processInboundMessage(db: EngineDb, sender: SenderRow, msg: any):
   return (await recordReplyIfNew(db, sender, msg, headers)) ? "reply" : "ignored";
 }
 
-/** Record permanent failures from a DSN. Transient (4.x.x / delayed) reports are ignored. */
-async function handleDsn(db: EngineDb, sender: SenderRow, env: any, dsn: DsnResult): Promise<boolean> {
+/**
+ * Record permanent failures from a DSN. Transient (4.x.x / delayed) reports
+ * are ignored. Only a dead address (DsnRecipient.hardBounce) is suppressed
+ * globally; other permanent refusals stop the lead in that campaign only.
+ */
+export async function handleDsn(db: EngineDb, sender: SenderRow, env: any, dsn: DsnResult): Promise<boolean> {
   const refs: string[] = [...dsn.originalMessageIds];
   if (env.inReplyTo) refs.push(env.inReplyTo);
   if (typeof env.references === "string") refs.push(...env.references.split(/\s+/).filter(Boolean));
@@ -707,6 +711,33 @@ async function handleDsn(db: EngineDb, sender: SenderRow, env: any, dsn: DsnResu
     if (!job) continue; // not one of ours
     const leads: any[] = await db.select().from(schema.leads).where(eq(schema.leads.id, job.leadId)).limit(1);
     const lead = leads[0];
+    if (!r.hardBounce) {
+      // Permanent but not a dead address (5.7.x policy/spam/DMARC, 5.2.2
+      // mailbox full, generic 5.0.0): stop this lead in this campaign only,
+      // never a global suppression. Policy blocks count against the mailbox.
+      const fresh = await recordCampaignStop(db, {
+        email: r.email,
+        leadId: job.leadId,
+        jobId: job.id,
+        campaignId: job.campaignId,
+        ownerUserId: lead?.userId || sender.userId,
+        status: r.status,
+        diagnostic: r.diagnostic,
+        via: "dsn",
+      });
+      if (fresh && r.policy) {
+        await flagSenderPolicyBlock(db, {
+          senderId: sender.id,
+          senderUserId: sender.userId,
+          senderEmail: sender.email,
+          status: r.status,
+          diagnostic: r.diagnostic,
+          via: "dsn",
+        });
+      }
+      recorded = true;
+      continue;
+    }
     await recordHardBounce(db, {
       email: r.email,
       leadId: job.leadId,

@@ -8,7 +8,7 @@
  * the sending mailbox's health or status.
  */
 import { schema } from "@smartreach/database";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { EngineDb } from "./db-port";
 import { addSuppression } from "./suppression";
 
@@ -84,4 +84,99 @@ export async function recordHardBounce(db: EngineDb, input: HardBounceInput): Pr
     });
   }
   return !alreadyBounced;
+}
+
+export interface CampaignStopInput {
+  email: string;
+  leadId: string;
+  jobId?: string | null;
+  campaignId: string;
+  ownerUserId: string;
+  status: string;
+  diagnostic?: string;
+  via: "smtp" | "dsn";
+}
+
+/**
+ * A permanent failure that is NOT proof the address is dead (policy / spam /
+ * DMARC 5.7.x, mailbox full 5.2.2, generic 5.0.0): stop this lead in THIS
+ * campaign only. No suppression is written, so the address stays mailable
+ * by other clients and the lead is not marked bounced.
+ * Returns true when this was new for the job.
+ */
+export async function recordCampaignStop(db: EngineDb, input: CampaignStopInput): Promise<boolean> {
+  const nowS = new Date().toISOString();
+  const diag = String(input.diagnostic ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+  const reason = `Delivery refused ${input.status}${diag ? `: ${diag}` : ""}`.slice(0, 500);
+
+  let fresh = true;
+  if (input.jobId) {
+    const changed: { id: string }[] = await db
+      .update(schema.emailJobs)
+      .set({ status: "bounced", lastError: reason, processingAt: null, updatedAt: nowS })
+      .where(and(eq(schema.emailJobs.id, input.jobId), inArray(schema.emailJobs.status, ["sent", "processing", "pending", "retry"])))
+      .returning({ id: schema.emailJobs.id });
+    fresh = changed.length > 0;
+  }
+  await db
+    .update(schema.emailJobs)
+    .set({ status: "cancelled", lastError: "lead-stopped-in-campaign", updatedAt: nowS })
+    .where(
+      and(
+        eq(schema.emailJobs.leadId, input.leadId),
+        eq(schema.emailJobs.campaignId, input.campaignId),
+        inArray(schema.emailJobs.status, ["pending", "retry"]),
+      ),
+    );
+  await db
+    .update(schema.campaignLeads)
+    .set({ status: "failed", lastError: reason, updatedAt: nowS })
+    .where(
+      and(
+        eq(schema.campaignLeads.leadId, input.leadId),
+        eq(schema.campaignLeads.campaignId, input.campaignId),
+        inArray(schema.campaignLeads.status, ["queued", "scheduled", "sent"]),
+      ),
+    );
+  if (fresh) {
+    await db.insert(schema.activityLogs).values({
+      id: crypto.randomUUID(),
+      userId: input.ownerUserId,
+      type: "email_blocked",
+      message: `${input.email} refused the message (${input.status}); stopped for this campaign, address not suppressed`,
+      campaignId: input.campaignId,
+      meta: { via: input.via, status: input.status, jobId: input.jobId ?? null },
+    });
+  }
+  return fresh;
+}
+
+/** Health points a sending mailbox loses per policy (5.7.x) refusal. */
+export const POLICY_BLOCK_HEALTH_PENALTY = 5;
+
+/**
+ * A 5.7.x refusal (spam, policy, DMARC/SPF/DKIM) says something about the
+ * SENDING mailbox or domain: lower its health a little and leave an activity
+ * row for its owner (the admin, for pool mailboxes). The mailbox stays in
+ * rotation; repeated blocks show up as falling health.
+ */
+export async function flagSenderPolicyBlock(
+  db: EngineDb,
+  input: { senderId: string; senderUserId: string; senderEmail: string; status: string; diagnostic?: string; via: "smtp" | "dsn" },
+): Promise<void> {
+  const nowS = new Date().toISOString();
+  const domain = input.senderEmail.split("@")[1] ?? "";
+  const diag = String(input.diagnostic ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
+  await db
+    .update(schema.senderAccounts)
+    .set({ health: sql`greatest(${schema.senderAccounts.health} - ${POLICY_BLOCK_HEALTH_PENALTY}, 0)`, updatedAt: nowS })
+    .where(eq(schema.senderAccounts.id, input.senderId));
+  await db.insert(schema.activityLogs).values({
+    id: crypto.randomUUID(),
+    userId: input.senderUserId,
+    type: "sender.policy_block",
+    message: `${input.senderEmail} was refused for policy reasons (${input.status}); check ${domain || "the domain"}'s SPF/DKIM/DMARC and reputation${diag ? `: ${diag}` : ""}`,
+    campaignId: null,
+    meta: { senderId: input.senderId, domain, status: input.status, via: input.via },
+  });
 }

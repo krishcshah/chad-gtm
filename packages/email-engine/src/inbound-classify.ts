@@ -9,6 +9,8 @@
  * fixtures (Gmail, Outlook, Exim) in __tests__/inbound-classify.test.ts.
  */
 
+import { isDeadAddress, isPolicyStatus } from "./smtp-errors";
+
 export type HeaderMap = Record<string, string>;
 
 /** Parse an RFC 5322 header block (folded lines unfolded, keys lowercased, repeats joined). */
@@ -42,8 +44,31 @@ export interface DsnRecipient {
   status: string;
   action?: string;
   diagnostic?: string;
-  /** 5.x.x and not merely delayed: the address is dead. */
+  /** 5.x.x and not merely delayed: this delivery failed for good. */
   permanent: boolean;
+  /**
+   * The ADDRESS is dead (5.1.1/5.1.2/5.1.3/5.1.6/5.1.10/5.2.1, or clear
+   * "user unknown" wording on a generic 5.0.0): hard bounce, suppressed
+   * globally. Policy/spam/DMARC (5.7.x) and mailbox full (5.2.2) are
+   * permanent for this message but never a hard bounce.
+   */
+  hardBounce: boolean;
+  /** 5.7.x: refused for policy / spam / authentication; counts against the sending mailbox. */
+  policy: boolean;
+}
+
+/** Permanent / hard-bounce / policy flags for one recipient's status. */
+export function dsnVerdict(
+  status: string,
+  action: string | undefined,
+  diagnostic: string | undefined,
+): Pick<DsnRecipient, "permanent" | "hardBounce" | "policy"> {
+  const permanent = status.startsWith("5.") && action !== "delayed";
+  return {
+    permanent,
+    hardBounce: permanent && isDeadAddress(status, diagnostic ?? ""),
+    policy: permanent && isPolicyStatus(status),
+  };
 }
 
 export interface DsnResult {
@@ -126,7 +151,7 @@ function parseDeliveryStatusGroups(body: string): DsnRecipient[] {
       status,
       action,
       diagnostic,
-      permanent: status.startsWith("5.") && action !== "delayed",
+      ...dsnVerdict(status, action, diagnostic),
     });
   }
   return out;
@@ -186,7 +211,8 @@ export function parseDsn(input: {
     const at = body.toLowerCase().indexOf(email);
     const near = at >= 0 ? statusFromText(body.slice(at, at + 600)) : null;
     const status = near ?? fallbackStatus;
-    recipients.push({ email, status, permanent: status.startsWith("5.") });
+    const context = at >= 0 ? body.slice(at, at + 600) : "";
+    recipients.push({ email, status, ...dsnVerdict(status, undefined, context) });
   }
   recipients = recipients.filter((r, i, a) => a.findIndex((x) => x.email === r.email) === i);
   return { recipients, originalMessageIds: originalIds(body) };

@@ -48,12 +48,19 @@ export function allocatePoolCapacity(
   const byCampaign = new Map<string, number>();
   const order = new Map(campaigns.map((c, i) => [c.id, i]));
 
-  for (const sender of senders) {
-    let capacity = Math.max(0, Math.floor(sender.capacity));
-    const eligible = campaigns.filter((c) => c.senderIds.includes(sender.id));
-    while (capacity > 0) {
-      const open = eligible.filter((c) => (remaining.get(c.id) ?? 0) > 0);
-      if (open.length === 0) break;
+  // Hand out ONE slot per mailbox per pass, cycling over the mailboxes, so a
+  // campaign's share is spread across every mailbox it can use. (Filling the
+  // first mailbox before moving on gave small campaigns 0 slots on later
+  // mailboxes, and follow-ups sticky to those mailboxes waited forever.)
+  const capacity = new Map(senders.map((s) => [s.id, Math.max(0, Math.floor(s.capacity))]));
+  const eligibleBySender = new Map(senders.map((s) => [s.id, campaigns.filter((c) => c.senderIds.includes(s.id))]));
+  let progressed = true;
+  while (progressed) {
+    progressed = false;
+    for (const sender of senders) {
+      if ((capacity.get(sender.id) ?? 0) <= 0) continue;
+      const open = (eligibleBySender.get(sender.id) ?? []).filter((c) => (remaining.get(c.id) ?? 0) > 0);
+      if (open.length === 0) continue;
       // 1) the user with the fewest slots so far
       const users = [...new Set(open.map((c) => c.userId))];
       users.sort((a, b) => (byUser.get(a) ?? 0) - (byUser.get(b) ?? 0) || a.localeCompare(b));
@@ -72,7 +79,8 @@ export function allocatePoolCapacity(
       byUser.set(userId, (byUser.get(userId) ?? 0) + 1);
       byCampaign.set(c.id, (byCampaign.get(c.id) ?? 0) + 1);
       remaining.set(c.id, (remaining.get(c.id) ?? 0) - 1);
-      capacity--;
+      capacity.set(sender.id, (capacity.get(sender.id) ?? 0) - 1);
+      progressed = true;
     }
   }
   return alloc;

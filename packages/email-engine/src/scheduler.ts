@@ -27,7 +27,7 @@ import {
   parseTimeToMinutes,
   randomBetween,
 } from "@smartreach/shared";
-import { and, asc, desc, eq, exists, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { CampaignRow, EngineDb, SenderRow } from "./db-port";
 import {
   dueQueuedLeadFilter,
@@ -51,6 +51,12 @@ import { loadUnapprovedOwners, OWNER_NOT_APPROVED_NOTE } from "./owner-approval"
 
 /** Shown on the campaign when it cannot send because the postal address is missing. */
 export const MISSING_POSTAL_ADDRESS_NOTE = "missing-postal-address";
+/** activity_logs.type of the "campaign cannot send" note (meta.reason says why). */
+export const CAMPAIGN_BLOCKED_LOG_TYPE = "campaign_blocked";
+export const MISSING_POSTAL_ADDRESS_MESSAGE =
+  "is not sending: add your business postal address in Settings. Every cold email must show it (CAN-SPAM).";
+/** A blocked campaign gets at most one note per this window. */
+const BLOCKED_NOTE_EVERY_MS = 24 * 3_600_000;
 /** Follow-ups wait this long for their step-1 mailbox to have capacity again. */
 const STICKY_DEFER_SEC = 3600;
 const RESCHEDULE_PAD_MIN = 5;
@@ -104,42 +110,80 @@ function nextWindowStart(c: CampaignRow, now: Date): Date {
 
 /** Fetch a campaign's assigned senders (joined, ordered deterministically). */
 export async function campaignSenders(db: EngineDb, campaignId: string): Promise<SenderRow[]> {
-  const directSenders = await db
+  // Attached mailboxes, including retired (soft-deleted) ones so we can tell
+  // "the pool mailboxes this campaign used were retired" from "nothing is
+  // attached" (never attached, or detached by the user).
+  const attached: SenderRow[] = await db
     .select({ sender: schema.senderAccounts })
     .from(schema.campaignSenders)
     .innerJoin(schema.senderAccounts, eq(schema.campaignSenders.senderId, schema.senderAccounts.id))
-    .where(and(eq(schema.campaignSenders.campaignId, campaignId), isNull(schema.senderAccounts.deletedAt)))
+    .where(eq(schema.campaignSenders.campaignId, campaignId))
     .orderBy(asc(schema.campaignSenders.createdAt))
     .then((rows: any[]) => rows.map((r) => r.sender as SenderRow));
 
+  const directSenders = attached.filter((s) => !(s as SenderRow & { deletedAt?: string | null }).deletedAt);
   if (directSenders.length > 0) {
     return directSenders;
   }
+  if (!onlyRetiredPoolSenders(attached)) return [];
 
-  // Check if this campaign is a ChadGTM campaign
-  const chadRun = await db
-    .select({ id: schema.chadGtmRuns.id })
+  // Fallback for autopilot campaigns only: the pool mailboxes this campaign
+  // was launched with were all retired, and it belongs to an ACTIVE
+  // chad_gtm_runs row of the same owner → use the current active pool.
+  // Manual campaigns, paused/finished runs, campaigns with nothing attached
+  // (e.g. a user detached the pool senders) never fall back.
+  const runRows: { runStatus: string; runUserId: string; campaignUserId: string }[] = await db
+    .select({
+      runStatus: schema.chadGtmRuns.status,
+      runUserId: schema.chadGtmRuns.userId,
+      campaignUserId: schema.campaigns.userId,
+    })
     .from(schema.chadGtmRuns)
+    .innerJoin(schema.campaigns, eq(schema.campaigns.id, schema.chadGtmRuns.campaignId))
     .where(eq(schema.chadGtmRuns.campaignId, campaignId))
     .limit(1);
+  if (!poolFallbackAllowed(runRows[0])) return [];
 
-  if (chadRun.length > 0) {
-    const poolSenders = await db
-      .select()
-      .from(schema.senderAccounts)
-      .where(
-        and(
-          eq(schema.senderAccounts.isSystemPool, true),
-          eq(schema.senderAccounts.status, "active"),
-          isNull(schema.senderAccounts.deletedAt),
-        ),
-      )
-      .orderBy(asc(schema.senderAccounts.createdAt));
+  const poolSenders = await db
+    .select()
+    .from(schema.senderAccounts)
+    .where(
+      and(
+        eq(schema.senderAccounts.isSystemPool, true),
+        eq(schema.senderAccounts.status, "active"),
+        isNull(schema.senderAccounts.deletedAt),
+      ),
+    )
+    .orderBy(asc(schema.senderAccounts.createdAt));
+  return poolSenders as SenderRow[];
+}
 
-    return poolSenders as SenderRow[];
-  }
+/**
+ * True when the campaign still has attachment rows and every attached
+ * mailbox is a retired (soft-deleted) system-pool mailbox. An empty
+ * attachment list (never attached, or detached) is false.
+ */
+export function onlyRetiredPoolSenders(attached: readonly SenderRow[]): boolean {
+  return (
+    attached.length > 0 &&
+    attached.every((s) => {
+      const row = s as SenderRow & { deletedAt?: string | null; isSystemPool?: boolean };
+      return Boolean(row.deletedAt) && row.isSystemPool === true;
+    })
+  );
+}
 
-  return [];
+/**
+ * May a campaign whose pool mailboxes were retired fall back to the current
+ * system pool? Only when it belongs to an ACTIVE autopilot run of the same
+ * owner; manual campaigns (no run) never do.
+ */
+export function poolFallbackAllowed(
+  run: { runStatus: string; runUserId: string; campaignUserId: string } | undefined | null,
+): boolean {
+  if (!run) return false; // manual campaign
+  if (run.runStatus !== "active") return false;
+  return Boolean(run.runUserId) && run.runUserId === run.campaignUserId;
 }
 
 /** The heart of the scheduler: enqueue due work for one campaign. */
@@ -192,6 +236,7 @@ export async function scheduleCampaign(
     | { unsubscribeBaseUrl?: string; postalAddress?: string }
     | undefined;
   if (!(settings?.postalAddress ?? "").trim()) {
+    await noteCampaignBlocked(db, campaign, MISSING_POSTAL_ADDRESS_NOTE, MISSING_POSTAL_ADDRESS_MESSAGE, now);
     return { enqueued: 0, note: MISSING_POSTAL_ADDRESS_NOTE };
   }
   // Base for {{unsubscribe_url}} when a template references it.
@@ -242,8 +287,11 @@ export async function scheduleCampaign(
   const daily = await loadDailyUsage(db, activeSenders.map((s) => s.id));
   const hourly = takeHourlySnapshot();
   const allowSender = (s: SenderRow) => withinPoolShare(pool, s);
+  // Follow-ups bypass the fair share (they must use their step-1 mailbox).
+  const hasFollowUps = claimable.some((r) => (r.stepPosition ?? 1) > 1);
   const anyCapacity = activeSenders.some(
-    (s) => senderHasCapacity(s, daily, hourly, campaign.maxEmailsPerSenderPerDay, now) && allowSender(s),
+    (s) =>
+      senderHasCapacity(s, daily, hourly, campaign.maxEmailsPerSenderPerDay, now) && (hasFollowUps || allowSender(s)),
   );
   if (!anyCapacity) {
     // Out of fair share (or every mailbox at cap): try again shortly.
@@ -306,14 +354,17 @@ export async function scheduleCampaign(
   // unclaim does not reset already-handled leads (slice(enqueued) was wrong
   // when suppressions/missing leads appeared mid-batch).
   const handledIds = new Set<string>();
+  let exhausted = false;
 
   for (const cl of claimedRows) {
+    // A follow-up must go from its step-1 mailbox, so the fair share does
+    // not gate it (the mailbox's hard daily/hourly cap still does); it is
+    // counted against the share below, leaving less room for new leads.
     const sticky = resolveStickySender({
       stepPosition: cl.stepPosition ?? 1,
       stickySenderId: stickyByClId.get(cl.id) ?? null,
       senders,
-      hasCapacity: (s) =>
-        senderHasCapacity(s, daily, hourly, campaign.maxEmailsPerSenderPerDay, now) && allowSender(s),
+      hasCapacity: (s) => senderHasCapacity(s, daily, hourly, campaign.maxEmailsPerSenderPerDay, now),
     });
     if (sticky.kind === "defer") {
       // Same mailbox is busy today: wait for it rather than switching persona.
@@ -337,20 +388,12 @@ export async function scheduleCampaign(
             allow: allowSender,
           });
     if (!pick) {
-      // Every sender exhausted → unclaim only untouched rows, park briefly.
-      const remainingIds = claimedRows.filter((r) => !handledIds.has(r.id)).map((r) => r.id);
-      if (remainingIds.length > 0) {
-        await db
-          .update(schema.campaignLeads)
-          .set({ status: "queued", updatedAt: nowIsoS })
-          .where(inArray(schema.campaignLeads.id, remainingIds));
-      }
-      const until = addSeconds(now, pool ? 900 : 3600).toISOString();
-      await db
-        .update(schema.campaigns)
-        .set({ senderCapUntil: until, updatedAt: nowIsoS })
-        .where(eq(schema.campaigns.id, campaign.id));
-      return { enqueued, note: pool ? "pool-share-used" : "senders-exhausted" };
+      // No mailbox (or fair share) left for a new lead. Leave it queued and
+      // keep going: follow-ups later in the batch may still use their
+      // step-1 mailbox. Without any, stop here.
+      exhausted = true;
+      if (!hasFollowUps) break;
+      continue;
     }
 
     const lead = leadById.get(cl.leadId);
@@ -471,6 +514,15 @@ export async function scheduleCampaign(
       .update(schema.campaignLeads)
       .set({ status: "queued", updatedAt: nowIsoS })
       .where(inArray(schema.campaignLeads.id, remainingIds));
+  }
+  if (exhausted) {
+    // Every sender exhausted for new leads → park briefly.
+    const until = addSeconds(now, pool ? 900 : 3600).toISOString();
+    await db
+      .update(schema.campaigns)
+      .set({ senderCapUntil: until, lastSenderIdx: cursor, updatedAt: nowIsoS })
+      .where(eq(schema.campaigns.id, campaign.id));
+    return { enqueued, note: pool ? "pool-share-used" : "senders-exhausted" };
   }
 
   await db
@@ -661,6 +713,49 @@ export async function schedulerTick(db: EngineDb, now = new Date()): Promise<Tic
     }
   }
   return result;
+}
+
+/**
+ * Record, at most once per day per campaign and reason, that a running
+ * campaign cannot send, so the web app can show it (activity_logs row with
+ * type CAMPAIGN_BLOCKED_LOG_TYPE, campaign_id set, meta.reason = note).
+ * Never throws: a logging problem must not break scheduling.
+ */
+export async function noteCampaignBlocked(
+  db: EngineDb,
+  campaign: Pick<CampaignRow, "id" | "userId" | "name">,
+  reason: string,
+  message: string,
+  now: Date = new Date(),
+): Promise<boolean> {
+  try {
+    const since = new Date(now.getTime() - BLOCKED_NOTE_EVERY_MS).toISOString();
+    const recent: { id: string }[] = await db
+      .select({ id: schema.activityLogs.id })
+      .from(schema.activityLogs)
+      .where(
+        and(
+          eq(schema.activityLogs.campaignId, campaign.id),
+          eq(schema.activityLogs.type, CAMPAIGN_BLOCKED_LOG_TYPE),
+          gte(schema.activityLogs.createdAt, since),
+          sql`${schema.activityLogs.meta}->>'reason' = ${reason}`,
+        ),
+      )
+      .limit(1);
+    if (recent.length > 0) return false;
+    await db.insert(schema.activityLogs).values({
+      id: crypto.randomUUID(),
+      userId: campaign.userId,
+      type: CAMPAIGN_BLOCKED_LOG_TYPE,
+      message: `Campaign "${campaign.name}" ${message}`,
+      campaignId: campaign.id,
+      meta: { reason, since: now.toISOString() },
+    });
+    return true;
+  } catch (err) {
+    console.error(`[scheduler] could not record blocked note for campaign ${campaign.id}:`, err);
+    return false;
+  }
 }
 
 async function log(db: EngineDb, userId: string, type: string, message: string, campaignId?: string) {
