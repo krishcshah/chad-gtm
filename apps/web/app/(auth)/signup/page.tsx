@@ -13,17 +13,31 @@ import {
   Label,
 } from "@smartreach/ui";
 import { authClient } from "@/lib/auth-client";
+import { AuthCard, AuthNotice } from "../auth-card";
+
+/** Where the verification link lands (see app/(auth)/email-verified). */
+const VERIFY_CALLBACK = "/email-verified";
+
+function markJustSignedUp() {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem("chadgtm_just_signed_up", "1");
+    localStorage.setItem("chadgtm_just_signed_up", "1");
+  } catch {}
+}
 
 export default function SignupPage() {
   const router = useRouter();
   const [error, setError] = useState("");
+  const [pendingEmail, setPendingEmail] = useState("");
+  const [resendState, setResendState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const { register, handleSubmit, formState } = useForm<SignUpInput>({
     resolver: zodResolver(signUpSchema),
   });
 
   const onSubmit = handleSubmit(async (values) => {
     setError("");
-    const res = await authClient.signUp.email(values);
+    const res = await authClient.signUp.email({ ...values, callbackURL: VERIFY_CALLBACK });
     if (res.error) {
       const msg = res.error.message || "";
       if (msg.toLowerCase().includes("exist")) {
@@ -31,25 +45,86 @@ export default function SignupPage() {
       }
       return setError(msg || "Could not create account");
     }
-    if (typeof window !== "undefined") {
-      try {
-        sessionStorage.setItem("chadgtm_just_signed_up", "1");
-        localStorage.setItem("chadgtm_just_signed_up", "1");
-      } catch {}
+    // No session token means email verification is required: the server has
+    // sent a confirmation link and the user signs in by clicking it.
+    if (!res.data?.token) {
+      setPendingEmail(values.email.trim());
+      return;
     }
+    markJustSignedUp();
     router.push("/chad-gtm?new_signup=1");
     router.refresh();
   });
 
-  return (
-    <div className="hairline-top w-full max-w-md rounded-2xl border border-zinc-800/80 bg-zinc-950/80 p-6 sm:p-8 shadow-[0_30px_80px_-40px_rgba(0,0,0,0.9)] backdrop-blur-xl">
-      <div className="mb-6 space-y-2 text-center">
-        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-zinc-50">Start your autopilot</h1>
-        <p className="text-sm text-zinc-400">
-          Next step: paste your website. Leads, mailboxes, and replies are on us.
-        </p>
-      </div>
+  const resend = async () => {
+    setResendState("sending");
+    const res = await authClient.sendVerificationEmail({ email: pendingEmail, callbackURL: VERIFY_CALLBACK });
+    setResendState(res.error ? "error" : "sent");
+  };
 
+  if (pendingEmail) {
+    return (
+      <AuthCard
+        title="Check your inbox"
+        subtitle="One click and you're in."
+        footer={
+          <>
+            Wrong address?{" "}
+            <button
+              type="button"
+              onClick={() => {
+                setPendingEmail("");
+                setResendState("idle");
+              }}
+              className="text-zinc-100 hover:underline transition-colors font-medium"
+            >
+              Start over
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <AuthNotice>
+            We sent a confirmation link to{" "}
+            <span className="font-medium text-zinc-100">{pendingEmail}</span>. Open it to confirm
+            your email and you&apos;ll be signed in. The link expires in 24 hours.
+          </AuthNotice>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full h-10 text-sm rounded-lg"
+            onClick={resend}
+            disabled={resendState === "sending" || resendState === "sent"}
+          >
+            {resendState === "sending"
+              ? "Sending…"
+              : resendState === "sent"
+                ? "Sent. Check your inbox"
+                : "Resend the link"}
+          </Button>
+          {resendState === "error" && (
+            <p className="text-center text-[11px] text-rose-400">
+              Couldn&apos;t resend right now. Wait a minute and try again.
+            </p>
+          )}
+        </div>
+      </AuthCard>
+    );
+  }
+
+  return (
+    <AuthCard
+      title="Start your autopilot"
+      subtitle="Next step: paste your website. Leads, mailboxes, and replies are on us."
+      footer={
+        <>
+          Already have an account?{" "}
+          <Link href="/login" className="text-zinc-100 hover:underline transition-colors font-medium">
+            Sign in
+          </Link>
+        </>
+      }
+    >
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         <div className="space-y-1.5">
           <Label htmlFor="name" className="text-xs font-medium text-zinc-300">
@@ -109,13 +184,6 @@ export default function SignupPage() {
           {formState.isSubmitting ? "Creating account…" : "Create account"}
         </Button>
       </form>
-
-      <div className="mt-6 border-t border-zinc-800/80 pt-4 text-center text-xs text-zinc-400">
-        Already have an account?{" "}
-        <Link href="/login" className="text-zinc-100 hover:underline transition-colors font-medium">
-          Sign in
-        </Link>
-      </div>
-    </div>
+    </AuthCard>
   );
 }

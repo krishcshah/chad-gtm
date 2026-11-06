@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./mailer": "./src/mailer.ts",
+    "./system-mailer": "./src/system-mailer.ts",
     "./rotation": "./src/rotation.ts",
     "./scheduler": "./src/scheduler.ts",
     "./processor": "./src/processor.ts",
