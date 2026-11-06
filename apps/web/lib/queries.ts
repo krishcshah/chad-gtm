@@ -2,6 +2,7 @@ import { and, count, desc, eq, gte, isNull, sql, inArray } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { getDb } from "./db";
 import { summarizeUniboxThreads } from "./unibox-conversations";
+import { isUsablePostalAddress } from "./campaign-start-guard";
 
 const {
   campaigns,
@@ -504,9 +505,23 @@ export async function getCampaign(userId: string, id: string, workspaceId?: stri
   };
 }
 
-/** Postal is optional — always true so start/publish UI is never blocked. */
-export async function hasWorkspacePostalAddress(_userId: string): Promise<boolean> {
-  return true;
+/** The account's compliance postal address ("" when none is saved). */
+export async function getWorkspacePostalAddress(userId: string): Promise<string> {
+  const db = getDb();
+  const [row] = await db
+    .select({ postalAddress: schema.workspaceSettings.postalAddress })
+    .from(schema.workspaceSettings)
+    .where(eq(schema.workspaceSettings.userId, userId))
+    .limit(1);
+  return row?.postalAddress ?? "";
+}
+
+/**
+ * True when the account has a usable physical postal address (CAN-SPAM).
+ * Campaigns that send are refused without one (see campaign-start-guard.ts).
+ */
+export async function hasWorkspacePostalAddress(userId: string): Promise<boolean> {
+  return isUsablePostalAddress(await getWorkspacePostalAddress(userId));
 }
 
 const MAX_REPLY_SCAN = 1000;

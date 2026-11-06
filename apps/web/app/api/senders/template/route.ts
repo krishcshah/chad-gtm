@@ -19,13 +19,14 @@ const EXAMPLE = [
   "20",
   "UTC",
   "",
-  "true",
-  "20",
-  "40",
 ];
 
+// AutoGTM runs no mailbox warm-up, so the old "Warmup ..." columns are left out
+// (imports still accept and ignore them).
+const COLUMNS = SENDER_IMPORT_COLUMNS.filter((c) => !c.toLowerCase().startsWith("warmup"));
+
 export async function GET() {
-  const header = SENDER_IMPORT_COLUMNS.join(",");
+  const header = COLUMNS.join(",");
   const example = EXAMPLE.map((v) => (v.includes(",") ? `"${v}"` : v)).join(",");
   const csv = `${header}\n${example}\n`;
   return new NextResponse(csv, {

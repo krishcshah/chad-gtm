@@ -50,7 +50,16 @@ export function AdminMailboxPoolView({
             nextStatus === "paused" ? prev.pausedMailboxes + 1 : prev.pausedMailboxes - 1,
         }));
       } else {
-        toast.error("Failed to update status");
+        toast.error(res.error || "Failed to update status");
+        // A failed activation test marks the mailbox failed; show that.
+        if (nextStatus === "active") {
+          setStats((prev) => ({
+            ...prev,
+            mailboxes: prev.mailboxes.map((m) =>
+              m.id === senderId ? { ...m, status: "failed" } : m
+            ),
+          }));
+        }
       }
     });
   };
@@ -99,7 +108,18 @@ export function AdminMailboxPoolView({
 
       const res = await importSystemMailboxesCsv(mappedRows);
       if (res.ok) {
-        toast.success(`Imported ${res.imported} shared mailboxes successfully!`);
+        if (res.activated > 0) {
+          toast.success(`${res.activated} shared mailbox${res.activated === 1 ? "" : "es"} passed the SMTP and IMAP login test and are active.`);
+        }
+        for (const m of res.inactive) {
+          toast.warning(`Row ${m.row} (${m.email}) saved as inactive: ${m.error}`);
+        }
+        for (const f of res.failed) {
+          toast.error(`Row ${f.row} not imported: ${f.error}`);
+        }
+        if (res.imported === 0 && res.failed.length === 0) {
+          toast.error("Nothing was imported.");
+        }
         setShowUploader(false);
       } else {
         toast.error("Import failed");
