@@ -25,11 +25,11 @@ export default async function LeadImportPage({
       <PageHeader
         eyebrow={
           <Link
-            href={target ? `/leads/${target.id}` : "/leads?tab=saved-lists"}
+            href={target ? `/leads/${target.id}` : "/campaigns"}
             className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground"
           >
             <ArrowLeft className="size-4" aria-hidden />
-            {target ? target.name : "Leads"}
+            {target ? target.name : "Campaigns & leads"}
           </Link>
         }
         title="Import leads"

@@ -352,7 +352,8 @@ export function AnalyticsSection({
 function StatStrip({ summary, points }: { summary: AnalyticsSummaryView; points: AnalyticsPointView[] }) {
   const sent = points.reduce((total, p) => total + p.sent, 0);
   return (
-    <Card className="grid grid-cols-2 gap-px overflow-hidden bg-border sm:grid-cols-3 xl:grid-cols-6 [&>*]:bg-card">
+    <div className="@container">
+      <Card className="grid grid-cols-2 gap-px overflow-hidden bg-border @lg:grid-cols-3 @4xl:grid-cols-6 [&>*]:bg-card">
       <Stat bare label="Emails sent" value={formatCount(sent)} hint="Including follow-ups" />
       <Stat bare label="Leads contacted" value={formatCount(summary.leadsContacted)} hint="Unique leads emailed" />
       <Stat
@@ -369,7 +370,8 @@ function StatStrip({ summary, points }: { summary: AnalyticsSummaryView; points:
       />
       <RateStat label="Open rate" rate={summary.openRate} count={summary.openCount} noun={["open", "opens"]} />
       <RateStat label="Click rate" rate={summary.clickRate} count={summary.clickCount} noun={["click", "clicks"]} />
-    </Card>
+      </Card>
+    </div>
   );
 }
 
@@ -448,7 +450,8 @@ export function AnalyticsSectionSkeleton({ hideKpis = false }: { hideKpis?: bool
   return (
     <div className="flex flex-col gap-6" aria-busy="true">
       {!hideKpis ? (
-        <Card className="grid grid-cols-2 gap-px overflow-hidden bg-border sm:grid-cols-3 xl:grid-cols-6 [&>*]:bg-card">
+        <div className="@container">
+        <Card className="grid grid-cols-2 gap-px overflow-hidden bg-border @lg:grid-cols-3 @4xl:grid-cols-6 [&>*]:bg-card">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="flex flex-col gap-3 p-5">
               <Skeleton className="h-3.5 w-20" />
@@ -457,6 +460,7 @@ export function AnalyticsSectionSkeleton({ hideKpis = false }: { hideKpis?: bool
             </div>
           ))}
         </Card>
+        </div>
       ) : null}
       <div className="grid gap-6 lg:grid-cols-2">
         {Array.from({ length: 2 }).map((_, i) => (

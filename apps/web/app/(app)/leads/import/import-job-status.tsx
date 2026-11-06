@@ -50,7 +50,7 @@ export function ImportCounts({ imported, skipped, invalid }: ImportCountsValue) 
 }
 
 function listHref(listId: string) {
-  return listId && listId !== "__new__" ? `/leads/${listId}` : "/leads";
+  return listId && listId !== "__new__" ? `/leads/${listId}` : "/campaigns";
 }
 
 export function ImportRunning({ job, onCancel }: { job: StoredImportJob; onCancel: () => Promise<void> }) {
@@ -97,7 +97,7 @@ export function ImportRunning({ job, onCancel }: { job: StoredImportJob; onCance
           </Button>
         </ConfirmDialog>
         <Button variant="outline" size="sm" asChild>
-          <Link href="/leads">Go to lead lists</Link>
+          <Link href="/campaigns">Back to campaigns</Link>
         </Button>
       </CardFooter>
     </Card>
