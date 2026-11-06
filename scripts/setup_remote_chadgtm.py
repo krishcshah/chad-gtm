@@ -63,8 +63,17 @@ fi
 
 node -e 'const [a,b]=process.versions.node.split(".").map(Number);process.exit(a>22||(a===22&&b>=13)?0:1)' \
   && echo "==> node $(node -v) ok" || echo "!! node $(node -v 2>/dev/null || echo missing): need >= 22.13"
-command -v pg_dump >/dev/null && echo "==> pg_dump $(pg_dump --version | awk '{print $3}')" \
-  || echo "!! pg_dump missing: sudo apt-get install -y postgresql-client"
+# Production Postgres is 17.x: pg_dump/pg_restore must be >= 17.
+if command -v pg_dump >/dev/null; then
+  pgv="$(pg_dump --version | awk '{print $3}')"
+  if [ "${pgv%%.*}" -ge 17 ] 2>/dev/null; then
+    echo "==> pg_dump $pgv ok"
+  else
+    echo "!! pg_dump $pgv is too old for the Postgres 17 server: install postgresql-client-17 (PGDG apt repo)"
+  fi
+else
+  echo "!! pg_dump missing: install postgresql-client-17 (PGDG apt repo)"
+fi
 
 if [ "$INSTALL_CRON" = "1" ]; then
   line='17 3 * * * cd /home/ubuntu/chad-gtm && bash scripts/backup-db.sh >> /home/ubuntu/backups/backup.log 2>&1'

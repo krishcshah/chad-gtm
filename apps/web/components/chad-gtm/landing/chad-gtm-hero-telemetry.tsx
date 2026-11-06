@@ -183,7 +183,7 @@ export function ChadGtmHeroTelemetry() {
             </div>
             <div>
               <span className="text-zinc-500 block">DB HARNESS</span>
-              <span className="text-zinc-300 font-medium">Postgres 16 + SQLite</span>
+              <span className="text-zinc-300 font-medium">Postgres 17 + SQLite</span>
             </div>
             <div>
               <span className="text-zinc-500 block">STATUS</span>

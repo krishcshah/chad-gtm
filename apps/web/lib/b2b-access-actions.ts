@@ -17,7 +17,7 @@ const B2B_UNLOCK_PENDING_MESSAGE =
 export async function unlockB2bAccessAction(_stripeSessionOrReference?: string) {
   try {
     const { user } = await requireWorkspace();
-    if (await hasB2BAccess(user.id)) {
+    if (await hasB2BAccess(user)) {
       revalidatePath("/b2b-database");
       return { success: true, message: "Directory access is already unlocked for your account." };
     }

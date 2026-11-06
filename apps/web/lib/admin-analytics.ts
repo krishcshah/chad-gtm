@@ -1,7 +1,7 @@
 import { desc, eq, isNull, sql } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { getDb } from "./db";
-import { requireAdmin, isAdminEmail } from "./admin";
+import { requireAdmin, isAdmin } from "./admin";
 import { getAllB2bAccessMap } from "./b2b-access";
 
 export interface UserAnalyticsSummary {
@@ -110,6 +110,7 @@ export async function getAdminUserAnalytics(
       name: schema.users.name,
       email: schema.users.email,
       emailVerified: schema.users.emailVerified,
+      role: schema.users.role,
       createdAt: schema.users.createdAt,
     })
     .from(schema.users)
@@ -250,9 +251,10 @@ export async function getAdminUserAnalytics(
       .sort((a, b) => b.count - a.count)
       .slice(0, 4);
 
+    // Same rule as getDirectoryAccessLevel: admin by role or VERIFIED
+    // ADMIN_EMAILS address, otherwise an active access grant.
     const hasB2b =
-      isAdminEmail(u.email) ||
-      u.email.toLowerCase() === "demo@ratecompany.com" ||
+      isAdmin({ email: u.email, role: u.role, emailVerified: Boolean(u.emailVerified) }) ||
       Boolean(b2bAccessMap[u.id]);
 
     return {

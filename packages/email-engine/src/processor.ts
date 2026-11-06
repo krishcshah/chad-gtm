@@ -29,6 +29,7 @@ import { isEngineDryRun, workerOwnsJob } from "./queue-mode";
 import { advanceSequenceAfterSend, loadCampaignSequenceSteps } from "./sequence";
 import { appUrl, appUrlReadyForLiveSend, engineBatchSize } from "./env";
 import { isSuppressedFor } from "./suppression";
+import { loadUnapprovedOwners, OWNER_NOT_APPROVED_NOTE } from "./owner-approval";
 import { classifySmtpError, failureBlamesSender } from "./smtp-errors";
 import { completeBodies } from "./body-format";
 import { recordHardBounce } from "./bounces";
@@ -245,6 +246,12 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<JobOutcome>
       .update(schema.emailJobs)
       .set({ status: "pending", processingAt: null, updatedAt: nowS })
       .where(eq(schema.emailJobs.id, job.id));
+    return "skipped";
+  }
+  // Owner's approval revoked since scheduling → hand the lead back to the
+  // scheduler, which skips the campaign until the owner is approved again.
+  if ((await loadUnapprovedOwners(db, [campaign.userId])).size > 0) {
+    await releaseToScheduler(db, job, OWNER_NOT_APPROVED_NOTE);
     return "skipped";
   }
   // Lead replied, bounced, opted out (or was deleted) since scheduling → cancel

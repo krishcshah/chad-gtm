@@ -28,7 +28,16 @@ if [[ ! "$RETENTION_DAYS" =~ ^[0-9]+$ ]] || (( RETENTION_DAYS < 1 )); then
   echo "[backup] RETENTION_DAYS must be a positive integer" >&2
   exit 2
 fi
-command -v pg_dump >/dev/null || { echo "[backup] pg_dump not found (apt install postgresql-client)" >&2; exit 1; }
+command -v pg_dump >/dev/null || { echo "[backup] pg_dump not found (install postgresql-client-17 from the PGDG apt repo)" >&2; exit 1; }
+# Production Postgres is 17.x. pg_dump refuses to dump a newer server, and the
+# Ubuntu default postgresql-client is older, so check before relying on it.
+PG_MIN_MAJOR="${PG_MIN_MAJOR:-17}"
+pg_dump_major="$(pg_dump --version | sed -E 's/.* ([0-9]+)(\.[0-9]+)?.*/\1/')"
+if [[ ! "$pg_dump_major" =~ ^[0-9]+$ ]] || (( pg_dump_major < PG_MIN_MAJOR )); then
+  echo "[backup] pg_dump ${pg_dump_major:-?} is too old: the server is Postgres 17.x, need pg_dump >= $PG_MIN_MAJOR (apt install postgresql-client-17 from the PGDG repo)" >&2
+  exit 1
+fi
+command -v pg_restore >/dev/null || { echo "[backup] pg_restore not found (install postgresql-client-17)" >&2; exit 1; }
 
 if [[ -z "${DATABASE_URL:-}" ]]; then
   if [[ ! -f "$ENV_FILE" ]]; then

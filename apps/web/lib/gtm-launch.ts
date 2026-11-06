@@ -5,8 +5,14 @@
  * NOT a "use server" module: these helpers take a trusted user/workspace id and
  * must never be callable from the browser.
  */
-import { and, eq, gte, inArray, isNull } from "drizzle-orm";
-import { ensureOutreachSpintax, schema } from "@smartreach/database";
+import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import {
+  applicableSuppressionValues,
+  ensureOutreachSpintax,
+  matchesSuppression,
+  schema,
+  suppressionCandidates,
+} from "@smartreach/database";
 import { nowIso } from "@smartreach/shared";
 import type { Db } from "./db";
 import { getMatchingDirectoryLeadsForExport, type DirectoryLead } from "./leads-directory";
@@ -179,6 +185,39 @@ export async function recentlyContactedEmails(db: Db, emails: string[], now = ne
       .innerJoin(schema.campaignLeads, eq(schema.campaignLeads.leadId, schema.leads.id))
       .where(and(inArray(schema.leads.email, batch), gte(schema.campaignLeads.createdAt, since)));
     for (const r of rows) out.add(r.email.toLowerCase());
+  }
+  return out;
+}
+
+/**
+ * Emails that must not be provisioned for `userId`: the owner's own
+ * suppressions (any source) plus everyone's global opt-outs (unsubscribe,
+ * bounce, complaint; see GLOBAL_SUPPRESSION_SOURCES), matched by address or
+ * "@domain". Same rule as the engine's send-time check.
+ */
+export async function suppressedEmailsFor(db: Db, userId: string, emails: string[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  const normalized = [...new Set(emails.filter(Boolean).map((e) => e.trim().toLowerCase()))];
+  if (normalized.length === 0) return out;
+  const candidates = [...new Set(normalized.flatMap(suppressionCandidates))];
+  const rows: Array<{ value: string; userId: string; source: string | null }> = [];
+  const CHUNK = 500;
+  for (let i = 0; i < candidates.length; i += CHUNK) {
+    const batch = candidates.slice(i, i + CHUNK);
+    const found = await db
+      .select({
+        value: schema.suppressions.value,
+        userId: schema.suppressions.userId,
+        source: schema.suppressions.source,
+      })
+      .from(schema.suppressions)
+      .where(inArray(sql`lower(${schema.suppressions.value})`, batch));
+    rows.push(...found);
+  }
+  const values = applicableSuppressionValues(rows, userId);
+  if (values.length === 0) return out;
+  for (const email of normalized) {
+    if (matchesSuppression(email, values)) out.add(email);
   }
   return out;
 }
@@ -357,9 +396,15 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
   // Leads: over-fetch, then drop anyone another campaign contacted recently.
   const leadOffset = stableHash(run.id) % 5000;
   const candidates = fetchTargetedLeads(industries, getTargetTitles(run), LEADS_PER_CAMPAIGN * 2, leadOffset);
-  const contacted = await recentlyContactedEmails(db, candidates.map((c) => c.email.toLowerCase()));
+  const candidateEmails = candidates.map((c) => c.email.toLowerCase());
+  const contacted = await recentlyContactedEmails(db, candidateEmails);
+  // Opt-outs: the owner's suppressions plus global unsubscribes/bounces/complaints.
+  const suppressed = await suppressedEmailsFor(db, userId, candidateEmails);
   const matchingDirectoryLeads = candidates
-    .filter((c) => !contacted.has(c.email.toLowerCase()))
+    .filter((c) => {
+      const e = c.email.toLowerCase();
+      return !contacted.has(e) && !suppressed.has(e);
+    })
     .slice(0, LEADS_PER_CAMPAIGN);
 
   if (matchingDirectoryLeads.length === 0) {

@@ -256,7 +256,7 @@ This is not a code bug, but it is a product-integrity bug. A technical buyer wil
 
 Be fair to the build. The following are real, deployed, and non-trivial:
 
-1. **Production outbound infrastructure**: Postgres 16, PM2, Caddy TLS, 26 tables, workspaces, auth.
+1. **Production outbound infrastructure**: Postgres 17, PM2, Caddy TLS, 26 tables, workspaces, auth.
 2. **Real SMTP dispatch**: atomic caps, jitter, retries, suppression, RFC 8058, threading.
 3. **Real IMAP sync**: quote stripping, auto-stop, sentiment tags, UniBox threads.
 4. **10.2M-row lead directory**: FTS5, facets, streaming ingestion, 7.8 GB DB, sub-second warm queries.

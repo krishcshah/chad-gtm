@@ -10,8 +10,10 @@ import {
 } from "../chad-gtm-research";
 import {
   getDirectoryFacets,
-  searchLeadsDirectory,
+  searchLeadsDirectoryForAccess,
+  type DirectoryAccessLevel,
 } from "../leads-directory";
+import { getDirectoryAccessLevel } from "../b2b-access";
 import { getWorkspaceAiOptions } from "../ai";
 import { ensureChadGtmTables } from "../db";
 import { autopilotCountries } from "../autopilot-policy";
@@ -232,17 +234,23 @@ export const searchLeadsTool: ToolDefinition<
     pageSize: z.number(),
   }),
   timeoutMs: 30_000,
-  async run(input) {
+  async run(input, ctx) {
+    const level = await resolveAgentDirectoryAccess(ctx);
     const pageSize = input.limit ?? 25;
-    const result = searchLeadsDirectory({
-      industries: input.industries,
-      jobTitles: input.titles,
-      countries: autopilotCountries(),
-      hasEmail: true,
-      hasWorkEmail: true,
-      page: input.page ?? 1,
-      pageSize,
-    });
+    // Same paywall as the directory UI: admins and paid accounts see full
+    // records; everyone else gets the masked one-page preview.
+    const result = searchLeadsDirectoryForAccess(
+      {
+        industries: input.industries,
+        jobTitles: input.titles,
+        countries: autopilotCountries(),
+        hasEmail: true,
+        hasWorkEmail: true,
+        page: input.page ?? 1,
+        pageSize,
+      },
+      level
+    );
     return {
       leads: result.leads.map((lead) => ({
         leadId: lead.leadId,
@@ -261,6 +269,32 @@ export const searchLeadsTool: ToolDefinition<
     };
   },
 };
+
+/**
+ * Directory access level of the user the agent run belongs to. Unknown users
+ * (or lookup failures) get the masked preview.
+ */
+export async function resolveAgentDirectoryAccess(ctx: {
+  userId: string;
+  db: any;
+}): Promise<DirectoryAccessLevel> {
+  try {
+    const [user] = await ctx.db
+      .select({
+        id: schema.users.id,
+        email: schema.users.email,
+        role: schema.users.role,
+        emailVerified: schema.users.emailVerified,
+      })
+      .from(schema.users)
+      .where(eq(schema.users.id, ctx.userId))
+      .limit(1);
+    if (!user) return "none";
+    return await getDirectoryAccessLevel(user);
+  } catch {
+    return "none";
+  }
+}
 
 export const getCampaignStatsTool: ToolDefinition<
   { campaignId: string },

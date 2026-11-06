@@ -90,7 +90,7 @@ SERVER_HOST=<vm address> python3 scripts/setup_remote_chadgtm.py --install-backu
 Idempotent. Clones the repo if missing, creates `apps/web/.env.local` from
 `.env.example` and an empty `packages/email-engine/.env` only if they do not
 exist (it never overwrites or copies env files), creates `/home/ubuntu/backups`,
-reports Node / `pg_dump` / `data/leads.db`, and optionally installs the nightly
+reports Node / `pg_dump` (must be >= 17, the server is Postgres 17.x) / `data/leads.db`, and optionally installs the nightly
 backup cron. Then do [PM2 setup](#pm2-startup-and-log-rotation) once.
 
 ## Rollback
@@ -116,6 +116,13 @@ data, restore the database too.
 **Database** — see [Restore a backup](#restore-a-backup).
 
 ## Backups
+
+Production Postgres is **17.x**, so `pg_dump`/`pg_restore` on the VM must be
+**17 or newer** (a 16 client refuses to dump a 17 server, and Ubuntu's default
+`postgresql-client` is older). Install `postgresql-client-17` from the PGDG apt
+repository (apt.postgresql.org). `backup-db.sh` refuses to run with an older
+`pg_dump` (override the minimum with `PG_MIN_MAJOR` only if the server changes),
+and the setup script reports the version.
 
 `scripts/backup-db.sh` runs `pg_dump --format=custom`, checks the result with
 `pg_restore --list`, writes atomically to `/home/ubuntu/backups` (mode 700/600)
@@ -261,14 +268,20 @@ them from `HEAD` does not help; rotate them. Order:
    deployment, not from here.
 3. **`BETTER_AUTH_SECRET`.** Generate
    (`node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`),
-   set the same value in both env files, reload both processes. Effects:
+   set the same value in both env files, and set `UNSUBSCRIBE_SECRET_PREVIOUS`
+   to the **old** `BETTER_AUTH_SECRET` value in both env files, then reload both
+   processes (`--update-env`). Effects:
    - everyone is logged out (sessions and the 5-minute cookie cache are signed with it);
-   - unsubscribe links in emails **already sent** stop verifying, because the
-     tokens are HMACs over this secret and there is no "previous secret"
-     fallback yet. Until there is, watch for people who cannot unsubscribe and
-     add them to the blocklist by hand.
+   - unsubscribe links in emails **already sent** keep working: tokens are
+     HMACs over this secret, and verification also accepts a signature made
+     with `UNSUBSCRIBE_SECRET_PREVIOUS`. New links are signed with the new
+     secret only. Remove `UNSUBSCRIBE_SECRET_PREVIOUS` after a year (tokens
+     expire after 365 days). Without it, old links fail and people who cannot
+     unsubscribe must be added to the blocklist by hand.
    It must still be rotated: with the leaked value anyone can forge a session
-   cookie for any user, including admins.
+   cookie for any user, including admins. `UNSUBSCRIBE_SECRET_PREVIOUS` only
+   verifies unsubscribe tokens (the worst a forger can do with it is
+   unsubscribe an address); it is never used for sessions.
 4. **`ENCRYPTION_KEY`.** Never just change it: every stored SMTP/IMAP password
    and AI key would become unreadable. Use the re-encryption script:
 
@@ -330,6 +343,7 @@ Web = `chadgtm-web`, Engine = `chadgtm-worker`.
 |---|---|---|---|---|
 | `DATABASE_URL` | both, migrate, scripts | yes | – | Postgres URL |
 | `BETTER_AUTH_SECRET` | both | yes (≥16 chars, use 32+) | – | Sessions; unsubscribe HMAC (falls back to `ENCRYPTION_KEY`). See rotation |
+| `UNSUBSCRIBE_SECRET_PREVIOUS` | both | no | – | Previous `BETTER_AUTH_SECRET` after a rotation; unsubscribe links signed with it still verify. Never used to sign. See rotation |
 | `ENCRYPTION_KEY` | both | yes | – | 64 hex chars (web rejects anything else in production). Rotate only with `scripts/rotate-encryption-key.ts` |
 | `APP_URL` | both | yes | `http://localhost:3000` (web) | Public https origin, e.g. `https://autogtm.tech`. Engine uses it for tracking, unsubscribe and "Needs you" links |
 | `BETTER_AUTH_URL` | web (engine falls back to it for links) | yes | `http://localhost:3000` | Usually equal to `APP_URL` |
@@ -338,7 +352,7 @@ Web = `chadgtm-web`, Engine = `chadgtm-worker`.
 | `CRON_SECRET` | web | yes in production | – | Bearer token for `/api/engine/tick`; route is disabled in production without it |
 | `ADMIN_EMAILS` | web | recommended | – | Comma-separated admin emails |
 | `ADMIN_EMAIL` | web | no | – | Legacy single admin email |
-| `SIGNUP_APPROVAL_REQUIRED` | web | no | `true` | `false` lets new accounts send without admin approval |
+| `SIGNUP_APPROVAL_REQUIRED` | both | no | `true` | `false` lets new accounts send without admin approval. The engine also re-checks it every tick: campaigns of owners who are not approved (approval revoked) are skipped (`owner-not-approved`) |
 | `GEMINI_API_KEY` | both | recommended | – | Research, per-lead copy, reply triage. Without any key, heuristics are used |
 | `GOOGLE_API_KEY` | both | no | – | Alias for `GEMINI_API_KEY` |
 | `OPENAI_API_KEY` | both | no | – | Used when a workspace selects OpenAI |

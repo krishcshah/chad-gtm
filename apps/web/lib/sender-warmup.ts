@@ -10,21 +10,9 @@
  * one clear status line.
  */
 
-/** Leftover warm-up marker, with the whitespace that preceded it. */
-const WARMUP_MARKER_RE = /\s*<!--\s*SR_WARMUP:[\s\S]*?-->/g;
-
-/** True when the signature still carries an old warm-up marker. */
-export function hasWarmupMarker(signature: string | null | undefined): boolean {
-  if (!signature) return false;
-  WARMUP_MARKER_RE.lastIndex = 0;
-  return WARMUP_MARKER_RE.test(signature);
-}
-
-/** The signature without any warm-up marker, trimmed. Safe to send. */
-export function stripWarmupMarker(signature: string | null | undefined): string {
-  if (!signature) return "";
-  return signature.replace(WARMUP_MARKER_RE, "").trim();
-}
+// One helper for the web app and the engine (strips the marker and the
+// whitespace before it).
+export { hasWarmupMarker, stripWarmupMarker } from "@smartreach/shared/signature";
 
 export const WARMUP_STATUS_TITLE = "Warm-up isn't run by AutoGTM";
 

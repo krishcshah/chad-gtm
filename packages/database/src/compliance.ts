@@ -3,8 +3,31 @@
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 
+/** Secret new unsubscribe tokens are signed with. */
 function tokenSecret(): string {
   return process.env.BETTER_AUTH_SECRET || process.env.ENCRYPTION_KEY || "dev-only-unsub-secret";
+}
+
+/**
+ * Secrets a token may be verified against: the current one, then
+ * UNSUBSCRIBE_SECRET_PREVIOUS (the old BETTER_AUTH_SECRET after a rotation),
+ * so unsubscribe links already sent keep working.
+ */
+function verificationSecrets(): string[] {
+  const current = tokenSecret();
+  const previous = (process.env.UNSUBSCRIBE_SECRET_PREVIOUS ?? "").trim();
+  return previous && previous !== current ? [current, previous] : [current];
+}
+
+/** Constant-time comparison of two base64url signatures. */
+function signatureMatches(sig: string, expected: string): boolean {
+  try {
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expected);
+    return a.length === b.length && timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
 }
 
 /** Normalize email for suppression matching. */
@@ -47,16 +70,13 @@ export function verifyUnsubscribeToken(
 ): { ok: true; userId: string; email: string } | { ok: false; error: string } {
   const [payload, sig] = token.split(".");
   if (!payload || !sig) return { ok: false, error: "Malformed token" };
-  const expected = createHmac("sha256", tokenSecret()).update(payload).digest("base64url");
-  try {
-    const a = Buffer.from(sig);
-    const b = Buffer.from(expected);
-    if (a.length !== b.length || !timingSafeEqual(a, b)) {
-      return { ok: false, error: "Invalid signature" };
-    }
-  } catch {
-    return { ok: false, error: "Invalid signature" };
+  // Check every accepted secret (no early exit) so timing doesn't reveal which matched.
+  let valid = false;
+  for (const secret of verificationSecrets()) {
+    const expected = createHmac("sha256", secret).update(payload).digest("base64url");
+    if (signatureMatches(sig, expected)) valid = true;
   }
+  if (!valid) return { ok: false, error: "Invalid signature" };
   let raw: string;
   try {
     raw = Buffer.from(payload, "base64url").toString("utf8");

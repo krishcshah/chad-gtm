@@ -380,3 +380,14 @@ describe("heartbeat", () => {
     err.mockRestore();
   });
 });
+
+describe("shared warm-up marker helper (scheduler signatures)", () => {
+  it("removes every legacy marker plus the whitespace before it, then trims", () => {
+    const sig = 'Best,\nJane  \n<!-- SR_WARMUP:{\n"enabled":true}-->\nAcme<!--SR_WARMUP:{"x":1}-->  ';
+    expect(stripWarmupMarker(sig)).toBe("Best,\nJane\nAcme");
+    expect(stripWarmupMarker(sig)).not.toContain("SR_WARMUP");
+    expect(stripWarmupMarker(undefined)).toBe("");
+    // Idempotent and repeatable (no lingering global-regex state).
+    expect(stripWarmupMarker(sig)).toBe(stripWarmupMarker(stripWarmupMarker(sig)));
+  });
+});

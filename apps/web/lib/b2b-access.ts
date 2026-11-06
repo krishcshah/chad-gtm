@@ -39,12 +39,18 @@ export async function ensureB2BAccessSchema(): Promise<void> {
   schemaEnsured = true;
 }
 
+/** The user fields needed to decide directory access. */
+export type B2BAccessUser = {
+  id: string;
+  email?: string | null;
+  role?: string | null;
+  emailVerified?: boolean | null;
+};
+
 /**
- * True when the user has an active B2B directory access grant.
- * Admins are handled by getDirectoryAccessLevel. There is no email-based
- * bypass: addresses aren't verified at sign-up, so anyone could claim one.
+ * True when the user has an active B2B directory access grant (no admin check).
  */
-export async function hasB2BAccess(userId: string, _email?: string): Promise<boolean> {
+export async function hasActiveB2BGrant(userId: string): Promise<boolean> {
   try {
     await ensureB2BAccessSchema();
     const db = getDb();
@@ -67,17 +73,23 @@ export async function hasB2BAccess(userId: string, _email?: string): Promise<boo
 }
 
 /**
+ * True when the user may use the full directory: an admin (role, or a
+ * VERIFIED ADMIN_EMAILS address via isAdmin) or an active access grant.
+ * An unverified address listed in ADMIN_EMAILS never grants access.
+ */
+export async function hasB2BAccess(user: B2BAccessUser): Promise<boolean> {
+  if (isAdmin(user)) return true;
+  return hasActiveB2BGrant(user.id);
+}
+
+/**
  * Server-side directory entitlement for a signed-in user:
  * "admin" (unrestricted), "paid" (active grant; full records, capped exports)
  * or "none" (masked one-page preview, no export or save).
  */
-export async function getDirectoryAccessLevel(user: {
-  id: string;
-  email?: string | null;
-  role?: string | null;
-}): Promise<DirectoryAccessLevel> {
+export async function getDirectoryAccessLevel(user: B2BAccessUser): Promise<DirectoryAccessLevel> {
   if (isAdmin(user)) return "admin";
-  return (await hasB2BAccess(user.id)) ? "paid" : "none";
+  return (await hasActiveB2BGrant(user.id)) ? "paid" : "none";
 }
 
 /**

@@ -111,3 +111,17 @@ describe("directory paywall (server side)", () => {
     expect(maskDirectoryLead({ ...lead(1), phone: "" }).phone).toBe("");
   });
 });
+
+describe("lead matcher preview params", () => {
+  it("caps the page size and keeps the launch audience filters", async () => {
+    const { leadMatcherSearchParams, LEAD_MATCHER_MAX_PAGE_SIZE } = await import("../leads-directory");
+    const p = leadMatcherSearchParams(["Software"], ["United States"], 3, 500);
+    expect(p.pageSize).toBe(LEAD_MATCHER_MAX_PAGE_SIZE);
+    expect(p.hasEmail).toBe(true);
+    expect(p.hasWorkEmail).toBe(true);
+    expect(p.countries).toEqual(["United States"]);
+    expect(p.industries).toEqual(["Software"]);
+    expect(leadMatcherSearchParams([], ["US"], 0, 0).industries).toBeUndefined();
+    expect(leadMatcherSearchParams([], ["US"], 0, 0).page).toBe(1);
+  });
+});

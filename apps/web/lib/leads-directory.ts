@@ -806,6 +806,44 @@ export function searchLeadsDirectoryForAccess(
   return applyDirectoryAccess(searchLeadsDirectory(clampDirectorySearchParams(params, level)), level);
 }
 
+/** Max rows the autopilot lead matcher preview returns per call. */
+export const LEAD_MATCHER_MAX_PAGE_SIZE = 10;
+
+/**
+ * Search params for the autopilot lead matcher preview: the launch audience
+ * (work addresses in the given countries), page size capped.
+ */
+export function leadMatcherSearchParams(
+  industries: string[],
+  countries: string[],
+  page = 1,
+  pageSize = LEAD_MATCHER_MAX_PAGE_SIZE
+): DirectorySearchParams {
+  const size = Math.min(LEAD_MATCHER_MAX_PAGE_SIZE, Math.max(1, Math.floor(Number(pageSize)) || LEAD_MATCHER_MAX_PAGE_SIZE));
+  return {
+    industries: industries.length > 0 ? industries : undefined,
+    countries,
+    hasEmail: true,
+    hasWorkEmail: true,
+    page: Math.max(1, Math.floor(Number(page)) || 1),
+    pageSize: size,
+  };
+}
+
+/**
+ * Lead matcher preview. The UI only shows name, title, company and location,
+ * so contact details are always masked (preview level), whatever the
+ * caller's directory access.
+ */
+export function searchLeadMatcherPreview(
+  industries: string[],
+  countries: string[],
+  page = 1,
+  pageSize = LEAD_MATCHER_MAX_PAGE_SIZE
+): DirectorySearchResult {
+  return searchLeadsDirectoryForAccess(leadMatcherSearchParams(industries, countries, page, pageSize), "none");
+}
+
 /** Max rows per CSV export for this level; 0 means exports are blocked. */
 export function directoryExportLimit(level: DirectoryAccessLevel, requested?: number): number {
   const cap =

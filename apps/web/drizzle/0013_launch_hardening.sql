@@ -26,3 +26,8 @@ CREATE TABLE IF NOT EXISTS "engine_heartbeats" (
 	"stats" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"updated_at" text DEFAULT to_char((now() AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS.MSZ') NOT NULL
 );
+--> statement-breakpoint
+-- Email verification is now enforced at sign-in. Accounts created before this
+-- release never received a verification email, so mark them verified to avoid
+-- locking them out. New sign-ups must verify.
+UPDATE "users" SET "email_verified" = true WHERE "email_verified" = false AND "created_at" < '2026-11-07T00:00:00Z';

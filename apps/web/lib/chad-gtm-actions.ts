@@ -13,7 +13,7 @@ import {
   type SynthesizedGtmStrategy,
 } from "./chad-gtm-research";
 import {
-  searchLeadsDirectory,
+  searchLeadMatcherPreview,
   getMatchingDirectoryLeadsForExport,
 } from "./leads-directory";
 import {
@@ -314,17 +314,18 @@ export async function searchMatchingLeadsAction(
   pageSize = 10
 ) {
   try {
+    await requireUser();
     // Same audience rules as launch: work addresses in AUTOPILOT_COUNTRIES.
-    const result = searchLeadsDirectory({
-      industries: industries.length > 0 ? industries : undefined,
-      countries: autopilotCountries(),
-      hasEmail: true,
-      hasWorkEmail: true,
+    // Masked preview (name/title/company/location only), capped page size.
+    const result = searchLeadMatcherPreview(
+      Array.isArray(industries) ? industries.filter((i) => typeof i === "string") : [],
+      autopilotCountries(),
       page,
-      pageSize,
-    });
+      pageSize
+    );
     return { ok: true, total: result.total, leads: result.leads };
   } catch (err: any) {
+    if (err?.digest?.startsWith?.("NEXT_REDIRECT")) throw err;
     return { ok: false, total: 0, leads: [], error: err?.message };
   }
 }

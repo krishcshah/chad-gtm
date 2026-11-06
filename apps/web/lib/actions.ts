@@ -61,6 +61,12 @@ import { requireUser } from "./session";
 import { isAdmin } from "./admin";
 import { APPROVAL_REQUIRED_ERROR, assertCanSend } from "./approval";
 import { campaignStartPostalError } from "./campaign-start-guard";
+import {
+  poolCampaignEditError,
+  poolLeadEditError,
+  poolListEditError,
+  poolTemplateEditError,
+} from "./pool-campaign-guard";
 import { getWorkspacePostalAddress } from "./queries";
 import {
   campaignSendersStartError,
@@ -322,6 +328,9 @@ export async function importLeads(input: unknown): Promise<
       .from(leadLists)
       .where(and(eq(leadLists.id, listId), eq(leadLists.userId, user.id)));
     if (!existing) return { ok: false, error: "List not found" };
+    // Never let a client import their own leads into an autopilot (pool) list.
+    const poolError = await poolListEditError(db, { id: user.id, isAdmin: isAdmin(user) }, listId);
+    if (poolError) return { ok: false, error: poolError };
   }
 
   const emailColumn = Object.entries(mapping).find(([, v]) => v === "email")?.[0];
@@ -438,15 +447,27 @@ export async function fetchLeadsPage(params: {
 
 export async function createLead(input: unknown): Promise<ActionResult<{ id: string }>> {
   const user = await requireUser();
+  const db = getDb();
+  const listId = (input as { listId?: unknown } | null | undefined)?.listId;
+  const poolError = await poolListEditError(
+    db,
+    { id: user.id, isAdmin: isAdmin(user) },
+    typeof listId === "string" ? listId : null,
+  );
+  if (poolError) return { ok: false, error: poolError };
   const workspace = await getActiveWorkspace(user.id);
-  const result = await createLeadForUser(getDb(), user.id, input, workspace.id);
+  const result = await createLeadForUser(db, user.id, input, workspace.id);
   if (result.ok) revalidatePath("/leads");
   return result;
 }
 
 export async function updateLead(leadId: string, input: unknown): Promise<ActionResult> {
   const user = await requireUser();
-  const result = await updateLeadForUser(getDb(), user.id, leadId, input);
+  const db = getDb();
+  // Leads of an autopilot (pool) list can't be rewritten (email, names, fields).
+  const poolError = await poolLeadEditError(db, { id: user.id, isAdmin: isAdmin(user) }, leadId);
+  if (poolError) return { ok: false, error: poolError };
+  const result = await updateLeadForUser(db, user.id, leadId, input);
   if (result.ok) revalidatePath("/leads");
   return result;
 }
@@ -865,6 +886,8 @@ export async function upsertTemplate(input: {
   const db = getDb();
   try {
     if (id) {
+      const poolError = await poolTemplateEditError(db, { id: user.id, isAdmin: isAdmin(user) }, id);
+      if (poolError) return { ok: false, error: poolError };
       await db
         .update(emailTemplates)
         .set({ ...parsed.data, updatedAt: nowIso() })
@@ -942,6 +965,8 @@ export async function updateSequenceTemplate(
   const serialized = serializeSequenceTemplate(trimmedName, description?.trim() || "", steps);
 
   try {
+    const poolError = await poolTemplateEditError(db, { id: user.id, isAdmin: isAdmin(user) }, id);
+    if (poolError) return { ok: false, error: poolError };
     const [row] = await db
       .update(emailTemplates)
       .set({
@@ -967,13 +992,22 @@ export async function updateSequenceTemplate(
 
 /* ═══ CAMPAIGNS ═══ */
 
+/** Id of an existing campaign named by a wizard payload, if any. */
+function payloadCampaignId(input: unknown): string | null {
+  const id = (input as { id?: unknown } | null | undefined)?.id;
+  return typeof id === "string" && id ? id : null;
+}
+
 export async function saveCampaignDraft(input: unknown): Promise<ActionResult<{ id: string }>> {
   const user = await requireUser();
   const db = getDb();
+  // A pool campaign's list/template/senders can't be swapped through the wizard.
+  const poolError = await poolCampaignEditError(db, { id: user.id, isAdmin: isAdmin(user) }, payloadCampaignId(input));
+  if (poolError) return { ok: false, error: poolError };
   const senderError = await manualCampaignSenderError(db, user, requestedSenderIds(input));
   if (senderError) return { ok: false, error: senderError, fieldErrors: { senderIds: [senderError] } };
   const workspace = await getActiveWorkspace(user.id);
-  const result = await saveCampaignDraftForUser(db, user.id, input, workspace.id);
+  const result = await saveCampaignDraftForUser(db, user.id, input, workspace.id, { isAdmin: isAdmin(user) });
   if (result.ok) {
     revalidatePath("/campaigns");
     revalidatePath("/dashboard");
@@ -984,6 +1018,8 @@ export async function saveCampaignDraft(input: unknown): Promise<ActionResult<{ 
 export async function publishCampaign(input: unknown): Promise<ActionResult<{ id: string }>> {
   const user = await requireUser();
   const db = getDb();
+  const poolError = await poolCampaignEditError(db, { id: user.id, isAdmin: isAdmin(user) }, payloadCampaignId(input));
+  if (poolError) return { ok: false, error: poolError };
   // Publishing starts sending (now or at the scheduled time).
   const approvalError = await sendApprovalError(user.id);
   if (approvalError) return { ok: false, error: approvalError };
@@ -993,7 +1029,9 @@ export async function publishCampaign(input: unknown): Promise<ActionResult<{ id
   const senderError = await manualCampaignSenderError(db, user, requestedSenderIds(input));
   if (senderError) return { ok: false, error: senderError, fieldErrors: { senderIds: [senderError] } };
   const workspace = await getActiveWorkspace(user.id);
-  const result = await publishCampaignForUser(db, user.id, input, postalAddress, workspace.id);
+  const result = await publishCampaignForUser(db, user.id, input, postalAddress, workspace.id, {
+    isAdmin: isAdmin(user),
+  });
   if (result.ok && result.data?.id) {
     const id = result.data.id;
     const rawSteps = (input as { steps?: unknown })?.steps;
@@ -1031,7 +1069,16 @@ export async function saveCampaignSequence(
   input: unknown,
 ): Promise<ActionResult<SequenceDTO>> {
   const user = await requireUser();
-  const result = await saveCampaignSequenceForUser(getDb(), user.id, input);
+  const db = getDb();
+  // Autopilot (pool) campaigns keep the copy the launcher wrote.
+  const campaignId = (input as { campaignId?: unknown } | null | undefined)?.campaignId;
+  const poolError = await poolCampaignEditError(
+    db,
+    { id: user.id, isAdmin: isAdmin(user) },
+    typeof campaignId === "string" ? campaignId : null,
+  );
+  if (poolError) return { ok: false, error: poolError };
+  const result = await saveCampaignSequenceForUser(db, user.id, input);
   if (result.ok) {
     const id = result.data?.campaignId;
     if (id) revalidatePath(`/campaigns/${id}`);
@@ -2416,6 +2463,8 @@ export async function saveDirectoryLeadsToCampaignListAction(input: {
         )
         .limit(1);
       if (!ownList) return { ok: false, error: "Lead list not found" };
+      const poolError = await poolListEditError(db, { id: user.id, isAdmin: isAdmin(user) }, targetListId);
+      if (poolError) return { ok: false, error: poolError };
     } else {
       const listName = input.listName || `Apollo Leads - ${new Date().toLocaleDateString()}`;
       const [newList] = await db

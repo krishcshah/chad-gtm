@@ -47,6 +47,7 @@ import { appUrl, engineBatchSize } from "./env";
 import { loadApplicableSuppressions } from "./suppression";
 import { buildPoolPlans, isPoolSender, withinPoolShare, type CampaignPoolPlan } from "./pool-allocation";
 import { stripWarmupMarker } from "./signature";
+import { loadUnapprovedOwners, OWNER_NOT_APPROVED_NOTE } from "./owner-approval";
 
 /** Shown on the campaign when it cannot send because the postal address is missing. */
 export const MISSING_POSTAL_ADDRESS_NOTE = "missing-postal-address";
@@ -592,10 +593,26 @@ export async function schedulerTick(db: EngineDb, now = new Date()): Promise<Tic
   const result: TickResult = { started: 0, enqueued: 0, completed: 0, rescheduled: 0, skipped: [] };
   result.started = await startDueCampaigns(db, now);
 
-  const running: CampaignRow[] = await db
+  const allRunning: CampaignRow[] = await db
     .select()
     .from(schema.campaigns)
     .where(and(eq(schema.campaigns.status, "running"), isNull(schema.campaigns.deletedAt)));
+
+  // Approval can be revoked while campaigns run: skip campaigns whose owner
+  // is not approved (role <> 'admin' AND approved_at IS NULL), unless
+  // SIGNUP_APPROVAL_REQUIRED="false". If the lookup fails, send nothing.
+  let unapproved: Set<string>;
+  try {
+    unapproved = await loadUnapprovedOwners(db, allRunning.map((c) => c.userId));
+  } catch (err) {
+    console.error("[scheduler] owner approval lookup failed:", err);
+    unapproved = new Set(allRunning.map((c) => c.userId));
+  }
+  const running: CampaignRow[] = [];
+  for (const c of allRunning) {
+    if (unapproved.has(c.userId)) result.skipped.push(`${c.name}: ${OWNER_NOT_APPROVED_NOTE}`);
+    else running.push(c);
+  }
 
   // Fair sharing: campaigns inside their window split the pool mailboxes'
   // daily capacity (round-robin over users, then campaigns), and the ones

@@ -36,6 +36,7 @@ type Store = {
   campaignSenders: { campaignId: string; senderId: string }[];
   campaignLeads: { id: string; campaignId: string; leadId: string; status: string }[];
   leads: { id: string; listId: string; status: string; deletedAt: string | null }[];
+  senderAccounts: { id: string; userId: string; isSystemPool: boolean; deletedAt: string | null }[];
 };
 
 let store: Store;
@@ -223,6 +224,9 @@ function doSelect(ctx: {
   else if (ctx.table === "campaign_senders") rows = store.campaignSenders;
   else if (ctx.table === "campaign_leads") rows = store.campaignLeads;
   else if (ctx.table === "leads") rows = store.leads;
+  // inArray(id, [...]) isn't extracted: every sender row comes back, which is
+  // fine because the partition looks senders up by id.
+  else if (ctx.table === "sender_accounts") return store.senderAccounts.map((r) => ({ ...r }));
 
   // inArray(status, [...]) isn't extracted — for leads, also match list_id
   rows = applyFilters(rows, ctx.filters);
@@ -335,7 +339,94 @@ function seedDraft(overrides: Partial<CampaignRow> = {}): CampaignRow {
 
 beforeEach(() => {
   idSeq = 0;
-  store = { campaigns: [], campaignSenders: [], campaignLeads: [], leads: [] };
+  store = {
+    campaigns: [],
+    campaignSenders: [],
+    campaignLeads: [],
+    leads: [],
+    senderAccounts: ["s1", "s-a", "s-b"].map((id) => ({
+      id,
+      userId: "user-1",
+      isSystemPool: false,
+      deletedAt: null,
+    })),
+  };
+});
+
+describe("sender ownership/pool filter (defense in depth)", () => {
+  beforeEach(() => {
+    store.senderAccounts.push(
+      { id: "pool-1", userId: "admin-1", isSystemPool: true, deletedAt: null },
+      { id: "other-1", userId: "user-2", isSystemPool: false, deletedAt: null },
+      { id: "gone-1", userId: "user-1", isSystemPool: false, deletedAt: "2026-01-01T00:00:00.000Z" },
+    );
+  });
+  const full = {
+    name: "Go",
+    leadListId: "list-1",
+    templateId: "t1",
+    startMode: "now" as const,
+    sendingTimezone: "UTC",
+  };
+
+  it("draft save drops pool, foreign and deleted mailboxes for a non-admin", async () => {
+    seedDraft();
+    const result = await saveCampaignDraftForUser(createStoreDb() as never, "user-1", {
+      id: "camp-1",
+      senderIds: ["s-a", "pool-1", "other-1", "gone-1"],
+    });
+    expect(result.ok).toBe(true);
+    expect(store.campaignSenders.map((s) => s.senderId)).toEqual(["s-a"]);
+  });
+
+  it("new draft never attaches a pool mailbox for a non-admin", async () => {
+    const result = await saveCampaignDraftForUser(createStoreDb() as never, "user-1", {
+      name: "x",
+      senderIds: ["pool-1"],
+    });
+    expect(result.ok).toBe(true);
+    expect(store.campaignSenders).toEqual([]);
+  });
+
+  it("publish refuses when only pool/foreign mailboxes were requested", async () => {
+    const result = await publishCampaignForUser(
+      createStoreDb() as never,
+      "user-1",
+      { ...full, senderIds: ["pool-1", "other-1"] },
+      "1 Main St",
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/Shared AutoGTM mailboxes/);
+    expect(store.campaigns).toHaveLength(0);
+    expect(store.campaignSenders).toEqual([]);
+  });
+
+  it("publish keeps only the allowed mailboxes", async () => {
+    store.leads.push({ id: "lead-1", listId: "list-1", status: "new", deletedAt: null });
+    const result = await publishCampaignForUser(
+      createStoreDb() as never,
+      "user-1",
+      { ...full, senderIds: ["s1", "pool-1"] },
+      "1 Main St",
+    );
+    expect(result.ok).toBe(true);
+    expect(store.campaignSenders.map((s) => s.senderId)).toEqual(["s1"]);
+  });
+
+  it("admins may attach pool mailboxes", async () => {
+    store.leads.push({ id: "lead-1", listId: "list-1", status: "new", deletedAt: null });
+    const result = await publishCampaignForUser(
+      createStoreDb() as never,
+      "admin-1",
+      { ...full, senderIds: ["pool-1"] },
+      "1 Main St",
+      null,
+      { isAdmin: true },
+    );
+    expect(result.ok).toBe(true);
+    expect(store.campaignSenders.map((s) => s.senderId)).toEqual(["pool-1"]);
+  });
 });
 
 describe("saveCampaignDraftForUser", () => {
