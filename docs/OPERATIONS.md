@@ -93,7 +93,7 @@ Repository secrets (Settings → Secrets and variables → Actions):
 | `SERVER_HOST` | VM address |
 | `SERVER_USER` | `ubuntu` |
 | `SSH_PRIVATE_KEY` | a dedicated deploy key whose public half is in `~/.ssh/authorized_keys` on the VM |
-| `SERVER_FINGERPRINT` | optional, recommended: `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the VM (the `SHA256:...` part) |
+| `SERVER_FINGERPRINT` | optional, recommended: the **ECDSA** host key, `ssh-keygen -lf /etc/ssh/ssh_host_ecdsa_key.pub` on the VM (the `SHA256:...` part). appleboy/ssh-action negotiates ECDSA first, so the ed25519 fingerprint fails with "host key fingerprint mismatch" |
 
 Known limitations: `npm ci` and the web build still run in place, under the
 running processes. While `npm ci` runs, routes that load a package for the
