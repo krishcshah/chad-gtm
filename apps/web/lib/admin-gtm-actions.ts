@@ -9,6 +9,16 @@ import { getDb, ensureChadGtmTables } from "./db";
 import { requireUser } from "./session";
 import { isAdmin } from "./admin";
 import {
+  MAX_POOL_MAILBOXES_PER_DOMAIN,
+  countPoolMailboxesByDomain,
+  emailDomain,
+  planPoolMailboxImport,
+  poolDomainCapError,
+  testPoolMailbox,
+  type PoolImportCandidate,
+} from "./pool-mailbox-import";
+import { stripWarmupMarker } from "./sender-warmup";
+import {
   importDirectoryLeadsFromCsv,
   getDirectoryStats,
   type IngestionResult,
@@ -163,9 +173,30 @@ export async function getSystemMailboxPoolStats(): Promise<SystemMailboxPoolStat
   };
 }
 
-export async function importSystemMailboxesCsv(
-  rows: unknown[]
-): Promise<{ ok: boolean; imported: number; failed: { row: number; error: string }[] }> {
+type PoolCsvCandidate = PoolImportCandidate & {
+  data: ReturnType<typeof senderCsvRowSchema.parse>;
+  /** Sender-shaped row with encrypted secrets, as the engine's tester expects. */
+  probe: Record<string, unknown>;
+};
+
+async function engineConnectionTester(candidate: { probe: Record<string, unknown> }) {
+  const { testConnection } = await import("@smartreach/email-engine/mailer");
+  return testConnection(candidate.probe as never);
+}
+
+export interface SystemMailboxImportResult {
+  ok: boolean;
+  /** Rows saved (active + inactive). */
+  imported: number;
+  /** Saved and live: SMTP and IMAP login both worked. */
+  activated: number;
+  /** Saved but inactive because a login test failed; fix and re-activate. */
+  inactive: { row: number; email: string; error: string }[];
+  /** Rows not saved. */
+  failed: { row: number; error: string }[];
+}
+
+export async function importSystemMailboxesCsv(rows: unknown[]): Promise<SystemMailboxImportResult> {
   const user = await requireUser();
   if (!isAdmin(user)) {
     throw new Error("Unauthorized: Admin privileges required.");
@@ -175,14 +206,20 @@ export async function importSystemMailboxesCsv(
   await ensureChadGtmTables(db);
 
   const failed: { row: number; error: string }[] = [];
+  const inactive: SystemMailboxImportResult["inactive"] = [];
   let imported = 0;
+  let activated = 0;
 
   const existing = await db
-    .select({ email: schema.senderAccounts.email })
+    .select({ email: schema.senderAccounts.email, isSystemPool: schema.senderAccounts.isSystemPool })
     .from(schema.senderAccounts)
     .where(isNull(schema.senderAccounts.deletedAt));
-  const existingSet = new Set(existing.map((r) => r.email.toLowerCase()));
+  const existingEmails = new Set(existing.map((r) => r.email.toLowerCase()));
+  const existingDomainCounts = countPoolMailboxesByDomain(
+    existing.filter((r) => r.isSystemPool).map((r) => r.email),
+  );
 
+  const candidates: PoolCsvCandidate[] = [];
   for (let i = 0; i < rows.length; i++) {
     const parsed = senderCsvRowSchema.safeParse(rows[i]);
     if (!parsed.success) {
@@ -192,48 +229,81 @@ export async function importSystemMailboxesCsv(
       });
       continue;
     }
+    const d = parsed.data;
+    const email = normalizeEmail(d.email).toLowerCase();
+    candidates.push({
+      row: i + 1,
+      email,
+      data: d,
+      probe: {
+        email,
+        fromName: d.senderName,
+        replyTo: "",
+        smtpHost: d.smtpHost,
+        smtpPort: d.smtpPort,
+        smtpUsername: d.smtpUsername,
+        smtpPasswordEnc: encryptSecret(d.smtpPassword),
+        smtpSecurity: d.smtpSecurity,
+        imapHost: d.imapHost || "",
+        imapPort: d.imapPort || 993,
+        imapUsername: d.imapUsername || "",
+        imapPasswordEnc: d.imapPassword ? encryptSecret(d.imapPassword) : "",
+      },
+    });
+  }
 
-    const email = normalizeEmail(parsed.data.email).toLowerCase();
-    if (existingSet.has(email)) {
-      failed.push({ row: i + 1, error: `${email} is already in the system` });
-      continue;
-    }
+  // Duplicates and the per-domain cap are checked before any login test.
+  const plan = await planPoolMailboxImport({
+    candidates,
+    existingEmails,
+    existingDomainCounts,
+    tester: engineConnectionTester,
+  });
+  failed.push(...plan.rejected);
 
+  for (const { candidate, verdict } of plan.toInsert) {
+    const d = candidate.data;
+    const probe = candidate.probe as {
+      smtpPasswordEnc: string;
+      imapPasswordEnc: string;
+    };
     try {
       await db.insert(schema.senderAccounts).values({
         userId: user.id,
-        senderName: parsed.data.senderName,
-        email,
-        smtpHost: parsed.data.smtpHost,
-        smtpPort: parsed.data.smtpPort,
-        smtpUsername: parsed.data.smtpUsername,
-        smtpPasswordEnc: encryptSecret(parsed.data.smtpPassword),
-        smtpSecurity: parsed.data.smtpSecurity,
-        imapHost: parsed.data.imapHost || "",
-        imapPort: parsed.data.imapPort || 993,
-        imapUsername: parsed.data.imapUsername || "",
-        imapPasswordEnc: parsed.data.imapPassword ? encryptSecret(parsed.data.imapPassword) : "",
-        dailyLimit: Math.min(30, parsed.data.dailyLimit || 30), // Target pace 30
-        hourlyLimit: parsed.data.hourlyLimit || 10,
-        fromName: parsed.data.senderName,
+        senderName: d.senderName,
+        email: candidate.email,
+        smtpHost: d.smtpHost,
+        smtpPort: d.smtpPort,
+        smtpUsername: d.smtpUsername,
+        smtpPasswordEnc: probe.smtpPasswordEnc,
+        smtpSecurity: d.smtpSecurity,
+        imapHost: d.imapHost || "",
+        imapPort: d.imapPort || 993,
+        imapUsername: d.imapUsername || "",
+        imapPasswordEnc: probe.imapPasswordEnc,
+        dailyLimit: Math.min(30, d.dailyLimit || 30), // Target pace 30
+        hourlyLimit: d.hourlyLimit || 10,
+        fromName: d.senderName,
         replyTo: "",
-        timezone: parsed.data.timezone || "UTC",
-        signature: parsed.data.signature || "",
-        status: "active",
-        health: 100,
-        smtpStatus: "untested",
-        imapStatus: "untested",
+        timezone: d.timezone || "UTC",
+        signature: stripWarmupMarker(d.signature || ""),
+        status: verdict.status,
+        health: verdict.health,
+        smtpStatus: verdict.smtpStatus,
+        imapStatus: verdict.imapStatus,
         isSystemPool: true,
       });
-      existingSet.add(email);
       imported++;
+      if (verdict.active) activated++;
+      else inactive.push({ row: candidate.row, email: candidate.email, error: verdict.error ?? "Login test failed" });
     } catch (err: any) {
-      failed.push({ row: i + 1, error: err?.message || "Failed to save into database" });
+      failed.push({ row: candidate.row, error: err?.message || "Failed to save into database" });
     }
   }
 
+  failed.sort((a, b) => a.row - b.row);
   revalidatePath("/admin");
-  return { ok: true, imported, failed };
+  return { ok: true, imported, activated, inactive, failed };
 }
 
 export async function toggleSystemMailboxStatus(
@@ -248,20 +318,55 @@ export async function toggleSystemMailboxStatus(
   const db = getDb();
   await ensureChadGtmTables(db);
 
-  await db
-    .update(schema.senderAccounts)
-    .set({
-      status: newStatus,
-      updatedAt: new Date().toISOString(),
-    })
+  const [sender] = await db
+    .select()
+    .from(schema.senderAccounts)
     .where(
       and(
         eq(schema.senderAccounts.id, senderId),
-        eq(schema.senderAccounts.isSystemPool, true)
+        eq(schema.senderAccounts.isSystemPool, true),
+        isNull(schema.senderAccounts.deletedAt)
       )
-    );
+    )
+    .limit(1);
+  if (!sender) return { ok: false, error: "Mailbox not found" };
+
+  if (newStatus === "paused") {
+    await db
+      .update(schema.senderAccounts)
+      .set({ status: "paused", updatedAt: new Date().toISOString() })
+      .where(eq(schema.senderAccounts.id, senderId));
+    revalidatePath("/admin");
+    return { ok: true };
+  }
+
+  // Activation: re-check the per-domain cap and require a live SMTP + IMAP login.
+  const domain = emailDomain(sender.email);
+  const poolOnDomain = await db
+    .select({ id: schema.senderAccounts.id, email: schema.senderAccounts.email })
+    .from(schema.senderAccounts)
+    .where(and(eq(schema.senderAccounts.isSystemPool, true), isNull(schema.senderAccounts.deletedAt)));
+  const sameDomain = poolOnDomain.filter((r) => r.id !== senderId && emailDomain(r.email) === domain);
+  if (sameDomain.length >= MAX_POOL_MAILBOXES_PER_DOMAIN) {
+    return { ok: false, error: poolDomainCapError(domain) };
+  }
+
+  const verdict = await testPoolMailbox(sender, (s) => engineConnectionTester({ probe: s as never }));
+  await db
+    .update(schema.senderAccounts)
+    .set({
+      status: verdict.status,
+      health: verdict.health,
+      smtpStatus: verdict.smtpStatus,
+      imapStatus: verdict.imapStatus,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(schema.senderAccounts.id, senderId));
 
   revalidatePath("/admin");
+  if (!verdict.active) {
+    return { ok: false, error: `Mailbox left inactive: ${verdict.error}` };
+  }
   return { ok: true };
 }
 

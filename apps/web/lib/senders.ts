@@ -1,10 +1,12 @@
 /**
- * Sender operations: pause/resume, edit limits, update details, delete, and warmup.
+ * Sender operations: pause/resume, edit limits, update details, delete.
+ * (AutoGTM runs no mailbox warm-up; see sender-warmup.ts.)
  */
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { schema, encryptSecret } from "@smartreach/database";
 import { nowIso } from "@smartreach/shared";
-import { parseSenderWarmup, formatSenderWarmup, type SenderWarmupConfig } from "./sender-warmup";
+import { hasWarmupMarker, stripWarmupMarker } from "./sender-warmup";
+import { patchChangesCredentials, poolActivationBlocker } from "./pool-mailbox-import";
 
 const { senderAccounts } = schema;
 
@@ -21,6 +23,20 @@ export async function toggleSenderForUser(
   pause: boolean,
 ): Promise<SenderActionResult> {
   try {
+    if (!pause) {
+      const [current] = await db
+        .select({
+          isSystemPool: senderAccounts.isSystemPool,
+          smtpStatus: senderAccounts.smtpStatus,
+          imapStatus: senderAccounts.imapStatus,
+        })
+        .from(senderAccounts)
+        .where(and(eq(senderAccounts.id, senderId), eq(senderAccounts.userId, userId)))
+        .limit(1);
+      if (!current) return { ok: false, error: "Sender not found" };
+      const blocked = poolActivationBlocker(current);
+      if (blocked) return { ok: false, error: blocked };
+    }
     const [row] = await db
       .update(senderAccounts)
       .set({ status: pause ? "paused" : "active", updatedAt: nowIso() })
@@ -78,7 +94,7 @@ export async function updateSenderLimitsForUser(
   }
 }
 
-/** Update general details & warmup config for a sender. */
+/** Update general details for a sender. */
 export async function updateSenderDetailsForUser(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
@@ -92,7 +108,6 @@ export async function updateSenderDetailsForUser(
     hourlyLimit?: number;
     timezone?: string;
     cleanSignature?: string;
-    warmup?: Partial<SenderWarmupConfig>;
     smtpHost?: string;
     smtpPort?: number;
     smtpUsername?: string;
@@ -112,15 +127,15 @@ export async function updateSenderDetailsForUser(
       .limit(1);
     if (!sender) return { ok: false, error: "Sender not found" };
 
-    const { warmup: currentWarmup, cleanSig: currentCleanSig } = parseSenderWarmup(sender.signature);
-    const updatedWarmup = { ...currentWarmup, ...(data.warmup ?? {}) };
-    const updatedCleanSig = data.cleanSignature !== undefined ? data.cleanSignature : currentCleanSig;
-    const finalSignature = formatSenderWarmup(updatedCleanSig, updatedWarmup);
-
     const patch: Record<string, unknown> = {
-      signature: finalSignature,
       updatedAt: nowIso(),
     };
+    // Never store the old warm-up marker: it was sent out with the signature.
+    if (data.cleanSignature !== undefined) {
+      patch.signature = stripWarmupMarker(data.cleanSignature);
+    } else if (hasWarmupMarker(sender.signature)) {
+      patch.signature = stripWarmupMarker(sender.signature);
+    }
 
     if (data.senderName) patch.senderName = data.senderName.trim();
     if (data.fromName !== undefined) patch.fromName = data.fromName.trim();
@@ -160,90 +175,26 @@ export async function updateSenderDetailsForUser(
       patch.imapPasswordEnc = encryptSecret(data.imapPassword.trim());
     }
 
+    // A shared pool mailbox with new login details must pass a new test before it sends again.
+    const needsRetest = Boolean(sender.isSystemPool) && patchChangesCredentials(patch);
+    if (needsRetest) {
+      patch.smtpStatus = "untested";
+      patch.imapStatus = "untested";
+      patch.status = "paused";
+    }
+
     await db
       .update(senderAccounts)
       .set(patch)
       .where(and(eq(senderAccounts.id, senderId), eq(senderAccounts.userId, userId)));
 
-    return { ok: true, message: "Sender details saved successfully" };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Failed to update sender" };
-  }
-}
-
-/** Peer warmup pool: exchange simulated warmup messages among enrolled senders. */
-export async function runWarmupCycleForUser(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: any,
-  userId: string,
-): Promise<{ ok: boolean; message: string; exchanged: number }> {
-  try {
-    const rows = await db
-      .select()
-      .from(senderAccounts)
-      .where(and(eq(senderAccounts.userId, userId), isNull(senderAccounts.deletedAt)));
-
-    const pool = rows.filter((r: any) => {
-      const { warmup } = parseSenderWarmup(r.signature);
-      return warmup.enabled && r.status !== "failed";
-    });
-
-    if (pool.length < 2) {
-      return {
-        ok: false,
-        message: "Need at least 2 active mailboxes with Warm-up enabled to exchange peer emails.",
-        exchanged: 0,
-      };
-    }
-
-    let exchanged = 0;
-    for (let i = 0; i < pool.length; i++) {
-      const sender = pool[i];
-      const peer = pool[(i + 1) % pool.length];
-      const { warmup: sWarmup, cleanSig: sSig } = parseSenderWarmup(sender.signature);
-      const { warmup: pWarmup, cleanSig: pSig } = parseSenderWarmup(peer.signature);
-
-      // increment sender sent count
-      sWarmup.sentCount += 1;
-      await db
-        .update(senderAccounts)
-        .set({
-          signature: formatSenderWarmup(sSig, sWarmup),
-          health: Math.min(100, (sender.health || 95) + 1),
-          updatedAt: nowIso(),
-        })
-        .where(eq(senderAccounts.id, sender.id));
-
-      // recipient receives & auto-replies based on reply rate
-      pWarmup.receivedCount += 1;
-      const shouldReply = Math.random() * 100 <= pWarmup.replyRate;
-      if (shouldReply) {
-        pWarmup.sentCount += 1;
-        sWarmup.receivedCount += 1;
-      }
-
-      await db
-        .update(senderAccounts)
-        .set({
-          signature: formatSenderWarmup(pSig, pWarmup),
-          health: Math.min(100, (peer.health || 95) + 1),
-          updatedAt: nowIso(),
-        })
-        .where(eq(senderAccounts.id, peer.id));
-
-      exchanged += 1;
-    }
-
     return {
       ok: true,
-      message: `Warm-up cycle completed: ${exchanged} peer exchanges processed across ${pool.length} pool mailboxes.`,
-      exchanged,
+      message: needsRetest
+        ? "Saved. This shared mailbox is paused until Retest Connection passes."
+        : "Sender details saved successfully",
     };
   } catch (e) {
-    return {
-      ok: false,
-      message: e instanceof Error ? e.message : "Warm-up cycle failed",
-      exchanged: 0,
-    };
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to update sender" };
   }
 }

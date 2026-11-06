@@ -17,11 +17,10 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Switch,
   Textarea,
 } from "@smartreach/ui";
 import { createSender, testSenderConnection } from "@/lib/actions";
-import { formatSenderWarmup } from "@/lib/sender-warmup";
+import { WARMUP_STATUS_DESCRIPTION, WARMUP_STATUS_TITLE } from "@/lib/sender-warmup";
 
 type ConnResult = {
   smtp: { ok: boolean; message: string; latencyMs?: number };
@@ -34,9 +33,6 @@ export function SenderForm() {
   const [f, setF] = useState<Record<string, string>>({});
   const [testing, setTesting] = useState(false);
   const [test, setTest] = useState<ConnResult | null>(null);
-  const [warmupEnabled, setWarmupEnabled] = useState(true);
-  const [warmupDaily, setWarmupDaily] = useState(20);
-  const [warmupRate, setWarmupRate] = useState(40);
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setF((p) => ({ ...p, [k]: e.target.value }));
@@ -91,11 +87,7 @@ export function SenderForm() {
         fromName: f.fromName ?? f.senderName ?? "",
         replyTo: f.replyTo ?? "",
         timezone: f.timezone ?? "UTC",
-        signature: formatSenderWarmup(f.signature ?? "", {
-          enabled: warmupEnabled,
-          dailyLimit: warmupDaily,
-          replyRate: warmupRate,
-        }),
+        signature: f.signature ?? "",
       });
       if (res.ok) {
         toast.success("Sender added");
@@ -174,48 +166,13 @@ export function SenderForm() {
         </Field>
       </Section>
 
-      <Section title="Automated Peer Warm-up Pool" hint="Exchange peer warm-up emails with other mailboxes in your pool to boost sender reputation.">
-        <div className="space-y-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <Flame className="size-4 text-amber-400 shrink-0" />
-              <div>
-                <Label className="text-sm font-semibold">Enroll in Warm-up Pool</Label>
-                <p className="text-xs text-muted-foreground">Automatically warm up this mailbox with peer inboxes.</p>
-              </div>
-            </div>
-            <Switch checked={warmupEnabled} onCheckedChange={setWarmupEnabled} />
-          </div>
-
-          {warmupEnabled && (
-            <div className="grid gap-4 sm:grid-cols-2 pt-3 border-t border-border/40">
-              <Field label="Daily warm-up emails" hint="Target sent peer messages per day">
-                <Input
-                  type="number"
-                  min={5}
-                  max={100}
-                  value={warmupDaily}
-                  onChange={(e) => setWarmupDaily(Number(e.target.value))}
-                />
-              </Field>
-              <Field label={`Target reply rate (${warmupRate}%)`} hint="Percentage of peer emails that trigger replies">
-                <div className="flex items-center gap-3 pt-2">
-                  <input
-                    type="range"
-                    min={10}
-                    max={90}
-                    step={5}
-                    value={warmupRate}
-                    onChange={(e) => setWarmupRate(Number(e.target.value))}
-                    className="flex-1 accent-amber-500"
-                  />
-                  <span className="text-xs font-bold tabular-nums w-10 text-right">{warmupRate}%</span>
-                </div>
-              </Field>
-            </div>
-          )}
+      <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-card/40 p-4">
+        <Flame className="size-4 text-muted-foreground shrink-0 mt-0.5" />
+        <div className="text-xs leading-relaxed">
+          <p className="font-semibold text-foreground">{WARMUP_STATUS_TITLE}</p>
+          <p className="text-muted-foreground mt-0.5">{WARMUP_STATUS_DESCRIPTION}</p>
         </div>
-      </Section>
+      </div>
 
       {test && (
         <Alert variant={test.smtp.ok ? "success" : "destructive"}>

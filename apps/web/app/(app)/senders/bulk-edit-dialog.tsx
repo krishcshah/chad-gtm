@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Flame, KeyRound, Loader2, Mail, Server, Shield, Sliders } from "lucide-react";
+import { Check, KeyRound, Loader2, Mail, Server, Shield, Sliders } from "lucide-react";
 import { toast } from "sonner";
 import {
   Button,
@@ -42,10 +42,7 @@ export function BulkEditDialog({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  // Warmup & Status
-  const [warmupAction, setWarmupAction] = useState<"keep" | "enable" | "disable">("keep");
-  const [warmupReplyRate, setWarmupReplyRate] = useState<string>("");
-  const [warmupDailyTarget, setWarmupDailyTarget] = useState<string>("");
+  // Status & limits
   const [statusAction, setStatusAction] = useState<"keep" | "active" | "paused">("keep");
   const [dailyLimit, setDailyLimit] = useState<string>("");
   const [hourlyLimit, setHourlyLimit] = useState<string>("");
@@ -65,9 +62,6 @@ export function BulkEditDialog({
   const [timezone, setTimezone] = useState("");
 
   const resetForm = () => {
-    setWarmupAction("keep");
-    setWarmupReplyRate("");
-    setWarmupDailyTarget("");
     setStatusAction("keep");
     setDailyLimit("");
     setHourlyLimit("");
@@ -89,15 +83,6 @@ export function BulkEditDialog({
     startTransition(async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const updates: Record<string, any> = {};
-
-      if (warmupAction === "enable") updates.warmupEnabled = true;
-      if (warmupAction === "disable") updates.warmupEnabled = false;
-      if (warmupReplyRate.trim() && !isNaN(Number(warmupReplyRate))) {
-        updates.warmupReplyRate = Math.min(100, Math.max(0, Number(warmupReplyRate)));
-      }
-      if (warmupDailyTarget.trim() && !isNaN(Number(warmupDailyTarget))) {
-        updates.warmupDailyTarget = Math.max(1, Number(warmupDailyTarget));
-      }
 
       if (statusAction === "active") updates.status = "active";
       if (statusAction === "paused") updates.status = "paused";
@@ -154,14 +139,14 @@ export function BulkEditDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="warmup" className="w-full mt-2">
+        <Tabs defaultValue="limits" className="w-full mt-2">
           <TabsList className="grid w-full grid-cols-3 rounded-xl border border-border/80 bg-muted/60 p-1 sm:p-1.5 gap-1 sm:gap-1.5 shadow-2xs">
             <TabsTrigger
-              value="warmup"
+              value="limits"
               className="gap-1.5 sm:gap-2 rounded-lg py-2 sm:py-2.5 text-[11px] sm:text-xs font-medium text-muted-foreground transition-all hover:text-foreground hover:bg-background/40 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-border"
             >
-              <Flame className="size-3.5 text-amber-500" />
-              <span className="truncate">Warmup & Limits</span>
+              <Sliders className="size-3.5 text-amber-500" />
+              <span className="truncate">Status & Limits</span>
             </TabsTrigger>
             <TabsTrigger
               value="servers"
@@ -181,58 +166,8 @@ export function BulkEditDialog({
 
           {/* Flexible container that adapts cleanly on mobile */}
           <div className="min-h-0 sm:min-h-[340px] pt-3 flex flex-col justify-start">
-            {/* TAB 1: Warmup & Limits */}
-            <TabsContent value="warmup" className="space-y-4 m-0">
-            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5 sm:p-4 space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                <div>
-                  <Label className="text-xs font-semibold text-foreground">Peer Warmup Pool</Label>
-                  <p className="text-[11px] text-muted-foreground">
-                    Enroll senders to exchange simulated outreach messages with peers.
-                  </p>
-                </div>
-                <Select value={warmupAction} onValueChange={(v: any) => setWarmupAction(v)}>
-                  <SelectTrigger className="h-8 w-full sm:w-44 bg-background text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="keep">Keep Current</SelectItem>
-                    <SelectItem value="enable">Enable on All</SelectItem>
-                    <SelectItem value="disable">Disable on All</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {warmupAction === "enable" && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-amber-500/15">
-                  <div className="space-y-1">
-                    <Label className="text-[11px] text-muted-foreground">Reply Rate (%)</Label>
-                    <Input
-                      type="number"
-                      placeholder="e.g. 30"
-                      value={warmupReplyRate}
-                      onChange={(e) => setWarmupReplyRate(e.target.value)}
-                      className="h-8 text-xs bg-background"
-                      min={0}
-                      max={100}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[11px] text-muted-foreground">Daily Warmup Cap</Label>
-                    <Input
-                      type="number"
-                      placeholder="e.g. 25"
-                      value={warmupDailyTarget}
-                      onChange={(e) => setWarmupDailyTarget(e.target.value)}
-                      className="h-8 text-xs bg-background"
-                      min={1}
-                      max={200}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
+            {/* TAB 1: Status & Limits */}
+            <TabsContent value="limits" className="space-y-4 m-0">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">Account Status</Label>

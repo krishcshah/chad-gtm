@@ -36,9 +36,13 @@ import {
   toggleSenderForUser,
   updateSenderLimitsForUser,
   updateSenderDetailsForUser,
-  runWarmupCycleForUser,
 } from "./senders";
-import { formatSenderWarmup, parseSenderWarmup } from "./sender-warmup";
+import { hasWarmupMarker, stripWarmupMarker } from "./sender-warmup";
+import {
+  patchChangesCredentials,
+  poolActivationBlocker,
+  verdictFromConnectionTest,
+} from "./pool-mailbox-import";
 import { normalizeEmail, nowIso } from "@smartreach/shared";
 import {
   ensureCampaignLeadSnapshot,
@@ -55,6 +59,15 @@ import {
 import { getDb } from "./db";
 import { requireUser } from "./session";
 import { isAdmin } from "./admin";
+import { APPROVAL_REQUIRED_ERROR, assertCanSend } from "./approval";
+import { campaignStartPostalError } from "./campaign-start-guard";
+import { getWorkspacePostalAddress } from "./queries";
+import {
+  campaignSendersStartError,
+  partitionCampaignSenders,
+  senderPartitionError,
+  type CampaignSenderRef,
+} from "./campaign-sender-policy";
 import type { LeadProfile } from "./ai";
 import { ACTIVE_WORKSPACE_COOKIE, getActiveWorkspace, type WorkspaceItem } from "./workspaces";
 import { formatZodActionError } from "./zod-action-error";
@@ -98,6 +111,104 @@ const err = (e: unknown): ActionResult<never> => ({
 function zodFail(error: { issues: { path: PropertyKey[]; message: string }[] }): ActionResult<never> {
   const { error: message, fieldErrors } = formatZodActionError(error.issues);
   return { ok: false, error: message, fieldErrors };
+}
+
+/* ═══ Send gates: approval, CAN-SPAM postal address, mailbox ownership ═══ */
+
+/** APPROVAL_REQUIRED_ERROR unless this account may send from the shared pool. */
+async function sendApprovalError(userId: string): Promise<string | null> {
+  try {
+    await assertCanSend(userId);
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : APPROVAL_REQUIRED_ERROR;
+  }
+}
+
+/** CAMPAIGN_POSTAL_REQUIRED_ERROR unless the campaign owner saved a postal address. */
+async function campaignPostalError(ownerId: string): Promise<string | null> {
+  return campaignStartPostalError(await getWorkspacePostalAddress(ownerId));
+}
+
+type DbHandle = ReturnType<typeof getDb>;
+
+async function loadSenderRefs(db: DbHandle, ids: string[]): Promise<CampaignSenderRef[]> {
+  const unique = [...new Set(ids.filter((id) => typeof id === "string" && id))];
+  if (unique.length === 0) return [];
+  return db
+    .select({
+      id: senderAccounts.id,
+      userId: senderAccounts.userId,
+      isSystemPool: senderAccounts.isSystemPool,
+      deletedAt: senderAccounts.deletedAt,
+    })
+    .from(senderAccounts)
+    .where(inArray(senderAccounts.id, unique));
+}
+
+async function loadAttachedSenderRefs(db: DbHandle, campaignId: string): Promise<CampaignSenderRef[]> {
+  return db
+    .select({
+      id: senderAccounts.id,
+      userId: senderAccounts.userId,
+      isSystemPool: senderAccounts.isSystemPool,
+      deletedAt: senderAccounts.deletedAt,
+    })
+    .from(campaignSenders)
+    .innerJoin(senderAccounts, eq(senderAccounts.id, campaignSenders.senderId))
+    .where(eq(campaignSenders.campaignId, campaignId));
+}
+
+/** Autopilot campaigns are the ones the AutoGTM launcher linked to a run. */
+async function isAutopilotCampaign(db: DbHandle, campaignId: string): Promise<boolean> {
+  try {
+    const [row] = await db
+      .select({ id: schema.chadGtmRuns.id })
+      .from(schema.chadGtmRuns)
+      .where(eq(schema.chadGtmRuns.campaignId, campaignId))
+      .limit(1);
+    return Boolean(row);
+  } catch {
+    return false;
+  }
+}
+
+/** Requested sender ids from a wizard payload (undefined when the field is absent). */
+function requestedSenderIds(input: unknown): string[] | undefined {
+  const raw = (input as { senderIds?: unknown } | null | undefined)?.senderIds;
+  if (!Array.isArray(raw)) return undefined;
+  return raw.filter((id): id is string => typeof id === "string");
+}
+
+/** Error when a manual campaign payload names a mailbox this user may not use. */
+async function manualCampaignSenderError(
+  db: DbHandle,
+  user: { id: string; email?: string | null; role?: string | null },
+  senderIds: string[] | undefined,
+): Promise<string | null> {
+  if (!senderIds || senderIds.length === 0) return null;
+  const partition = partitionCampaignSenders({
+    senderIds,
+    senders: await loadSenderRefs(db, senderIds),
+    userId: user.id,
+    isAdmin: isAdmin(user),
+  });
+  return senderPartitionError(partition);
+}
+
+/** Senders of `campaignId` that `user` may carry over to a manual copy. */
+async function copyableSenderIds(
+  db: DbHandle,
+  user: { id: string; email?: string | null; role?: string | null },
+  campaignId: string,
+): Promise<string[]> {
+  const attached = await loadAttachedSenderRefs(db, campaignId);
+  return partitionCampaignSenders({
+    senderIds: attached.map((s) => s.id),
+    senders: attached,
+    userId: user.id,
+    isAdmin: isAdmin(user),
+  }).allowed;
 }
 
 /* ═══ Activity log helper ═══ */
@@ -442,7 +553,7 @@ function buildSenderValues(userId: string, d: ReturnType<typeof senderCreateSche
     fromName: d.fromName,
     replyTo: d.replyTo,
     timezone: d.timezone,
-    signature: d.signature,
+    signature: stripWarmupMarker(d.signature),
   };
 }
 
@@ -541,8 +652,10 @@ export async function retestSenderConnection(senderId: string): Promise<
     const smtpStatus = result.smtp.ok ? "ok" : "failed";
     const imapStatus = result.imap.ok ? "ok" : "failed";
     const bothOk = result.smtp.ok && result.imap.ok;
-    const nextStatus = result.smtp.ok ? "active" : "failed";
-    const nextHealth = bothOk ? 100 : result.smtp.ok ? 75 : 20;
+    // Shared pool mailboxes need IMAP too (reply detection); own mailboxes may send without it.
+    const poolVerdict = sender.isSystemPool ? verdictFromConnectionTest(result) : null;
+    const nextStatus = poolVerdict ? poolVerdict.status : result.smtp.ok ? "active" : "failed";
+    const nextHealth = poolVerdict ? poolVerdict.health : bothOk ? 100 : result.smtp.ok ? 75 : 20;
 
     await db
       .update(schema.senderAccounts)
@@ -577,25 +690,12 @@ export async function retestSenderConnection(senderId: string): Promise<
   }
 }
 
-export async function runWarmupCycle(): Promise<{ ok: boolean; message: string; exchanged: number }> {
-  const user = await requireUser();
-  const result = await runWarmupCycleForUser(getDb(), user.id);
-  if (result.ok) {
-    await logActivity(user.id, "sender.warmup", result.message);
-    revalidatePath("/senders");
-  }
-  return result;
-}
-
 export async function bulkUpdateSenders(
   senderIds: string[],
   updates: {
     dailyLimit?: number;
     hourlyLimit?: number;
     status?: "active" | "paused";
-    warmupEnabled?: boolean;
-    warmupReplyRate?: number;
-    warmupDailyTarget?: number;
     smtpHost?: string;
     smtpPort?: number;
     smtpPassword?: string;
@@ -635,7 +735,10 @@ export async function bulkUpdateSenders(
       patch.hourlyLimit = Math.max(1, updates.hourlyLimit);
     }
     if (updates.status !== undefined) {
-      patch.status = updates.status;
+      // Shared pool mailboxes go active only after a passing login test.
+      if (updates.status === "paused" || !poolActivationBlocker(s)) {
+        patch.status = updates.status;
+      }
     }
     if (updates.fromName !== undefined && updates.fromName.trim() !== "") {
       patch.fromName = updates.fromName.trim();
@@ -668,23 +771,15 @@ export async function bulkUpdateSenders(
       patch.imapPasswordEnc = encryptSecret(updates.imapPassword.trim());
     }
 
-    if (
-      updates.warmupEnabled !== undefined ||
-      updates.warmupReplyRate !== undefined ||
-      updates.warmupDailyTarget !== undefined
-    ) {
-      const { warmup: currentWarmup, cleanSig } = parseSenderWarmup(s.signature);
-      const newWarmup = {
-        ...currentWarmup,
-        enabled: updates.warmupEnabled !== undefined ? updates.warmupEnabled : currentWarmup.enabled,
-        replyRate:
-          updates.warmupReplyRate !== undefined ? updates.warmupReplyRate : currentWarmup.replyRate,
-        dailyLimit:
-          updates.warmupDailyTarget !== undefined
-            ? updates.warmupDailyTarget
-            : currentWarmup.dailyLimit,
-      };
-      patch.signature = formatSenderWarmup(cleanSig, newWarmup);
+    // Drop the old warm-up marker; it used to go out with the signature.
+    if (hasWarmupMarker(s.signature)) {
+      patch.signature = stripWarmupMarker(s.signature);
+    }
+    // New login details on a pool mailbox: retest before it sends again.
+    if (s.isSystemPool && patchChangesCredentials(patch)) {
+      patch.smtpStatus = "untested";
+      patch.imapStatus = "untested";
+      patch.status = "paused";
     }
 
     await db
@@ -728,13 +823,8 @@ export async function importSendersCsv(rows: unknown[]): Promise<
       failed.push({ row: i + 1, error: `${email} already exists` });
       continue;
     }
-    const finalSignature = parsed.data.warmupEnabled
-      ? formatSenderWarmup(parsed.data.signature || "", {
-          enabled: true,
-          dailyLimit: parsed.data.warmupDailyLimit ?? 20,
-          replyRate: parsed.data.warmupReplyRate ?? 40,
-        })
-      : parsed.data.signature || "";
+    // Warm-up columns in the CSV are ignored: AutoGTM runs no warm-up.
+    const finalSignature = stripWarmupMarker(parsed.data.signature || "");
 
     try {
       await db.insert(senderAccounts).values({
@@ -880,6 +970,8 @@ export async function updateSequenceTemplate(
 export async function saveCampaignDraft(input: unknown): Promise<ActionResult<{ id: string }>> {
   const user = await requireUser();
   const db = getDb();
+  const senderError = await manualCampaignSenderError(db, user, requestedSenderIds(input));
+  if (senderError) return { ok: false, error: senderError, fieldErrors: { senderIds: [senderError] } };
   const workspace = await getActiveWorkspace(user.id);
   const result = await saveCampaignDraftForUser(db, user.id, input, workspace.id);
   if (result.ok) {
@@ -892,8 +984,16 @@ export async function saveCampaignDraft(input: unknown): Promise<ActionResult<{ 
 export async function publishCampaign(input: unknown): Promise<ActionResult<{ id: string }>> {
   const user = await requireUser();
   const db = getDb();
+  // Publishing starts sending (now or at the scheduled time).
+  const approvalError = await sendApprovalError(user.id);
+  if (approvalError) return { ok: false, error: approvalError };
+  const postalAddress = await getWorkspacePostalAddress(user.id);
+  const postalError = campaignStartPostalError(postalAddress);
+  if (postalError) return { ok: false, error: postalError };
+  const senderError = await manualCampaignSenderError(db, user, requestedSenderIds(input));
+  if (senderError) return { ok: false, error: senderError, fieldErrors: { senderIds: [senderError] } };
   const workspace = await getActiveWorkspace(user.id);
-  const result = await publishCampaignForUser(db, user.id, input, null, workspace.id);
+  const result = await publishCampaignForUser(db, user.id, input, postalAddress, workspace.id);
   if (result.ok && result.data?.id) {
     const id = result.data.id;
     const rawSteps = (input as { steps?: unknown })?.steps;
@@ -985,6 +1085,17 @@ export async function campaignAction(
         if (!c.leadListId) {
           return { ok: false, error: "Campaign is missing a lead list" };
         }
+        const approvalError = await sendApprovalError(user.id);
+        if (approvalError) return { ok: false, error: approvalError };
+        const postalError = await campaignPostalError(c.userId);
+        if (postalError) return { ok: false, error: postalError };
+        const senderError = campaignSendersStartError({
+          attached: await loadAttachedSenderRefs(db, campaignId),
+          ownerId: c.userId,
+          actorIsAdmin: userIsAdmin,
+          isAutopilotCampaign: await isAutopilotCampaign(db, campaignId),
+        });
+        if (senderError) return { ok: false, error: senderError };
         await ensureCampaignLeadSnapshot(db, campaignId, c.leadListId);
         await db
           .update(campaigns)
@@ -1040,14 +1151,13 @@ export async function campaignAction(
             trackOpens: c.trackOpens,
           })
           .returning({ id: campaigns.id });
-        const senders = await db
-          .select({ senderId: campaignSenders.senderId })
-          .from(campaignSenders)
-          .where(eq(campaignSenders.campaignId, campaignId));
-        if (senders.length) {
+        // The copy is a manual campaign: never carry shared pool mailboxes
+        // (or anyone else's) over to it, except for admins.
+        const copySenderIds = await copyableSenderIds(db, user, campaignId);
+        if (copySenderIds.length) {
           await db
             .insert(campaignSenders)
-            .values(senders.map((s) => ({ campaignId: copy.id, senderId: s.senderId })));
+            .values(copySenderIds.map((senderId) => ({ campaignId: copy.id, senderId })));
         }
         // Prefill campaign_leads so Start does not race an empty queue
         if (c.leadListId) {
@@ -1108,15 +1218,12 @@ export async function duplicateCampaignToDraft(
       })
       .returning({ id: campaigns.id });
 
-    // Copy attached senders
-    const senders = await db
-      .select({ senderId: campaignSenders.senderId })
-      .from(campaignSenders)
-      .where(eq(campaignSenders.campaignId, campaignId));
-    if (senders.length) {
+    // Copy attached senders the user may use on a manual campaign (no pool mailboxes).
+    const copySenderIds = await copyableSenderIds(db, user, campaignId);
+    if (copySenderIds.length) {
       await db
         .insert(campaignSenders)
-        .values(senders.map((s) => ({ campaignId: copy.id, senderId: s.senderId })));
+        .values(copySenderIds.map((senderId) => ({ campaignId: copy.id, senderId })));
     }
 
     // Clone sequence steps & variants
@@ -1165,6 +1272,30 @@ export async function updateCampaignSettings(
       .where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, user.id), isNull(campaigns.deletedAt)));
     if (!c) return { ok: false, error: "Campaign not found" };
 
+    // Validate mailboxes before changing anything. Pool mailboxes may only stay
+    // on the autopilot campaign they were attached to; they can't be added.
+    let targetSenderIds: string[] | null = null;
+    if (Array.isArray(input.senderIds)) {
+      const userIsAdmin = isAdmin(user);
+      const keepPoolIds = new Set<string>();
+      if (!userIsAdmin && (await isAutopilotCampaign(db, campaignId))) {
+        for (const s of await loadAttachedSenderRefs(db, campaignId)) {
+          if (s.isSystemPool) keepPoolIds.add(s.id);
+        }
+      }
+      const requested = input.senderIds.filter((id): id is string => typeof id === "string");
+      const partition = partitionCampaignSenders({
+        senderIds: requested,
+        senders: await loadSenderRefs(db, requested),
+        userId: user.id,
+        isAdmin: userIsAdmin,
+        keepPoolIds,
+      });
+      const senderError = senderPartitionError(partition);
+      if (senderError) return { ok: false, error: senderError };
+      targetSenderIds = partition.allowed;
+    }
+
     const updateData: Record<string, unknown> = { updatedAt: nowIso() };
     if (typeof input.name === "string" && input.name.trim()) updateData.name = input.name.trim();
     if (typeof input.dailyLimit === "number") updateData.dailyLimit = Math.max(1, input.dailyLimit);
@@ -1179,14 +1310,7 @@ export async function updateCampaignSettings(
 
     await db.update(campaigns).set(updateData).where(eq(campaigns.id, campaignId));
 
-    if (Array.isArray(input.senderIds)) {
-      const validSenders = await db
-        .select({ id: senderAccounts.id })
-        .from(senderAccounts)
-        .where(and(eq(senderAccounts.userId, user.id), isNull(senderAccounts.deletedAt)));
-      const validSet = new Set(validSenders.map((s) => s.id));
-      const targetSenderIds = input.senderIds.filter((id) => validSet.has(id));
-
+    if (targetSenderIds) {
       await db.delete(campaignSenders).where(eq(campaignSenders.campaignId, campaignId));
       if (targetSenderIds.length > 0) {
         await db
@@ -1298,6 +1422,10 @@ export async function sendUniboxReply(input: {
       )
       .limit(1);
     if (!sender) return { ok: false, error: "Sender account not found" };
+    if (sender.isSystemPool) {
+      const approvalError = await sendApprovalError(user.id);
+      if (approvalError) return { ok: false, error: approvalError };
+    }
 
     const { sendMail } = await import("@smartreach/email-engine/mailer");
     const subject = reply.subject?.startsWith("Re:") ? reply.subject : `Re: ${reply.subject ?? ""}`.trim();
@@ -2199,25 +2327,31 @@ export async function saveWorkspaceAiSettings(input: {
 /* ─── Apollo Lead Directory Actions ────────────────────────────────────────── */
 
 import {
-  searchLeadsDirectory,
+  searchLeadsDirectoryForAccess,
   getDirectoryFacets,
   getDirectoryDb,
   buildDirectoryWhereClause,
   getMatchingDirectoryLeadsForExport,
+  directoryExportLimit,
+  directorySaveLimit,
+  DIRECTORY_LOCKED_ERROR,
   type DirectorySearchParams,
   type DirectorySearchResult,
   type DirectoryFacets,
 } from "./leads-directory";
+import { getDirectoryAccessLevel } from "./b2b-access";
 
 /**
  * Search the master Lead Directory (Apollo-style lead database).
+ * Accounts without directory access get the masked one-page preview.
  */
 export async function searchDirectoryLeadsAction(
   params: DirectorySearchParams
 ): Promise<ActionResult<DirectorySearchResult>> {
   try {
-    await requireUser();
-    const result = searchLeadsDirectory(params);
+    const user = await requireUser();
+    const level = await getDirectoryAccessLevel(user);
+    const result = searchLeadsDirectoryForAccess(params ?? {}, level);
     return { ok: true, data: result };
   } catch (e) {
     return err(e);
@@ -2250,11 +2384,39 @@ export async function saveDirectoryLeadsToCampaignListAction(input: {
 }): Promise<ActionResult<{ leadListId: string; count: number }>> {
   try {
     const user = await requireUser();
+    const saveLimit = directorySaveLimit(await getDirectoryAccessLevel(user));
+    if (saveLimit <= 0) return { ok: false, error: DIRECTORY_LOCKED_ERROR };
     const db = getDb();
     const dirDb = getDirectoryDb();
 
+    const leadIds = Array.isArray(input.leadIds)
+      ? [...new Set(input.leadIds.map(Number).filter((n) => Number.isInteger(n) && n > 0))]
+      : [];
+    if (!input.selectAllMatching && leadIds.length === 0) {
+      return { ok: false, error: "No leads selected" };
+    }
+    if (!input.selectAllMatching && leadIds.length > saveLimit) {
+      return {
+        ok: false,
+        error: `You can add at most ${saveLimit.toLocaleString()} directory leads at a time.`,
+      };
+    }
+
     let targetListId = input.listId;
-    if (!targetListId) {
+    if (targetListId) {
+      const [ownList] = await db
+        .select({ id: schema.leadLists.id })
+        .from(schema.leadLists)
+        .where(
+          and(
+            eq(schema.leadLists.id, targetListId),
+            eq(schema.leadLists.userId, user.id),
+            isNull(schema.leadLists.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!ownList) return { ok: false, error: "Lead list not found" };
+    } else {
       const listName = input.listName || `Apollo Leads - ${new Date().toLocaleDateString()}`;
       const [newList] = await db
         .insert(schema.leadLists)
@@ -2273,15 +2435,15 @@ export async function saveDirectoryLeadsToCampaignListAction(input: {
     let rows: any[] = [];
     if (input.selectAllMatching) {
       const { whereSql, bindings } = buildDirectoryWhereClause(input.searchParams || {});
-      // Fetch matching leads up to 5,000 for responsive serverless insertion
+      // Capped per access level (admin 5,000) for responsive insertion
       rows = dirDb
-        .prepare(`SELECT * FROM leads ${whereSql} ORDER BY id ASC LIMIT 5000`)
-        .all(...bindings) as any[];
-    } else if (input.leadIds && input.leadIds.length > 0) {
-      const placeholders = input.leadIds.map(() => "?").join(",");
+        .prepare(`SELECT * FROM leads ${whereSql} ORDER BY id ASC LIMIT ?`)
+        .all(...bindings, saveLimit) as any[];
+    } else if (leadIds.length > 0) {
+      const placeholders = leadIds.map(() => "?").join(",");
       rows = dirDb
         .prepare(`SELECT * FROM leads WHERE id IN (${placeholders})`)
-        .all(...input.leadIds) as any[];
+        .all(...leadIds) as any[];
     } else {
       return { ok: false, error: "No leads selected" };
     }
@@ -2362,8 +2524,10 @@ export async function exportMatchingDirectoryLeadsCsvAction(
   maxRows = 15000
 ): Promise<ActionResult<{ csv: string; count: number; filename: string }>> {
   try {
-    await requireUser();
-    const leads = getMatchingDirectoryLeadsForExport(params, maxRows);
+    const user = await requireUser();
+    const limit = directoryExportLimit(await getDirectoryAccessLevel(user), maxRows);
+    if (limit <= 0) return { ok: false, error: DIRECTORY_LOCKED_ERROR };
+    const leads = getMatchingDirectoryLeadsForExport(params ?? {}, limit);
     if (!leads.length) {
       return { ok: false, error: "No leads match current filters" };
     }
@@ -2628,6 +2792,11 @@ export async function sendManualTestEmailAction(input: {
         allSenders.find((s) => s.email.toLowerCase().startsWith("hello@")) ||
         allSenders.find((s) => s.email.toLowerCase().startsWith("contact@")) ||
         allSenders[0];
+    }
+
+    if (senderRow.isSystemPool) {
+      const approvalError = await sendApprovalError(user.id);
+      if (approvalError) return { ok: false, error: approvalError };
     }
 
     const { sendMail } = await import("@smartreach/email-engine/mailer");

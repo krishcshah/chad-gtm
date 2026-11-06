@@ -1,7 +1,8 @@
 import { and, eq, sql } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { getDb } from "./db";
-import { isAdminEmail } from "./admin";
+import { isAdmin } from "./admin";
+import type { DirectoryAccessLevel } from "./leads-directory";
 
 export { STRIPE_B2B_CHECKOUT_BASE, getB2BCheckoutUrl } from "./b2b-constants";
 
@@ -39,20 +40,11 @@ export async function ensureB2BAccessSchema(): Promise<void> {
 }
 
 /**
- * Checks if a user has access to the 300K+ B2B leads database.
- * CRITICAL RULE: Admin accounts (e.g. de.krish.shah@gmail.com) are NEVER blocked.
+ * True when the user has an active B2B directory access grant.
+ * Admins are handled by getDirectoryAccessLevel. There is no email-based
+ * bypass: addresses aren't verified at sign-up, so anyone could claim one.
  */
-export async function hasB2BAccess(userId: string, email?: string): Promise<boolean> {
-  // 1. Admin ALWAYS has unrestricted database access
-  if (isAdminEmail(email)) {
-    return true;
-  }
-
-  // 2. Official demo account for showcase stability
-  if (email && email.trim().toLowerCase() === "demo@ratecompany.com") {
-    return true;
-  }
-
+export async function hasB2BAccess(userId: string, _email?: string): Promise<boolean> {
   try {
     await ensureB2BAccessSchema();
     const db = getDb();
@@ -72,6 +64,20 @@ export async function hasB2BAccess(userId: string, email?: string): Promise<bool
     console.error("[hasB2BAccess] query error:", err);
     return false;
   }
+}
+
+/**
+ * Server-side directory entitlement for a signed-in user:
+ * "admin" (unrestricted), "paid" (active grant; full records, capped exports)
+ * or "none" (masked one-page preview, no export or save).
+ */
+export async function getDirectoryAccessLevel(user: {
+  id: string;
+  email?: string | null;
+  role?: string | null;
+}): Promise<DirectoryAccessLevel> {
+  if (isAdmin(user)) return "admin";
+  return (await hasB2BAccess(user.id)) ? "paid" : "none";
 }
 
 /**
