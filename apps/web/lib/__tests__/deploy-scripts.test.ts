@@ -77,7 +77,7 @@ echo "curl $*" >> "$STUB_LOG"
 echo '{"ok":true,"db":true,"engine":{"stale":false}}'
 `,
   pg_dump: `#!/usr/bin/env bash
-if [[ "$1" == "--version" ]]; then echo "pg_dump (PostgreSQL) 17.2"; exit 0; fi
+if [[ "$1" == "--version" ]]; then echo "pg_dump (PostgreSQL) \${PG_DUMP_VERSION:-17.2}"; exit 0; fi
 echo "pg_dump" >> "$STUB_LOG"
 for a in "$@"; do case "$a" in --file=*) echo dump > "\${a#--file=}" ;; esac; done
 `,
@@ -291,6 +291,47 @@ describe.skipIf(!hasBash)("scripts/backup-db.sh", () => {
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
+  });
+});
+
+describe.skipIf(!hasBash)("scripts/backup-db.sh version check", () => {
+  // The server's major version decides, not a hard-coded one: the VM's
+  // Postgres turned out to be 16 while the scripts assumed 17.
+  function runWith(pgDump: string, serverNum: string | null) {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "backup-ver-"));
+    try {
+      const bin = path.join(tmp, "bin");
+      for (const name of ["pg_dump", "pg_restore"]) write(path.join(bin, name), STUBS[name], 0o755);
+      if (serverNum !== null) write(path.join(bin, "psql"), `#!/usr/bin/env bash\necho ${serverNum}\n`, 0o755);
+      const env = {
+        PATH: `${bin}:/usr/bin:/bin`,
+        HOME: tmp,
+        BACKUP_DIR: path.join(tmp, "b"),
+        DATABASE_URL: "postgres://u:p@127.0.0.1/chadgtm",
+        STUB_LOG: path.join(tmp, "log"),
+        PG_DUMP_VERSION: pgDump,
+      };
+      const r = spawnSync("bash", [path.join(scriptsDir, "backup-db.sh"), "v"], { env: asEnv(env), encoding: "utf8" });
+      return { status: r.status, err: r.stderr };
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+
+  it("accepts a 16 client against a 16 server", () => {
+    expect(runWith("16.4", "160004").status).toBe(0);
+  });
+
+  it("refuses a 16 client against a 17 server and names the package", () => {
+    const r = runWith("16.4", "170002");
+    expect(r.status).not.toBe(0);
+    expect(r.err).toContain("postgresql-client-17");
+  });
+
+  it("falls back to pg_dump's own check when psql is missing", () => {
+    const r = runWith("16.4", null);
+    expect(r.status).toBe(0);
+    expect(r.err).toContain("relying on pg_dump");
   });
 });
 

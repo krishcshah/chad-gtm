@@ -72,16 +72,17 @@ fi
 
 node -e 'const [a,b]=process.versions.node.split(".").map(Number);process.exit(a>22||(a===22&&b>=13)?0:1)' \
   && echo "==> node $(node -v) ok" || echo "!! node $(node -v 2>/dev/null || echo missing): need >= 22.13"
-# Production Postgres is 17.x: pg_dump/pg_restore must be >= 17.
+# pg_dump must be at least the server's major version (backup-db.sh enforces it).
 if command -v pg_dump >/dev/null; then
   pgv="$(pg_dump --version | awk '{print $3}')"
-  if [ "${pgv%%.*}" -ge 17 ] 2>/dev/null; then
-    echo "==> pg_dump $pgv ok"
+  srv="$(sudo -n -u postgres psql -X -Atqc 'SHOW server_version' 2>/dev/null || true)"
+  if [ -n "$srv" ] && [ "${pgv%%.*}" -lt "${srv%%.*}" ] 2>/dev/null; then
+    echo "!! pg_dump $pgv is older than the Postgres $srv server: install postgresql-client-${srv%%.*} (PGDG apt repo)"
   else
-    echo "!! pg_dump $pgv is too old for the Postgres 17 server: install postgresql-client-17 (PGDG apt repo)"
+    echo "==> pg_dump $pgv (server ${srv:-unknown})"
   fi
 else
-  echo "!! pg_dump missing: install postgresql-client-17 (PGDG apt repo)"
+  echo "!! pg_dump missing: install the postgresql-client matching the server (PGDG apt repo)"
 fi
 
 if [ "$INSTALL_CRON" = "1" ]; then

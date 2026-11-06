@@ -197,12 +197,10 @@ if [[ ! -s data/leads.db && ! -s apps/web/data/leads.db ]]; then
   false
 fi
 type -P pm2 >/dev/null || { echo "!! pm2 not found" >&2; false; }
-type -P pg_dump >/dev/null || { echo "!! pg_dump not found (install postgresql-client-17 from the PGDG apt repo)" >&2; false; }
-pg_dump_major="$(pg_dump --version | sed -E 's/.* ([0-9]+)(\.[0-9]+)?.*/\1/')"
-if [[ ! "$pg_dump_major" =~ ^[0-9]+$ ]] || (( pg_dump_major < ${PG_MIN_MAJOR:-17} )); then
-  echo "!! pg_dump ${pg_dump_major:-?} is too old for the Postgres 17 server (install postgresql-client-17)" >&2
-  false
-fi
+# backup-db.sh checks pg_dump against the server's own major version before
+# anything is migrated; here we only need the tools to exist.
+type -P pg_dump >/dev/null || { echo "!! pg_dump not found (install the postgresql-client matching the server)" >&2; false; }
+type -P pg_restore >/dev/null || { echo "!! pg_restore not found (install the postgresql-client matching the server)" >&2; false; }
 free_mb="$(df -Pk "$APP_DIR" | awk 'NR==2 {print int($4/1024)}')"
 if [[ "$free_mb" =~ ^[0-9]+$ ]] && (( free_mb < MIN_FREE_MB )); then
   echo "!! only ${free_mb} MB free on the disk; need ${MIN_FREE_MB} MB for the install and build backups" >&2

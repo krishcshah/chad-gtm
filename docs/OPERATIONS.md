@@ -37,7 +37,7 @@ It connects over SSH and:
    the fetched commit into a temporary directory and runs them, which does:
    - **preflight**, before anything changes: the fetched commit is a
      fast-forward of the checkout, no local changes to tracked files, Node >=
-     22.13, `pg_dump` >= 17, `pm2`, `data/leads.db`, at least 1 GB free disk,
+     22.13, `pg_dump`/`pg_restore`, `pm2`, `data/leads.db`, at least 1 GB free disk,
      and the [environment check](#deploy-environment-check) (web, worker and
      migrations all use the `chadgtm` database; web and worker share their
      secrets);
@@ -186,7 +186,7 @@ SERVER_HOST=<vm address> python3 scripts/setup_remote_chadgtm.py --install-backu
 Idempotent. Clones the repo if missing, creates `apps/web/.env.local` from
 `.env.example` and an empty `packages/email-engine/.env` only if they do not
 exist (it never overwrites or copies env files), creates `/home/ubuntu/backups`,
-reports Node / `pg_dump` (must be >= 17, the server is Postgres 17.x) / `data/leads.db`, and optionally installs the nightly
+reports Node / `pg_dump` against the server version / `data/leads.db`, and optionally installs the nightly
 backup cron. Then do [PM2 setup](#pm2-startup-and-log-rotation) once.
 
 ## Rollback
@@ -223,12 +223,12 @@ data, restore the database too.
 
 ## Backups
 
-Production Postgres is **17.x**, so `pg_dump`/`pg_restore` on the VM must be
-**17 or newer** (a 16 client refuses to dump a 17 server, and Ubuntu's default
-`postgresql-client` is older). Install `postgresql-client-17` from the PGDG apt
-repository (apt.postgresql.org). `backup-db.sh` refuses to run with an older
-`pg_dump` (override the minimum with `PG_MIN_MAJOR` only if the server changes),
-and the setup script reports the version.
+`pg_dump`/`pg_restore` on the VM must be at least the Postgres server's major
+version (an older client refuses to dump a newer server). `backup-db.sh` asks
+the server for its version with `psql` and refuses to run with an older
+`pg_dump`; install the matching `postgresql-client-<major>` from the PGDG apt
+repository (apt.postgresql.org) if needed. `PG_MIN_MAJOR` overrides the
+server's answer. The setup script reports both versions.
 
 `scripts/backup-db.sh` runs `pg_dump --format=custom`, checks the result with
 `pg_restore --list`, writes atomically to `/home/ubuntu/backups` (mode 700/600),
@@ -246,7 +246,9 @@ Every deploy writes `chadgtm-predeploy-<sha>-<UTC time>.dump` before migrating;
 re-running the deploy of the same commit writes a new file, so the dump taken
 before the first (failed) attempt's migrations is kept.
 
-Nightly cron (installed by `setup_remote_chadgtm.py --install-backup-cron`, or `crontab -e`):
+Nightly cron (installed by `setup_remote_chadgtm.py --install-backup-cron`, or `crontab -e`).
+Skip it if the VM already has a nightly dump of the `chadgtm` database from
+another cron job; two jobs are harmless but use twice the disk:
 
 ```cron
 17 3 * * * cd /home/ubuntu/chad-gtm && bash scripts/backup-db.sh >> /home/ubuntu/backups/backup.log 2>&1
@@ -471,7 +473,7 @@ Web = `chadgtm-web`, Engine = `chadgtm-worker`.
 | `NEXT_PUBLIC_APP_URL` | web (browser), engine fallback | no | `BETTER_AUTH_URL` | Inlined at build time |
 | `CRON_SECRET` | web | yes in production | – | Bearer token for `/api/engine/tick`; route is disabled in production without it |
 | `ADMIN_EMAILS` | web | no | – | Comma-separated emails that are admins **once the address is verified**. The main mechanism is `users.role = 'admin'` |
-| `ADMIN_EMAIL` | – | – | – | Alias appended to `ADMIN_EMAILS`, same rule: grants admin only to a **verified** email. Without `SYSTEM_SMTP_*` no email is ever verified, so grant the first admin with `DATABASE_URL=... npx tsx scripts/make-admin.ts --email you@company.com [--dry-run]` (sets `users.role = 'admin'` and approves the account) |
+| `ADMIN_EMAIL` | – | – | – | Alias appended to `ADMIN_EMAILS`, same rule: grants admin only to a **verified** email. Without `SYSTEM_SMTP_*` new sign-ups are never verified (migration 0013 marked accounts that existed then as verified), so grant the first admin with `DATABASE_URL=... npx tsx scripts/make-admin.ts --email you@company.com [--dry-run]` (sets `users.role = 'admin'` and approves the account) |
 | `SIGNUP_APPROVAL_REQUIRED` | both | no | `true` | `false` lets new accounts send without admin approval. The engine also re-checks it every tick: campaigns of owners who are not approved (approval revoked) are skipped (`owner-not-approved`) |
 | `GEMINI_API_KEY` | both | recommended | – | Research, per-lead copy, reply triage. Without any key, heuristics are used |
 | `GOOGLE_API_KEY` | both | no | – | Alias for `GEMINI_API_KEY` |

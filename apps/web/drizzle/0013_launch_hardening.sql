@@ -1,20 +1,24 @@
 -- Launch hardening: account approval, admin by role, agent retry, engine heartbeat.
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "approved_at" timestamp with time zone;
 --> statement-breakpoint
--- Every account that exists when this migration runs predates the approval
--- gate: treat it as approved. No date cutoff, so a late deploy cannot leave
--- accounts created under the old code unapproved (their running campaigns
--- would otherwise stop sending silently).
-UPDATE "users" SET "approved_at" = COALESCE("created_at", now()) WHERE "approved_at" IS NULL;
+-- Accounts created under the old code were never reviewed. Approve only the
+-- ones with a campaign that is sending (running or scheduled) when this runs,
+-- so a live client is not cut off; admins are approved below. Everyone else
+-- (unknown sign-ups, test fixtures with passwords in the public repo) waits
+-- for an admin in /admin. No date cutoff, so a late deploy behaves the same.
+UPDATE "users" SET "approved_at" = COALESCE("created_at", now())
+WHERE "approved_at" IS NULL
+  AND "id" IN (SELECT "user_id" FROM "campaigns" WHERE "status" IN ('running', 'scheduled'));
 --> statement-breakpoint
 -- Admin is now role-based. Promote the accounts that were admins via the old
 -- hard-coded email list, but only if they already existed before this change
 -- (a fresh sign-up with one of those addresses must not become admin). This is
 -- the only statement that keeps a fixed cutoff: it is a security boundary, not
--- a backfill. Later admins: scripts/make-admin.ts.
+-- a backfill. The cutoff is the day production was checked: neither address
+-- had a newer account then. Later admins: scripts/make-admin.ts.
 UPDATE "users" SET "role" = 'admin'
 WHERE lower("email") IN ('de.krish.shah@gmail.com', 'krish@leadskingdom.co')
-  AND "created_at" < '2026-11-07T00:00:00Z'
+  AND "created_at" < '2026-11-06T00:00:00Z'
   AND "role" <> 'admin';
 --> statement-breakpoint
 UPDATE "users" SET "approved_at" = COALESCE("approved_at", now()) WHERE "role" = 'admin';
@@ -35,4 +39,10 @@ CREATE TABLE IF NOT EXISTS "engine_heartbeats" (
 -- Email verification is now enforced at sign-in. Every account that exists
 -- when this migration runs was created without a verification email, so mark
 -- it verified to avoid locking it out (no date cutoff). New sign-ups must verify.
-UPDATE "users" SET "email_verified" = true WHERE "email_verified" = false;
+-- Exception: an unpromoted account on one of the old hard-coded admin
+-- addresses could be a squatter (the old code made that address admin
+-- unverified), and a verified address in ADMIN_EMAILS grants admin. It stays
+-- unverified until its owner verifies it.
+UPDATE "users" SET "email_verified" = true
+WHERE "email_verified" = false
+  AND NOT (lower("email") IN ('de.krish.shah@gmail.com', 'krish@leadskingdom.co') AND "role" <> 'admin');

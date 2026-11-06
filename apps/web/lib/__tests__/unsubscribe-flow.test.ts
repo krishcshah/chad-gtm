@@ -120,7 +120,9 @@ describe("/unsubscribe page", () => {
     const done = renderToStaticMarkup(await UnsubscribePage({ searchParams: Promise.resolve({ status: "done" }) }));
     expect(done).toContain("You have been unsubscribed");
     const bad = renderToStaticMarkup(await UnsubscribePage({ searchParams: Promise.resolve({ token: "x.y" }) }));
-    expect(bad).toContain("Invalid signature");
+    // Recipients get a plain message, not the verifier's internal error text.
+    expect(bad).toContain("This unsubscribe link is invalid or has expired.");
+    expect(bad).not.toContain("Invalid signature");
     expect(bad).not.toContain("<form");
   });
 });
