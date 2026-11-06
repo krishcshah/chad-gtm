@@ -61,6 +61,47 @@ export async function loadDailyUsage(
  */
 export const HARD_MAX_PER_SENDER_PER_DAY = 30;
 
+/** New mailboxes start here and climb by RAMP_STEP_PER_DAY each day. */
+export const RAMP_START_PER_DAY = 10;
+export const RAMP_STEP_PER_DAY = 5;
+
+/**
+ * Daily ceiling from mailbox age: 10 on the day it was added, +5 per full day,
+ * up to `max` (30). Mailboxes older than the ramp (or with no usable
+ * creation time) get `max`, so existing mailboxes are unaffected.
+ */
+export function rampedDailyCap(
+  createdAt: string | Date | null | undefined,
+  now: Date = new Date(),
+  max: number = HARD_MAX_PER_SENDER_PER_DAY,
+): number {
+  if (!createdAt) return max;
+  const t = createdAt instanceof Date ? createdAt.getTime() : Date.parse(createdAt);
+  if (!Number.isFinite(t)) return max;
+  const days = Math.max(0, Math.floor((now.getTime() - t) / 86_400_000));
+  return Math.min(max, RAMP_START_PER_DAY + RAMP_STEP_PER_DAY * days);
+}
+
+/** Today's cap for one sender: its own limit, the campaign's, the hard 30, and the ramp. */
+export function senderDailyCap(
+  sender: Pick<SenderRow, "dailyLimit"> & { createdAt?: string | null },
+  perCampaignSenderDailyCap: number = HARD_MAX_PER_SENDER_PER_DAY,
+  now: Date = new Date(),
+): number {
+  return Math.min(
+    sender.dailyLimit ?? HARD_MAX_PER_SENDER_PER_DAY,
+    perCampaignSenderDailyCap ?? HARD_MAX_PER_SENDER_PER_DAY,
+    HARD_MAX_PER_SENDER_PER_DAY,
+    rampedDailyCap(sender.createdAt, now),
+  );
+}
+
+export interface PickSenderOptions {
+  now?: Date;
+  /** Extra per-sender gate (fair-share quota, sticky sender, …). */
+  allow?: (s: SenderRow) => boolean;
+}
+
 /**
  * Pick the next usable sender starting after `lastSenderIdx` (round-robin).
  * Returns the sender + its index, or null when every sender is exhausted.
@@ -71,24 +112,35 @@ export function pickSenderIndex(
   hourly: Map<string, number>,
   lastSenderIdx: number,
   perCampaignSenderDailyCap: number,
+  opts: PickSenderOptions = {},
 ): { sender: SenderRow; index: number } | null {
   if (senders.length === 0) return null;
+  const now = opts.now ?? new Date();
   for (let step = 1; step <= senders.length; step++) {
-    const index = (lastSenderIdx + step) % senders.length;
+    const index = (((lastSenderIdx + step) % senders.length) + senders.length) % senders.length;
     const s = senders[index]!;
-    if (s.status !== "active") continue;
-    const usedToday = daily.get(s.id) ?? 0;
-    const cap = Math.min(
-      s.dailyLimit,
-      perCampaignSenderDailyCap,
-      HARD_MAX_PER_SENDER_PER_DAY,
-    );
-    if (usedToday >= cap) continue;
-    const usedHour = hourly.get(s.id) ?? 0;
-    if (usedHour >= s.hourlyLimit) continue;
+    if (!senderHasCapacity(s, daily, hourly, perCampaignSenderDailyCap, now)) continue;
+    if (opts.allow && !opts.allow(s)) continue;
     return { sender: s, index };
   }
   return null;
+}
+
+/** Active, under its (ramped) daily cap and under its hourly cap. */
+export function senderHasCapacity(
+  s: SenderRow,
+  daily: Map<string, number>,
+  hourly: Map<string, number>,
+  perCampaignSenderDailyCap: number,
+  now: Date = new Date(),
+): boolean {
+  if (s.status !== "active") return false;
+  const usedToday = daily.get(s.id) ?? 0;
+  if (usedToday >= senderDailyCap(s as SenderRow & { createdAt?: string }, perCampaignSenderDailyCap, now)) {
+    return false;
+  }
+  const usedHour = hourly.get(s.id) ?? 0;
+  return usedHour < s.hourlyLimit;
 }
 
 /**

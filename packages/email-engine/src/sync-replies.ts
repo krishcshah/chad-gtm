@@ -11,12 +11,37 @@ import { parseSenderAddress } from "@smartreach/shared";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { EngineDb, SenderRow } from "./db-port";
 import { makeImapClient } from "./mailer";
+import {
+  classifyOptOut,
+  detectAutoReply,
+  parseDsn,
+  parseHeaderBlock,
+  type DsnResult,
+  type HeaderMap,
+} from "./inbound-classify";
+import { recordHardBounce } from "./bounces";
+import { addSuppression } from "./suppression";
 
 export interface SyncResult {
   checked: number;
   repliesFound: number;
+  /** Hard bounces recorded from delivery-status notifications. */
+  bounces: number;
   errors: string[];
 }
+
+/** Headers fetched with every inbound message (bounce + autoresponder detection). */
+const INBOUND_HEADERS = [
+  "content-type",
+  "auto-submitted",
+  "x-autoreply",
+  "x-autorespond",
+  "x-autoresponse",
+  "precedence",
+  "x-failed-recipients",
+  "x-auto-response-suppress",
+  "return-path",
+];
 
 /** Decode quoted-printable octets as UTF-8 (not latin1 / fromCharCode). */
 export function decodeQuotedPrintable(input: string): string {
@@ -89,6 +114,8 @@ export function stripLeakageFromBody(body: string): string {
   // Relative token URLs that sometimes leak
   s = s.replace(/(?:^|\s)\/api\/unsubscribe\?token=[^\s<>"']+/gim, "");
   s = s.replace(/(?:^|\s)\/unsubscribe\?token=[^\s<>"']+/gim, "");
+  // Compliance footer lines ("Don't want these emails? Unsubscribe: <url>")
+  s = s.replace(/Don'?t want these emails\?\s*Unsubscribe:?[^\n]*/gi, "");
   // "Unsubscribe: <url>" plaintext footer line
   s = s.replace(/\n*Unsubscribe:\s*\S*/gi, "");
   // HTML SmartReach unsub / postal blocks
@@ -490,9 +517,13 @@ export function prepareReplyBodies(rawText: string, rawHtml: string): PreparedBo
 }
 
 /** Sync one sender's inbox. Returns count of new replies recorded. */
-export async function syncSenderReplies(db: EngineDb, sender: SenderRow): Promise<{ found: number; error?: string }> {
+export async function syncSenderReplies(
+  db: EngineDb,
+  sender: SenderRow,
+): Promise<{ found: number; bounces?: number; error?: string }> {
   if (!sender.imapHost || !sender.imapPasswordEnc) return { found: 0 };
   let found = 0;
+  let bounces = 0;
   let client: any = null;
   let closed = false;
   try {
@@ -511,11 +542,19 @@ export async function syncSenderReplies(db: EngineDb, sender: SenderRow): Promis
       for await (const msg of client.fetch(
         list,
         // Fetch text + common multipart part numbers for text/html split
-        { uid: true, envelope: true, bodyStructure: true, bodyParts: ["text", "1", "1.1", "1.2", "2", "2.1", "2.2"] },
+        {
+          uid: true,
+          envelope: true,
+          bodyStructure: true,
+          headers: INBOUND_HEADERS,
+          bodyParts: ["text", "1", "1.1", "1.2", "2", "2.1", "2.2"],
+        },
         { uid: true },
       )) {
         try {
-          found += (await recordReplyIfNew(db, sender, msg)) ? 1 : 0;
+          const outcome = await processInboundMessage(db, sender, msg);
+          if (outcome === "reply") found++;
+          else if (outcome === "bounce") bounces++;
         } catch (err) {
           console.error(`[sync] record reply failed for sender ${sender.id}`, err);
         }
@@ -527,7 +566,7 @@ export async function syncSenderReplies(db: EngineDb, sender: SenderRow): Promis
       .update(schema.senderAccounts)
       .set({ lastSyncAt: new Date().toISOString(), imapStatus: "ok" })
       .where(eq(schema.senderAccounts.id, sender.id));
-    return { found };
+    return { found, bounces };
   } catch (err: any) {
     const message = String(err?.responseText || err?.message || "IMAP sync failed");
     const isAuthFailure = /auth|login|credential|AUTHENTICATIONFAILED/i.test(message);
@@ -535,7 +574,7 @@ export async function syncSenderReplies(db: EngineDb, sender: SenderRow): Promis
       .update(schema.senderAccounts)
       .set({ imapStatus: isAuthFailure ? "failed" : "error" })
       .where(eq(schema.senderAccounts.id, sender.id));
-    return { found, error: message };
+    return { found, bounces, error: message };
   } finally {
     if (!closed && client) {
       try {
@@ -611,7 +650,80 @@ export function classifyReplyTag(subject: string, bodyText: string): InboundSent
   return null;
 }
 
-async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any): Promise<boolean> {
+/** Raw BODY[TEXT] (whole body, all MIME parts) for report parsing. */
+function rawBodyText(msg: any): string {
+  return getRawPart(msg, "text", "1", "2");
+}
+
+export type InboundOutcome = "reply" | "bounce" | "ignored";
+
+/**
+ * Handle one inbound message: bounces are recorded as bounces (never as a
+ * reply, never sent to the agent, never held against the mailbox); everything
+ * else goes through reply recording.
+ */
+async function processInboundMessage(db: EngineDb, sender: SenderRow, msg: any): Promise<InboundOutcome> {
+  const env = msg.envelope ?? {};
+  const fromEmail = String(env.from?.[0]?.address ?? "").toLowerCase();
+  if (!fromEmail || fromEmail === sender.email.toLowerCase()) return "ignored"; // skip self
+  const headers = parseHeaderBlock(msg.headers);
+  const dsn = parseDsn({ fromEmail, subject: env.subject ?? "", headers, body: rawBodyText(msg) });
+  if (dsn) return (await handleDsn(db, sender, env, dsn)) ? "bounce" : "ignored";
+  return (await recordReplyIfNew(db, sender, msg, headers)) ? "reply" : "ignored";
+}
+
+/** Record permanent failures from a DSN. Transient (4.x.x / delayed) reports are ignored. */
+async function handleDsn(db: EngineDb, sender: SenderRow, env: any, dsn: DsnResult): Promise<boolean> {
+  const refs: string[] = [...dsn.originalMessageIds];
+  if (env.inReplyTo) refs.push(env.inReplyTo);
+  if (typeof env.references === "string") refs.push(...env.references.split(/\s+/).filter(Boolean));
+  let recorded = false;
+  for (const r of dsn.recipients) {
+    if (!r.permanent) continue;
+    let job: any | undefined;
+    if (refs.length > 0) {
+      const rows: any[] = await db
+        .select()
+        .from(schema.emailJobs)
+        .where(and(eq(schema.emailJobs.senderId, sender.id), inArray(schema.emailJobs.messageId, refs)))
+        .limit(5);
+      job = rows.find((j) => String(j.toEmail).toLowerCase() === r.email);
+    }
+    if (!job) {
+      const rows: any[] = await db
+        .select()
+        .from(schema.emailJobs)
+        .where(
+          and(
+            eq(schema.emailJobs.senderId, sender.id),
+            eq(schema.emailJobs.toEmail, r.email),
+            inArray(schema.emailJobs.status, ["sent", "bounced"]),
+          ),
+        )
+        .orderBy(desc(schema.emailJobs.sentAt))
+        .limit(1);
+      job = rows[0];
+    }
+    if (!job) continue; // not one of ours
+    const leads: any[] = await db.select().from(schema.leads).where(eq(schema.leads.id, job.leadId)).limit(1);
+    const lead = leads[0];
+    await recordHardBounce(db, {
+      email: r.email,
+      leadId: job.leadId,
+      jobId: job.id,
+      campaignId: job.campaignId,
+      ownerUserId: lead?.userId || sender.userId,
+      workspaceId: lead?.workspaceId ?? null,
+      status: r.status,
+      diagnostic: r.diagnostic,
+      via: "dsn",
+    });
+    recorded = true;
+  }
+  return recorded;
+}
+
+async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any, headers: HeaderMap = {}): Promise<boolean> {
   const env = msg.envelope ?? {};
   const fromRaw: string = env.from?.[0]?.address ?? "";
   const from = parseSenderAddress(fromRaw ? `${env.from?.[0]?.name ?? ""} <${fromRaw}>` : "");
@@ -670,7 +782,12 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any): Prom
   const receivedAt = (env.date ? new Date(env.date) : new Date()).toISOString();
   const nowS = new Date().toISOString();
   const replyId = crypto.randomUUID();
-  const classifiedTag = classifyReplyTag(env.subject ?? "", bodyText);
+  // Autoresponders (RFC 3834 headers, OOO subjects) are tagged out_of_office
+  // and never answered by the agent.
+  const autoReply = detectAutoReply(headers, env.subject ?? "");
+  const classifiedTag: InboundSentimentTag = autoReply.auto
+    ? "out_of_office"
+    : classifyReplyTag(env.subject ?? "", bodyText);
 
   // Shared-pool mailboxes are owned by the platform admin, but the reply
   // belongs to whoever owns the lead/campaign. Attribute everything to the
@@ -679,8 +796,9 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any): Prom
   const ownerWorkspaceId: string | null =
     (lead as any)?.workspaceId || (sender as any).workspaceId || null;
 
-  // Autopilot campaigns hand every inbound reply to the reply agent.
-  let agentStatus: "pending" | null = null;
+  // Autopilot campaigns hand every inbound reply to the reply agent, except
+  // automatic replies, which are recorded as skipped.
+  let agentStatus: "pending" | "skipped" | null = null;
   if (campaignId) {
     try {
       const runs: any[] = await db
@@ -688,11 +806,19 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any): Prom
         .from(schema.chadGtmRuns)
         .where(eq(schema.chadGtmRuns.campaignId, campaignId))
         .limit(1);
-      if (runs[0] && runs[0].mode !== "off") agentStatus = "pending";
+      if (runs[0] && runs[0].mode !== "off") agentStatus = autoReply.auto ? "skipped" : "pending";
     } catch {
       agentStatus = null;
     }
   }
+  const agentSkip =
+    agentStatus === "skipped"
+      ? {
+          agentIntent: "out_of_office",
+          agentSummary: `Automatic reply (${autoReply.reason}); the agent does not answer auto-replies.`,
+          agentHandledAt: nowS,
+        }
+      : {};
 
   try {
     await db.insert(schema.replies).values({
@@ -711,6 +837,7 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any): Prom
       receivedAt,
       tag: classifiedTag,
       agentStatus,
+      ...agentSkip,
     });
   } catch {
     return false; // unique constraint — already recorded concurrently
@@ -751,21 +878,24 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any): Prom
     return true;
   }
 
-  // If Negative / Unsubscribe / Opt-out: add to suppressions table
-  if (classifiedTag === "not_interested") {
+  // Opt-outs: "remove me" is an unsubscribe and a spam complaint is a
+  // complaint — both global, so no client mails this person again. A plain
+  // "not interested" only stops this client.
+  const optOut = classifyOptOut(env.subject ?? "", bodyText);
+  if (optOut) {
     try {
-      await db
-        .insert(schema.suppressions)
-        .values({
-          id: crypto.randomUUID(),
-          userId: ownerId,
-          workspaceId: ownerWorkspaceId,
-          value: fromEmail,
-          kind: "email",
-          reason: "Negative reply / opt-out",
-          source: "complaint",
-        })
-        .onConflictDoNothing();
+      await addSuppression(db, {
+        userId: ownerId,
+        workspaceId: ownerWorkspaceId,
+        email: fromEmail,
+        source: optOut === "not_interested" ? "manual" : optOut,
+        reason:
+          optOut === "unsubscribe"
+            ? "Asked to be removed (reply)"
+            : optOut === "complaint"
+              ? "Spam complaint (reply)"
+              : "Replied not interested",
+      });
     } catch {
       // non-fatal
     }
@@ -800,7 +930,7 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any): Prom
 
 /** Sync all senders that have IMAP configured and are not failed. */
 export async function syncTick(db: EngineDb): Promise<SyncResult> {
-  const result: SyncResult = { checked: 0, repliesFound: 0, errors: [] };
+  const result: SyncResult = { checked: 0, repliesFound: 0, bounces: 0, errors: [] };
   const senders: SenderRow[] = await db
     .select()
     .from(schema.senderAccounts)
@@ -811,10 +941,10 @@ export async function syncTick(db: EngineDb): Promise<SyncResult> {
   const syncWithTimeout = async (s: SenderRow) => {
     return Promise.race([
       syncSenderReplies(db, s),
-      new Promise<{ found: number; error?: string }>((_, reject) =>
+      new Promise<{ found: number; bounces?: number; error?: string }>((_, reject) =>
         setTimeout(() => reject(new Error("IMAP sync timeout (10s)")), 10000)
       ),
-    ]).catch((err) => {
+    ]).catch((err): { found: number; bounces?: number; error?: string } => {
       return { found: 0, error: String(err?.message || err) };
     });
   };
@@ -826,6 +956,7 @@ export async function syncTick(db: EngineDb): Promise<SyncResult> {
     const s = senders[i];
     if (outcome.status === "fulfilled") {
       result.repliesFound += outcome.value.found;
+      result.bounces += outcome.value.bounces ?? 0;
       if (outcome.value.error) result.errors.push(`${s.email}: ${outcome.value.error}`);
     } else {
       result.errors.push(`${s.email}: ${String((outcome as PromiseRejectedResult).reason?.message || (outcome as PromiseRejectedResult).reason)}`);

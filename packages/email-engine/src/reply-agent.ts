@@ -15,7 +15,7 @@
  * When the client answers, the answer is saved to the knowledge base so the
  * same question is handled automatically next time.
  */
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { classifyReplyTag } from "./sync-replies";
 import { callLlmJson, type AiEngineOptions } from "./ai";
@@ -566,29 +566,112 @@ export interface ReplyAgentResult {
   escalated: number;
   skipped: number;
   failed: number;
+  /** Errors that will be retried with backoff. */
+  retried: number;
+  /** Replies handed to the client after the last attempt failed. */
+  gaveUp: number;
+  /** Replies recovered from a worker that died mid-processing. */
+  reclaimed: number;
+  /** Open requests the client was reminded about. */
+  renotified: number;
+}
+
+/** Attempts before the agent gives up and hands the reply to the client. */
+export const AGENT_MAX_ATTEMPTS = 3;
+/** A reply left in 'processing' longer than this belonged to a dead worker. */
+export const AGENT_STUCK_AFTER_MS = 10 * 60_000;
+/** Remind the client once about a request still open after this long. */
+export const AGENT_RENOTIFY_AFTER_MS = 24 * 3_600_000;
+export const AGENT_GAVE_UP_TITLE = "The agent couldn't handle this reply";
+
+/** Backoff before retry after `attempts` failures: 2^attempts minutes. */
+export function agentRetryDelayMs(attempts: number): number {
+  return 2 ** Math.max(0, attempts) * 60_000;
+}
+
+/** Is a pending reply (failed `attempts` times, last at `claimedAt`) due again? */
+export function isAgentRetryDue(attempts: number, claimedAt: string | null | undefined, now: Date): boolean {
+  if (!attempts || !claimedAt) return true;
+  const t = Date.parse(claimedAt);
+  if (!Number.isFinite(t)) return true;
+  return now.getTime() - t >= agentRetryDelayMs(attempts);
+}
+
+/**
+ * Remind once: the request is old enough and the only notification so far is
+ * the original one (sent around creation time) or none at all.
+ */
+export function needsRenotify(
+  req: { createdAt: string; notifiedAt: string | null },
+  now: Date,
+): boolean {
+  const created = Date.parse(req.createdAt);
+  if (!Number.isFinite(created) || now.getTime() - created < AGENT_RENOTIFY_AFTER_MS) return false;
+  if (!req.notifiedAt) return true;
+  const notified = Date.parse(req.notifiedAt);
+  if (!Number.isFinite(notified)) return true;
+  return notified - created < AGENT_RENOTIFY_AFTER_MS / 2;
+}
+
+/** SQL: pending replies whose backoff has elapsed. */
+function pendingDueCondition(now: Date) {
+  const due = [isNull(schema.replies.agentClaimedAt), eq(schema.replies.agentAttempts, 0)];
+  for (let a = 1; a < AGENT_MAX_ATTEMPTS; a++) {
+    due.push(
+      and(
+        eq(schema.replies.agentAttempts, a),
+        lte(schema.replies.agentClaimedAt, new Date(now.getTime() - agentRetryDelayMs(a)).toISOString()),
+      )!,
+    );
+  }
+  return and(eq(schema.replies.agentStatus, "pending"), or(...due));
 }
 
 /**
  * Process pending agent replies. Safe to run concurrently: each reply is
  * claimed with a conditional UPDATE before any side effect happens.
+ *
+ * Reliability: a handling error puts the reply back to 'pending' with
+ * agent_attempts+1 and agent_claimed_at as the backoff marker (retry after
+ * 2^attempts minutes). After AGENT_MAX_ATTEMPTS the reply is handed to the
+ * client as an agent_request. Replies stuck in 'processing' (worker died) are
+ * reclaimed after 10 minutes, and open requests get one reminder after 24h.
  */
 export async function replyAgentTick(
   db: EngineDb,
   deps: ReplyAgentDeps = {},
   limit = 15,
 ): Promise<ReplyAgentResult> {
-  const result: ReplyAgentResult = { processed: 0, replied: 0, escalated: 0, skipped: 0, failed: 0 };
+  const result: ReplyAgentResult = {
+    processed: 0,
+    replied: 0,
+    escalated: 0,
+    skipped: 0,
+    failed: 0,
+    retried: 0,
+    gaveUp: 0,
+    reclaimed: 0,
+    renotified: 0,
+  };
+  const now = deps.now?.() ?? new Date();
+
+  try {
+    result.reclaimed = await reclaimStuckReplies(db, deps, now, result);
+  } catch (err) {
+    console.error("[reply-agent] reclaim failed", err);
+  }
+
   const pending: any[] = await db
-    .select({ id: schema.replies.id })
+    .select({ id: schema.replies.id, agentAttempts: schema.replies.agentAttempts })
     .from(schema.replies)
-    .where(eq(schema.replies.agentStatus, "pending"))
+    .where(pendingDueCondition(now))
     .orderBy(schema.replies.receivedAt)
     .limit(limit);
 
   for (const row of pending) {
     const claimed: any[] = await db
       .update(schema.replies)
-      .set({ agentStatus: "processing" })
+      .set({ agentStatus: "processing", agentClaimedAt: now.toISOString() })
       .where(and(eq(schema.replies.id, row.id), eq(schema.replies.agentStatus, "pending")))
       .returning({ id: schema.replies.id });
     if (claimed.length === 0) continue;
@@ -599,17 +682,258 @@ export async function replyAgentTick(
     } catch (err) {
       console.error("[reply-agent] failed", row.id, err);
       result.failed++;
-      await db
-        .update(schema.replies)
-        .set({
-          agentStatus: "failed",
-          agentSummary: `Agent error: ${String((err as Error)?.message || err).slice(0, 200)}`,
-          agentHandledAt: (deps.now?.() ?? new Date()).toISOString(),
-        })
-        .where(eq(schema.replies.id, row.id));
+      const attempts = Number(row.agentAttempts ?? 0) + 1;
+      await recordAgentFailure(db, row.id, attempts, String((err as Error)?.message || err), deps, now, result);
     }
   }
+
+  try {
+    result.renotified = await renotifyStaleRequests(db, deps, now);
+  } catch (err) {
+    console.error("[reply-agent] re-notify failed", err);
+  }
   return result;
+}
+
+/** After a handling error: back off and retry, or give up after the last attempt. */
+async function recordAgentFailure(
+  db: EngineDb,
+  replyId: string,
+  attempts: number,
+  message: string,
+  deps: ReplyAgentDeps,
+  now: Date,
+  result: ReplyAgentResult,
+): Promise<void> {
+  if (attempts >= AGENT_MAX_ATTEMPTS) {
+    await giveUpOnReply(db, replyId, attempts, message, deps, now);
+    result.gaveUp++;
+    return;
+  }
+  await db
+    .update(schema.replies)
+    .set({
+      agentStatus: "pending",
+      agentAttempts: attempts,
+      agentClaimedAt: now.toISOString(),
+      agentSummary: `Agent error (attempt ${attempts} of ${AGENT_MAX_ATTEMPTS}), retrying: ${message.slice(0, 160)}`,
+    })
+    .where(eq(schema.replies.id, replyId));
+  result.retried++;
+}
+
+/** Replies left in 'processing' by a worker that died: retry (counts as an attempt). */
+async function reclaimStuckReplies(
+  db: EngineDb,
+  deps: ReplyAgentDeps,
+  now: Date,
+  result: ReplyAgentResult,
+): Promise<number> {
+  const cutoff = new Date(now.getTime() - AGENT_STUCK_AFTER_MS).toISOString();
+  const stuck: { id: string; agentAttempts: number | null; agentClaimedAt: string | null }[] = await db
+    .select({
+      id: schema.replies.id,
+      agentAttempts: schema.replies.agentAttempts,
+      agentClaimedAt: schema.replies.agentClaimedAt,
+    })
+    .from(schema.replies)
+    .where(
+      and(
+        eq(schema.replies.agentStatus, "processing"),
+        or(isNull(schema.replies.agentClaimedAt), lte(schema.replies.agentClaimedAt, cutoff)),
+      ),
+    )
+    .limit(50);
+  let reclaimed = 0;
+  for (const row of stuck) {
+    const attempts = Number(row.agentAttempts ?? 0) + 1;
+    if (attempts >= AGENT_MAX_ATTEMPTS) {
+      // Claim it first so two workers do not both give up on it.
+      const claimed: any[] = await db
+        .update(schema.replies)
+        .set({ agentClaimedAt: now.toISOString() })
+        .where(
+          and(
+            eq(schema.replies.id, row.id),
+            eq(schema.replies.agentStatus, "processing"),
+            row.agentClaimedAt
+              ? eq(schema.replies.agentClaimedAt, row.agentClaimedAt)
+              : isNull(schema.replies.agentClaimedAt),
+          ),
+        )
+        .returning({ id: schema.replies.id });
+      if (claimed.length === 0) continue;
+      await giveUpOnReply(db, row.id, attempts, "The worker stopped while handling this reply.", deps, now);
+      result.gaveUp++;
+      reclaimed++;
+      continue;
+    }
+    const res: any[] = await db
+      .update(schema.replies)
+      .set({ agentStatus: "pending", agentAttempts: attempts, agentClaimedAt: now.toISOString() })
+      .where(
+        and(
+          eq(schema.replies.id, row.id),
+          eq(schema.replies.agentStatus, "processing"),
+          row.agentClaimedAt
+            ? eq(schema.replies.agentClaimedAt, row.agentClaimedAt)
+            : isNull(schema.replies.agentClaimedAt),
+        ),
+      )
+      .returning({ id: schema.replies.id });
+    if (res.length > 0) reclaimed++;
+  }
+  return reclaimed;
+}
+
+/** Last attempt failed: mark the reply failed and put it in front of the client. */
+async function giveUpOnReply(
+  db: EngineDb,
+  replyId: string,
+  attempts: number,
+  message: string,
+  deps: ReplyAgentDeps,
+  now: Date,
+): Promise<void> {
+  const nowIso = now.toISOString();
+  await db
+    .update(schema.replies)
+    .set({
+      agentStatus: "failed",
+      agentAttempts: attempts,
+      agentSummary: `Agent gave up after ${attempts} attempts: ${message.slice(0, 160)}`,
+      agentHandledAt: nowIso,
+    })
+    .where(eq(schema.replies.id, replyId));
+
+  const [reply] = await db.select().from(schema.replies).where(eq(schema.replies.id, replyId)).limit(1);
+  if (!reply) return;
+  const [run] = reply.campaignId
+    ? await db.select().from(schema.chadGtmRuns).where(eq(schema.chadGtmRuns.campaignId, reply.campaignId)).limit(1)
+    : [];
+  const [lead] = reply.leadId
+    ? await db.select().from(schema.leads).where(eq(schema.leads.id, reply.leadId)).limit(1)
+    : [];
+  const ownerId: string = run?.userId || reply.userId;
+
+  const existing: any[] = await db
+    .select({ id: schema.agentRequests.id })
+    .from(schema.agentRequests)
+    .where(and(eq(schema.agentRequests.replyId, replyId), eq(schema.agentRequests.status, "open")))
+    .limit(1);
+  if (existing.length > 0) return;
+
+  const requestId = crypto.randomUUID();
+  const said = String(reply.bodyText || reply.snippet || "").replace(/\s+/g, " ").trim().slice(0, 500);
+  await db.insert(schema.agentRequests).values({
+    id: requestId,
+    userId: ownerId,
+    workspaceId: run?.workspaceId ?? null,
+    runId: run?.id ?? null,
+    campaignId: reply.campaignId,
+    replyId,
+    leadId: reply.leadId,
+    kind: "other",
+    status: "open",
+    title: AGENT_GAVE_UP_TITLE,
+    question: said || `${reply.fromEmail} replied (subject: ${reply.subject || "no subject"})`,
+    leadEmail: reply.fromEmail,
+    leadName: [lead?.firstName, lead?.lastName].filter(Boolean).join(" ") || reply.fromName || "",
+    leadCompany: lead?.company || "",
+    draftReply: "",
+  });
+  await db.insert(schema.activityLogs).values({
+    id: crypto.randomUUID(),
+    userId: ownerId,
+    type: "agent.failed",
+    message: `Agent couldn't handle a reply from ${reply.fromEmail}; it's waiting for you`,
+    campaignId: reply.campaignId,
+    meta: { replyId, attempts },
+  });
+
+  if (deps.notifyClient !== false) {
+    const [sender] = await db
+      .select()
+      .from(schema.senderAccounts)
+      .where(eq(schema.senderAccounts.id, reply.senderId))
+      .limit(1);
+    if (sender) {
+      await notifyClientOfRequest(
+        db,
+        sender as SenderRow,
+        ownerId,
+        AGENT_GAVE_UP_TITLE,
+        said,
+        reply.fromEmail,
+        deps,
+      ).catch((err) => console.warn("[reply-agent] client notification failed", err));
+    }
+  }
+  // Stamp it even if the email failed, so the 24h reminder logic has a baseline.
+  await db.update(schema.agentRequests).set({ notifiedAt: nowIso }).where(eq(schema.agentRequests.id, requestId));
+}
+
+/** Remind the client once about requests still open after 24 hours. */
+async function renotifyStaleRequests(db: EngineDb, deps: ReplyAgentDeps, now: Date): Promise<number> {
+  if (deps.notifyClient === false) return 0;
+  const cutoff = new Date(now.getTime() - AGENT_RENOTIFY_AFTER_MS).toISOString();
+  const rows: any[] = await db
+    .select()
+    .from(schema.agentRequests)
+    .where(
+      and(
+        eq(schema.agentRequests.status, "open"),
+        lte(schema.agentRequests.createdAt, cutoff),
+        or(
+          isNull(schema.agentRequests.notifiedAt),
+          sql`${schema.agentRequests.notifiedAt}::timestamptz < ${schema.agentRequests.createdAt}::timestamptz + interval '12 hours'`,
+        ),
+      ),
+    )
+    .limit(10);
+  let sent = 0;
+  for (const req of rows) {
+    if (!needsRenotify({ createdAt: req.createdAt, notifiedAt: req.notifiedAt ?? null }, now)) continue;
+    // Claim the reminder (conditional on the notifiedAt we read) so it goes out once.
+    const claimed: any[] = await db
+      .update(schema.agentRequests)
+      .set({ notifiedAt: now.toISOString() })
+      .where(
+        and(
+          eq(schema.agentRequests.id, req.id),
+          eq(schema.agentRequests.status, "open"),
+          req.notifiedAt ? eq(schema.agentRequests.notifiedAt, req.notifiedAt) : isNull(schema.agentRequests.notifiedAt),
+        ),
+      )
+      .returning({ id: schema.agentRequests.id });
+    if (claimed.length === 0) continue;
+    const [reply] = req.replyId
+      ? await db.select().from(schema.replies).where(eq(schema.replies.id, req.replyId)).limit(1)
+      : [];
+    const [sender] = reply
+      ? await db.select().from(schema.senderAccounts).where(eq(schema.senderAccounts.id, reply.senderId)).limit(1)
+      : [];
+    if (!sender) continue;
+    await notifyClientOfRequest(
+      db,
+      sender as SenderRow,
+      req.userId,
+      `Reminder: ${req.title}`,
+      req.question || "",
+      req.leadEmail || reply?.fromEmail || "",
+      deps,
+    )
+      .then(() => {
+        sent++;
+      })
+      .catch((err) => console.warn("[reply-agent] reminder failed", err));
+    // notifyClientOfRequest may stamp sibling requests; keep this one's stamp.
+    await db
+      .update(schema.agentRequests)
+      .set({ notifiedAt: now.toISOString() })
+      .where(eq(schema.agentRequests.id, req.id));
+  }
+  return sent;
 }
 
 async function handleReply(
