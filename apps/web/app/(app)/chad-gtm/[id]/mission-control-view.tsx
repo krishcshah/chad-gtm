@@ -27,7 +27,21 @@ import {
 import { Button, Input, cn, toast } from "@smartreach/ui";
 import { timeAgo } from "@smartreach/shared";
 import { toggleChadGtmStatusAction, updateChadGtmVelocityAction } from "@/lib/chad-gtm-actions";
-import { setBookingUrlAction, setReplyAgentModeAction } from "@/lib/autopilot-actions";
+import { setBookingUrlAction, setReplyAgentModeAction, type AutopilotOutcome } from "@/lib/autopilot-actions";
+import type { RunPhase } from "@/lib/autopilot-policy";
+import type { PlanPreview } from "@/lib/autopilot-state";
+import { LaunchStatePanel, PhaseBadge, PlanPreviewCard } from "../launch-setup";
+
+/** Launch state for a run that may not be live yet (computed on the server). */
+export interface LaunchView {
+  phase: RunPhase;
+  approved: boolean;
+  reason: string | null;
+  failureCode: string | null;
+  missing: NonNullable<AutopilotOutcome["missing"]>;
+  identity: { companyName: string; postalAddress: string };
+  preview: PlanPreview | null;
+}
 
 type Mode = "autopilot" | "approve" | "off";
 
@@ -37,7 +51,15 @@ const MODES: Array<{ id: Mode; label: string; hint: string }> = [
   { id: "off", label: "Off", hint: "Only classifies replies. You answer from the UniBox." },
 ];
 
-export function MissionControlView({ runId, initialData }: { runId: string; initialData: any }) {
+export function MissionControlView({
+  runId,
+  initialData,
+  launch,
+}: {
+  runId: string;
+  initialData: any;
+  launch: LaunchView;
+}) {
   const router = useRouter();
   const run = initialData?.run;
   const kpis = {
@@ -63,7 +85,13 @@ export function MissionControlView({ runId, initialData }: { runId: string; init
   const [editingBooking, setEditingBooking] = useState(!run?.bookingUrl);
   const [isPending, startTransition] = useTransition();
 
-  const needsLaunch = run?.status === "needs_input" || !run?.campaignId;
+  // Anything without a campaign is not live, whatever its status says.
+  const needsLaunch = !run?.campaignId;
+
+  const onLaunchChanged = (outcome: AutopilotOutcome) => {
+    if (outcome.phase === "live") setStatus("active");
+    router.refresh();
+  };
 
   const handleToggleStatus = () => {
     const next = status === "active" ? "paused" : "active";
@@ -143,9 +171,7 @@ export function MissionControlView({ runId, initialData }: { runId: string; init
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-50 sm:text-[28px]">{run?.companyName || host}</h1>
             {needsLaunch ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/25 bg-amber-400/10 px-2.5 py-0.5 text-xs font-medium text-amber-300">
-                <span className="size-1.5 rounded-full bg-amber-400" /> Waiting for booking link
-              </span>
+              <PhaseBadge phase={launch.phase} />
             ) : status === "active" ? (
               <span className="inline-flex items-center gap-2 rounded-full border border-brand-400/25 bg-brand-400/10 px-2.5 py-0.5 text-xs font-medium text-brand-300">
                 <span className="live-dot" /> Live
@@ -208,7 +234,22 @@ export function MissionControlView({ runId, initialData }: { runId: string; init
         </Link>
       )}
 
+      {needsLaunch && (
+        <LaunchStatePanel
+          runId={runId}
+          phase={launch.phase}
+          reason={launch.reason}
+          failureCode={launch.failureCode}
+          approved={launch.approved}
+          companyLabel={run?.companyName || host}
+          missing={launch.missing}
+          identity={launch.identity}
+          onChanged={onLaunchChanged}
+        />
+      )}
+
       {/* Funnel */}
+      {!needsLaunch && (
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         {funnel.map((f, i) => (
           <div
@@ -228,9 +269,13 @@ export function MissionControlView({ runId, initialData }: { runId: string; init
           </div>
         ))}
       </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-        {/* Activity */}
+        {needsLaunch && launch.preview ? (
+          <PlanPreviewCard preview={launch.preview} />
+        ) : (
+        /* Activity */
         <section className="overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-950/70">
           <div className="flex items-center justify-between border-b border-zinc-800/70 px-5 py-3.5">
             <h2 className="text-sm font-semibold text-zinc-100">Activity</h2>
@@ -244,11 +289,11 @@ export function MissionControlView({ runId, initialData }: { runId: string; init
                 <Sparkles className="size-4 text-brand-300" />
               </div>
               <p className="text-[13px] font-medium text-zinc-200">
-                {needsLaunch ? "Add your booking link to go live" : "First emails go out in the next sending window"}
+                {needsLaunch ? "Nothing has been sent yet" : "First emails go out in the next sending window"}
               </p>
               <p className="mx-auto mt-1 max-w-sm text-xs text-zinc-500">
-                Sends are paced 45–120 seconds apart across the mailbox pool. Replies and the agent&apos;s responses
-                show up here as they happen.
+                Sends go out Monday to Friday during business hours, paced 45–120 seconds apart across the mailbox
+                pool. Replies and the agent&apos;s responses show up here as they happen.
               </p>
             </div>
           ) : (
@@ -288,6 +333,7 @@ export function MissionControlView({ runId, initialData }: { runId: string; init
             </ul>
           )}
         </section>
+        )}
 
         <aside className="flex flex-col gap-4">
           {/* Reply agent */}

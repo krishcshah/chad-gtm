@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   Bot,
-  CalendarClock,
   Check,
   ChevronRight,
   Globe,
@@ -20,7 +19,9 @@ import {
 } from "lucide-react";
 import { Button, Input, cn, toast } from "@smartreach/ui";
 import { timeAgo } from "@smartreach/shared";
-import { setBookingUrlAction, startAutopilotAction } from "@/lib/autopilot-actions";
+import { startAutopilotAction, type AutopilotOutcome } from "@/lib/autopilot-actions";
+import type { RunPhase } from "@/lib/autopilot-policy";
+import { LaunchDetailsForm, PHASE_BADGE } from "./launch-setup";
 
 export interface RunSummary {
   id: string;
@@ -33,6 +34,7 @@ export interface RunSummary {
   replyAgentMode: string;
   dailyEmailLimit: number;
   createdAt: string;
+  phase: RunPhase;
 }
 
 const STAGES = [
@@ -43,17 +45,6 @@ const STAGES = [
   { icon: Inbox, label: "Assigning warmed mailboxes", detail: "30 sends per mailbox per day, human pacing" },
 ];
 
-const STATUS_STYLE: Record<string, { label: string; dot: string; text: string }> = {
-  active: { label: "Live", dot: "bg-brand-400", text: "text-brand-300" },
-  paused: { label: "Paused", dot: "bg-zinc-500", text: "text-zinc-400" },
-  needs_input: { label: "Needs booking link", dot: "bg-amber-400", text: "text-amber-300" },
-  analyzing: { label: "Analyzing", dot: "bg-sky-400", text: "text-sky-300" },
-  reviewing: { label: "Draft", dot: "bg-zinc-500", text: "text-zinc-400" },
-  calibrating: { label: "Draft", dot: "bg-zinc-500", text: "text-zinc-400" },
-  ready: { label: "Ready", dot: "bg-sky-400", text: "text-sky-300" },
-  completed: { label: "Completed", dot: "bg-zinc-500", text: "text-zinc-400" },
-};
-
 export function AutopilotLauncher({ runs }: { runs: RunSummary[] }) {
   const router = useRouter();
   const [url, setUrl] = useState("");
@@ -62,8 +53,8 @@ export function AutopilotLauncher({ runs }: { runs: RunSummary[] }) {
   const [showMore, setShowMore] = useState(false);
   const [running, setRunning] = useState(false);
   const [stage, setStage] = useState(0);
-  const [needsLink, setNeedsLink] = useState<{ runId: string; company: string } | null>(null);
-  const [lateLink, setLateLink] = useState("");
+  const [needsDetails, setNeedsDetails] = useState<AutopilotOutcome | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   // Visual progress while the server works (research + launch is one request).
@@ -74,30 +65,32 @@ export function AutopilotLauncher({ runs }: { runs: RunSummary[] }) {
     return () => clearInterval(t);
   }, [running]);
 
+  /** Live → mission control; details missing → ask here; anything else → mission control explains it. */
+  const handleOutcome = (outcome: AutopilotOutcome, message?: string) => {
+    if (outcome.phase === "needs_details") {
+      setNeedsDetails(outcome);
+      return;
+    }
+    setNeedsDetails(null);
+    if (outcome.phase === "live") toast.success(message || "Outreach is live");
+    else if (message) toast.info(message);
+    router.push(`/chad-gtm/${outcome.runId}`);
+  };
+
   const launch = () => {
     if (!url.trim()) return void toast.error("Enter your company website first.");
+    setError(null);
     setRunning(true);
     start(async () => {
       const res = await startAutopilotAction({ url, bookingUrl: booking, notes });
       setRunning(false);
-      if (!res.ok) return void toast.error(res.error);
-      if (res.data?.needsBookingUrl) {
-        setNeedsLink({ runId: res.data.runId, company: res.data.companyName || "your company" });
+      if (!res.ok) {
+        setError(res.error);
         return;
       }
-      toast.success(res.message || "Outreach is live");
-      router.push(`/chad-gtm/${res.data!.runId}`);
+      handleOutcome(res.data!, res.message);
     });
   };
-
-  const submitLateLink = () =>
-    start(async () => {
-      if (!needsLink) return;
-      const res = await setBookingUrlAction(needsLink.runId, lateLink);
-      if (!res.ok) return void toast.error(res.error);
-      toast.success(res.message || "Live");
-      router.push(`/chad-gtm/${needsLink.runId}`);
-    });
 
   return (
     <div className="page-stack">
@@ -118,34 +111,15 @@ export function AutopilotLauncher({ runs }: { runs: RunSummary[] }) {
             send interested leads to your calendar. You only hear from us when a lead needs something we don&apos;t have.
           </p>
 
-          {needsLink ? (
-            <div className="mt-8 w-full animate-float-up rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-5 text-left">
-              <div className="flex items-start gap-3">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-300">
-                  <CalendarClock className="size-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h2 className="text-[15px] font-semibold text-zinc-50">One last thing: where should leads book?</h2>
-                  <p className="mt-1 text-[13px] text-zinc-400">
-                    We researched {needsLink.company} but couldn&apos;t find a booking page on the site. Paste your
-                    Calendly, Cal.com, HubSpot, or Google booking link and we go live.
-                  </p>
-                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                    <Input
-                      autoFocus
-                      value={lateLink}
-                      onChange={(e) => setLateLink(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && submitLateLink()}
-                      placeholder="https://cal.com/you/intro"
-                      className="h-10 text-sm"
-                      aria-label="Booking link"
-                    />
-                    <Button variant="brand" size="lg" onClick={submitLateLink} disabled={pending || !lateLink.trim()}>
-                      {pending ? <Loader2 className="animate-spin" /> : <ArrowRight />} Go live
-                    </Button>
-                  </div>
-                </div>
-              </div>
+          {needsDetails ? (
+            <div className="mt-8 w-full">
+              <LaunchDetailsForm
+                runId={needsDetails.runId}
+                companyLabel={needsDetails.companyName || "your company"}
+                missing={needsDetails.missing ?? ["bookingUrl"]}
+                identity={needsDetails.identity}
+                onOutcome={handleOutcome}
+              />
             </div>
           ) : running ? (
             <div className="mt-8 w-full max-w-md animate-float-up text-left" aria-live="polite">
@@ -205,6 +179,17 @@ export function AutopilotLauncher({ runs }: { runs: RunSummary[] }) {
                   Start outreach <ArrowRight />
                 </Button>
               </div>
+              {error && (
+                <div
+                  role="alert"
+                  className="mt-3 flex items-start gap-2 rounded-xl border border-rose-400/25 bg-rose-400/[0.06] px-3 py-2.5 text-left text-xs text-rose-200"
+                >
+                  <span className="min-w-0 flex-1">{error}</span>
+                  <button type="submit" className="shrink-0 font-medium text-rose-100 underline-offset-2 hover:underline">
+                    Try again
+                  </button>
+                </div>
+              )}
 
               <button
                 type="button"
@@ -221,7 +206,7 @@ export function AutopilotLauncher({ runs }: { runs: RunSummary[] }) {
                   </div>
                   <div>
                     <label className="mb-1 block text-[11px] font-medium text-zinc-500">Anything we should know?</label>
-                    <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. focus on Series A fintechs in the EU" />
+                    <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. we sell to dental clinics and orthodontists" />
                   </div>
                 </div>
               )}
@@ -229,7 +214,7 @@ export function AutopilotLauncher({ runs }: { runs: RunSummary[] }) {
           )}
         </div>
 
-        {!running && !needsLink && (
+        {!running && !needsDetails && (
           <div className="relative mx-auto mt-10 grid max-w-3xl gap-3 sm:grid-cols-3">
             {[
               { icon: Users, title: "Leads included", body: "Verified B2B contacts matched to your ICP." },
@@ -262,7 +247,7 @@ export function AutopilotLauncher({ runs }: { runs: RunSummary[] }) {
         ) : (
           <ul className="grid gap-3 md:grid-cols-2">
             {runs.map((r) => {
-              const st = STATUS_STYLE[r.status] ?? STATUS_STYLE.reviewing!;
+              const st = PHASE_BADGE[r.phase] ?? PHASE_BADGE.draft;
               let host = r.url;
               try {
                 host = new URL(r.url).hostname.replace(/^www\./, "");
@@ -270,7 +255,7 @@ export function AutopilotLauncher({ runs }: { runs: RunSummary[] }) {
               return (
                 <li key={r.id}>
                   <Link
-                    href={r.status === "reviewing" || r.status === "calibrating" ? "/chad-gtm?mode=guided" : `/chad-gtm/${r.id}`}
+                    href={r.phase === "draft" ? "/chad-gtm?mode=guided" : `/chad-gtm/${r.id}`}
                     className="group flex items-center gap-4 rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-4 transition-colors hover:border-zinc-700 hover:bg-zinc-900/50"
                   >
                     <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-sm font-semibold text-zinc-200 ring-1 ring-zinc-800">

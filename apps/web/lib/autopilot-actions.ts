@@ -3,8 +3,10 @@
 /**
  * One-URL autopilot + reply-agent controls.
  *
- *  startAutopilotAction      URL in → research → leads → campaign live
- *  setBookingUrlAction       the one thing we may need to ask for
+ *  startAutopilotAction      URL in → research → plan → (blocked | live)
+ *  completeAutopilotSetupAction  booking link + CAN-SPAM identity, then launch
+ *  retryAutopilotLaunchAction / retryAutopilotResearchAction  recover failed runs
+ *  setBookingUrlAction       change the booking link (launches if that was the blocker)
  *  setReplyAgentModeAction   autopilot | approve | off
  *  agent requests            what the agent needs from the client
  *  knowledge base            resources/answers the agent may use
@@ -17,9 +19,24 @@ import { getDb, ensureChadGtmTables } from "./db";
 import { requireUser } from "./session";
 import { getActiveWorkspace } from "./workspaces";
 import { analyzeWebsiteAction } from "./chad-gtm-actions";
-import { launchRunCampaign } from "./gtm-launch";
+import {
+  COMPLIANCE_REQUIRED_ERROR,
+  LaunchError,
+  launchRunCampaign,
+  loadComplianceIdentity,
+} from "./gtm-launch";
+import { APPROVAL_REQUIRED_ERROR, assertCanSend } from "./approval";
+import {
+  LAUNCH_FAILURE_MESSAGES,
+  complianceProblems,
+  type LaunchFailure,
+  type RunPhase,
+} from "./autopilot-policy";
+import { loadLaunchContext, runBlockers, runLaunchState, type LaunchContext, type RunLaunchState } from "./autopilot-state";
 import { normalizeClientBookingUrl } from "./booking-links";
 import { getWorkspaceAiOptions } from "./ai";
+
+type RunRow = typeof schema.chadGtmRuns.$inferSelect;
 
 type Result<T = undefined> = { ok: true; data?: T; message?: string } | { ok: false; error: string };
 
@@ -38,11 +55,30 @@ async function loadOwnedRun(runId: string, userId: string) {
 
 /* ─── Autopilot launch ────────────────────────────────────────────────── */
 
+/**
+ * Where an autopilot run stands after a start/retry/setup call. The client
+ * renders one state per phase; only "live" means emails will go out.
+ */
+export interface AutopilotOutcome {
+  runId: string;
+  phase: RunPhase;
+  companyName: string;
+  campaignId?: string;
+  leadCount?: number;
+  /** Fields the client still has to provide (phase "needs_details"). */
+  missing?: Array<"bookingUrl" | "companyName" | "postalAddress">;
+  /** Prefill for the details form. */
+  identity?: { companyName: string; postalAddress: string };
+  bookingUrl?: string | null;
+  /** Client-facing explanation for every non-live phase. */
+  reason?: string;
+}
+
 export async function startAutopilotAction(input: {
   url: string;
   bookingUrl?: string;
   notes?: string;
-}): Promise<Result<{ runId: string; needsBookingUrl: boolean; campaignId?: string; companyName?: string }>> {
+}): Promise<Result<AutopilotOutcome>> {
   const user = await requireUser();
   const url = String(input?.url || "").trim();
   if (url.length < 4 || !url.includes(".")) return { ok: false, error: "Enter your company website, e.g. acme.com" };
@@ -55,45 +91,190 @@ export async function startAutopilotAction(input: {
 
   const analysis = await analyzeWebsiteAction(url, input.notes, { autopilot: true, bookingUrl });
   if (!analysis.ok || !analysis.runId) {
-    return { ok: false, error: analysis.error || "We couldn't analyze that website." };
+    return { ok: false, error: analysis.error || "We couldn't analyze that website. Check the address and try again." };
+  }
+  return advanceAutopilotRun(analysis.runId, user.id);
+}
+
+/** Save the booking link and/or CAN-SPAM identity the launcher asked for, then try to launch. */
+export async function completeAutopilotSetupAction(
+  runId: string,
+  input: { bookingUrl?: string; companyName?: string; postalAddress?: string },
+): Promise<Result<AutopilotOutcome>> {
+  const user = await requireUser();
+  const run = await loadOwnedRun(runId, user.id);
+  if (!run) return { ok: false, error: "Run not found." };
+  const db = getDb();
+
+  if (input.bookingUrl !== undefined && input.bookingUrl.trim()) {
+    const bookingUrl = normalizeClientBookingUrl(input.bookingUrl);
+    if (!bookingUrl) return { ok: false, error: "Paste a full booking link, e.g. https://cal.com/you/intro" };
+    await db.update(schema.chadGtmRuns).set({ bookingUrl, updatedAt: nowIso() }).where(eq(schema.chadGtmRuns.id, run.id));
   }
 
-  const run = await loadOwnedRun(analysis.runId, user.id);
-  if (!run) return { ok: false, error: "Analysis finished but the run could not be loaded." };
-
-  const db = getDb();
-  if (!run.bookingUrl) {
-    await db
-      .update(schema.chadGtmRuns)
-      .set({ status: "needs_input", autopilot: true, updatedAt: nowIso() })
-      .where(eq(schema.chadGtmRuns.id, run.id));
-    revalidatePath("/chad-gtm");
-    return {
-      ok: true,
-      data: { runId: run.id, needsBookingUrl: true, companyName: run.companyName },
-      message: "Almost there — we just need your booking link.",
+  if (input.companyName !== undefined || input.postalAddress !== undefined) {
+    const current = await loadComplianceIdentity(db, user.id);
+    const identity = {
+      companyName: input.companyName !== undefined ? input.companyName.trim() : current.companyName,
+      postalAddress: input.postalAddress !== undefined ? input.postalAddress.trim() : current.postalAddress,
     };
+    const problems = complianceProblems(identity);
+    const firstProblem = problems.companyName || problems.postalAddress;
+    if (firstProblem) return { ok: false, error: firstProblem };
+    await saveComplianceIdentity(user.id, identity);
+  }
+
+  return advanceAutopilotRun(run.id, user.id);
+}
+
+/** Retry a launch that failed or was waiting (capacity, approval, leads). */
+export async function retryAutopilotLaunchAction(runId: string): Promise<Result<AutopilotOutcome>> {
+  const user = await requireUser();
+  const run = await loadOwnedRun(runId, user.id);
+  if (!run) return { ok: false, error: "Run not found." };
+  return advanceAutopilotRun(run.id, user.id);
+}
+
+/** Re-run the website research on the same run (optionally with a note on who to target). */
+export async function retryAutopilotResearchAction(
+  runId: string,
+  notes?: string,
+): Promise<Result<AutopilotOutcome>> {
+  const user = await requireUser();
+  const run = await loadOwnedRun(runId, user.id);
+  if (!run) return { ok: false, error: "Run not found." };
+  if (run.campaignId) return advanceAutopilotRun(run.id, user.id);
+  const analysis = await analyzeWebsiteAction(run.url, notes?.trim() || undefined, {
+    autopilot: true,
+    bookingUrl: run.bookingUrl,
+    existingRunId: run.id,
+  });
+  if (!analysis.ok) return { ok: false, error: analysis.error || "Research failed. Try again in a minute." };
+  return advanceAutopilotRun(run.id, user.id);
+}
+
+async function saveComplianceIdentity(userId: string, identity: { companyName: string; postalAddress: string }) {
+  const db = getDb();
+  const workspace = await getActiveWorkspace(userId);
+  await db
+    .insert(schema.workspaceSettings)
+    .values({ userId, workspaceId: workspace.id, companyName: identity.companyName, postalAddress: identity.postalAddress })
+    .onConflictDoUpdate({
+      target: schema.workspaceSettings.userId,
+      set: { companyName: identity.companyName, postalAddress: identity.postalAddress, updatedAt: nowIso() },
+    });
+  revalidatePath("/settings");
+}
+
+function outcomeFor(run: RunRow, state: RunLaunchState, ctx: LaunchContext): AutopilotOutcome {
+  const details = state.blockers.find((b) => b.kind === "details");
+  const reason =
+    state.phase === "launch_failed"
+      ? state.launchFailure?.message || LAUNCH_FAILURE_MESSAGES.error
+      : state.phase === "needs_research" || state.phase === "needs_details" || state.phase === "awaiting_approval"
+        ? state.blockers[0]?.message
+        : undefined;
+  return {
+    runId: run.id,
+    phase: state.phase,
+    companyName: run.companyName,
+    campaignId: run.campaignId ?? undefined,
+    missing: details && details.kind === "details" ? details.missing : undefined,
+    identity: {
+      companyName: ctx.identity.companyName || run.companyName || "",
+      postalAddress: ctx.identity.postalAddress,
+    },
+    bookingUrl: run.bookingUrl,
+    reason,
+  };
+}
+
+const PHASE_MESSAGES: Partial<Record<RunPhase, string>> = {
+  needs_research: "We couldn't pin down your audience, so nothing was sent.",
+  needs_details: "Almost there. We need a couple of details before we send.",
+  awaiting_approval: "Your plan is ready. Launch unlocks as soon as your account is approved.",
+  launch_failed: "Nothing was sent. Your plan is saved, so you can retry.",
+};
+
+/**
+ * Move an autopilot run as far as it can go: record what blocks it, or launch.
+ * Never leaves a run looking live without a running campaign.
+ */
+async function advanceAutopilotRun(runId: string, userId: string): Promise<Result<AutopilotOutcome>> {
+  const db = getDb();
+  let run = await loadOwnedRun(runId, userId);
+  if (!run) return { ok: false, error: "Run not found." };
+  if (!run.autopilot) {
+    await db.update(schema.chadGtmRuns).set({ autopilot: true, updatedAt: nowIso() }).where(eq(schema.chadGtmRuns.id, run.id));
+    run = { ...run, autopilot: true };
+  }
+
+  const ctx = await loadLaunchContext(db, userId);
+  if (run.campaignId) {
+    return { ok: true, data: outcomeFor(run, runLaunchState(run, ctx), ctx) };
+  }
+
+  const blockers = runBlockers(run, ctx);
+  if (blockers.length > 0) {
+    // Approval is the only blocker: the plan is ready, so show it as such.
+    const status = blockers[0]!.kind === "approval" ? "ready" : "needs_input";
+    run = { ...run, status };
+    await db.update(schema.chadGtmRuns).set({ status, updatedAt: nowIso() }).where(eq(schema.chadGtmRuns.id, run.id));
+    revalidateRun(run.id);
+    const outcome = outcomeFor(run, runLaunchState(run, ctx), ctx);
+    return { ok: true, data: outcome, message: PHASE_MESSAGES[outcome.phase] };
   }
 
   try {
-    const launched = await launchAutopilotRun(run.id, user.id);
+    const launched = await launchAutopilotRun(run, userId);
+    const fresh = (await loadOwnedRun(run.id, userId)) ?? run;
+    revalidateRun(run.id);
     return {
       ok: true,
-      data: { runId: run.id, needsBookingUrl: false, campaignId: launched.campaignId, companyName: run.companyName },
-      message: `Outreach is live — ${launched.leadCount} prospects queued.`,
+      data: { ...outcomeFor(fresh, runLaunchState(fresh, ctx), ctx), campaignId: launched.campaignId, leadCount: launched.leadCount },
+      message: `Outreach is live: ${launched.leadCount} prospects queued for the next sending window.`,
     };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Launch failed." };
+    const message = err instanceof Error ? err.message : "";
+    if (message === APPROVAL_REQUIRED_ERROR || message === COMPLIANCE_REQUIRED_ERROR) {
+      // Approval or identity changed between the check and the launch: re-evaluate.
+      const ctxNow = await loadLaunchContext(db, userId);
+      const status = runBlockers(run, ctxNow)[0]?.kind === "approval" ? "ready" : "needs_input";
+      run = { ...run, status };
+      await db.update(schema.chadGtmRuns).set({ status, updatedAt: nowIso() }).where(eq(schema.chadGtmRuns.id, run.id));
+      revalidateRun(run.id);
+      const outcome = outcomeFor(run, runLaunchState(run, ctxNow), ctxNow);
+      return { ok: true, data: outcome, message: PHASE_MESSAGES[outcome.phase] };
+    }
+    console.error("[autopilot] launch failed", { runId: run.id, error: err });
+    const failure: LaunchFailure = {
+      code: err instanceof LaunchError ? err.code : "error",
+      message: err instanceof LaunchError ? err.message : LAUNCH_FAILURE_MESSAGES.error,
+      at: nowIso(),
+    };
+    const calibrationProfile = { ...((run.calibrationProfile as any) || {}), launchFailure: failure };
+    run = { ...run, status: "needs_input", calibrationProfile };
+    await db
+      .update(schema.chadGtmRuns)
+      .set({ status: "needs_input", calibrationProfile, updatedAt: nowIso() })
+      .where(eq(schema.chadGtmRuns.id, run.id));
+    revalidateRun(run.id);
+    return { ok: true, data: outcomeFor(run, runLaunchState(run, ctx), ctx), message: PHASE_MESSAGES.launch_failed };
   }
 }
 
-async function launchAutopilotRun(runId: string, userId: string) {
+function revalidateRun(runId: string) {
+  revalidatePath("/chad-gtm");
+  revalidatePath(`/chad-gtm/${runId}`);
+  revalidatePath("/dashboard");
+}
+
+async function launchAutopilotRun(run: RunRow, userId: string) {
   const db = getDb();
-  const run = await loadOwnedRun(runId, userId);
-  if (!run) throw new Error("Run not found.");
-  if (run.campaignId) return { campaignId: run.campaignId, leadCount: 0 };
+  // Server-side gate, independent of any UI state.
+  await assertCanSend(userId);
   const workspace = await getActiveWorkspace(userId);
-  const out = await launchRunCampaign(db, {
+  return launchRunCampaign(db, {
     run,
     userId,
     workspaceId: run.workspaceId ?? workspace.id,
@@ -101,20 +282,12 @@ async function launchAutopilotRun(runId: string, userId: string) {
     approvedSamples: [],
     selectedOfferIndex: 0,
   });
-  await db
-    .update(schema.chadGtmRuns)
-    .set({ autopilot: true, updatedAt: nowIso() })
-    .where(eq(schema.chadGtmRuns.id, run.id));
-  revalidatePath("/chad-gtm");
-  revalidatePath(`/chad-gtm/${run.id}`);
-  revalidatePath("/dashboard");
-  return out;
 }
 
 export async function setBookingUrlAction(
   runId: string,
   rawUrl: string,
-): Promise<Result<{ launched: boolean; campaignId?: string }>> {
+): Promise<Result<{ launched: boolean; campaignId?: string; phase?: RunPhase; outcome?: AutopilotOutcome }>> {
   const user = await requireUser();
   const bookingUrl = normalizeClientBookingUrl(rawUrl || "");
   if (!bookingUrl) return { ok: false, error: "Paste a full booking link, e.g. https://cal.com/you/intro" };
@@ -149,23 +322,23 @@ export async function setBookingUrlAction(
     }
   }
 
-  let launched = false;
-  let campaignId: string | undefined = run.campaignId ?? undefined;
+  let outcome: AutopilotOutcome | undefined;
   if (run.autopilot && !run.campaignId) {
-    try {
-      const out = await launchAutopilotRun(run.id, user.id);
-      launched = true;
-      campaignId = out.campaignId;
-    } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : "Saved the link, but launch failed." };
-    }
+    const advanced = await advanceAutopilotRun(run.id, user.id);
+    if (!advanced.ok) return advanced;
+    outcome = advanced.data;
   }
   revalidatePath(`/chad-gtm/${run.id}`);
   revalidatePath("/requests");
+  const launched = outcome?.phase === "live";
   return {
     ok: true,
-    data: { launched, campaignId },
-    message: launched ? "Booking link saved — outreach is live." : "Booking link saved.",
+    data: { launched, campaignId: outcome?.campaignId ?? run.campaignId ?? undefined, phase: outcome?.phase, outcome },
+    message: launched
+      ? "Booking link saved. Outreach is live."
+      : outcome
+        ? `Booking link saved. ${PHASE_MESSAGES[outcome.phase] ?? ""}`.trim()
+        : "Booking link saved.",
   };
 }
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { auditDomainDns } from "@smartreach/email-engine/ai";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../leads-directory";
 import { getWorkspaceAiOptions } from "../ai";
 import { ensureChadGtmTables } from "../db";
+import { autopilotCountries } from "../autopilot-policy";
 import type { ToolDefinition } from "./types";
 
 const scrapedSchema = z
@@ -76,17 +77,24 @@ export const synthesizeStrategyTool: ToolDefinition<
 };
 
 export const persistGtmRunTool: ToolDefinition<
-  { url: string; notes?: string; autopilot?: boolean; bookingUrl?: string | null },
+  {
+    url: string;
+    notes?: string;
+    autopilot?: boolean;
+    bookingUrl?: string | null;
+    existingRunId?: string | null;
+  },
   { chadGtmRunId: string }
 > = {
   name: "persist_gtm_run",
   description:
-    "Persist the synthesized strategy as a chad_gtm_runs row so the wizard and mission control can use it.",
+    "Persist the synthesized strategy as a chad_gtm_runs row so the wizard and mission control can use it. With existingRunId, re-research that run in place (retry).",
   inputSchema: z.object({
     url: z.string().min(3),
     notes: z.string().optional(),
     autopilot: z.boolean().optional(),
     bookingUrl: z.string().nullable().optional(),
+    existingRunId: z.string().nullable().optional(),
   }),
   outputSchema: z.object({ chadGtmRunId: z.string() }),
   timeoutMs: 30_000,
@@ -97,6 +105,35 @@ export const persistGtmRunTool: ToolDefinition<
     }
 
     await ensureChadGtmTables(ctx.db);
+
+    if (input.existingRunId) {
+      // Retry: refresh the research on the client's existing (unlaunched) run.
+      const bookingUrl = input.bookingUrl || strategy.scrapedData.bookingUrl || null;
+      const updated = await ctx.db
+        .update(schema.chadGtmRuns)
+        .set({
+          companyName: strategy.companyName,
+          status: "reviewing",
+          businessOverview: strategy.businessOverview,
+          icpProfile: strategy.icpProfile,
+          offers: strategy.offers,
+          selectedIndustries: strategy.icpProfile.industries || [],
+          calibrationProfile: {},
+          agentRunId: ctx.run.id,
+          ...(bookingUrl ? { bookingUrl } : {}),
+          updatedAt: new Date().toISOString(),
+        })
+        .where(
+          and(
+            eq(schema.chadGtmRuns.id, input.existingRunId),
+            eq(schema.chadGtmRuns.userId, ctx.userId),
+            isNull(schema.chadGtmRuns.campaignId)
+          )
+        )
+        .returning({ id: schema.chadGtmRuns.id });
+      if (updated.length === 0) throw new Error("Run not found or already launched.");
+      return { chadGtmRunId: input.existingRunId };
+    }
     const runId = crypto.randomUUID();
     await ctx.db.insert(schema.chadGtmRuns).values({
       id: runId,
@@ -200,7 +237,9 @@ export const searchLeadsTool: ToolDefinition<
     const result = searchLeadsDirectory({
       industries: input.industries,
       jobTitles: input.titles,
+      countries: autopilotCountries(),
       hasEmail: true,
+      hasWorkEmail: true,
       page: input.page ?? 1,
       pageSize,
     });

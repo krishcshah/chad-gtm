@@ -30,6 +30,9 @@ import { ToolRegistry } from "./agent/registry";
 import { GtmAnalysisPlanner } from "./agent/planner";
 import { AgentRuntime } from "./agent/runtime";
 import { PHASE_1_TOOLS } from "./agent/tools";
+import { assertCanSend } from "./approval";
+import { analysisRateLimit } from "./autopilot-state";
+import { autopilotCountries } from "./autopilot-policy";
 import {
   buildCampaignContext,
   compactCustomFields,
@@ -138,19 +141,37 @@ async function mapWithConcurrency<T, R>(
 export async function analyzeWebsiteAction(
   rawUrl: string,
   optionalNotes?: string,
-  options: { autopilot?: boolean; bookingUrl?: string | null } = {}
+  options: { autopilot?: boolean; bookingUrl?: string | null; existingRunId?: string | null } = {}
 ): Promise<{
   ok: boolean;
   runId?: string;
   strategy?: SynthesizedGtmStrategy;
   agentRunId?: string;
   error?: string;
+  rateLimited?: boolean;
 }> {
   try {
     const user = await requireUser();
     const workspace = await getActiveWorkspace(user.id);
     const db = getDb();
     await ensureChadGtmTables(db);
+
+    // Each analysis runs a headless browser and LLM calls: cap it per user.
+    const limited = await analysisRateLimit(db, user.id);
+    if (limited) return { ok: false, error: limited, rateLimited: true };
+
+    // Retrying research on an existing run: it must be the caller's and unlaunched.
+    let existingRunId: string | null = null;
+    if (options.existingRunId) {
+      const [existing] = await db
+        .select({ id: schema.chadGtmRuns.id, campaignId: schema.chadGtmRuns.campaignId })
+        .from(schema.chadGtmRuns)
+        .where(and(eq(schema.chadGtmRuns.id, options.existingRunId), eq(schema.chadGtmRuns.userId, user.id)))
+        .limit(1);
+      if (!existing) return { ok: false, error: "Run not found." };
+      if (existing.campaignId) return { ok: false, error: "This campaign is already live." };
+      existingRunId = existing.id;
+    }
 
     // Phase 1: run the analysis through the agent harness. If anything in the
     // harness fails, fall back to the legacy direct path so the user is never
@@ -176,6 +197,7 @@ export async function analyzeWebsiteAction(
             notes: optionalNotes ?? "",
             autopilot: Boolean(options.autopilot),
             bookingUrl: options.bookingUrl ?? null,
+            existingRunId,
           },
           budgetCents: 200,
         });
@@ -205,6 +227,25 @@ export async function analyzeWebsiteAction(
     const scraped = await scrapeCompanyWebsite(rawUrl);
     const aiOpts = await getWorkspaceAiOptions(user.id);
     const strategy = await synthesizeGtmStrategy(scraped, optionalNotes, aiOpts);
+
+    if (existingRunId) {
+      const bookingUrl = options.bookingUrl || scraped.bookingUrl || null;
+      await db
+        .update(schema.chadGtmRuns)
+        .set({
+          companyName: strategy.companyName,
+          status: "reviewing",
+          businessOverview: strategy.businessOverview,
+          icpProfile: strategy.icpProfile,
+          offers: strategy.offers,
+          selectedIndustries: strategy.icpProfile.industries || [],
+          calibrationProfile: {},
+          ...(bookingUrl ? { bookingUrl } : {}),
+          updatedAt: nowIso(),
+        })
+        .where(and(eq(schema.chadGtmRuns.id, existingRunId), eq(schema.chadGtmRuns.userId, user.id)));
+      return { ok: true, runId: existingRunId, strategy };
+    }
 
     const runId = crypto.randomUUID();
     await db.insert(schema.chadGtmRuns).values({
@@ -273,9 +314,12 @@ export async function searchMatchingLeadsAction(
   pageSize = 10
 ) {
   try {
+    // Same audience rules as launch: work addresses in AUTOPILOT_COUNTRIES.
     const result = searchLeadsDirectory({
       industries: industries.length > 0 ? industries : undefined,
+      countries: autopilotCountries(),
       hasEmail: true,
+      hasWorkEmail: true,
       page,
       pageSize,
     });
@@ -1009,6 +1053,10 @@ export async function toggleChadGtmStatusAction(
       )
       .limit(1);
     if (!run) return { ok: false, error: "Run not found." };
+    if (newStatus === "active") {
+      if (!run.campaignId) return { ok: false, error: "This campaign hasn't launched yet." };
+      await assertCanSend(user.id);
+    }
 
     await db
       .update(schema.chadGtmRuns)

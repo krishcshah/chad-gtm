@@ -9,9 +9,19 @@ import { and, eq, gte, inArray, isNull } from "drizzle-orm";
 import { ensureOutreachSpintax, schema } from "@smartreach/database";
 import { nowIso } from "@smartreach/shared";
 import type { Db } from "./db";
-import { getMatchingDirectoryLeadsForExport } from "./leads-directory";
+import { getMatchingDirectoryLeadsForExport, type DirectoryLead } from "./leads-directory";
 import type { CampaignResearchContext } from "./ai";
 import { ensureCampaignLeadSnapshot } from "./campaign-drafts";
+import { assertCanSend } from "./approval";
+import {
+  LAUNCH_FAILURE_MESSAGES,
+  autopilotCountries,
+  autopilotSendingWindow,
+  complianceProblems,
+  isAllowedCountry,
+  pickWorkAddress,
+  type LaunchFailureCode,
+} from "./autopilot-policy";
 
 type RunRow = typeof schema.chadGtmRuns.$inferSelect;
 
@@ -64,31 +74,68 @@ export function getTargetTitles(run: RunRow): string[] {
 }
 
 /**
+ * Leads every pool campaign may contact: a work address that is not a
+ * consumer/ISP mailbox, in one of AUTOPILOT_COUNTRIES. The address on the
+ * returned lead is replaced by that work address.
+ */
+export function toContactableLeads(rows: DirectoryLead[], countries: string[]): DirectoryLead[] {
+  const out: DirectoryLead[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (!isAllowedCountry(row.country, countries)) continue;
+    const address = pickWorkAddress(row);
+    if (!address) continue;
+    const key = address.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ ...row, email: address });
+  }
+  return out;
+}
+
+export type DirectoryQuery = (
+  params: Parameters<typeof getMatchingDirectoryLeadsForExport>[0],
+  maxRows: number,
+  offset: number
+) => DirectoryLead[];
+
+/**
  * Prefer leads whose titles match the ICP, then top up with industry-only
  * matches. Prevents a campaign from starving when title formats vary wildly.
+ * Only work addresses in the allowed countries are ever returned.
  */
 export function fetchTargetedLeads(
   industries: string[],
   targetTitles: string[],
   desired: number,
-  offset: number
-) {
+  offset: number,
+  options: { countries?: string[]; query?: DirectoryQuery } = {}
+): DirectoryLead[] {
+  const countries = options.countries ?? autopilotCountries();
+  const query: DirectoryQuery = options.query ?? getMatchingDirectoryLeadsForExport;
   const base = {
     industries: industries.length > 0 ? industries : undefined,
+    countries,
     hasEmail: true,
+    hasWorkEmail: true,
   };
+  // A small share of "work" addresses are ISP mailboxes; over-fetch to cover them.
+  const fetchSize = Math.ceil(desired * 1.25) + 5;
   if (targetTitles.length === 0) {
-    return getMatchingDirectoryLeadsForExport(base, desired, offset);
+    return toContactableLeads(query(base, fetchSize, offset), countries).slice(0, desired);
   }
 
-  const targeted = getMatchingDirectoryLeadsForExport({ ...base, jobTitles: targetTitles }, desired, offset);
+  const targeted = toContactableLeads(query({ ...base, jobTitles: targetTitles }, fetchSize, offset), countries).slice(
+    0,
+    desired
+  );
   if (targeted.length >= desired) return targeted;
 
   const seen = new Set(targeted.map((lead) => lead.email.toLowerCase()));
-  let fallback = getMatchingDirectoryLeadsForExport(base, desired * 3, offset);
+  let fallback = toContactableLeads(query(base, desired * 3, offset), countries);
   if (fallback.length === 0 && offset > 0) {
     // Niche industries can have fewer rows than the rotation offset.
-    fallback = getMatchingDirectoryLeadsForExport(base, desired * 3, 0);
+    fallback = toContactableLeads(query(base, desired * 3, 0), countries);
   }
   for (const lead of fallback) {
     if (targeted.length >= desired) break;
@@ -155,6 +202,107 @@ export function lowerFirst(text: string): string {
   return text ? text.charAt(0).toLowerCase() + text.slice(1) : text;
 }
 
+/** A launch that could not complete; `code` drives the client-facing state. */
+export class LaunchError extends Error {
+  constructor(
+    readonly code: LaunchFailureCode,
+    message: string = LAUNCH_FAILURE_MESSAGES[code]
+  ) {
+    super(message);
+    this.name = "LaunchError";
+  }
+}
+
+export const COMPLIANCE_REQUIRED_ERROR =
+  "Add your company name and physical postal address (Settings → Compliance) before launching. Anti-spam law requires them in every email.";
+
+/** The sender identity CAN-SPAM requires in every email (workspace compliance settings). */
+export async function loadComplianceIdentity(
+  db: Db,
+  userId: string
+): Promise<{ companyName: string; postalAddress: string }> {
+  const [row] = await db
+    .select({
+      companyName: schema.workspaceSettings.companyName,
+      postalAddress: schema.workspaceSettings.postalAddress,
+    })
+    .from(schema.workspaceSettings)
+    .where(eq(schema.workspaceSettings.userId, userId))
+    .limit(1);
+  return { companyName: row?.companyName ?? "", postalAddress: row?.postalAddress ?? "" };
+}
+
+const DEFAULT_OFFER = {
+  title: "Direct Value Offer",
+  angle: "Direct ROI",
+  valueProp: "Accelerate your team's workflow and output.",
+  cta: "Open to a brief look?",
+};
+
+export interface RunSequence {
+  activeOffer: { title?: string; angle?: string; valueProp?: string; cta?: string };
+  subject: string;
+  bodyText: string;
+  bodyHtml: string;
+  steps: Array<{ delayDays: number; subject: string; bodyText: string; prompt: string }>;
+}
+
+/**
+ * The baseline 3-step sequence for a run: what is sent when on-the-fly
+ * personalization is unavailable, and what the client previews before launch.
+ */
+export function buildRunSequence(run: RunRow, approvedSamples: any[] = [], selectedOfferIndex = 0): RunSequence {
+  const companyName = run.companyName || "Autonomous GTM";
+  const calibratedProfile = (run.calibrationProfile as any) || {};
+  const offers = (run.offers as any[]) || [];
+  const activeOffer = offers[selectedOfferIndex] || offers[0] || DEFAULT_OFFER;
+
+  // Baseline copy: approved swipe sample > calibrated template > offer-grounded opener.
+  const offerOpener = defaultOpenerFromOffer(companyName, activeOffer);
+  const primarySample = approvedSamples[0] || {
+    subject: calibratedProfile.calibratedSubjectTemplate || offerOpener.subject,
+    bodyText: calibratedProfile.calibratedBodyTemplate || offerOpener.bodyText,
+    bodyHtml: calibratedProfile.calibratedBodyTemplate ? "" : offerOpener.bodyHtml,
+  };
+
+  const subject = primarySample.subject || offerOpener.subject;
+  const bodyText = ensureOutreachSpintax(primarySample.bodyText || offerOpener.bodyText);
+  const bodyHtml = ensureOutreachSpintax(primarySample.bodyHtml || `<p>${bodyText.replace(/\n/g, "<br/>")}</p>`);
+
+  const reSubject = subject.toLowerCase().startsWith("re:") ? subject : `re: ${subject}`;
+  const steps: RunSequence["steps"] = [
+    {
+      delayDays: 0,
+      subject,
+      bodyText,
+      prompt: [
+        calibratedProfile.customAiInstruction ||
+          `Company: ${companyName}. Value offer: ${activeOffer.valueProp}. Angle: ${activeOffer.angle}. Call to action: ${activeOffer.cta}. Write a first-touch cold email in 35-70 words. No pleasantries, no self-intro, no feature dump. One specific observation, one friction, one low-friction permission question.`,
+        `SPINTAX: include {Hi|Hey|Hello} and at least one other {a|b} variant group. Never spin names, companies, numbers, or factual claims.`,
+        `Do not mention DNS, mailboxes, inbox warmup, or deliverability unless the campaign explicitly asks for it.`,
+      ].join("\n\n"),
+    },
+    {
+      delayDays: 3,
+      subject: reSubject,
+      bodyText: ensureOutreachSpintax(
+        `Hi {{first_name}},\n\nOne more thought on this — ${lowerFirst((activeOffer.valueProp || "").replace(/\.$/, "")) || "happy to share how it would apply to {{company}}"}.\n\nWorth a look, or should I leave it?\n\n{{sender_name}}`
+      ),
+      prompt: `Write follow-up #1 (sent 3 days after initial message) for ${companyName}. Recipient is {{job_title}} at {{company}}. Never say "just checking in" or "following up". Add one new, specific reason this matters, grounded in: ${activeOffer.valueProp}. Strictly under 35 words. Low-friction permission CTA.`,
+    },
+    {
+      delayDays: 4,
+      subject: reSubject,
+      bodyText: ensureOutreachSpintax(
+        `Hi {{first_name}},\n\nAssuming the timing isn't right for {{company}}.\n\nShould I close the loop for now, or check back next quarter?\n\n{{sender_name}}`
+      ),
+      prompt: `Write follow-up #2 (final breakup email, sent 7 days after initial outreach) for ${companyName}. Recipient is {{job_title}} at {{company}}. Zero guilt, polite permission close. Under 25 words. Ask if we should close the loop or check back next quarter.`,
+    },
+  ];
+
+  return { activeOffer, subject, bodyText, bodyHtml, steps };
+}
+
 export interface LaunchRunInput {
   run: RunRow;
   userId: string;
@@ -167,6 +315,11 @@ export interface LaunchRunInput {
 /**
  * Provision list → leads → template → campaign → 3-step AI sequence → pool
  * senders → lead snapshot, then flip the run to active.
+ *
+ * Every precondition (approval, CAN-SPAM identity, pool capacity, leads) is
+ * checked before anything is written, and the campaign is created as a draft
+ * and only switched to "running" once fully provisioned, so a failure part-way
+ * never leaves a live campaign behind.
  */
 export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<{ campaignId: string; leadCount: number }> {
   const { run, userId, workspaceId } = input;
@@ -176,6 +329,15 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
   const dateStr = new Date().toISOString().slice(0, 10);
   const companyName = run.companyName || "Autonomous GTM";
   const calibratedProfile = (run.calibrationProfile as any) || {};
+
+  // Only approved accounts may send from the shared pool.
+  await assertCanSend(userId);
+
+  // CAN-SPAM: the sender's identity and postal address go in every email.
+  const identity = await loadComplianceIdentity(db, userId);
+  if (Object.keys(complianceProblems(identity)).length > 0) {
+    throw new Error(COMPLIANCE_REQUIRED_ERROR);
+  }
 
   // Fail before writing anything if there is no capacity to send from.
   const systemSenders: Array<{ id: string }> = await db
@@ -189,9 +351,7 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
       )
     );
   if (systemSenders.length === 0) {
-    throw new Error(
-      "No active shared mailboxes are available. Ask an admin to add or reactivate a system-pool sender before launching."
-    );
+    throw new LaunchError("no_senders");
   }
 
   // Leads: over-fetch, then drop anyone another campaign contacted recently.
@@ -203,11 +363,7 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
     .slice(0, LEADS_PER_CAMPAIGN);
 
   if (matchingDirectoryLeads.length === 0) {
-    throw new Error(
-      candidates.length > 0
-        ? "Every matching lead was contacted by another campaign in the last 90 days. Broaden the ICP industries."
-        : "No verified leads match the selected industries. Refine the ICP or pick another industry facet."
-    );
+    throw new LaunchError(candidates.length > 0 ? "all_contacted" : "no_leads");
   }
 
   const listId = crypto.randomUUID();
@@ -247,29 +403,8 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
       .onConflictDoNothing();
   }
 
-  const offers = (run.offers as any[]) || [];
-  const activeOffer = offers[input.selectedOfferIndex ?? 0] ||
-    offers[0] || {
-      title: "Direct Value Offer",
-      angle: "Direct ROI",
-      valueProp: "Accelerate your team's workflow and output.",
-      cta: "Open to a brief look?",
-    };
-
-  // Baseline copy: approved swipe sample > calibrated template > offer-grounded opener.
-  // This is what gets sent if on-the-fly generation is unavailable.
-  const offerOpener = defaultOpenerFromOffer(companyName, activeOffer);
-  const primarySample = approvedSamples[0] || {
-    subject: calibratedProfile.calibratedSubjectTemplate || offerOpener.subject,
-    bodyText: calibratedProfile.calibratedBodyTemplate || offerOpener.bodyText,
-    bodyHtml: calibratedProfile.calibratedBodyTemplate ? "" : offerOpener.bodyHtml,
-  };
-
-  const finalSubject = primarySample.subject || offerOpener.subject;
-  const finalBodyText = ensureOutreachSpintax(primarySample.bodyText || offerOpener.bodyText);
-  const finalBodyHtml = ensureOutreachSpintax(
-    primarySample.bodyHtml || `<p>${finalBodyText.replace(/\n/g, "<br/>")}</p>`
-  );
+  const sequence = buildRunSequence(run, approvedSamples, input.selectedOfferIndex ?? 0);
+  const { activeOffer, subject: finalSubject, bodyText: finalBodyText, bodyHtml: finalBodyHtml, steps } = sequence;
 
   const templateId = crypto.randomUUID();
   await db.insert(schema.emailTemplates).values({
@@ -288,7 +423,8 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
     userId,
     workspaceId,
     name: `AutoGTM: ${companyName}`,
-    status: "running",
+    // Draft until fully provisioned; flipped to running at the end.
+    status: "draft",
     leadListId: listId,
     templateId,
     dailyLimit,
@@ -298,7 +434,8 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
     stopOnReply: true,
     retryFailed: true,
     trackOpens: true,
-    startedAt: nowIso(),
+    // Business hours, Monday–Friday, in the prospects' timezone (AUTOPILOT_TIMEZONE).
+    ...autopilotSendingWindow(),
   });
 
   const styleExemplars: Array<{ subject: string; bodyText: string; recipientTitle?: string }> =
@@ -318,37 +455,6 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
       negativeConstraints: calibratedProfile.rejectionConstraints || [],
       requireSpintax: true,
     });
-
-  const reSubject = finalSubject.toLowerCase().startsWith("re:") ? finalSubject : `re: ${finalSubject}`;
-  const steps: Array<{ delayDays: number; subject: string; bodyText: string; prompt: string }> = [
-    {
-      delayDays: 0,
-      subject: finalSubject,
-      bodyText: finalBodyText,
-      prompt: [
-        calibratedProfile.customAiInstruction ||
-          `Company: ${companyName}. Value offer: ${activeOffer.valueProp}. Angle: ${activeOffer.angle}. Call to action: ${activeOffer.cta}. Write a first-touch cold email in 35-70 words. No pleasantries, no self-intro, no feature dump. One specific observation, one friction, one low-friction permission question.`,
-        `SPINTAX: include {Hi|Hey|Hello} and at least one other {a|b} variant group. Never spin names, companies, numbers, or factual claims.`,
-        `Do not mention DNS, mailboxes, inbox warmup, or deliverability unless the campaign explicitly asks for it.`,
-      ].join("\n\n"),
-    },
-    {
-      delayDays: 3,
-      subject: reSubject,
-      bodyText: ensureOutreachSpintax(
-        `Hi {{first_name}},\n\nOne more thought on this — ${lowerFirst((activeOffer.valueProp || "").replace(/\.$/, "")) || "happy to share how it would apply to {{company}}"}.\n\nWorth a look, or should I leave it?\n\n{{sender_name}}`
-      ),
-      prompt: `Write follow-up #1 (sent 3 days after initial message) for ${companyName}. Recipient is {{job_title}} at {{company}}. Never say "just checking in" or "following up". Add one new, specific reason this matters, grounded in: ${activeOffer.valueProp}. Strictly under 35 words. Low-friction permission CTA.`,
-    },
-    {
-      delayDays: 4,
-      subject: reSubject,
-      bodyText: ensureOutreachSpintax(
-        `Hi {{first_name}},\n\nAssuming the timing isn't right for {{company}}.\n\nShould I close the loop for now, or check back next quarter?\n\n{{sender_name}}`
-      ),
-      prompt: `Write follow-up #2 (final breakup email, sent 7 days after initial outreach) for ${companyName}. Recipient is {{job_title}} at {{company}}. Zero guilt, polite permission close. Under 25 words. Ask if we should close the loop or check back next quarter.`,
-    },
-  ];
 
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i]!;
@@ -376,8 +482,19 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
     .values(systemSenders.map((s) => ({ campaignId, senderId: s.id })))
     .onConflictDoNothing();
 
-  await ensureCampaignLeadSnapshot(db, campaignId, listId);
+  const snapshot = await ensureCampaignLeadSnapshot(db, campaignId, listId);
+  if (snapshot === 0) {
+    // Every lead row collided with an existing one; nothing would be sent.
+    throw new LaunchError("no_leads");
+  }
 
+  const startedAt = nowIso();
+  await db
+    .update(schema.campaigns)
+    .set({ status: "running", startedAt, updatedAt: startedAt })
+    .where(eq(schema.campaigns.id, campaignId));
+
+  const { launchFailure: _cleared, ...profileWithoutFailure } = calibratedProfile;
   await db
     .update(schema.chadGtmRuns)
     .set({
@@ -385,6 +502,7 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
       campaignId,
       dailyEmailLimit: dailyLimit,
       approvedEmailSamples: approvedSamples,
+      calibrationProfile: profileWithoutFailure,
       updatedAt: nowIso(),
     })
     .where(eq(schema.chadGtmRuns.id, run.id));
