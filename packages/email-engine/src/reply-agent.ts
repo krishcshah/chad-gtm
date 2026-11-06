@@ -15,7 +15,7 @@
  * When the client answers, the answer is saved to the knowledge base so the
  * same question is handled automatically next time.
  */
-import { and, desc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { classifyReplyTag } from "./sync-replies";
 import { callLlmJson, type AiEngineOptions } from "./ai";
@@ -23,6 +23,7 @@ import { loadEngineAiOptions } from "./ai-options";
 import { sendMail as realSendMail, type SendParams } from "./mailer";
 import { extractSenderFirstName } from "./sequence";
 import type { EngineDb, SenderRow } from "./db-port";
+import { loadUnapprovedOwners } from "./owner-approval";
 
 /* ─── Types ──────────────────────────────────────────────────────────── */
 
@@ -583,6 +584,51 @@ export const AGENT_STUCK_AFTER_MS = 10 * 60_000;
 /** Remind the client once about a request still open after this long. */
 export const AGENT_RENOTIFY_AFTER_MS = 24 * 3_600_000;
 export const AGENT_GAVE_UP_TITLE = "The agent couldn't handle this reply";
+/** Shown on a reply the agent did not answer because the owner is not approved. */
+export const AGENT_OWNER_NOT_APPROVED_SUMMARY =
+  "Held: this account is not approved, so the agent did not answer. Reply from the UniBox once the account is approved.";
+/** activity_logs.type of the once-a-day reminder digest sent to a client. */
+export const AGENT_REMINDER_DIGEST_TYPE = "agent.reminder_digest";
+/** At most one reminder digest per client per this window. */
+export const AGENT_DIGEST_EVERY_MS = 24 * 3_600_000;
+/**
+ * engine_heartbeats row whose last_tick_at records when reminders were first
+ * enabled. Requests created before it never get a reminder, so the first
+ * deploy does not mail clients about months-old requests.
+ */
+export const AGENT_REMINDERS_MARKER_ID = "marker:agent-reminders-since";
+
+/**
+ * Replies this process has already answered (SMTP accepted the agent's
+ * email) even if recording that failed. Never answered twice by this worker.
+ */
+const deliveredReplies = new Set<string>();
+
+/** Thrown when the agent's email went out but recording it failed. Never retried. */
+export class AgentReplyDeliveredError extends Error {
+  readonly delivered = true;
+  constructor(
+    readonly messageId: string,
+    readonly cause: unknown,
+  ) {
+    super(`agent reply was sent (${messageId}) but recording it failed: ${String((cause as Error)?.message || cause)}`);
+  }
+}
+
+export function isAgentReplyDelivered(err: unknown): err is AgentReplyDeliveredError {
+  return Boolean(err && typeof err === "object" && (err as { delivered?: unknown }).delivered === true);
+}
+
+/** Has the agent already answered this reply (this process, or a recorded agent message)? */
+async function agentAlreadyAnswered(db: EngineDb, replyId: string): Promise<boolean> {
+  if (deliveredReplies.has(replyId)) return true;
+  const rows: any[] = await db
+    .select({ id: schema.uniboxMessages.id })
+    .from(schema.uniboxMessages)
+    .where(and(eq(schema.uniboxMessages.replyId, replyId), eq(schema.uniboxMessages.fromRole, "agent" as any)))
+    .limit(1);
+  return rows.length > 0;
+}
 
 /** Backoff before retry after `attempts` failures: 2^attempts minutes. */
 export function agentRetryDelayMs(attempts: number): number {
@@ -604,9 +650,15 @@ export function isAgentRetryDue(attempts: number, claimedAt: string | null | und
 export function needsRenotify(
   req: { createdAt: string; notifiedAt: string | null },
   now: Date,
+  /** Reminders exist only for requests created at/after this time (feature start). */
+  since?: string | null,
 ): boolean {
   const created = Date.parse(req.createdAt);
   if (!Number.isFinite(created) || now.getTime() - created < AGENT_RENOTIFY_AFTER_MS) return false;
+  if (since) {
+    const start = Date.parse(since);
+    if (Number.isFinite(start) && created < start) return false;
+  }
   if (!req.notifiedAt) return true;
   const notified = Date.parse(req.notifiedAt);
   if (!Number.isFinite(notified)) return true;
@@ -681,6 +733,18 @@ export async function replyAgentTick(
       result[outcome]++;
     } catch (err) {
       console.error("[reply-agent] failed", row.id, err);
+      if (isAgentReplyDelivered(err)) {
+        // The lead already got the agent's email: never put it back to
+        // pending. Best effort to record it; otherwise it stays in
+        // 'processing' and reclaim marks it replied (never re-sends).
+        await db
+          .update(schema.replies)
+          .set({ agentStatus: "replied", agentHandledAt: now.toISOString() })
+          .where(eq(schema.replies.id, row.id))
+          .catch((e: unknown) => console.error("[reply-agent] could not record sent reply", row.id, e));
+        result.replied++;
+        continue;
+      }
       result.failed++;
       const attempts = Number(row.agentAttempts ?? 0) + 1;
       await recordAgentFailure(db, row.id, attempts, String((err as Error)?.message || err), deps, now, result);
@@ -738,14 +802,30 @@ async function reclaimStuckReplies(
     })
     .from(schema.replies)
     .where(
-      and(
-        eq(schema.replies.agentStatus, "processing"),
-        or(isNull(schema.replies.agentClaimedAt), lte(schema.replies.agentClaimedAt, cutoff)),
-      ),
+      // Legacy rows left in 'processing' before claim timestamps existed
+      // (agent_claimed_at NULL) are left for manual review, never auto-answered.
+      and(eq(schema.replies.agentStatus, "processing"), lte(schema.replies.agentClaimedAt, cutoff)),
     )
     .limit(50);
   let reclaimed = 0;
   for (const row of stuck) {
+    if (!row.agentClaimedAt) continue;
+    if (await agentAlreadyAnswered(db, row.id)) {
+      // The worker died after the agent's email went out: record, never re-send.
+      const done: any[] = await db
+        .update(schema.replies)
+        .set({ agentStatus: "replied", agentHandledAt: now.toISOString() })
+        .where(
+          and(
+            eq(schema.replies.id, row.id),
+            eq(schema.replies.agentStatus, "processing"),
+            eq(schema.replies.agentClaimedAt, row.agentClaimedAt),
+          ),
+        )
+        .returning({ id: schema.replies.id });
+      if (done.length > 0) reclaimed++;
+      continue;
+    }
     const attempts = Number(row.agentAttempts ?? 0) + 1;
     if (attempts >= AGENT_MAX_ATTEMPTS) {
       // Claim it first so two workers do not both give up on it.
@@ -873,9 +953,58 @@ async function giveUpOnReply(
   await db.update(schema.agentRequests).set({ notifiedAt: nowIso }).where(eq(schema.agentRequests.id, requestId));
 }
 
-/** Remind the client once about requests still open after 24 hours. */
+let remindersSinceCache: string | null = null;
+const PROCESS_STARTED_AT = new Date().toISOString();
+
+/** Test hook: forget the cached reminders start time. */
+export function resetRemindersSinceCache(): void {
+  remindersSinceCache = null;
+}
+
+/**
+ * When reminders were first enabled (stored once in engine_heartbeats under
+ * AGENT_REMINDERS_MARKER_ID; the first engine to run this code writes it).
+ * If it cannot be read, this process's start time is used, which is never
+ * earlier than the real start, so old requests are still never reminded.
+ */
+export async function remindersEnabledSince(db: EngineDb, now: Date): Promise<string> {
+  if (remindersSinceCache) return remindersSinceCache;
+  try {
+    await db
+      .insert(schema.engineHeartbeats)
+      .values({
+        id: AGENT_REMINDERS_MARKER_ID,
+        lastTickAt: now.toISOString(),
+        lastOkAt: null,
+        lastError: null,
+        stats: { marker: "agent-reminders-since" },
+        updatedAt: now.toISOString(),
+      })
+      .onConflictDoNothing();
+    const rows: { lastTickAt: string }[] = await db
+      .select({ lastTickAt: schema.engineHeartbeats.lastTickAt })
+      .from(schema.engineHeartbeats)
+      .where(eq(schema.engineHeartbeats.id, AGENT_REMINDERS_MARKER_ID))
+      .limit(1);
+    const at = rows[0]?.lastTickAt;
+    if (at && Number.isFinite(Date.parse(at))) {
+      remindersSinceCache = at;
+      return at;
+    }
+  } catch (err) {
+    console.warn("[reply-agent] reminders start marker unavailable; using process start", err);
+  }
+  return PROCESS_STARTED_AT;
+}
+
+/**
+ * Remind clients about requests still open after 24 hours: only requests
+ * created after reminders were enabled, each reminded once, grouped into at
+ * most one digest email per client per day.
+ */
 async function renotifyStaleRequests(db: EngineDb, deps: ReplyAgentDeps, now: Date): Promise<number> {
   if (deps.notifyClient === false) return 0;
+  const since = await remindersEnabledSince(db, now);
   const cutoff = new Date(now.getTime() - AGENT_RENOTIFY_AFTER_MS).toISOString();
   const rows: any[] = await db
     .select()
@@ -884,56 +1013,152 @@ async function renotifyStaleRequests(db: EngineDb, deps: ReplyAgentDeps, now: Da
       and(
         eq(schema.agentRequests.status, "open"),
         lte(schema.agentRequests.createdAt, cutoff),
+        gte(schema.agentRequests.createdAt, since),
         or(
           isNull(schema.agentRequests.notifiedAt),
           sql`${schema.agentRequests.notifiedAt}::timestamptz < ${schema.agentRequests.createdAt}::timestamptz + interval '12 hours'`,
         ),
       ),
     )
-    .limit(10);
-  let sent = 0;
+    .orderBy(schema.agentRequests.createdAt)
+    .limit(200);
+
+  const byOwner = new Map<string, any[]>();
   for (const req of rows) {
-    if (!needsRenotify({ createdAt: req.createdAt, notifiedAt: req.notifiedAt ?? null }, now)) continue;
-    // Claim the reminder (conditional on the notifiedAt we read) so it goes out once.
-    const claimed: any[] = await db
-      .update(schema.agentRequests)
-      .set({ notifiedAt: now.toISOString() })
+    if (!needsRenotify({ createdAt: req.createdAt, notifiedAt: req.notifiedAt ?? null }, now, since)) continue;
+    const list = byOwner.get(req.userId) ?? [];
+    list.push(req);
+    byOwner.set(req.userId, list);
+  }
+  if (byOwner.size === 0) return 0;
+
+  let unapproved: Set<string>;
+  try {
+    unapproved = await loadUnapprovedOwners(db, [...byOwner.keys()]);
+  } catch (err) {
+    console.error("[reply-agent] owner approval lookup failed; no reminders this tick", err);
+    return 0;
+  }
+
+  let sent = 0;
+  for (const [ownerId, reqs] of byOwner) {
+    if (unapproved.has(ownerId)) continue;
+    // One digest per client per day.
+    const recent: any[] = await db
+      .select({ id: schema.activityLogs.id })
+      .from(schema.activityLogs)
       .where(
         and(
-          eq(schema.agentRequests.id, req.id),
-          eq(schema.agentRequests.status, "open"),
-          req.notifiedAt ? eq(schema.agentRequests.notifiedAt, req.notifiedAt) : isNull(schema.agentRequests.notifiedAt),
+          eq(schema.activityLogs.userId, ownerId),
+          eq(schema.activityLogs.type, AGENT_REMINDER_DIGEST_TYPE),
+          gte(schema.activityLogs.createdAt, new Date(now.getTime() - AGENT_DIGEST_EVERY_MS).toISOString()),
         ),
       )
-      .returning({ id: schema.agentRequests.id });
+      .limit(1);
+    if (recent.length > 0) continue;
+
+    // Claim each reminder (conditional on the notifiedAt we read) so it goes out once.
+    const claimed: any[] = [];
+    for (const req of reqs) {
+      const ok: any[] = await db
+        .update(schema.agentRequests)
+        .set({ notifiedAt: now.toISOString() })
+        .where(
+          and(
+            eq(schema.agentRequests.id, req.id),
+            eq(schema.agentRequests.status, "open"),
+            req.notifiedAt ? eq(schema.agentRequests.notifiedAt, req.notifiedAt) : isNull(schema.agentRequests.notifiedAt),
+          ),
+        )
+        .returning({ id: schema.agentRequests.id });
+      if (ok.length > 0) claimed.push(req);
+    }
     if (claimed.length === 0) continue;
-    const [reply] = req.replyId
-      ? await db.select().from(schema.replies).where(eq(schema.replies.id, req.replyId)).limit(1)
-      : [];
-    const [sender] = reply
-      ? await db.select().from(schema.senderAccounts).where(eq(schema.senderAccounts.id, reply.senderId)).limit(1)
-      : [];
-    if (!sender) continue;
-    await notifyClientOfRequest(
-      db,
-      sender as SenderRow,
-      req.userId,
-      `Reminder: ${req.title}`,
-      req.question || "",
-      req.leadEmail || reply?.fromEmail || "",
-      deps,
-    )
-      .then(() => {
-        sent++;
-      })
-      .catch((err) => console.warn("[reply-agent] reminder failed", err));
-    // notifyClientOfRequest may stamp sibling requests; keep this one's stamp.
-    await db
-      .update(schema.agentRequests)
-      .set({ notifiedAt: now.toISOString() })
-      .where(eq(schema.agentRequests.id, req.id));
+
+    // Pool mailbox fallback (used only without a system mailer): the one that got the first lead's reply.
+    let sender: SenderRow | null = null;
+    const withReply = claimed.find((r) => r.replyId);
+    if (withReply) {
+      const [reply] = await db.select().from(schema.replies).where(eq(schema.replies.id, withReply.replyId)).limit(1);
+      const [s] = reply
+        ? await db.select().from(schema.senderAccounts).where(eq(schema.senderAccounts.id, reply.senderId)).limit(1)
+        : [];
+      sender = (s as SenderRow) ?? null;
+    }
+    try {
+      await sendReminderDigest(db, sender, ownerId, claimed, deps);
+      await db.insert(schema.activityLogs).values({
+        id: crypto.randomUUID(),
+        userId: ownerId,
+        type: AGENT_REMINDER_DIGEST_TYPE,
+        message: `Reminded you about ${claimed.length} open request${claimed.length === 1 ? "" : "s"}`,
+        campaignId: null,
+        meta: { requestIds: claimed.map((r) => r.id) },
+      });
+      sent++;
+    } catch (err) {
+      console.warn("[reply-agent] reminder digest failed", ownerId, err);
+    }
   }
   return sent;
+}
+
+/** One email listing every open request the client is being reminded about. */
+export function composeReminderDigest(
+  owner: { name?: string | null },
+  requests: Array<{ title: string; question?: string | null; leadEmail?: string | null }>,
+  appUrl: string,
+): { subject: string; text: string } {
+  const firstName = String(owner.name || "").split(/\s+/)[0] || "there";
+  const link = appUrl ? `${appUrl}/requests` : "your AutoGTM requests page";
+  const n = requests.length;
+  const items = requests
+    .map((r) => {
+      const q = String(r.question || "").replace(/\s+/g, " ").trim().slice(0, 200);
+      return `- ${r.title}${r.leadEmail ? ` (${r.leadEmail})` : ""}${q ? `: "${q}"` : ""}`;
+    })
+    .join("\n");
+  const subject = n === 1 ? `Reminder: ${requests[0]!.title}` : `Reminder: ${n} leads are waiting on you`;
+  const text = `Hi ${firstName},\n\nYour outreach agent is still waiting on you for ${n === 1 ? "a lead" : `${n} leads`}:\n\n${items}\n\nAnswer here and the agent will pick the conversations back up: ${link}\n\nAnything you share is saved, so the agent won't ask twice.\n\n— AutoGTM`;
+  return { subject, text };
+}
+
+async function sendReminderDigest(
+  db: EngineDb,
+  sender: SenderRow | null,
+  ownerId: string,
+  requests: any[],
+  deps: ReplyAgentDeps,
+): Promise<void> {
+  const [owner] = await db
+    .select({ email: schema.users.email, name: schema.users.name })
+    .from(schema.users)
+    .where(eq(schema.users.id, ownerId))
+    .limit(1);
+  if (!owner?.email) throw new Error("owner has no email");
+  const appUrl = (process.env.APP_URL || process.env.BETTER_AUTH_URL || "").replace(/\/$/, "");
+  const { subject, text } = composeReminderDigest(owner, requests, appUrl);
+  await deliverToClient(sender, { to: owner.email, subject, text, html: textToHtml(text) }, deps);
+}
+
+/**
+ * Send a notification to the client. Prefers the dedicated system sender
+ * (neutral "AutoGTM" From, outside the cold-outreach pool); falls back to
+ * `sender` only when no system mailer is configured. Throws on failure.
+ */
+async function deliverToClient(
+  sender: SenderRow | null,
+  message: { to: string; subject: string; text: string; html: string },
+  deps: ReplyAgentDeps,
+): Promise<void> {
+  const { isSystemMailerConfigured, sendSystemEmail } = await import("./system-mailer");
+  if (isSystemMailerConfigured()) {
+    await sendSystemEmail(message);
+    return;
+  }
+  if (!sender) throw new Error("no mailbox available for the client notification");
+  const send = deps.sendMail ?? realSendMail;
+  await send(sender, message);
 }
 
 async function handleReply(
@@ -978,6 +1203,19 @@ async function handleReply(
 
   if (!run || run.replyAgentMode === "off" || !sender) {
     return finish("skipped", "other", run ? "Reply agent is off for this campaign." : "Not an autopilot campaign.");
+  }
+
+  // Already answered (a worker sent the agent's email and then failed or
+  // died before recording it): record it, never send a second email.
+  if (await agentAlreadyAnswered(db, replyId)) {
+    return finish("replied", reply.agentIntent || "other", "The agent's reply was already sent.");
+  }
+
+  // Approval can be revoked while replies keep arriving: the agent never
+  // sends (from a pool mailbox or otherwise) for an owner who is not
+  // approved. The reply is held for a human instead.
+  if ((await loadUnapprovedOwners(db, [run.userId])).has(run.userId)) {
+    return finish("escalated", "other", AGENT_OWNER_NOT_APPROVED_SUMMARY);
   }
 
   const ownerId: string = run.userId;
@@ -1095,30 +1333,54 @@ async function handleReply(
   }
 
   // decision.action === "reply"
-  const sent = await sendAgentReply(db, {
-    reply,
-    sender: sender as SenderRow,
-    ownerId,
-    workspaceId,
-    body: decision.body,
-    nowIso,
-    deps,
-  });
-  if (decision.usedKnowledgeIds.length > 0) {
-    await db
-      .update(schema.agentKnowledge)
-      .set({ usageCount: sql`${schema.agentKnowledge.usageCount} + 1`, updatedAt: nowIso })
-      .where(inArray(schema.agentKnowledge.id, decision.usedKnowledgeIds));
+  // As soon as SMTP accepts the email the reply is marked 'replied' (the
+  // "sent" marker), before any other write. Errors after that point are
+  // logged, never retried: retrying would email the lead a second time.
+  const finalIntent = triage.intent;
+  let uniboxMessageId: string | null = null;
+  try {
+    const sent = await sendAgentReply(db, {
+      reply,
+      sender: sender as SenderRow,
+      ownerId,
+      workspaceId,
+      body: decision.body,
+      nowIso,
+      deps,
+      onDelivered: async () => {
+        deliveredReplies.add(replyId);
+        await finish("replied", finalIntent, decision.summary, decision.tag);
+      },
+    });
+    uniboxMessageId = sent.uniboxMessageId;
+  } catch (err) {
+    if (!isAgentReplyDelivered(err)) throw err; // nothing was sent: safe to retry
+    console.error("[reply-agent] reply sent but recording failed", replyId, err);
+    // Make sure the sent marker is there; if even this fails, the tick
+    // records it (and the in-process guard prevents a second send).
+    await finish("replied", finalIntent, decision.summary, decision.tag).catch(() => {
+      throw err;
+    });
   }
-  await db.insert(schema.activityLogs).values({
-    id: crypto.randomUUID(),
-    userId: ownerId,
-    type: "agent.replied",
-    message: `Agent replied to ${reply.fromEmail}: ${decision.summary}`,
-    campaignId: reply.campaignId,
-    meta: { replyId, uniboxMessageId: sent.uniboxMessageId },
-  });
-  return finish("replied", triage.intent, decision.summary, decision.tag);
+  try {
+    if (decision.usedKnowledgeIds.length > 0) {
+      await db
+        .update(schema.agentKnowledge)
+        .set({ usageCount: sql`${schema.agentKnowledge.usageCount} + 1`, updatedAt: nowIso })
+        .where(inArray(schema.agentKnowledge.id, decision.usedKnowledgeIds));
+    }
+    await db.insert(schema.activityLogs).values({
+      id: crypto.randomUUID(),
+      userId: ownerId,
+      type: "agent.replied",
+      message: `Agent replied to ${reply.fromEmail}: ${decision.summary}`,
+      campaignId: reply.campaignId,
+      meta: { replyId, uniboxMessageId },
+    });
+  } catch (err) {
+    console.error("[reply-agent] bookkeeping after a sent reply failed (not retried)", replyId, err);
+  }
+  return "replied";
 }
 
 /** Send a threaded reply as the mailbox that received the lead's message. */
@@ -1133,6 +1395,11 @@ export async function sendAgentReply(
     nowIso: string;
     deps?: ReplyAgentDeps;
     fromRole?: "agent" | "operator";
+    /**
+     * Runs right after SMTP accepts the email, before anything else is
+     * written: record the "sent" marker here.
+     */
+    onDelivered?: (messageId: string) => Promise<void>;
   },
 ): Promise<{ uniboxMessageId: string; messageId: string }> {
   const { reply, sender } = input;
@@ -1153,24 +1420,37 @@ export async function sendAgentReply(
     inReplyTo: reply.messageId || undefined,
     references: reply.messageId || undefined,
   });
+  // From here on the email is out: any failure is reported as
+  // AgentReplyDeliveredError so no caller retries (and re-sends) it.
+  let markerError: unknown = null;
+  try {
+    await input.onDelivered?.(info.messageId);
+  } catch (err) {
+    markerError = err;
+  }
   const uniboxMessageId = crypto.randomUUID();
-  await db.insert(schema.uniboxMessages).values({
-    id: uniboxMessageId,
-    userId: input.ownerId,
-    workspaceId: input.workspaceId,
-    replyId: reply.id,
-    leadId: reply.leadId,
-    campaignId: reply.campaignId,
-    senderId: sender.id,
-    direction: "operator",
-    fromRole: (input.fromRole ?? "agent") as any,
-    fromName: (sender.fromName || sender.senderName || "").trim(),
-    fromEmail: sender.email,
-    subject,
-    bodyText: input.body.trim(),
-    bodyHtml: textToHtml(input.body),
-    sentAt: input.nowIso,
-  });
+  try {
+    await db.insert(schema.uniboxMessages).values({
+      id: uniboxMessageId,
+      userId: input.ownerId,
+      workspaceId: input.workspaceId,
+      replyId: reply.id,
+      leadId: reply.leadId,
+      campaignId: reply.campaignId,
+      senderId: sender.id,
+      direction: "operator",
+      fromRole: (input.fromRole ?? "agent") as any,
+      fromName: (sender.fromName || sender.senderName || "").trim(),
+      fromEmail: sender.email,
+      subject,
+      bodyText: input.body.trim(),
+      bodyHtml: textToHtml(input.body),
+      sentAt: input.nowIso,
+    });
+  } catch (err) {
+    throw new AgentReplyDeliveredError(info.messageId, err);
+  }
+  if (markerError) throw new AgentReplyDeliveredError(info.messageId, markerError);
   return { uniboxMessageId, messageId: info.messageId };
 }
 
@@ -1199,17 +1479,10 @@ export async function notifyClientOfRequest(
     text: body,
     html: textToHtml(body),
   };
-  // Prefer the dedicated system sender (neutral "AutoGTM" From, outside the
-  // cold-outreach pool). Fall back to the pool mailbox that received the
-  // reply only when no system mailer is configured. Any send failure throws,
-  // so notified_at is only set after a successful send.
-  const { isSystemMailerConfigured, sendSystemEmail } = await import("./system-mailer");
-  if (isSystemMailerConfigured()) {
-    await sendSystemEmail(message);
-  } else {
-    const send = deps.sendMail ?? realSendMail;
-    await send(sender, message);
-  }
+  // System mailer first, the pool mailbox that received the reply only as a
+  // fallback. Any send failure throws, so notified_at is only set after a
+  // successful send.
+  await deliverToClient(sender, message, deps);
   await db
     .update(schema.agentRequests)
     .set({ notifiedAt: (deps.now?.() ?? new Date()).toISOString() })

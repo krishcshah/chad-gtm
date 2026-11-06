@@ -30,9 +30,9 @@ import { advanceSequenceAfterSend, loadCampaignSequenceSteps } from "./sequence"
 import { appUrl, appUrlReadyForLiveSend, engineBatchSize } from "./env";
 import { isSuppressedFor } from "./suppression";
 import { loadUnapprovedOwners, OWNER_NOT_APPROVED_NOTE } from "./owner-approval";
-import { classifySmtpError, failureBlamesSender } from "./smtp-errors";
+import { classifySmtpError, failureBlamesSender, isPolicyStatus } from "./smtp-errors";
 import { completeBodies } from "./body-format";
-import { recordHardBounce } from "./bounces";
+import { flagSenderPolicyBlock, recordHardBounce } from "./bounces";
 
 const STUCK_AFTER_MS = 3 * 60_000;
 /** How long a job waits when it cannot legally go out yet (no postal address / APP_URL). */
@@ -136,6 +136,7 @@ export async function recoverStuckJobs(db: EngineDb, now = new Date()): Promise<
     )
     .limit(200);
   for (const s of stuck) {
+    if (unrecordedSends.has(s.id)) continue; // delivered; bookkeeping is being reconciled
     await db
       .update(schema.emailJobs)
       .set({ status: "pending", processingAt: null, updatedAt: now.toISOString() })
@@ -230,6 +231,14 @@ const UNSENDABLE_LEAD_STATUSES = new Set(["bounced", "unsubscribed", "blocked"])
 export async function processJob(db: EngineDb, job: JobRow): Promise<JobOutcome> {
   const nowS = new Date().toISOString();
 
+  // Already delivered by this worker (bookkeeping failed earlier): finish the
+  // bookkeeping, never send again.
+  const delivered0 = unrecordedSends.get(job.id);
+  if (delivered0) {
+    await recordDelivered(db, delivered0);
+    return "sent";
+  }
+
   // Load sender + campaign (fresh, to honor just-paused states)
   const senders: SenderRow[] = await db
     .select()
@@ -294,6 +303,7 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<JobOutcome>
   }
 
   let reserved = false;
+  let delivered = false;
 
   try {
     // Links are built now (not at import time) from the configured APP_URL.
@@ -427,35 +437,34 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<JobOutcome>
       transporter.close();
     }
 
-    // Success — job done
-    await db
-      .update(schema.emailJobs)
-      .set({
-        status: "sent",
-        messageId: String(info?.messageId ?? "") || null,
-        sentAt: nowS,
-        processingAt: null,
-        lastError: null,
-        updatedAt: nowS,
-      })
-      .where(eq(schema.emailJobs.id, job.id));
-    const steps = await loadCampaignSequenceSteps(db, job.campaignId);
-    await advanceSequenceAfterSend(db, {
+    // The email is out. From here on nothing may make the job retryable:
+    // a bookkeeping error must never re-send the same email.
+    delivered = true;
+    const record: DeliveredJob = {
+      jobId: job.id,
       campaignId: job.campaignId,
       campaignLeadId: job.campaignLeadId,
+      leadId: job.leadId,
       stepPosition: job.stepPosition ?? 1,
+      messageId: String(info?.messageId ?? "") || null,
       sentAt: nowS,
-      steps,
-    });
-    await db
-      .update(schema.leads)
-      .set({ status: "contacted", updatedAt: nowS })
-      .where(eq(schema.leads.id, job.leadId));
+      stage: 0,
+    };
+    unrecordedSends.set(job.id, record);
+    await recordDelivered(db, record);
     // The atomic reservation already recorded this send for both sender and
     // campaign; do not increment the counters a second time.
     noteHourlySend(sender.id);
     return "sent";
   } catch (err: any) {
+    if (delivered) {
+      // SMTP accepted the message but a database write failed afterwards.
+      // Keep the reservation, never retry; recordDelivered is retried on the
+      // next tick (and recoverStuckJobs / processJob will not re-send it).
+      console.error(`[processor] job ${job.id} was sent but bookkeeping failed; will reconcile:`, err);
+      noteHourlySend(sender.id);
+      return "sent";
+    }
     if (reserved) {
       try {
         await releaseSendSlot(db, {
@@ -470,6 +479,38 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<JobOutcome>
     const failure = classifySmtpError(err);
     const attempts = job.attempts + 1;
     const message = failure.message;
+
+    // The MAILBOX was refused as a sender (MAIL FROM, sender domain, relay
+    // denied, daily sending quota). The lead did nothing wrong: never fail
+    // it and never suppress it.
+    if (failure.kind === "sender") {
+      if (failure.senderQuota || !failure.permanent) {
+        // Provider quota / temporary: try this job again later, same mailbox.
+        await holdJob(db, job, `Mailbox sending limit: ${message}`.slice(0, 500));
+        return "held";
+      }
+      await db
+        .update(schema.senderAccounts)
+        .set({
+          health: Math.max(0, (sender.health ?? 100) - 25),
+          smtpStatus: "failed",
+          status: "failed",
+          updatedAt: nowS,
+        })
+        .where(eq(schema.senderAccounts.id, sender.id));
+      await db.insert(schema.activityLogs).values({
+        id: crypto.randomUUID(),
+        userId: sender.userId,
+        type: "sender.failed",
+        message: `${sender.email} was refused as a sender and taken out of rotation: ${message.slice(0, 180)}`,
+        campaignId: null,
+        meta: { senderId: sender.id, status: failure.enhanced ?? failure.code ?? null },
+      });
+      // Hand the lead to another mailbox (sticky rule switches when the step-1 mailbox is failed).
+      await releaseToScheduler(db, job, "sender-refused");
+      return "skipped";
+    }
+
     // 4xx (rate limit, greylisting, timeout) and mailbox problems → retry;
     // permanent 5xx for this recipient/message → fail the job.
     const willRetry = !failure.permanent && campaign.retryFailed && attempts < job.maxAttempts;
@@ -535,6 +576,19 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<JobOutcome>
       return "failed";
     }
 
+    if (failure.permanent && isPolicyStatus(failure.enhanced)) {
+      // Spam / policy / DMARC refusal: says something about this mailbox's
+      // reputation or authentication, not about the address.
+      await flagSenderPolicyBlock(db, {
+        senderId: sender.id,
+        senderUserId: sender.userId,
+        senderEmail: sender.email,
+        status: failure.enhanced!,
+        diagnostic: message,
+        via: "smtp",
+      }).catch((e) => console.error("[processor] policy flag failed:", e));
+    }
+
     await db
       .update(schema.emailJobs)
       .set({ status: "failed", attempts, lastError: message, processingAt: null, updatedAt: nowS })
@@ -554,6 +608,84 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<JobOutcome>
   }
 }
 
+/* ─── Sent-but-unrecorded jobs ──────────────────────────────────────────── */
+
+/** A job SMTP accepted, with how far its bookkeeping got. */
+export interface DeliveredJob {
+  jobId: string;
+  campaignId: string;
+  campaignLeadId: string;
+  leadId: string;
+  stepPosition: number;
+  messageId: string | null;
+  sentAt: string;
+  /** 0 = nothing recorded, 1 = job marked sent, 2 = sequence advanced, 3 = done. */
+  stage: number;
+}
+
+/**
+ * Jobs this process delivered whose database bookkeeping has not finished.
+ * Entries leave only once recordDelivered completes; until then the job is
+ * never handed to SMTP again by this worker.
+ */
+const unrecordedSends = new Map<string, DeliveredJob>();
+
+/** Test hook / introspection: ids of delivered jobs still awaiting bookkeeping. */
+export function unrecordedSendIds(): string[] {
+  return [...unrecordedSends.keys()];
+}
+
+/** Idempotent bookkeeping for a delivered job; resumes from `stage`. */
+async function recordDelivered(db: EngineDb, rec: DeliveredJob): Promise<void> {
+  if (rec.stage < 1) {
+    await db
+      .update(schema.emailJobs)
+      .set({
+        status: "sent",
+        messageId: rec.messageId,
+        sentAt: rec.sentAt,
+        processingAt: null,
+        lastError: null,
+        updatedAt: rec.sentAt,
+      })
+      .where(eq(schema.emailJobs.id, rec.jobId));
+    rec.stage = 1;
+  }
+  if (rec.stage < 2) {
+    const steps = await loadCampaignSequenceSteps(db, rec.campaignId);
+    await advanceSequenceAfterSend(db, {
+      campaignId: rec.campaignId,
+      campaignLeadId: rec.campaignLeadId,
+      stepPosition: rec.stepPosition,
+      sentAt: rec.sentAt,
+      steps,
+    });
+    rec.stage = 2;
+  }
+  if (rec.stage < 3) {
+    await db
+      .update(schema.leads)
+      .set({ status: "contacted", updatedAt: rec.sentAt })
+      .where(eq(schema.leads.id, rec.leadId));
+    rec.stage = 3;
+  }
+  unrecordedSends.delete(rec.jobId);
+}
+
+/** Retry bookkeeping for delivered jobs whose writes failed earlier. Never sends. */
+export async function reconcileDeliveredJobs(db: EngineDb): Promise<number> {
+  let done = 0;
+  for (const rec of [...unrecordedSends.values()]) {
+    try {
+      await recordDelivered(db, rec);
+      done++;
+    } catch (err) {
+      console.error(`[processor] reconcile of sent job ${rec.jobId} failed; will retry:`, err);
+    }
+  }
+  return done;
+}
+
 async function cancelJobChain(db: EngineDb, job: JobRow, reason: string) {
   const nowS = new Date().toISOString();
   await db
@@ -568,6 +700,7 @@ async function cancelJobChain(db: EngineDb, job: JobRow, reason: string) {
 
 export async function processTick(db: EngineDb, now = new Date()): Promise<ProcessResult> {
   const result: ProcessResult = { sent: 0, failed: 0, retried: 0, recovered: 0, skipped: 0, held: 0 };
+  await reconcileDeliveredJobs(db);
   result.recovered = await recoverStuckJobs(db, now);
   const jobs = await claimDueJobs(db, now);
   for (const job of jobs) {

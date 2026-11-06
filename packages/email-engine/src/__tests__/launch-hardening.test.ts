@@ -238,7 +238,11 @@ describe("classifySmtpError", () => {
     expect(failureBlamesSender(f)).toBe(false);
   });
   it("a policy block on the recipient fails the job but is not a hard bounce", () => {
-    const f = classifySmtpError({ command: "RCPT TO", responseCode: 550, response: "550 5.7.1 Relaying denied" });
+    const f = classifySmtpError({
+      command: "RCPT TO",
+      responseCode: 550,
+      response: "550 5.7.1 Message rejected due to recipient policy",
+    });
     expect(f).toMatchObject({ kind: "recipient", permanent: true, hardBounce: false });
     expect(failureBlamesSender(f)).toBe(false);
   });

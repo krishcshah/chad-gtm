@@ -188,3 +188,92 @@ recipients. This is a permanent error. The following address(es) failed:
 Message-ID: <exim-orig-2@pool-three.example>
 `,
 };
+
+/** Outlook NDR: the pool domain failed DMARC/SPF. The ADDRESS is fine. */
+export const outlookUnauthenticated = {
+  fromEmail: "postmaster@outlook.com",
+  subject: "Undeliverable: Quick idea for Fabrikam",
+  headers: 'Content-Type: multipart/report; report-type=delivery-status; boundary="ndr-5726"\r\n\r\n',
+  body: `--ndr-5726
+Content-Type: text/plain; charset="us-ascii"
+
+Your message to lee@fabrikam-example.com couldn't be delivered.
+The sending domain failed authentication.
+
+--ndr-5726
+Content-Type: message/delivery-status
+
+Reporting-MTA: dns;AM0PR01MB0001.eurprd01.prod.outlook.com
+
+Final-Recipient: rfc822;lee@fabrikam-example.com
+Action: failed
+Status: 5.7.26
+Diagnostic-Code: smtp;550 5.7.26 Unauthenticated email from pool-four.example is not accepted due to domain's DMARC policy
+
+--ndr-5726
+Content-Type: text/rfc822-headers
+
+From: Kim <kim@pool-four.example>
+To: <lee@fabrikam-example.com>
+Message-ID: <dmarc-1@pool-four.example>
+
+--ndr-5726--
+`,
+};
+
+/** Gmail NDR: content blocked as spam. */
+export const gmailSpamBlock = {
+  fromEmail: "mailer-daemon@googlemail.com",
+  subject: "Delivery Status Notification (Failure)",
+  headers:
+    'Content-Type: multipart/report; boundary="spam1"; report-type=delivery-status\r\n' +
+    "X-Failed-Recipients: max@northwind-example.com\r\n\r\n",
+  body: `--spam1
+Content-Type: message/delivery-status
+
+Reporting-MTA: dns; googlemail.com
+
+Final-Recipient: rfc822; max@northwind-example.com
+Action: failed
+Status: 5.7.1
+Diagnostic-Code: smtp; 550-5.7.1 Our system has detected that this message is likely unsolicited mail. To reduce the amount of spam sent to Gmail, this message has been blocked.
+
+--spam1--
+`,
+};
+
+/** Mailbox full: permanent for this message, address still valid. */
+export const mailboxFull = {
+  fromEmail: "MAILER-DAEMON@mx.tailspin-example.com",
+  subject: "Undelivered Mail Returned to Sender",
+  headers: 'Content-Type: multipart/report; report-type=delivery-status; boundary="full1"\r\n\r\n',
+  body: `--full1
+Content-Type: message/delivery-status
+
+Reporting-MTA: dns; mx.tailspin-example.com
+
+Final-Recipient: rfc822; pat@tailspin-example.com
+Action: failed
+Status: 5.2.2
+Diagnostic-Code: smtp; 552 5.2.2 <pat@tailspin-example.com>: Recipient address rejected: Mailbox full
+
+--full1--
+`,
+};
+
+/** Exim plain-text bounce with no status code: spam wording only. */
+export const eximPlainSpamNoCode = {
+  fromEmail: "Mailer-Daemon@server9.web-hosting.com",
+  subject: "Mail delivery failed: returning message to sender",
+  headers: "X-Failed-Recipients: ann@contoso-example.org\r\nAuto-Submitted: auto-replied\r\n\r\n",
+  body: `This message was created automatically by mail delivery software.
+
+A message that you sent could not be delivered to one or more of its
+recipients. This is a permanent error. The following address(es) failed:
+
+  ann@contoso-example.org
+    host mx.contoso-example.org [203.0.113.9]
+    SMTP error from remote mail server after end of data:
+    Message rejected as spam by Content Filtering
+`,
+};

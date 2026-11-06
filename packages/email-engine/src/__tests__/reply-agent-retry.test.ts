@@ -152,6 +152,7 @@ describe("replyAgentTick reliability", () => {
   it("reclaims replies stuck in processing as a retry", async () => {
     const { db, updates } = scriptedDb([
       [{ id: "r9", agentAttempts: 0, agentClaimedAt: "2026-11-06T11:00:00.000Z" }], // stuck
+      [], // no agent message was sent for it
       [], // nothing pending
     ]);
     const r = await replyAgentTick(db, { now: () => NOW, notifyClient: false });
@@ -161,7 +162,8 @@ describe("replyAgentTick reliability", () => {
 
   it("a stuck reply on its last attempt is handed to the client instead", async () => {
     const { db, updates, inserts } = scriptedDb([
-      [{ id: "r9", agentAttempts: AGENT_MAX_ATTEMPTS - 1, agentClaimedAt: null }], // stuck
+      [{ id: "r9", agentAttempts: AGENT_MAX_ATTEMPTS - 1, agentClaimedAt: "2026-11-06T11:00:00.000Z" }], // stuck
+      [], // no agent message was sent for it
       [{ id: "r9", userId: "u1", senderId: "s1", campaignId: null, leadId: null, fromEmail: "x@y.com", bodyText: "hi" }],
       [], // no open request
       [], // nothing pending
