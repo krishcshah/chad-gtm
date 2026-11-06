@@ -12,9 +12,9 @@ import { B2bPaywall } from "@/components/leads/b2b-paywall";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Global Directory · 100M+ Verified Leads · AutoGTM",
+  title: "B2B Directory",
   description:
-    "Search 100M+ verified global B2B decision-makers, filter by company size, seniority, and industry, and export directly to autonomous campaigns.",
+    "Search verified B2B decision-makers, filter by company size, seniority, and industry, and export directly to autonomous campaigns.",
 };
 
 export default async function B2bDatabasePage({
@@ -34,7 +34,7 @@ export default async function B2bDatabasePage({
 
   const userIsAdmin = true;
 
-  // In ChadGTM, all authenticated users have full access to the 100M+ Global Leads Directory
+  // In ChadGTM, all authenticated users have full access to the B2B leads directory
   const hasAccess = true;
   const isPreviewingPaywall = false;
 
@@ -92,11 +92,11 @@ export default async function B2bDatabasePage({
   return (
     <div className="w-full max-w-full min-w-0 overflow-x-hidden space-y-3">
       {userIsAdmin && (
-        <div className="flex items-center justify-between rounded-none border border-zinc-700 bg-zinc-900 px-4 py-2 text-xs font-mono text-white">
+        <div className="flex items-center justify-between rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-xs font-mono text-white">
           <span className="flex items-center gap-2">
             <ShieldCheck className="size-4 text-white" />
             <span>
-              <strong>ADMIN ACCESS:</strong> Unrestricted access to 100M+ Global B2B Leads Directory (Full Ingestion).
+              <strong>ADMIN ACCESS:</strong> Unrestricted access to the full B2B leads directory.
             </span>
           </span>
           <Link

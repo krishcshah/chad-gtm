@@ -1,55 +1,20 @@
-export interface SenderWarmupConfig {
-  enabled: boolean;
-  dailyLimit: number;
-  replyRate: number; // percentage, e.g. 40
-  sentCount: number;
-  receivedCount: number;
-}
+/**
+ * Mailbox warm-up: honest status only.
+ *
+ * AutoGTM does not run inbox warm-up. An earlier version showed a "warm-up
+ * pool" that sent no email: it only bumped counters stored as a
+ * `<!--SR_WARMUP:{json}-->` comment inside the sender signature, and that
+ * comment then went out to recipients with the signature. Both are gone.
+ *
+ * This module only removes leftover markers from signatures and gives the UI
+ * one clear status line.
+ */
 
-export function parseSenderWarmup(signature: string | null | undefined): {
-  warmup: SenderWarmupConfig;
-  cleanSig: string;
-} {
-  const defaultWarmup: SenderWarmupConfig = {
-    enabled: false,
-    dailyLimit: 20,
-    replyRate: 40,
-    sentCount: 0,
-    receivedCount: 0,
-  };
-  if (!signature) return { warmup: defaultWarmup, cleanSig: "" };
+// One helper for the web app and the engine (strips the marker and the
+// whitespace before it).
+export { hasWarmupMarker, stripWarmupMarker } from "@smartreach/shared/signature";
 
-  const match = signature.match(/<!--SR_WARMUP:(\{.*?\})-->/);
-  if (!match) return { warmup: defaultWarmup, cleanSig: signature };
+export const WARMUP_STATUS_TITLE = "Warm-up isn't run by AutoGTM";
 
-  try {
-    const parsed = JSON.parse(match[1]);
-    const cleanSig = signature.replace(match[0], "").trim();
-    return {
-      warmup: {
-        enabled: Boolean(parsed.enabled),
-        dailyLimit: Number(parsed.dailyLimit) || 20,
-        replyRate: Number(parsed.replyRate) || 40,
-        sentCount: Number(parsed.sentCount) || 0,
-        receivedCount: Number(parsed.receivedCount) || 0,
-      },
-      cleanSig,
-    };
-  } catch {
-    return { warmup: defaultWarmup, cleanSig: signature };
-  }
-}
-
-export function formatSenderWarmup(
-  cleanSignature: string,
-  warmup: Partial<SenderWarmupConfig>
-): string {
-  const json = JSON.stringify({
-    enabled: Boolean(warmup.enabled),
-    dailyLimit: Number(warmup.dailyLimit ?? 20),
-    replyRate: Number(warmup.replyRate ?? 40),
-    sentCount: Number(warmup.sentCount ?? 0),
-    receivedCount: Number(warmup.receivedCount ?? 0),
-  });
-  return `${cleanSignature.trim()}\n<!--SR_WARMUP:${json}-->`.trim();
-}
+export const WARMUP_STATUS_DESCRIPTION =
+  "AutoGTM doesn't warm up mailboxes and sends no warm-up email. Before cold sending from a new mailbox or domain, warm it for 2 to 4 weeks with a dedicated warm-up service, and keep daily volume low at first.";

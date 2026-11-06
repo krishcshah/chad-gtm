@@ -8,6 +8,7 @@
 import { getDirectoryFacets } from "./leads-directory";
 import type { AiEngineOptions } from "./ai";
 import { crawlCompanyDomain, type CrawledCompanyProfile, type PricingTier } from "./gtm-crawler";
+import { matchIndustriesInText, RESEARCH_BLOCKED_MESSAGE, type TargetingSource } from "./autopilot-policy";
 
 export interface ScrapedCompanyData {
   url: string;
@@ -26,6 +27,8 @@ export interface ScrapedCompanyData {
   fetchFailed: boolean;
   failureReason?: string;
   usedHeadlessFallback?: boolean;
+  /** Scheduling link found on the site (Calendly, Cal.com, HubSpot...). */
+  bookingUrl?: string | null;
 }
 
 export interface BusinessOverview {
@@ -56,6 +59,15 @@ export interface IcpProfile {
   industries: string[];
   painPoints: string[];
   personas?: IcpPersona[];
+  /**
+   * Where industries/titles came from. "simulated" means hard-coded defaults
+   * that were not derived from the client; autopilot never launches on those.
+   */
+  targetingSource?: TargetingSource;
+  /** False when the targeting is not grounded in the client's site or notes. */
+  targetingGrounded?: boolean;
+  /** Client-facing explanation when targetingGrounded is false. */
+  targetingIssue?: string;
 }
 
 export interface GtmOffer {
@@ -117,6 +129,7 @@ export async function scrapeCompanyWebsite(rawUrl: string): Promise<ScrapedCompa
     fetchFailed: profile.fetchFailed,
     failureReason: profile.failureReason,
     usedHeadlessFallback: profile.usedHeadlessFallback,
+    bookingUrl: profile.bookingUrl ?? null,
   };
 }
 
@@ -378,6 +391,7 @@ export async function synthesizeGtmStrategy(
 ): Promise<SynthesizedGtmStrategy> {
   const facets = getDirectoryFacets();
   const topIndustries = facets.industries.slice(0, 40).map((i) => i.value);
+  const allIndustries = facets.industries.map((i) => i.value);
 
   const explicitProvider = (aiOptions?.provider || "").toLowerCase();
   const openAiKey = process.env.OPENAI_API_KEY;
@@ -389,7 +403,7 @@ export async function synthesizeGtmStrategy(
   const apiKey = provider === "openai" ? aiOptions?.apiKey || openAiKey : geminiKey;
 
   if (!apiKey) {
-    return simulateGtmStrategy(scraped, optionalNotes, topIndustries);
+    return simulateGtmStrategy(scraped, optionalNotes, topIndustries, allIndustries);
   }
 
   const prompt = buildResearchPrompt(scraped, optionalNotes, topIndustries);
@@ -405,6 +419,21 @@ export async function synthesizeGtmStrategy(
     const industries = Array.isArray(parsed.icpProfile?.industries)
       ? parsed.icpProfile.industries.filter((ind: string) => topIndustries.includes(ind))
       : [];
+    const modelTitles = Array.isArray(parsed.icpProfile?.targetTitles)
+      ? parsed.icpProfile.targetTitles.map((t: unknown) => String(t ?? "").trim()).filter(Boolean)
+      : [];
+    // The model only counts as the source of targeting if it actually chose
+    // directory industries and titles; otherwise the defaults below are invented.
+    // When the site could not be read, the model's choice is grounded only if
+    // the client told us who they sell to (the notes are in the prompt).
+    const notesGiven = hasClientNotes(optionalNotes);
+    const modelGrounded =
+      industries.length > 0 && modelTitles.length > 0 && (!scraped.fetchFailed || notesGiven);
+    // Otherwise fall back to directory industries the client's notes name
+    // (a blocked site must not trap the run in needs_research for good).
+    const notesIndustries = modelGrounded ? [] : matchIndustriesInNotes(optionalNotes, allIndustries, 3);
+    const notesGrounded = !modelGrounded && notesIndustries.length > 0;
+    const grounded = modelGrounded || notesGrounded;
 
     return {
       companyName: parsed.companyName || scraped.domain,
@@ -437,31 +466,217 @@ export async function synthesizeGtmStrategy(
         pricingModel: parsed.businessOverview?.pricingModel || "",
       },
       icpProfile: {
-        targetTitles: normalizeStringArray(parsed.icpProfile?.targetTitles, 3, [
-          "Founder",
-          "VP of Operations",
-          "Head of Engineering",
-        ]),
+        targetTitles: notesGrounded && modelTitles.length === 0
+          ? [...OWNER_TITLES]
+          : normalizeStringArray(parsed.icpProfile?.targetTitles, 3, [
+              "Founder",
+              "VP of Operations",
+              "Head of Engineering",
+            ]),
         companySizes: normalizeStringArray(parsed.icpProfile?.companySizes, 2, [
           "11-50",
           "51-200",
         ]),
-        industries:
-          industries.length > 0 ? industries : topIndustries.slice(0, 3),
+        industries: notesGrounded
+          ? notesIndustries
+          : industries.length > 0
+            ? industries
+            : topIndustries.slice(0, 3),
         painPoints: normalizeStringArray(parsed.icpProfile?.painPoints, 3, [
           "The workflow is manual, fragmented, and expensive to scale.",
           "Existing tools require too much setup and maintenance.",
           "Leadership cannot see cost or performance in one place.",
         ]),
         personas: normalizePersonas(parsed.icpProfile?.personas),
+        targetingSource: modelGrounded ? "ai" : notesGrounded ? "heuristic" : "simulated",
+        targetingGrounded: grounded,
+        ...(grounded ? {} : { targetingIssue: ungroundedReason(scraped) }),
       },
       offers: normalizeOffers(parsed.offers, scraped.domain),
       scrapedData: scraped,
     };
   } catch (err) {
     console.error("[chad-gtm-research] AI synthesis failed, using grounded fallback:", err);
-    return simulateGtmStrategy(scraped, optionalNotes, topIndustries);
+    return simulateGtmStrategy(scraped, optionalNotes, topIndustries, allIndustries);
   }
+}
+
+/** Decision makers to target when we only know the industry, not the buyer function. */
+const OWNER_TITLES = ["Founder", "Owner", "CEO", "President"] as const;
+
+function hasClientNotes(notes?: string): boolean {
+  return String(notes ?? "").replace(/[^a-z0-9]/gi, "").length >= 3;
+}
+
+/** Words that never identify an industry on their own ("Financial Services" is not "services"). */
+const GENERIC_INDUSTRY_WORDS = new Set([
+  "and", "the", "for", "services", "service", "management", "practice", "care", "goods", "development",
+  "organization", "organizations", "institutions", "other", "general", "products", "production", "related",
+  "consumer", "business", "businesses", "supplies", "equipment", "international", "public", "industrial",
+  "electronic", "electrical", "professional", "online", "information", "technology", "systems", "media",
+  "companies", "company", "industry", "industries", "fine", "office", "facilities", "affairs", "relations",
+  "program", "materials", "agent", "careers", "buyers", "seller", "excellent", "customer", "real",
+]);
+
+/**
+ * Everyday words clients use for directory industries. Values are directory
+ * industry names; a value only counts if it exists in the live directory.
+ */
+const INDUSTRY_SYNONYMS: Record<string, string[]> = {
+  dental: ["Medical Practice", "Hospital & Health Care"],
+  dentist: ["Medical Practice", "Hospital & Health Care"],
+  dentistry: ["Medical Practice", "Hospital & Health Care"],
+  orthodontist: ["Medical Practice"],
+  clinic: ["Medical Practice", "Hospital & Health Care"],
+  healthcare: ["Hospital & Health Care"],
+  hospital: ["Hospital & Health Care"],
+  law: ["Law Practice", "Legal Services"],
+  doctor: ["Medical Practice"],
+  physician: ["Medical Practice"],
+  chiropractor: ["Alternative Medicine", "Medical Practice"],
+  therapist: ["Mental Health Care", "Health, Wellness and Fitness"],
+  gym: ["Health, Wellness and Fitness"],
+  vet: ["Veterinary"],
+  lawyer: ["Law Practice", "Legal Services"],
+  attorney: ["Law Practice", "Legal Services"],
+  realtor: ["Real Estate"],
+  brokerage: ["Real Estate"],
+  property: ["Real Estate"],
+  mortgage: ["Financial Services"],
+  accountant: ["Accounting"],
+  bookkeeper: ["Accounting"],
+  bookkeeping: ["Accounting"],
+  cpa: ["Accounting"],
+  saas: ["Computer Software"],
+  software: ["Computer Software"],
+  startup: ["Computer Software", "Internet"],
+  ecommerce: ["Retail", "Internet"],
+  shopify: ["Retail", "Internet"],
+  store: ["Retail"],
+  shop: ["Retail"],
+  agency: ["Marketing and Advertising"],
+  freight: ["Logistics and Supply Chain", "Transportation/Trucking/Railroad"],
+  trucking: ["Transportation/Trucking/Railroad", "Logistics and Supply Chain"],
+  shipping: ["Logistics and Supply Chain"],
+  warehouse: ["Warehousing", "Logistics and Supply Chain"],
+  contractor: ["Construction"],
+  roofing: ["Construction"],
+  plumbing: ["Construction"],
+  plumber: ["Construction"],
+  hvac: ["Construction"],
+  builder: ["Construction"],
+  hotel: ["Hospitality"],
+  car: ["Automotive"],
+  dealership: ["Automotive"],
+  dealer: ["Automotive"],
+  cafe: ["Restaurants", "Food & Beverages"],
+  bakery: ["Food & Beverages", "Restaurants"],
+  school: ["Education Management", "Primary/Secondary Education"],
+  university: ["Higher Education"],
+  college: ["Higher Education"],
+  nonprofit: ["Non-Profit Organization Management"],
+  charity: ["Non-Profit Organization Management"],
+  recruiter: ["Staffing and Recruiting"],
+  recruitment: ["Staffing and Recruiting"],
+  manufacturer: ["Machinery", "Industrial Automation"],
+  bank: ["Banking"],
+  insurer: ["Insurance"],
+  consultancy: ["Management Consulting"],
+  consultant: ["Management Consulting"],
+  photographer: ["Photography"],
+  salon: ["Cosmetics", "Health, Wellness and Fitness"],
+  spa: ["Health, Wellness and Fitness"],
+};
+
+/** Generic words in the same stemmed form as the tokens they are compared with. */
+const GENERIC_INDUSTRY_STEMS = new Set([...GENERIC_INDUSTRY_WORDS].map((w) => stemWord(w)));
+
+/** Lower-case, crude singular: "clinics" -> "clinic", "companies" -> "company", "logistics" -> "logistic". */
+function stemWord(word: string): string {
+  const w = word.toLowerCase();
+  if (w.length > 4 && w.endsWith("ies")) return `${w.slice(0, -3)}y`;
+  if (w.length > 4 && /(ches|shes|sses|xes)$/.test(w)) return w.slice(0, -2);
+  if (w.length > 3 && w.endsWith("s") && !w.endsWith("ss")) return w.slice(0, -1);
+  return w;
+}
+
+function wordsOf(text: string): string[] {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/e-commerce/g, "ecommerce")
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .map(stemWord);
+}
+
+/** Case-insensitive de-duplication that keeps the first (most common) spelling. */
+function uniqueIndustries(list: string[], max: number): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const name of list) {
+    const key = name.toLowerCase().replace(/&/g, "and").replace(/\s+/g, " ").trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+/**
+ * Directory industries named in the client's own notes. Looser than
+ * matchIndustriesInText (which guards against stray words in a crawled page):
+ * one mention of a distinctive industry word or a common synonym is enough,
+ * because the client typed it in answer to "who do you sell to?".
+ * Returns exact directory values, best match first.
+ */
+export function matchIndustriesInNotes(notes: string | undefined, industries: string[], max = 3): string[] {
+  const words = wordsOf(notes || "");
+  if (words.length === 0) return [];
+  const noteWords = new Set(words);
+  const byKey = new Map<string, string>();
+  industries.forEach((name) => {
+    const key = String(name || "").toLowerCase().trim();
+    if (key && !byKey.has(key)) byKey.set(key, name);
+  });
+
+  const scores = new Map<string, { industry: string; score: number; order: number }>();
+  const add = (industry: string, score: number, order: number) => {
+    const prev = scores.get(industry);
+    if (prev) prev.score += score;
+    else scores.set(industry, { industry, score, order });
+  };
+
+  industries.forEach((industry, order) => {
+    const name = String(industry || "").trim();
+    // Skip compound facet values ("Real Estate,Residential Real Estate,...").
+    if (!name || /,\S/.test(name)) return;
+    const tokens = [...new Set(wordsOf(name))].filter((t) => t.length >= 4 && !GENERIC_INDUSTRY_STEMS.has(t));
+    const hits = tokens.filter((t) => noteWords.has(t)).length;
+    if (hits > 0) add(name, hits * 2, order);
+  });
+
+  for (const word of noteWords) {
+    // Own-property lookup only: notes like "constructor" must not hit Object.prototype.
+    const targets = Object.prototype.hasOwnProperty.call(INDUSTRY_SYNONYMS, word) ? INDUSTRY_SYNONYMS[word] : [];
+    for (const target of targets) {
+      const actual = byKey.get(target.toLowerCase());
+      if (actual) add(actual, 1, industries.indexOf(actual));
+    }
+  }
+
+  const ranked = [...scores.values()].sort((a, b) => b.score - a.score || a.order - b.order);
+  return uniqueIndustries(
+    ranked.map((s) => s.industry),
+    max,
+  );
+}
+
+function ungroundedReason(scraped: ScrapedCompanyData): string {
+  if (scraped.fetchFailed) {
+    return "We couldn't read your website (it may block automated visits or need a login), so we haven't sent anything. Retry, or add a short note about who you sell to.";
+  }
+  return RESEARCH_BLOCKED_MESSAGE;
 }
 
 function normalizeStringArray(value: unknown, min: number, fallback: string[]): string[] {
@@ -523,16 +738,34 @@ function normalizeOffers(value: unknown, domain: string): GtmOffer[] {
 function simulateGtmStrategy(
   scraped: ScrapedCompanyData,
   optionalNotes?: string,
-  topIndustries: string[] = []
+  topIndustries: string[] = [],
+  allIndustries: string[] = topIndustries
 ): SynthesizedGtmStrategy {
   const brandName =
     scraped.title && scraped.title.length < 40
       ? scraped.title.split(/[-|·–]/)[0].trim()
       : scraped.domain.split(".")[0];
 
-  const primaryIndustry = topIndustries[0] || "Software & Technology";
-  const secondaryIndustry = topIndustries[1] || "Internet";
-  const tertiaryIndustry = topIndustries[2] || "Information Technology";
+  // Heuristic targeting: only directory industries the client names on their
+  // own site or in their notes. Anything else would be invented, so the run is
+  // marked ungrounded and autopilot asks the client instead of launching.
+  const ownWords = [
+    optionalNotes || "",
+    scraped.fetchFailed ? "" : scraped.combinedCorpus || "",
+    scraped.fetchFailed ? "" : [scraped.title, scraped.description, ...(scraped.headings || [])].join(" "),
+  ].join(" \n ");
+  // The client's notes are an explicit answer to "who do you sell to", so one
+  // loose mention there is enough ("dental clinics", "logistics companies").
+  const namedIndustries = uniqueIndustries(
+    [...matchIndustriesInNotes(optionalNotes, allIndustries, 3), ...matchIndustriesInText(ownWords, allIndustries, 3)],
+    3,
+  );
+  const grounded = namedIndustries.length > 0;
+
+  const primaryIndustry = namedIndustries[0] || topIndustries[0] || "Software & Technology";
+  const secondaryIndustry = namedIndustries[1] || (grounded ? "" : topIndustries[1] || "Internet");
+  const tertiaryIndustry = namedIndustries[2] || (grounded ? "" : topIndustries[2] || "Information Technology");
+  const icpIndustries = [primaryIndustry, secondaryIndustry, tertiaryIndustry].filter(Boolean);
 
   const proofPoints = (scraped.caseStudySignals || []).slice(0, 3);
   const contrasts = (scraped.competitorSignals || []).slice(0, 2).map((signal) => ({
@@ -589,9 +822,16 @@ function simulateGtmStrategy(
       pricingModel: hasPricing ? "Published tiers" : "",
     },
     icpProfile: {
-      targetTitles: ["Founder", "VP of Operations", "Head of Engineering"],
+      // With grounded industries, aim at the owners/decision makers of those
+      // businesses rather than guessing a functional buyer.
+      targetTitles: grounded
+        ? [...OWNER_TITLES]
+        : ["Founder", "VP of Operations", "Head of Engineering"],
       companySizes: ["11-50", "51-200", "201-500"],
-      industries: [primaryIndustry, secondaryIndustry, tertiaryIndustry],
+      industries: icpIndustries,
+      targetingSource: grounded ? "heuristic" : "simulated",
+      targetingGrounded: grounded,
+      ...(grounded ? {} : { targetingIssue: ungroundedReason(scraped) }),
       painPoints: [
         "The current process is manual, fragmented, and hard to audit.",
         "Existing tools take too long to implement and maintain.",

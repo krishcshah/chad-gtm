@@ -72,7 +72,7 @@ export function TicketCreateForm({ onSuccess }: { onSuccess?: () => void }) {
                 key={cat.id}
                 type="button"
                 onClick={() => setCategory(cat.id)}
-                className={`flex items-start gap-2.5 p-3 text-left rounded-none border transition-all ${
+                className={`flex items-start gap-2.5 p-3 text-left rounded-lg border transition-all ${
                   isSelected
                     ? "border-white bg-zinc-900 text-white"
                     : "border-zinc-800 bg-black text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
@@ -102,7 +102,7 @@ export function TicketCreateForm({ onSuccess }: { onSuccess?: () => void }) {
           onChange={(e) => setHeading(e.target.value)}
           placeholder="e.g. Apollo leads matching filter error on healthcare sector"
           required
-          className="rounded-none border-zinc-800 bg-black text-xs text-white placeholder:text-zinc-600 focus:border-white font-mono h-10"
+          className="rounded-lg border-zinc-800 bg-black text-xs text-white placeholder:text-zinc-600 focus:border-white font-mono h-10"
         />
       </div>
 
@@ -118,7 +118,7 @@ export function TicketCreateForm({ onSuccess }: { onSuccess?: () => void }) {
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Describe what happened, what you expected, or provide detailed feedback/questions for our engineering team..."
           required
-          className="rounded-none border-zinc-800 bg-black text-xs text-white placeholder:text-zinc-600 focus:border-white font-mono resize-y"
+          className="rounded-lg border-zinc-800 bg-black text-xs text-white placeholder:text-zinc-600 focus:border-white font-mono resize-y"
         />
       </div>
 
@@ -132,7 +132,7 @@ export function TicketCreateForm({ onSuccess }: { onSuccess?: () => void }) {
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://autogtm.tech/campaigns/..."
-          className="rounded-none border-zinc-800 bg-black text-xs text-white placeholder:text-zinc-600 focus:border-white font-mono h-9"
+          className="rounded-lg border-zinc-800 bg-black text-xs text-white placeholder:text-zinc-600 focus:border-white font-mono h-9"
         />
       </div>
 
@@ -141,7 +141,7 @@ export function TicketCreateForm({ onSuccess }: { onSuccess?: () => void }) {
         <Button
           type="submit"
           disabled={isPending}
-          className="rounded-none bg-white hover:bg-zinc-200 text-black font-semibold text-xs uppercase tracking-wider font-mono h-10 px-5 gap-2"
+          className="rounded-lg bg-white hover:bg-zinc-200 text-black font-semibold text-xs uppercase tracking-wider font-mono h-10 px-5 gap-2"
         >
           {isPending ? (
             <>

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { auditDomainDns } from "@smartreach/email-engine/ai";
 import {
@@ -10,10 +10,13 @@ import {
 } from "../chad-gtm-research";
 import {
   getDirectoryFacets,
-  searchLeadsDirectory,
+  searchLeadsDirectoryForAccess,
+  type DirectoryAccessLevel,
 } from "../leads-directory";
+import { getDirectoryAccessLevel } from "../b2b-access";
 import { getWorkspaceAiOptions } from "../ai";
 import { ensureChadGtmTables } from "../db";
+import { autopilotCountries } from "../autopilot-policy";
 import type { ToolDefinition } from "./types";
 
 const scrapedSchema = z
@@ -76,22 +79,63 @@ export const synthesizeStrategyTool: ToolDefinition<
 };
 
 export const persistGtmRunTool: ToolDefinition<
-  { url: string; notes?: string },
+  {
+    url: string;
+    notes?: string;
+    autopilot?: boolean;
+    bookingUrl?: string | null;
+    existingRunId?: string | null;
+  },
   { chadGtmRunId: string }
 > = {
   name: "persist_gtm_run",
   description:
-    "Persist the synthesized strategy as a chad_gtm_runs row so the wizard and mission control can use it.",
-  inputSchema: z.object({ url: z.string().min(3), notes: z.string().optional() }),
+    "Persist the synthesized strategy as a chad_gtm_runs row so the wizard and mission control can use it. With existingRunId, re-research that run in place (retry).",
+  inputSchema: z.object({
+    url: z.string().min(3),
+    notes: z.string().optional(),
+    autopilot: z.boolean().optional(),
+    bookingUrl: z.string().nullable().optional(),
+    existingRunId: z.string().nullable().optional(),
+  }),
   outputSchema: z.object({ chadGtmRunId: z.string() }),
   timeoutMs: 30_000,
-  async run(_input, ctx) {
+  async run(input, ctx) {
     const strategy = ctx.state.strategy as SynthesizedGtmStrategy | undefined;
     if (!strategy) {
       throw new Error("synthesize_strategy must complete before persist_gtm_run");
     }
 
     await ensureChadGtmTables(ctx.db);
+
+    if (input.existingRunId) {
+      // Retry: refresh the research on the client's existing (unlaunched) run.
+      const bookingUrl = input.bookingUrl || strategy.scrapedData.bookingUrl || null;
+      const updated = await ctx.db
+        .update(schema.chadGtmRuns)
+        .set({
+          companyName: strategy.companyName,
+          status: "reviewing",
+          businessOverview: strategy.businessOverview,
+          icpProfile: strategy.icpProfile,
+          offers: strategy.offers,
+          selectedIndustries: strategy.icpProfile.industries || [],
+          calibrationProfile: {},
+          agentRunId: ctx.run.id,
+          ...(bookingUrl ? { bookingUrl } : {}),
+          updatedAt: new Date().toISOString(),
+        })
+        .where(
+          and(
+            eq(schema.chadGtmRuns.id, input.existingRunId),
+            eq(schema.chadGtmRuns.userId, ctx.userId),
+            isNull(schema.chadGtmRuns.campaignId)
+          )
+        )
+        .returning({ id: schema.chadGtmRuns.id });
+      if (updated.length === 0) throw new Error("Run not found or already launched.");
+      return { chadGtmRunId: input.existingRunId };
+    }
     const runId = crypto.randomUUID();
     await ctx.db.insert(schema.chadGtmRuns).values({
       id: runId,
@@ -107,6 +151,8 @@ export const persistGtmRunTool: ToolDefinition<
       dailyEmailLimit: 30,
       approvedEmailSamples: [],
       agentRunId: ctx.run.id,
+      bookingUrl: input.bookingUrl || strategy.scrapedData.bookingUrl || null,
+      autopilot: Boolean(input.autopilot),
     });
 
     return { chadGtmRunId: runId };
@@ -188,15 +234,23 @@ export const searchLeadsTool: ToolDefinition<
     pageSize: z.number(),
   }),
   timeoutMs: 30_000,
-  async run(input) {
+  async run(input, ctx) {
+    const level = await resolveAgentDirectoryAccess(ctx);
     const pageSize = input.limit ?? 25;
-    const result = searchLeadsDirectory({
-      industries: input.industries,
-      jobTitles: input.titles,
-      hasEmail: true,
-      page: input.page ?? 1,
-      pageSize,
-    });
+    // Same paywall as the directory UI: admins and paid accounts see full
+    // records; everyone else gets the masked one-page preview.
+    const result = searchLeadsDirectoryForAccess(
+      {
+        industries: input.industries,
+        jobTitles: input.titles,
+        countries: autopilotCountries(),
+        hasEmail: true,
+        hasWorkEmail: true,
+        page: input.page ?? 1,
+        pageSize,
+      },
+      level
+    );
     return {
       leads: result.leads.map((lead) => ({
         leadId: lead.leadId,
@@ -215,6 +269,32 @@ export const searchLeadsTool: ToolDefinition<
     };
   },
 };
+
+/**
+ * Directory access level of the user the agent run belongs to. Unknown users
+ * (or lookup failures) get the masked preview.
+ */
+export async function resolveAgentDirectoryAccess(ctx: {
+  userId: string;
+  db: any;
+}): Promise<DirectoryAccessLevel> {
+  try {
+    const [user] = await ctx.db
+      .select({
+        id: schema.users.id,
+        email: schema.users.email,
+        role: schema.users.role,
+        emailVerified: schema.users.emailVerified,
+      })
+      .from(schema.users)
+      .where(eq(schema.users.id, ctx.userId))
+      .limit(1);
+    if (!user) return "none";
+    return await getDirectoryAccessLevel(user);
+  } catch {
+    return "none";
+  }
+}
 
 export const getCampaignStatsTool: ToolDefinition<
   { campaignId: string },
@@ -266,11 +346,11 @@ export const getCampaignStatsTool: ToolDefinition<
       .where(eq(schema.campaignLeads.campaignId, input.campaignId));
     const [sentCount] = await ctx.db
       .select({ count: sql<number>`count(*)` })
-      .from(schema.campaignLeads)
+      .from(schema.emailJobs)
       .where(
         and(
-          eq(schema.campaignLeads.campaignId, input.campaignId),
-          eq(schema.campaignLeads.status, "sent")
+          eq(schema.emailJobs.campaignId, input.campaignId),
+          eq(schema.emailJobs.status, "sent")
         )
       );
     const [opensCount] = await ctx.db

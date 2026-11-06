@@ -1,50 +1,71 @@
-import { processUnsubscribe } from "@/lib/actions";
-import { APP_NAME } from "@smartreach/shared";
-import Link from "next/link";
+import { verifyUnsubscribeToken } from "@smartreach/database";
+import type { ReactNode } from "react";
+import { UNSUBSCRIBE_CONFIRM_FIELD } from "@/lib/unsubscribe-flow";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Confirm page. Loading it (GET) never unsubscribes: link scanners fetch every
+ * URL in an email. The button POSTs to /api/unsubscribe, which unsubscribes and
+ * redirects back here with ?status=done or ?status=error.
+ */
 export default async function UnsubscribePage({
   searchParams,
 }: {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ token?: string; status?: string }>;
 }) {
   const sp = await searchParams;
   const token = sp.token?.trim() ?? "";
-  let result: { ok: boolean; message?: string; error?: string; email?: string } = {
-    ok: false,
-    error: "Missing unsubscribe token",
-  };
-  if (token) {
-    const r = await processUnsubscribe(token);
-    if (r.ok) {
-      result = { ok: true, message: r.message, email: r.data?.email };
-    } else {
-      result = { ok: false, error: r.error };
-    }
+  const status = sp.status === "done" || sp.status === "error" ? sp.status : null;
+
+  let body: ReactNode;
+  if (status === "done") {
+    body = (
+      <p className="text-sm text-zinc-300">
+        You have been unsubscribed. You will not receive further campaign emails from this sender.
+      </p>
+    );
+  } else if (status === "error") {
+    body = (
+      <p className="text-sm text-red-400">
+        We could not process this unsubscribe link. It may be invalid or expired. Reply to the email
+        and ask to be removed instead.
+      </p>
+    );
+  } else if (!token) {
+    body = <p className="text-sm text-red-400">This unsubscribe link is incomplete. Reply to the email and ask to be removed instead.</p>;
+  } else {
+    // Read-only check so the page can show which address will be removed.
+    const verified = verifyUnsubscribeToken(token);
+    body = verified.ok ? (
+      <form method="post" action="/api/unsubscribe" className="flex flex-col gap-3">
+        <p className="text-sm text-zinc-300">
+          Stop campaign emails to <span className="font-mono">{verified.email}</span> from this sender?
+        </p>
+        <input type="hidden" name="token" value={token} />
+        <input type="hidden" name={UNSUBSCRIBE_CONFIRM_FIELD} value="1" />
+        <button
+          type="submit"
+          className="w-fit rounded-lg bg-zinc-50 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-zinc-200"
+        >
+          Unsubscribe
+        </button>
+      </form>
+    ) : (
+      <p className="text-sm text-red-400">
+        This unsubscribe link is invalid or has expired. Reply to the email and ask to be removed instead.
+      </p>
+    );
   }
 
+  // Recipients land here from a client's email: keep it neutral (no platform
+  // branding or links into the app).
   return (
-    <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center gap-4 p-8">
-      <h1 className="text-2xl font-semibold tracking-tight">{APP_NAME}</h1>
-      <h2 className="text-lg font-medium">Unsubscribe</h2>
-      {result.ok ? (
-        <p className="text-sm text-muted-foreground">
-          {result.message}
-          {result.email ? (
-            <>
-              {" "}
-              (<span className="font-mono">{result.email}</span>)
-            </>
-          ) : null}
-          . You will not receive further campaign emails from this workspace.
-        </p>
-      ) : (
-        <p className="text-sm text-destructive">{result.error}</p>
-      )}
-      <Link href="/" className="text-sm text-primary underline-offset-4 hover:underline">
-        Back to {APP_NAME}
-      </Link>
+    <main className="flex min-h-screen items-center justify-center bg-zinc-950 px-4 py-12">
+      <div className="w-full max-w-md rounded-lg border border-white/10 bg-zinc-900/60 p-6 shadow-xl">
+        <h1 className="mb-3 text-lg font-semibold tracking-tight text-zinc-50">Unsubscribe</h1>
+        {body}
+      </div>
     </main>
   );
 }

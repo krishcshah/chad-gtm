@@ -22,7 +22,9 @@ export function makeTransport(sender: SenderRow): Transporter {
     connectionTimeout: 12_000,
     socketTimeout: 20_000,
     greetingTimeout: 10_000,
-    tls: { rejectUnauthorized: false },
+    // Verify certificates by default: SMTP AUTH sends the mailbox password.
+    // Self-hosted servers with self-signed certs can opt out explicitly.
+    tls: { rejectUnauthorized: process.env.SMTP_ALLOW_SELF_SIGNED !== "true" },
   } as any);
 }
 

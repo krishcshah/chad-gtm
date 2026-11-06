@@ -26,31 +26,38 @@ export function ComplianceForms({
         <div>
           <h2 className="font-medium">Company & Unsubscribe Compliance</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Optional company name, postal address, and unsubscribe base URL. Stored with your
-            workspace and appended to your campaign emails for CAN-SPAM and GDPR compliance.
+            Your company name and physical postal address are required: they are added to every
+            campaign email (CAN-SPAM / GDPR), and campaigns will not start or send until they are
+            set. The unsubscribe base URL is optional.
           </p>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="companyName">Company name</Label>
+          <Label htmlFor="companyName">Company name (required)</Label>
           <Input
             id="companyName"
             value={settings.companyName}
             onChange={(e) => setSettings((s) => ({ ...s, companyName: e.target.value }))}
             placeholder="Acme Inc."
+            required
+            aria-required="true"
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="postalAddress">Physical postal address</Label>
+          <Label htmlFor="postalAddress">Physical postal address (required)</Label>
           <Textarea
             id="postalAddress"
             value={settings.postalAddress}
             onChange={(e) => setSettings((s) => ({ ...s, postalAddress: e.target.value }))}
             placeholder={"123 Market St\nSan Francisco, CA 94105\nUSA"}
             rows={3}
-            aria-describedby="postal-optional-hint"
+            required
+            aria-required="true"
+            aria-describedby="postal-required-hint"
           />
-          <p id="postal-optional-hint" className="text-xs text-muted-foreground">
-            Required by anti-spam regulations (CAN-SPAM / EU e-Privacy) in cold outreach footers.
+          <p id="postal-required-hint" className="text-xs text-muted-foreground">
+            Required. A real street address or P.O. box with city, postcode and country. Anti-spam
+            law (CAN-SPAM / EU e-Privacy) requires it in every cold email, so campaigns are held
+            until it is set.
           </p>
         </div>
         <div className="space-y-2">

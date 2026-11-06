@@ -1,87 +1,73 @@
 import { NextResponse } from "next/server";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { getDb } from "@/lib/db";
+import { clickFallbackUrl, resolveTrackedDestination } from "@/lib/click-tracking";
+
+export const dynamic = "force-dynamic";
+
+const NO_STORE = { "Cache-Control": "no-store" };
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const jid = url.searchParams.get("jid");
   const target = url.searchParams.get("url");
 
-  const fallbackRedirect = "/";
+  const fallback = () =>
+    NextResponse.redirect(clickFallbackUrl(req.url), { status: 302, headers: NO_STORE });
 
-  if (!target) {
-    return NextResponse.redirect(new URL(fallbackRedirect, req.url));
-  }
+  // Only redirect to a link that was actually part of this tracked email.
+  // Anything else (no job, unknown job, forged url) lands on APP_URL.
+  if (!jid || !target || jid.length > 128) return fallback();
 
-  let destination = target;
-  try {
-    destination = decodeURIComponent(target);
-    const parsed = new URL(destination);
-    if (!["http:", "https:"].includes(parsed.protocol)) {
-      return NextResponse.redirect(new URL(fallbackRedirect, req.url));
-    }
-  } catch {
-    return NextResponse.redirect(new URL(fallbackRedirect, req.url));
-  }
-
-  if (jid) {
-    try {
-      const db = getDb();
-      // Ensure email_tracking_events table exists
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS email_tracking_events (
-          id text PRIMARY KEY,
-          user_id text NOT NULL,
-          campaign_id text,
-          job_id text,
-          lead_id text,
-          type text NOT NULL,
-          target_url text,
-          ip text,
-          user_agent text,
-          created_at text NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS email_tracking_user_type_idx ON email_tracking_events(user_id, type, created_at);
-        CREATE INDEX IF NOT EXISTS email_tracking_campaign_type_idx ON email_tracking_events(campaign_id, type, created_at);
-        CREATE INDEX IF NOT EXISTS email_tracking_job_idx ON email_tracking_events(job_id, type);
-      `).catch(() => {});
-
-      const [job] = await db
-        .select({
-          id: schema.emailJobs.id,
-          campaignId: schema.emailJobs.campaignId,
-          leadId: schema.emailJobs.leadId,
-          userId: schema.campaigns.userId,
-        })
-        .from(schema.emailJobs)
-        .innerJoin(schema.campaigns, eq(schema.emailJobs.campaignId, schema.campaigns.id))
-        .where(eq(schema.emailJobs.id, jid))
-        .limit(1);
-
-      if (job) {
-        const userAgent = req.headers.get("user-agent") || "";
-        const ip = req.headers.get("x-forwarded-for")?.split(",")[0] || "";
-
-        await db
-          .insert(schema.emailTrackingEvents)
-          .values({
-            userId: job.userId,
-            campaignId: job.campaignId,
-            jobId: job.id,
-            leadId: job.leadId,
-            type: "click",
-            targetUrl: destination,
-            userAgent,
-            ip,
-            createdAt: new Date().toISOString(),
-          })
-          .catch(() => {});
+  let job:
+    | {
+        id: string;
+        campaignId: string;
+        leadId: string;
+        userId: string;
+        bodyHtml: string | null;
+        bodyText: string | null;
       }
-    } catch {
-      // Fail safely without blocking redirect
-    }
+    | undefined;
+  try {
+    const db = getDb();
+    [job] = await db
+      .select({
+        id: schema.emailJobs.id,
+        campaignId: schema.emailJobs.campaignId,
+        leadId: schema.emailJobs.leadId,
+        userId: schema.campaigns.userId,
+        bodyHtml: schema.emailJobs.bodyHtml,
+        bodyText: schema.emailJobs.bodyText,
+      })
+      .from(schema.emailJobs)
+      .innerJoin(schema.campaigns, eq(schema.emailJobs.campaignId, schema.campaigns.id))
+      .where(eq(schema.emailJobs.id, jid))
+      .limit(1);
+  } catch {
+    return fallback();
   }
 
-  return NextResponse.redirect(destination, 302);
+  const destination = resolveTrackedDestination(target, job);
+  if (!job || !destination) return fallback();
+
+  try {
+    const db = getDb();
+    await db.insert(schema.emailTrackingEvents).values({
+      userId: job.userId,
+      campaignId: job.campaignId,
+      jobId: job.id,
+      leadId: job.leadId,
+      type: "click",
+      targetUrl: destination.slice(0, 2000),
+      userAgent: (req.headers.get("user-agent") || "").slice(0, 500),
+      ip: (req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "").slice(0, 100),
+      createdAt: new Date().toISOString(),
+    });
+  } catch {
+    // Logging must never block the redirect.
+  }
+
+  return NextResponse.redirect(destination, { status: 302, headers: NO_STORE });
 }

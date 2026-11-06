@@ -9,6 +9,9 @@ import { getActiveWorkspace, getFallbackWorkspace, listUserWorkspaces, type Work
 import { SidebarProvider } from "@/components/layout/sidebar-context";
 import { AppShell, AppMainContent } from "@/components/layout/app-shell";
 import { PageTracker } from "@/components/page-tracker";
+import { countOpenAgentRequests } from "@/lib/autopilot-actions";
+import { approvalRequired, isApprovedToSend } from "@/lib/approval";
+import { ApprovalBanner } from "./approval-banner";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
@@ -33,6 +36,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     console.error("[AppLayout] Failed to list workspaces:", err);
   }
 
+  const openRequests = await countOpenAgentRequests();
+
+  let showApprovalBanner = false;
+  let emailOnApprove = false;
+  if (approvalRequired()) {
+    try {
+      showApprovalBanner = !(await isApprovedToSend(user.id));
+      if (showApprovalBanner) {
+        const { isSystemMailerConfigured } = await import("@smartreach/email-engine/system-mailer");
+        emailOnApprove = isSystemMailerConfigured();
+      }
+    } catch (err) {
+      console.error("[AppLayout] Failed to check approval:", err);
+    }
+  }
+
   return (
     <SidebarProvider>
       <ImportJobProvider>
@@ -43,8 +62,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             user={user}
             workspaces={workspaces}
             activeWorkspace={workspace}
+            openRequests={openRequests}
           />
-          <AppMainContent>{children}</AppMainContent>
+          <AppMainContent>
+            {showApprovalBanner && <ApprovalBanner emailOnApprove={emailOnApprove} />}
+            {children}
+          </AppMainContent>
           <CommandPalette />
         </AppShell>
       </ImportJobProvider>

@@ -126,7 +126,7 @@ export function TicketThreadView({
                 variant="outline"
                 size="sm"
                 disabled={statusPending}
-                className="rounded-none border-zinc-800 bg-black text-xs font-mono uppercase tracking-wider text-zinc-300 hover:bg-zinc-900 hover:text-white h-9 px-3 gap-2"
+                className="rounded-lg border-zinc-800 bg-black text-xs font-mono uppercase tracking-wider text-zinc-300 hover:bg-zinc-900 hover:text-white h-9 px-3 gap-2"
               >
                 {statusPending ? (
                   <Loader2 className="size-3.5 animate-spin" />
@@ -138,7 +138,7 @@ export function TicketThreadView({
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="rounded-none border-zinc-800 bg-black font-mono">
+            <DropdownMenuContent align="end" className="rounded-lg border-zinc-800 bg-black font-mono">
               <DropdownMenuItem onClick={() => handleStatusChange("open")}>
                 Mark as Open
               </DropdownMenuItem>
@@ -155,7 +155,7 @@ export function TicketThreadView({
           </DropdownMenu>
 
           {isAdminUser && (
-            <span className="rounded-none border border-zinc-700 bg-zinc-900 px-2 py-1 text-[9px] uppercase tracking-widest text-zinc-300">
+            <span className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-[9px] uppercase tracking-widest text-zinc-300">
               Admin Mode
             </span>
           )}
@@ -176,7 +176,7 @@ export function TicketThreadView({
           return (
             <div
               key={msg.id}
-              className={`rounded-none border p-4 sm:p-5 transition-colors ${
+              className={`rounded-lg border p-4 sm:p-5 transition-colors ${
                 isAdminMsg
                   ? "border-zinc-700 bg-zinc-950/80 shadow-sm"
                   : "border-zinc-800/80 bg-black/70"
@@ -186,7 +186,7 @@ export function TicketThreadView({
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-900 pb-3 mb-3">
                 <div className="flex items-center gap-2">
                   <div
-                    className={`flex size-6 items-center justify-center rounded-none border text-xs ${
+                    className={`flex size-6 items-center justify-center rounded-lg border text-xs ${
                       isAdminMsg
                         ? "border-white bg-white text-black font-bold"
                         : "border-zinc-700 bg-zinc-900 text-zinc-300"
@@ -200,11 +200,11 @@ export function TicketThreadView({
                   </span>
 
                   {isAdminMsg ? (
-                    <span className="rounded-none border border-white bg-black px-1.5 py-0.2 text-[8px] font-mono tracking-widest text-white uppercase">
+                    <span className="rounded-lg border border-white bg-black px-1.5 py-0.2 text-[8px] font-mono tracking-widest text-white uppercase">
                       Admin / Core Team
                     </span>
                   ) : (
-                    <span className="rounded-none border border-zinc-800 bg-zinc-900 px-1.5 py-0.2 text-[8px] font-mono tracking-widest text-zinc-400 uppercase">
+                    <span className="rounded-lg border border-zinc-800 bg-zinc-900 px-1.5 py-0.2 text-[8px] font-mono tracking-widest text-zinc-400 uppercase">
                       Author
                     </span>
                   )}
@@ -227,7 +227,7 @@ export function TicketThreadView({
       </div>
 
       {/* Reply Box */}
-      <div className="rounded-none border border-zinc-800 bg-zinc-950 p-5 space-y-4">
+      <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-5 space-y-4">
         <div className="flex items-center justify-between">
           <div className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-2">
             <Send className="size-3.5 text-zinc-400" />
@@ -258,7 +258,7 @@ export function TicketThreadView({
                 ? "Write an official response or resolution update as AutoGTM Engineering... (Ctrl+Enter to send)"
                 : "Type your reply or additional details here... (Ctrl+Enter to send)"
             }
-            className="rounded-none border-zinc-800 bg-black text-xs text-white placeholder:text-zinc-600 focus:border-white font-mono resize-y"
+            className="rounded-lg border-zinc-800 bg-black text-xs text-white placeholder:text-zinc-600 focus:border-white font-mono resize-y"
           />
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
@@ -269,7 +269,7 @@ export function TicketThreadView({
             <Button
               type="submit"
               disabled={isPending || !replyText.trim()}
-              className="rounded-none bg-white hover:bg-zinc-200 text-black font-semibold text-xs font-mono uppercase tracking-wider h-9 px-5 gap-2 shrink-0"
+              className="rounded-lg bg-white hover:bg-zinc-200 text-black font-semibold text-xs font-mono uppercase tracking-wider h-9 px-5 gap-2 shrink-0"
             >
               {isPending ? (
                 <>

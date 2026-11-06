@@ -1,24 +1,64 @@
+import { desc, eq } from "drizzle-orm";
+import { schema } from "@smartreach/database";
 import { requireUser } from "@/lib/session";
+import { getDb, ensureChadGtmTables } from "@/lib/db";
 import { getDirectoryFacets } from "@/lib/leads-directory";
+import { loadLaunchContext, runLaunchState } from "@/lib/autopilot-state";
 import { ChadGtmWizard } from "./chad-gtm-wizard";
+import { AutopilotLauncher, type RunSummary } from "./autopilot-launcher";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "AutoGTM · Autonomous Go-To-Market & Cold Outreach Engine",
-  description:
-    "Self-driving cold outreach engine. Enter your company URL, extract verified Apollo leads, calibrate tone via swipe deck, and dispatch through pre-warmed shared mailboxes.",
+  title: "Autopilot",
+  description: "Paste your website. AutoGTM researches, prospects, sends, replies, and books meetings for you.",
 };
 
-export default async function ChadGtmPage() {
-  await requireUser();
+export default async function ChadGtmPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ mode?: string }>;
+}) {
+  const user = await requireUser();
+  const { mode } = await searchParams;
 
-  const facets = getDirectoryFacets();
-  const allIndustries = facets.industries.map((i) => i.value);
+  if (mode === "guided") {
+    const facets = getDirectoryFacets();
+    return (
+      <div className="mx-auto max-w-6xl">
+        <ChadGtmWizard allIndustries={facets.industries.map((i) => i.value)} />
+      </div>
+    );
+  }
 
-  return (
-    <div className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
-      <ChadGtmWizard allIndustries={allIndustries} />
-    </div>
-  );
+  const db = getDb();
+  await ensureChadGtmTables(db);
+  const rows = await db
+    .select({
+      id: schema.chadGtmRuns.id,
+      companyName: schema.chadGtmRuns.companyName,
+      url: schema.chadGtmRuns.url,
+      status: schema.chadGtmRuns.status,
+      campaignId: schema.chadGtmRuns.campaignId,
+      bookingUrl: schema.chadGtmRuns.bookingUrl,
+      autopilot: schema.chadGtmRuns.autopilot,
+      replyAgentMode: schema.chadGtmRuns.replyAgentMode,
+      dailyEmailLimit: schema.chadGtmRuns.dailyEmailLimit,
+      createdAt: schema.chadGtmRuns.createdAt,
+      icpProfile: schema.chadGtmRuns.icpProfile,
+      calibrationProfile: schema.chadGtmRuns.calibrationProfile,
+    })
+    .from(schema.chadGtmRuns)
+    .where(eq(schema.chadGtmRuns.userId, user.id))
+    .orderBy(desc(schema.chadGtmRuns.createdAt))
+    .limit(30);
+
+  // One phase per run so a run without a campaign never shows as "Live".
+  const ctx = await loadLaunchContext(db, user.id);
+  const runs: RunSummary[] = rows.map(({ icpProfile, calibrationProfile, ...r }: any) => ({
+    ...r,
+    phase: runLaunchState({ ...r, icpProfile, calibrationProfile } as any, ctx).phase,
+  }));
+
+  return <AutopilotLauncher runs={runs} />;
 }

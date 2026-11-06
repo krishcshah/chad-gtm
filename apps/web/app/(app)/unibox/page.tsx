@@ -6,6 +6,7 @@ import { requireWorkspace } from "@/lib/session";
 import { UniboxClient } from "./unibox-client";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "UniBox" };
 
 function parseTag(raw: string | undefined): UniboxReplyTag | null {
   if (!raw) return null;
@@ -49,6 +50,8 @@ export default async function UniboxPage({
       receivedAt: t.replies.receivedAt,
       readAt: t.replies.readAt,
       tag: t.replies.tag,
+      agentStatus: t.replies.agentStatus,
+      agentSummary: t.replies.agentSummary,
       campaignName: t.campaigns.name,
       senderEmail: t.senderAccounts.email,
       senderName: t.senderAccounts.senderName,

@@ -6,6 +6,7 @@ import {
   htmlToPlainText,
   prepareReplyBodies,
   stripLeakageFromBody,
+  hasQpSoftBreaks,
 } from "../sync-replies";
 
 describe("decodeQuotedPrintable (UTF-8)", () => {
@@ -292,5 +293,30 @@ describe("unibox quote ingest", () => {
     const prepared = prepareReplyBodies("On purpose I wrote: this stays.", "");
     expect(prepared.bodyText).toBe("On purpose I wrote: this stays.");
     expect(prepared.snippet).toBe("On purpose I wrote: this stays.");
+  });
+});
+
+describe("single-part quoted-printable replies", () => {
+  // Real encoders wrap at 76 columns: 75 chars + "=" soft break.
+  const firstLine = "This is timely, we're rebuilding our reporting and analytics stack this quarter";
+  const qpBody = `Hi Alex,\r\n\r\n${firstLine.slice(0, 75)}=\r\n${firstLine.slice(75)}. Before a call, could you send over a case study deck?\r\n`;
+
+  it("decodes using BODYSTRUCTURE encoding when MIME headers are absent", () => {
+    const msg = {
+      bodyStructure: { type: "text/plain", encoding: "quoted-printable" },
+      bodyParts: new Map([["text", Buffer.from(qpBody)]]),
+    };
+    const { text } = extractTextAndHtml(msg);
+    expect(text).toContain(`${firstLine}. Before a call`);
+    expect(text).not.toContain("=\n");
+  });
+
+  it("detects soft breaks without BODYSTRUCTURE", () => {
+    const { text } = extractTextAndHtml({ bodyParts: new Map([["text", Buffer.from(qpBody)]]) });
+    expect(text).toContain(`${firstLine}. Before a call`);
+  });
+
+  it("leaves plain text with a short trailing '=' alone", () => {
+    expect(hasQpSoftBreaks("x =\ny")).toBe(false);
   });
 });

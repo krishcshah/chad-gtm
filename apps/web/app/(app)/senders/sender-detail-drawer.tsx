@@ -17,7 +17,6 @@ import {
   Loader2,
   Lock,
   Mail,
-  Play,
   RefreshCw,
   Save,
   Server,
@@ -47,19 +46,21 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Switch,
   Textarea,
   cn,
 } from "@smartreach/ui";
 import {
   deleteSender,
   retestSenderConnection,
-  runWarmupCycle,
   testSenderConnection,
   updateSenderDetails,
   updateSenderLimits,
 } from "@/lib/actions";
-import { parseSenderWarmup, type SenderWarmupConfig } from "@/lib/sender-warmup";
+import {
+  WARMUP_STATUS_DESCRIPTION,
+  WARMUP_STATUS_TITLE,
+  stripWarmupMarker,
+} from "@/lib/sender-warmup";
 
 export interface SenderFullData {
   id: string;
@@ -109,20 +110,12 @@ export function SenderDetailDrawer({ sender, open, onOpenChange }: SenderDetailD
     imap: { ok: boolean; message: string; latencyMs?: number };
   } | null>(null);
 
-  // Parsed Warmup & Signature
-  const { warmup: initialWarmup, cleanSig: initialSig } = useMemo(
-    () => parseSenderWarmup(sender.signature),
-    [sender.signature],
-  );
+  // Signature without the old warm-up marker
+  const initialSig = useMemo(() => stripWarmupMarker(sender.signature), [sender.signature]);
 
   // Editable Limits Form
   const [dailyLimit, setDailyLimit] = useState(sender.dailyLimit || 50);
   const [hourlyLimit, setHourlyLimit] = useState(sender.hourlyLimit || 15);
-
-  // Editable Warmup Form
-  const [warmupEnabled, setWarmupEnabled] = useState(initialWarmup.enabled);
-  const [warmupDaily, setWarmupDaily] = useState(initialWarmup.dailyLimit || 20);
-  const [warmupRate, setWarmupRate] = useState(initialWarmup.replyRate || 40);
 
   // Editable General Settings Form
   const [senderName, setSenderName] = useState(sender.senderName || "");
@@ -264,27 +257,6 @@ export function SenderDetailDrawer({ sender, open, onOpenChange }: SenderDetailD
     });
   };
 
-  const handleSaveWarmup = () => {
-    start(async () => {
-      const res = await updateSenderDetails(sender.id, {
-        cleanSignature: signatureText,
-        warmup: {
-          enabled: warmupEnabled,
-          dailyLimit: warmupDaily,
-          replyRate: warmupRate,
-          sentCount: initialWarmup.sentCount,
-          receivedCount: initialWarmup.receivedCount,
-        },
-      });
-      if (res.ok) {
-        toast.success("Warm-up settings saved");
-        router.refresh();
-      } else {
-        toast.error(res.error || "Failed to save warmup");
-      }
-    });
-  };
-
   const handleSaveSettings = () => {
     start(async () => {
       const res = await updateSenderDetails(sender.id, {
@@ -303,13 +275,6 @@ export function SenderDetailDrawer({ sender, open, onOpenChange }: SenderDetailD
         imapPort: Number(imapPort),
         imapUsername: imapUsername.trim(),
         imapPassword: imapPassword.trim() || undefined,
-        warmup: {
-          enabled: warmupEnabled,
-          dailyLimit: warmupDaily,
-          replyRate: warmupRate,
-          sentCount: initialWarmup.sentCount,
-          receivedCount: initialWarmup.receivedCount,
-        },
       });
       if (res.ok) {
         toast.success("Sender details and credentials saved successfully!");
@@ -318,18 +283,6 @@ export function SenderDetailDrawer({ sender, open, onOpenChange }: SenderDetailD
         router.refresh();
       } else {
         toast.error(res.error || "Failed to save details");
-      }
-    });
-  };
-
-  const handleRunWarmup = () => {
-    start(async () => {
-      const res = await runWarmupCycle();
-      if (res.ok) {
-        toast.success(res.message);
-        router.refresh();
-      } else {
-        toast.error(res.message);
       }
     });
   };
@@ -388,11 +341,6 @@ export function SenderDetailDrawer({ sender, open, onOpenChange }: SenderDetailD
                 >
                   {liveStatus}
                 </Badge>
-                {warmupEnabled && (
-                  <Badge variant="outline" className="border-amber-500/30 text-amber-400 bg-amber-500/10 text-[10px]">
-                    <Flame className="size-3 mr-1" /> Warmup Active
-                  </Badge>
-                )}
               </div>
             </div>
 
@@ -401,7 +349,7 @@ export function SenderDetailDrawer({ sender, open, onOpenChange }: SenderDetailD
               {[
                 { key: "performance", label: "Health & Performance", icon: Activity },
                 { key: "limits", label: "Usage Limits", icon: Sliders },
-                { key: "warmup", label: "Warmup Pool", icon: Flame },
+                { key: "warmup", label: "Warm-up", icon: Flame },
                 { key: "settings", label: "Settings", icon: Save },
               ].map((t) => {
                 const Icon = t.icon;
@@ -658,102 +606,15 @@ export function SenderDetailDrawer({ sender, open, onOpenChange }: SenderDetailD
               </div>
             )}
 
-            {/* TAB 3: WARMUP POOL */}
+            {/* TAB 3: WARM-UP STATUS (AutoGTM runs no warm-up) */}
             {tab === "warmup" && (
               <div className="space-y-5">
-                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 flex items-start gap-3">
-                  <Flame className="size-5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="rounded-lg border border-border/60 bg-card/40 p-4 flex items-start gap-3">
+                  <Flame className="size-5 text-muted-foreground shrink-0 mt-0.5" />
                   <div className="text-xs leading-relaxed">
-                    <p className="font-semibold text-foreground">Peer-to-Peer Warm-up Network</p>
-                    <p className="text-muted-foreground mt-0.5">
-                      Enrolled mailboxes automatically exchange simulated warm-up emails with other sender
-                      accounts in your pool. They reply based on your target rate, building reputation
-                      before you launch massive campaigns.
-                    </p>
+                    <p className="font-semibold text-foreground">{WARMUP_STATUS_TITLE}</p>
+                    <p className="text-muted-foreground mt-0.5">{WARMUP_STATUS_DESCRIPTION}</p>
                   </div>
-                </div>
-
-                <div className="rounded-xl border border-border/60 bg-card/40 p-5 space-y-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <Label className="text-xs font-semibold">Enroll in Warmup Pool</Label>
-                      <p className="text-[11px] text-muted-foreground">
-                        Enable automated peer warm-up exchanges for this mailbox.
-                      </p>
-                    </div>
-                    <Switch checked={warmupEnabled} onCheckedChange={setWarmupEnabled} />
-                  </div>
-
-                  {warmupEnabled && (
-                    <div className="space-y-4 pt-3 border-t border-border/40">
-                      <div>
-                        <Label className="text-xs font-semibold">Daily Warm-up Volume</Label>
-                        <p className="text-[11px] text-muted-foreground mb-2">
-                          Max warm-up emails sent per day (gradually ramps up).
-                        </p>
-                        <Input
-                          type="number"
-                          min={5}
-                          max={100}
-                          value={warmupDaily}
-                          onChange={(e) => setWarmupDaily(Number(e.target.value))}
-                          className="w-32 font-mono text-sm"
-                        />
-                      </div>
-
-                      <div>
-                        <Label className="text-xs font-semibold">Target Reply Rate ({warmupRate}%)</Label>
-                        <p className="text-[11px] text-muted-foreground mb-2">
-                          Percentage of peer emails that will automatically generate positive replies.
-                        </p>
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="range"
-                            min={10}
-                            max={90}
-                            step={5}
-                            value={warmupRate}
-                            onChange={(e) => setWarmupRate(Number(e.target.value))}
-                            className="flex-1 accent-amber-500"
-                          />
-                          <span className="text-xs font-bold tabular-nums w-12 text-right">
-                            {warmupRate}%
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3 pt-2">
-                        <div className="p-3 rounded-lg border border-border/40 bg-accent/20">
-                          <span className="text-[10px] text-muted-foreground uppercase">Warmup Sent</span>
-                          <p className="text-lg font-bold tabular-nums text-foreground mt-0.5">
-                            {initialWarmup.sentCount}
-                          </p>
-                        </div>
-                        <div className="p-3 rounded-lg border border-border/40 bg-accent/20">
-                          <span className="text-[10px] text-muted-foreground uppercase">Warmup Received</span>
-                          <p className="text-lg font-bold tabular-nums text-foreground mt-0.5">
-                            {initialWarmup.receivedCount}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 pt-2">
-                        <Button onClick={handleSaveWarmup} disabled={pending} size="sm" className="gap-1.5">
-                          <Save className="size-3.5" /> Save Warm-up Config
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={handleRunWarmup}
-                          disabled={pending}
-                          className="gap-1.5 text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
-                        >
-                          <Play className="size-3.5" /> Run Exchange Cycle Now
-                        </Button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             )}

@@ -1,12 +1,16 @@
 /**
  * Production Seed Script for SmartReach Demo Account
  * 
- * Account Credentials:
- *   Email:    demo@ratecompany.com
- *   Password: demo123
- * 
+ * Usage:
+ *   DATABASE_URL=... SEED_DEMO_PASSWORD=... node scripts/seed-demo-account.cjs
+ *
+ * Refuses to run without DATABASE_URL and a SEED_DEMO_PASSWORD of at least
+ * 12 characters. The password is never printed and never stored in the repo.
+ *
+ * Account: demo@ratecompany.com (password: whatever SEED_DEMO_PASSWORD was)
+ *
  * Features Populated:
- *   - User: demo@ratecompany.com, Password: demo123
+ *   - User: demo@ratecompany.com
  *   - Workspace: RateCompany Outreach (Default workspace)
  *   - Compliance settings: RateCompany Technologies GmbH, Berlin
  *   - 6 Connected active sender mailboxes with warmup health, signatures, daily stats
@@ -24,13 +28,21 @@ const { hashPassword } = require('better-auth/crypto');
 const crypto = require('crypto');
 
 const DEMO_EMAIL = 'demo@ratecompany.com';
-const DEMO_PASSWORD = 'demo123';
+const DEMO_PASSWORD = process.env.SEED_DEMO_PASSWORD || '';
 const DEMO_USER_ID = 'usr_demo_ratecompany';
 const DEMO_WORKSPACE_ID = 'ws_demo_ratecompany';
 
-const DATABASE_URL =
-  process.env.DATABASE_URL ||
-  'postgresql://smartreach_user:17e808d5ab8c28f4875c2c4d8f6ee0c562592646ccb73e0c@127.0.0.1:5432/smartreach';
+/* Set DATABASE_URL in the environment; credentials never live in the repo. */
+const DATABASE_URL = (process.env.DATABASE_URL || '').trim();
+
+if (!DATABASE_URL) {
+  console.error('Refusing to run: set DATABASE_URL.');
+  process.exit(1);
+}
+if (DEMO_PASSWORD.length < 12) {
+  console.error('Refusing to run: set SEED_DEMO_PASSWORD (at least 12 characters).');
+  process.exit(1);
+}
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
@@ -85,7 +97,7 @@ const INDUSTRIES = [
 
 async function seed() {
   console.log('--- Starting SmartReach Demo Account Seeding ---');
-  console.log(`Target: ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
+  console.log(`Target: ${DEMO_EMAIL}`);
 
   const client = await pool.connect();
 
@@ -1158,7 +1170,7 @@ async function seed() {
     console.log('\n======================================================');
     console.log('✨ SmartReach Demo Account Successfully Seeded! ✨');
     console.log(`Email:    ${DEMO_EMAIL}`);
-    console.log(`Password: ${DEMO_PASSWORD}`);
+    console.log('Password: the SEED_DEMO_PASSWORD you supplied');
     console.log('======================================================\n');
   } catch (err) {
     await client.query('ROLLBACK');

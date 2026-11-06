@@ -42,6 +42,8 @@ interface ReplyRow {
   fromName: string; fromEmail: string; subject: string; snippet: string;
   bodyText: string; bodyHtml: string; receivedAt: string; readAt: string | null;
   tag: string | null;
+  agentStatus?: string | null;
+  agentSummary?: string | null;
   campaignName: string | null; senderEmail: string | null; senderName: string | null;
 }
 
@@ -74,6 +76,7 @@ function senderLabel(m: UniboxThreadMessage): string {
 }
 
 function roleHint(m: UniboxThreadMessage): string {
+  if (m.fromRole === "agent") return "Sent by agent";
   if (m.direction === "campaign" || m.fromRole === "automation") return "Campaign";
   return "";
 }
@@ -126,15 +129,15 @@ function ThreadBubble({ m }: { m: UniboxThreadMessage }) {
   const bubble = rich
     ? ""
     : right
-      ? "rounded-none bg-zinc-800/90 border border-zinc-700/80 px-4 py-3 text-zinc-100 shadow-sm"
+      ? "rounded-lg bg-zinc-800/90 border border-zinc-700/80 px-4 py-3 text-zinc-100 shadow-sm"
       : m.direction === "campaign" || m.fromRole === "automation"
-        ? "rounded-none border border-zinc-800/80 bg-zinc-900/70 px-4 py-3 text-foreground shadow-sm"
-        : "rounded-none border border-zinc-800/80 bg-zinc-950/90 px-4 py-3 text-foreground shadow-sm";
+        ? "rounded-lg border border-zinc-800/80 bg-zinc-900/70 px-4 py-3 text-foreground shadow-sm"
+        : "rounded-lg border border-zinc-800/80 bg-zinc-950/90 px-4 py-3 text-foreground shadow-sm";
 
   return (
     <div className={`flex w-full items-end gap-2.5 ${right ? "justify-end" : "justify-start"}`}>
       {!right ? (
-        <span className="mb-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-none bg-zinc-800 border border-zinc-700/80 text-[11px] font-semibold text-zinc-300 shadow-xs" aria-hidden>
+        <span className="mb-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-lg bg-zinc-800 border border-zinc-700/80 text-[11px] font-semibold text-zinc-300 shadow-xs" aria-hidden>
           {initial}
         </span>
       ) : null}
@@ -142,7 +145,15 @@ function ThreadBubble({ m }: { m: UniboxThreadMessage }) {
         <p className={`flex items-baseline gap-2 text-[11px] text-muted-foreground ${right ? "flex-row-reverse" : ""}`}>
           <span className="truncate font-medium text-foreground">{senderLabel(m)}</span>
           {hint && hint !== senderLabel(m) ? (
-            <span className="rounded-none bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400 font-medium">{hint}</span>
+            <span
+              className={
+                m.fromRole === "agent"
+                  ? "rounded-md border border-brand-400/25 bg-brand-400/10 px-1.5 py-px text-[10px] font-medium text-brand-300"
+                  : "rounded-md bg-zinc-800 px-1.5 py-px text-[10px] font-medium text-zinc-400"
+              }
+            >
+              {hint}
+            </span>
           ) : null}
           {time ? <time dateTime={m.sentAt} className="text-zinc-500">{time}</time> : null}
         </p>
@@ -166,7 +177,7 @@ function ThreadTranscript({ messages }: { messages: UniboxThreadMessage[] }) {
         nodes.push(
           <div key={`day-${key}`} className="flex items-center gap-3 py-1">
             <div className="h-px flex-1 bg-border" />
-            <span className="shrink-0 rounded-none border border-border bg-background px-2.5 py-0.5 text-[11px] font-medium text-foreground/80">
+            <span className="shrink-0 rounded-lg border border-border bg-background px-2.5 py-0.5 text-[11px] font-medium text-foreground/80">
               {label}
             </span>
             <div className="h-px flex-1 bg-border" />
@@ -359,17 +370,17 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
     <div className="unibox-root flex h-[calc(100dvh-6.5rem)] min-h-[580px] max-h-[920px] flex-col gap-3.5 w-full max-w-none overflow-hidden flex-1">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between shrink-0">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-none bg-primary/10 text-primary shadow-xs">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary shadow-xs">
             <Inbox className="size-5" aria-hidden />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold tracking-tight">UniBox</h1>
-              <span className="inline-flex items-center gap-1.5 rounded-none bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-500">
-                <span className="size-1.5 rounded-none bg-emerald-500 animate-pulse" />
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-500">
+                <span className="size-1.5 rounded-lg bg-emerald-500 animate-pulse" />
                 Live Sync
               </span>
-              <span className="inline-flex items-center rounded-none border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
+              <span className="inline-flex items-center rounded-lg border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
                 {unread} unread
               </span>
             </div>
@@ -394,7 +405,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-none border border-border/70 bg-card shadow-xs">
+      <div className="flex min-h-0 flex-1 w-full overflow-hidden rounded-lg border border-border/70 bg-card shadow-xs">
         <div className={`w-full md:w-[300px] lg:w-[330px] shrink-0 min-h-0 flex flex-col border-r border-border/60 ${activeId ? "hidden md:flex" : "flex"}`}>
           {/* List Sub-header with Filter & Count */}
           <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/30 px-3.5 py-2.5 shrink-0">
@@ -442,16 +453,16 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
                   onClick={() => setActiveId(r.id)}
                   className={`group flex w-full items-start gap-3 px-3.5 py-3 text-left transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
                     isActive
-                      ? "bg-zinc-800/60 border-l-2 border-l-white"
+                      ? "bg-zinc-800/60 border-l-2 border-l-brand-400"
                       : "hover:bg-zinc-900/40 border-l-2 border-l-transparent"
                   } ${isUnread ? "bg-white/[0.02]" : ""}`}
                 >
                   <div className="relative mt-0.5 shrink-0">
-                    <span className="flex size-8 items-center justify-center rounded-none bg-zinc-800 border border-zinc-700/80 text-[11px] font-semibold text-zinc-200">
+                    <span className="flex size-8 items-center justify-center rounded-lg bg-zinc-800 border border-zinc-700/80 text-[11px] font-semibold text-zinc-200">
                       {initial}
                     </span>
                     {isUnread && (
-                      <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-none bg-emerald-500 ring-2 ring-zinc-950" />
+                      <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-lg bg-emerald-500 ring-2 ring-zinc-950" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -469,11 +480,22 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
                     <p className="line-clamp-1 text-[11px] text-zinc-500 group-hover:text-zinc-400 transition-colors">
                       {messagePreview(r.snippet || r.bodyText)}
                     </p>
-                    {c.tag ? (
-                      <div className="mt-1.5 flex items-center gap-1.5">
-                        <span className={`inline-flex items-center rounded-none border px-2 py-0.5 text-[9px] font-medium ${getTagBadgeClass(c.tag)}`}>
-                          {tagLabel(c.tag)}
-                        </span>
+                    {c.tag || r.agentStatus === "escalated" || r.agentStatus === "replied" ? (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        {r.agentStatus === "escalated" ? (
+                          <span className="inline-flex items-center rounded-md border border-amber-400/25 bg-amber-400/10 px-1.5 py-px text-[9px] font-semibold text-amber-300" title={r.agentSummary || undefined}>
+                            Needs you
+                          </span>
+                        ) : r.agentStatus === "replied" ? (
+                          <span className="inline-flex items-center rounded-md border border-brand-400/25 bg-brand-400/10 px-1.5 py-px text-[9px] font-semibold text-brand-300" title={r.agentSummary || undefined}>
+                            Agent replied
+                          </span>
+                        ) : null}
+                        {c.tag ? (
+                          <span className={`inline-flex items-center rounded-md border px-1.5 py-px text-[9px] font-medium ${getTagBadgeClass(c.tag)}`}>
+                            {tagLabel(c.tag)}
+                          </span>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
@@ -514,7 +536,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
                         {name} {"<"}{r.fromEmail}{">"}
                         {r.senderEmail ? ` → ${r.senderEmail}` : ""}
                       </p>
-                      {r.campaignName && <span className="mt-1.5 inline-block rounded-none bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">{r.campaignName}</span>}
+                      {r.campaignName && <span className="mt-1.5 inline-block rounded-lg bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">{r.campaignName}</span>}
                     </div>
                     <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
                       <Select
@@ -534,7 +556,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
                           ))}
                         </SelectContent>
                       </Select>
-                      <button type="button" aria-label="Back to conversations" onClick={() => setActiveId(null)} className="hidden md:flex rounded-none p-1.5 text-muted-foreground hover:bg-accent"><X className="size-4" /></button>
+                      <button type="button" aria-label="Back to conversations" onClick={() => setActiveId(null)} className="hidden md:flex rounded-lg p-1.5 text-muted-foreground hover:bg-accent"><X className="size-4" /></button>
                     </div>
                   </div>
                   <div ref={scrollerRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 pt-3 pb-12 sm:px-4 sm:pb-16">
@@ -562,7 +584,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
                             setComposerCollapsed(false);
                           }
                         }}
-                        className="group flex items-center justify-between rounded-none border border-zinc-800/80 bg-zinc-950/60 px-4 py-3 shadow-xs cursor-pointer hover:bg-zinc-900/40 hover:border-zinc-700 transition-all card-shine"
+                        className="group flex items-center justify-between rounded-lg border border-zinc-800/80 bg-zinc-950/60 px-4 py-3 shadow-xs cursor-pointer hover:bg-zinc-900/40 hover:border-zinc-700 transition-all card-shine"
                       >
                         <div className="flex items-center gap-2.5 text-xs text-muted-foreground truncate">
                           <SendHorizonal className="size-3.5 shrink-0 text-muted-foreground group-hover:text-primary transition-colors" />
@@ -593,7 +615,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
                         </button>
                       </div>
                     ) : (
-                      <div className="rounded-none border border-zinc-800/80 bg-zinc-950/90 shadow-sm card-shine overflow-hidden">
+                      <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/90 shadow-sm card-shine overflow-hidden">
                         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border/50 bg-muted/20 px-3.5 py-2 text-[11px] text-muted-foreground">
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
                             <span className="flex items-center gap-1 truncate">
@@ -647,7 +669,7 @@ export function UniboxClient({ initial, initialTag = "" }: { initial: ReplyRow[]
                           </button>
 
                           {showQuotedPreview ? (
-                            <div className="mt-2 rounded-none border-l-2 border-primary/40 bg-muted/40 p-2.5 text-xs text-muted-foreground">
+                            <div className="mt-2 rounded-lg border-l-2 border-primary/40 bg-muted/40 p-2.5 text-xs text-muted-foreground">
                               <p className="font-medium text-foreground/80">
                                 On {r.receivedAt ? format(new Date(r.receivedAt), "EEE, MMM d, yyyy 'at' h:mm a") : "earlier"} {r.fromName || r.fromEmail} &lt;{r.fromEmail}&gt; wrote:
                               </p>

@@ -17,6 +17,8 @@ import { DangerZoneCard } from "./danger-zone-card";
 
 export const dynamic = "force-dynamic";
 
+export const metadata = { title: "Settings" };
+
 export default async function SettingsPage() {
   const { user, workspace } = await requireWorkspace();
   const workspaces = await listUserWorkspaces(user.id);
@@ -142,7 +144,7 @@ export default async function SettingsPage() {
           <span>AutoGTM Autonomous Outbound Engine</span>
         </div>
         <p className="text-xs text-zinc-400 leading-relaxed max-w-xl">
-          Powered by our proprietary AutoGTM Neural Core™ trained on 50M+ sales touchpoints, 100M+ verified global decision-maker prospects, and autonomous managed mailboxes with safe 30/day delivery pacing.
+          Powered by your selected AI model, the shared verified B2B directory, and managed mailboxes with a safe 30/day delivery pacing.
         </p>
         <div className="mt-3 flex items-center gap-4 text-[11px] font-mono text-zinc-500">
           <span className="flex items-center gap-1.5">

@@ -1,7 +1,8 @@
 import { and, eq, sql } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { getDb } from "./db";
-import { isAdminEmail } from "./admin";
+import { isAdmin } from "./admin";
+import type { DirectoryAccessLevel } from "./leads-directory";
 
 export { STRIPE_B2B_CHECKOUT_BASE, getB2BCheckoutUrl } from "./b2b-constants";
 
@@ -38,21 +39,18 @@ export async function ensureB2BAccessSchema(): Promise<void> {
   schemaEnsured = true;
 }
 
+/** The user fields needed to decide directory access. */
+export type B2BAccessUser = {
+  id: string;
+  email?: string | null;
+  role?: string | null;
+  emailVerified?: boolean | null;
+};
+
 /**
- * Checks if a user has access to the 300K+ B2B leads database.
- * CRITICAL RULE: Admin accounts (e.g. de.krish.shah@gmail.com) are NEVER blocked.
+ * True when the user has an active B2B directory access grant (no admin check).
  */
-export async function hasB2BAccess(userId: string, email?: string): Promise<boolean> {
-  // 1. Admin ALWAYS has unrestricted database access
-  if (isAdminEmail(email)) {
-    return true;
-  }
-
-  // 2. Official demo account for showcase stability
-  if (email && email.trim().toLowerCase() === "demo@ratecompany.com") {
-    return true;
-  }
-
+export async function hasActiveB2BGrant(userId: string): Promise<boolean> {
   try {
     await ensureB2BAccessSchema();
     const db = getDb();
@@ -72,6 +70,26 @@ export async function hasB2BAccess(userId: string, email?: string): Promise<bool
     console.error("[hasB2BAccess] query error:", err);
     return false;
   }
+}
+
+/**
+ * True when the user may use the full directory: an admin (role, or a
+ * VERIFIED ADMIN_EMAILS address via isAdmin) or an active access grant.
+ * An unverified address listed in ADMIN_EMAILS never grants access.
+ */
+export async function hasB2BAccess(user: B2BAccessUser): Promise<boolean> {
+  if (isAdmin(user)) return true;
+  return hasActiveB2BGrant(user.id);
+}
+
+/**
+ * Server-side directory entitlement for a signed-in user:
+ * "admin" (unrestricted), "paid" (active grant; full records, capped exports)
+ * or "none" (masked one-page preview, no export or save).
+ */
+export async function getDirectoryAccessLevel(user: B2BAccessUser): Promise<DirectoryAccessLevel> {
+  if (isAdmin(user)) return "admin";
+  return (await hasActiveB2BGrant(user.id)) ? "paid" : "none";
 }
 
 /**

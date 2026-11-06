@@ -17,12 +17,13 @@ import { hashPassword } from 'better-auth/crypto';
 const { Pool } = pg;
 
 // --- CONFIGURATION ---
-const DATABASE_URL = 'postgresql://smartreach_user:17e808d5ab8c28f4875c2c4d8f6ee0c562592646ccb73e0c@130.61.146.177:5432/chadgtm';
-const ENCRYPTION_KEY = '8b79c60db4df77c334722b0103f33f195d4dea4b6028129ab66a1d05ea55eebc';
-const BETTER_AUTH_SECRET = '1e007e8d1f1558a2669e6f4527a79360b01d84778e66c1b2c403f9e426130a84';
-const LIVE_URL = 'https://chadgtm.130-61-146-177.sslip.io';
-const MAIL_HOST = 'krishshah.cloud';
-const MAIL_PASS = 'tffu^R78fu6f13';
+/* Set DATABASE_URL in the environment; credentials never live in the repo. */
+const DATABASE_URL = process.env.DATABASE_URL || '';
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '';
+const BETTER_AUTH_SECRET = process.env.BETTER_AUTH_SECRET || '';
+const LIVE_URL = process.env.LIVE_URL || 'http://localhost:3000';
+const MAIL_HOST = process.env.MAIL_HOST || '';
+const MAIL_PASS = process.env.MAIL_PASS || '';
 const CHROME_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const SCREENSHOT_DIR = path.resolve('qa-runs/adversarial-audit-20261017/screenshots');
 

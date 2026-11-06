@@ -6,7 +6,9 @@ import { listAllDataRemovalRequestsForAdmin } from "@/lib/data-removal";
 import { getAdminUserAnalytics } from "@/lib/admin-analytics";
 import { getSystemMailboxPoolStats } from "@/lib/admin-gtm-actions";
 import { getDirectoryStats } from "@/lib/leads-directory";
+import { listAccountApprovalsAction } from "@/lib/admin-actions";
 import { AdminConsoleView } from "./admin-console-view";
+import { AdminApprovalsView } from "./admin-approvals-view";
 import { ShieldCheck, ShieldAlert } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +25,7 @@ export default async function AdminPage() {
   if (!isAdmin(user)) {
     return (
       <div className="mx-auto max-w-2xl py-16 px-4 font-mono">
-        <div className="rounded-none border border-red-900/60 bg-red-950/20 p-6 text-center space-y-3">
+        <div className="rounded-lg border border-red-900/60 bg-red-950/20 p-6 text-center space-y-3">
           <ShieldAlert className="mx-auto size-10 text-red-400" />
           <h2 className="text-lg font-bold text-white uppercase tracking-wider">Access Restricted</h2>
           <p className="text-xs text-zinc-400 max-w-md mx-auto leading-relaxed font-sans">
@@ -35,11 +37,15 @@ export default async function AdminPage() {
     );
   }
 
-  const [analytics, supportTickets, removalRequests, poolStats] = await Promise.all([
+  const [analytics, supportTickets, removalRequests, poolStats, approvals] = await Promise.all([
     getAdminUserAnalytics(user),
     listAllTicketsForAdmin(user),
     listAllDataRemovalRequestsForAdmin(user),
     getSystemMailboxPoolStats(),
+    listAccountApprovalsAction().catch((err) => {
+      console.error("[AdminPage] Failed to load account approvals:", err);
+      return { pending: [], recentlyApproved: [], emailOnApprove: false };
+    }),
   ]);
 
   const directoryStats = getDirectoryStats();
@@ -49,7 +55,7 @@ export default async function AdminPage() {
       {/* Admin Header */}
       <div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1 rounded-none bg-black border border-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
+          <span className="inline-flex items-center gap-1 rounded-lg bg-black border border-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
             <ShieldCheck className="size-3" />
             System Administrator
           </span>
@@ -61,9 +67,11 @@ export default async function AdminPage() {
           Admin Command Center
         </h1>
         <p className="mt-1 text-xs text-zinc-500 font-sans max-w-2xl">
-          Universal management of shared mailbox fleets, 100M+ lead directory, user analytics, support tickets, and GDPR compliance requests.
+          Universal management of shared mailbox fleets, lead directory, user analytics, support tickets, and GDPR compliance requests.
         </p>
       </div>
+
+      <AdminApprovalsView initial={approvals} />
 
       <AdminConsoleView
         initialAnalytics={analytics}

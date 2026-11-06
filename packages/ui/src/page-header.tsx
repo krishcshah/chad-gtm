@@ -6,11 +6,14 @@ export function PageHeader({
   title,
   description,
   actions,
+  eyebrow,
   className,
 }: {
   title: string;
   description?: string;
   actions?: React.ReactNode;
+  /** Small label above the title, e.g. a section name. */
+  eyebrow?: React.ReactNode;
   className?: string;
 }) {
   return (
@@ -21,7 +24,10 @@ export function PageHeader({
       )}
     >
       <div className="min-w-0">
-        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{title}</h1>
+        {eyebrow ? (
+          <div className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-brand-400/90">{eyebrow}</div>
+        ) : null}
+        <h1 className="text-xl font-semibold tracking-tight text-zinc-50 sm:text-[26px]">{title}</h1>
         {description ? (
           <p className="mt-1 text-sm text-muted-foreground">{description}</p>
         ) : null}

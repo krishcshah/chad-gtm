@@ -1,5 +1,8 @@
 import fs from "node:fs";
 import * as cheerio from "cheerio";
+import { extractBookingLinks, pickBestBookingUrl } from "./booking-links";
+import { checkUrlSyntax, isPublicUrl, safeFetchText } from "./url-guard";
+import { chromiumProxyArgs, startGuardedProxy, type GuardedProxy } from "./guarded-proxy";
 
 export interface PricingTier {
   name: string;
@@ -19,6 +22,8 @@ export interface CrawledPageContent {
   featuresAndBullets: string[];
   caseStudySignals: string[];
   competitorSignals: string[];
+  /** Scheduling links (Calendly, Cal.com, HubSpot Meetings...) found on the page. */
+  bookingLinks: string[];
   wordCount: number;
   renderedWith: "static" | "headless";
 }
@@ -33,6 +38,8 @@ export interface CrawledCompanyProfile {
   fetchFailed: boolean;
   failureReason?: string;
   usedHeadlessFallback: boolean;
+  /** Best guess at the company's own booking page, if the site links one. */
+  bookingUrl?: string | null;
 }
 
 const BROWSER_HEADERS: Record<string, string> = {
@@ -81,54 +88,13 @@ export function normalizeTargetUrl(rawUrl: string): { normalizedUrl: string; dom
 }
 
 /**
- * Reject loopback, link-local and RFC1918 targets before fetching. The crawler
- * accepts user-supplied URLs, so this closes the obvious SSRF surface without
- * requiring a DNS resolver round-trip on every page load.
+ * Synchronous pre-check (no DNS): http(s) only, no credentials, and no
+ * loopback/private/link-local/CGNAT/multicast IP literal or internal hostname
+ * (decimal/octal/hex and IPv4-mapped IPv6 forms included). Hostnames are
+ * resolved and re-checked on every request by ./url-guard.
  */
 export function isPublicHttpUrl(rawUrl: string): boolean {
-  let parsed: URL;
-  try {
-    parsed = new URL(rawUrl);
-  } catch {
-    return false;
-  }
-  if (!["http:", "https:"].includes(parsed.protocol)) return false;
-
-  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (
-    !hostname ||
-    hostname === "localhost" ||
-    hostname.endsWith(".localhost") ||
-    hostname.endsWith(".local") ||
-    hostname.endsWith(".internal") ||
-    hostname === "metadata.google.internal"
-  ) {
-    return false;
-  }
-
-  const ipv4 = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (ipv4) {
-    const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
-    if (a === 10 || a === 127 || a === 0) return false;
-    if (a === 169 && b === 254) return false;
-    if (a === 172 && b >= 16 && b <= 31) return false;
-    if (a === 192 && b === 168) return false;
-    if (a >= 224) return false;
-  }
-
-  if (hostname.includes(":")) {
-    if (
-      hostname === "::1" ||
-      hostname === "::" ||
-      hostname.startsWith("fc") ||
-      hostname.startsWith("fd") ||
-      hostname.startsWith("fe80")
-    ) {
-      return false;
-    }
-  }
-
-  return true;
+  return checkUrlSyntax(rawUrl).ok;
 }
 
 function normalizeWhitespace(text: string): string {
@@ -157,6 +123,8 @@ export function distillHtml(
   pageUrl: string,
   renderedWith: "static" | "headless" = "static"
 ): CrawledPageContent {
+  // Scan for scheduling links before boilerplate (nav/header CTAs) is removed.
+  const bookingLinks = extractBookingLinks(html, pageUrl);
   const $ = cheerio.load(html);
 
   const title =
@@ -266,6 +234,7 @@ export function distillHtml(
     featuresAndBullets: featuresAndBullets.slice(0, 15),
     caseStudySignals: caseStudySignals.slice(0, 10),
     competitorSignals: competitorSignals.slice(0, 8),
+    bookingLinks: bookingLinks.slice(0, 5),
     wordCount,
     renderedWith,
   };
@@ -285,6 +254,7 @@ function discoverSubpageLinks(html: string, rootUrl: string, rootDomain: string)
     [/about|company|team|story/, 80],
     [/solutions?|use-cases?|industries/, 70],
     [/product|platform|features|how-it-works/, 60],
+    [/demo|book|schedule|contact|talk-to|get-started/, 55],
     [/compare|vs\b|alternatives?/, 50],
   ];
 
@@ -367,22 +337,35 @@ function isThinContent(page: CrawledPageContent): boolean {
   return page.wordCount < THIN_WORD_THRESHOLD || substantive < 4;
 }
 
-class HeadlessRenderer {
+/** Test seam: how the renderer starts the egress proxy and loads puppeteer. */
+export const headlessDeps = {
+  startProxy: (): Promise<GuardedProxy> => startGuardedProxy(),
+  loadPuppeteer: (): Promise<any> => import("puppeteer-core"),
+  resolveExecutable: (): string | null => resolveChromeExecutable(),
+};
+
+export class HeadlessRenderer {
   private browser: any = null;
+  private proxy: GuardedProxy | null = null;
   private launching: Promise<any> | null = null;
   private unavailable = false;
 
   private async getBrowser(): Promise<any> {
     if (this.browser) return this.browser;
     if (this.launching) return this.launching;
-    const executablePath = resolveChromeExecutable();
+    const executablePath = headlessDeps.resolveExecutable();
     if (!executablePath) {
       this.unavailable = true;
       console.warn("[gtm-crawler] No Chromium executable found; skipping headless fallback.");
       return null;
     }
     this.launching = (async () => {
-      const puppeteer = await import("puppeteer-core");
+      // All Chromium traffic goes through an in-process proxy that resolves
+      // names itself and only connects to validated public IPs. Chromium
+      // never does its own DNS, so a rebinding host can't reach internal
+      // addresses after the interception check passed.
+      this.proxy = await headlessDeps.startProxy();
+      const puppeteer = await headlessDeps.loadPuppeteer();
       const launch = (puppeteer as any).default?.launch ?? (puppeteer as any).launch;
       this.browser = await launch({
         executablePath,
@@ -395,6 +378,7 @@ class HeadlessRenderer {
           "--no-first-run",
           "--no-zygote",
           "--disable-background-networking",
+          ...chromiumProxyArgs(this.proxy.url),
         ],
         protocolTimeout: HEADLESS_TIMEOUT_MS,
       });
@@ -405,10 +389,17 @@ class HeadlessRenderer {
     } catch (err: any) {
       this.unavailable = true;
       console.warn("[gtm-crawler] Chromium launch failed:", err?.message || err);
+      await this.closeProxy();
       return null;
     } finally {
       this.launching = null;
     }
+  }
+
+  private async closeProxy(): Promise<void> {
+    const proxy = this.proxy;
+    this.proxy = null;
+    if (proxy) await proxy.close().catch(() => undefined);
   }
 
   async render(url: string): Promise<string | null> {
@@ -419,6 +410,7 @@ class HeadlessRenderer {
     try {
       const page = await browser.newPage();
       try {
+        await guardHeadlessPage(page);
         await page.setUserAgent(BROWSER_HEADERS["User-Agent"]);
         await page.setExtraHTTPHeaders({ "Accept-Language": BROWSER_HEADERS["Accept-Language"] });
         await page.goto(url, { waitUntil: "networkidle2", timeout: HEADLESS_TIMEOUT_MS });
@@ -438,32 +430,61 @@ class HeadlessRenderer {
   }
 
   async close(): Promise<void> {
+    if (this.launching) await this.launching.catch(() => undefined);
     if (this.browser) {
       await this.browser.close().catch(() => undefined);
       this.browser = null;
     }
+    await this.closeProxy();
   }
 }
 
+/**
+ * Lock a headless page down to public http(s) targets: every request
+ * (navigation, each redirect hop, subresources, XHR/fetch) is checked against
+ * the SSRF guard before Chromium may send it. Service workers are bypassed so
+ * every request is visible here, and WebSocket/WebRTC/WebTransport (which
+ * request interception does not see) and workers (whose sockets it does not
+ * see either) are removed from the page. This is defense in depth: the egress
+ * proxy (./guarded-proxy) is what pins every connection to a public IP.
+ */
+async function guardHeadlessPage(page: any): Promise<void> {
+  await page.setBypassServiceWorker?.(true);
+  await page.evaluateOnNewDocument(() => {
+    for (const name of [
+      "WebSocket",
+      "WebTransport",
+      "RTCPeerConnection",
+      "webkitRTCPeerConnection",
+      "Worker",
+      "SharedWorker",
+    ]) {
+      try {
+        Object.defineProperty(window, name, { value: undefined, configurable: false, writable: false });
+      } catch {
+        // Ignore: property may be non-configurable in some builds.
+      }
+    }
+  });
+  await page.setRequestInterception(true);
+  page.on("request", (request: any) => {
+    if (request.isInterceptResolutionHandled?.()) return;
+    const target = String(request.url());
+    // data:/blob: never touch the network.
+    if (target.startsWith("data:") || target.startsWith("blob:")) {
+      request.continue().catch(() => undefined);
+      return;
+    }
+    isPublicUrl(target)
+      .then((ok) => (ok ? request.continue() : request.abort("blockedbyclient")))
+      .catch(() => request.abort("blockedbyclient").catch(() => undefined));
+  });
+}
+
 async function fetchStatic(url: string, timeoutMs: number): Promise<string | null> {
-  if (!isPublicHttpUrl(url)) return null;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, {
-      headers: BROWSER_HEADERS,
-      signal: controller.signal,
-      redirect: "follow",
-    });
-    if (!res.ok) return null;
-    const finalUrl = res.url || url;
-    if (!isPublicHttpUrl(finalUrl)) return null;
-    return await res.text();
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
+  // Checks the URL and every redirect hop, and only connects to public IPs.
+  const res = await safeFetchText(url, { headers: BROWSER_HEADERS, timeoutMs });
+  return res ? res.body : null;
 }
 
 /**
@@ -488,6 +509,7 @@ export async function crawlCompanyDomain(rawUrl: string): Promise<CrawledCompany
       featuresAndBullets: [],
       caseStudySignals: [],
       competitorSignals: [],
+      bookingLinks: [],
       wordCount: 0,
       renderedWith: "static",
     },
@@ -497,7 +519,7 @@ export async function crawlCompanyDomain(rawUrl: string): Promise<CrawledCompany
     usedHeadlessFallback: false,
   };
 
-  if (!isPublicHttpUrl(normalizedUrl)) {
+  if (!(await isPublicUrl(normalizedUrl))) {
     return {
       ...fallbackProfile,
       fetchFailed: true,
@@ -603,8 +625,13 @@ export async function crawlCompanyDomain(rawUrl: string): Promise<CrawledCompany
 }
 
 function finalizeProfile(profile: CrawledCompanyProfile): CrawledCompanyProfile {
+  const bookingCandidates = [
+    ...(profile.rootPage.bookingLinks || []),
+    ...profile.subpages.flatMap((p) => p.bookingLinks || []),
+  ];
   return {
     ...profile,
+    bookingUrl: pickBestBookingUrl(Array.from(new Set(bookingCandidates))),
     combinedCorpus: profile.combinedCorpus.slice(0, MAX_CORPUS_CHARS),
   };
 }

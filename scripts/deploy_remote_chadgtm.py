@@ -1,38 +1,90 @@
-import subprocess
+#!/usr/bin/env python3
+"""Manual deploy of AutoGTM to the Oracle VM.
+
+Runs the same steps as .github/workflows/deploy.yml: take the shared deploy
+lock, fetch origin/main without touching the checkout, then run
+scripts/deploy-remote.sh from the fetched commit (preflight incl. env/database
+check -> fast-forward -> npm ci -> pg_dump -> db:migrate -> build ->
+pm2 reload chadgtm-web/chadgtm-worker -> health check). A failure before the
+reload restores the previous commit, node_modules and .next.
+
+Usage:
+    SERVER_HOST=<vm ip or name> python3 scripts/deploy_remote_chadgtm.py
+
+Env:
+    SERVER_HOST   required
+    SERVER_USER   default "ubuntu"
+    SSH_KEY_PATH  default "~/.oci/smartreach_id_rsa"
+
+Pushes nothing: it deploys whatever is on origin/main. No secrets live here.
+"""
 import os
+import subprocess
 import sys
 
-key = os.path.expanduser('~/.oci/smartreach_id_rsa')
-commands = r'''
-set -e
-cd /home/ubuntu/chad-gtm
-echo "📥 Pulling latest main..."
-git pull origin main
-
-echo "📦 Installing workspace dependencies in /home/ubuntu/chad-gtm..."
-npm install --no-audit
-
-echo "🏗️ Building ChadGTM web application..."
-npm run build --workspace=@smartreach/web
-
-echo "🚀 Starting PM2 processes for ChadGTM..."
-pm2 delete chadgtm-web 2>/dev/null || true
-pm2 delete chadgtm-worker 2>/dev/null || true
-
-cd /home/ubuntu/chad-gtm/apps/web
-pm2 start "npx next start -p 3005" --name "chadgtm-web"
-
-cd /home/ubuntu/chad-gtm/packages/email-engine
-pm2 start "npm run worker" --name "chadgtm-worker"
-
-pm2 save
-pm2 status
-echo "CHADGTM_DEPLOYED_SUCCESSFULLY"
+# Keep this block identical to the `script:` block in .github/workflows/deploy.yml.
+BOOTSTRAP = r'''
+set -euo pipefail
+APP_DIR=/home/ubuntu/chad-gtm
+LOCK_FILE=/home/ubuntu/.openoutreach-deploy.lock
+# Same lock as SmartReach's deploy, so two builds never run at once on the VM.
+exec 9>>"$LOCK_FILE"
+echo "==> waiting for deploy lock $LOCK_FILE"
+# 10 min wait + a worst-case deploy (~25 min) stays well inside command_timeout (55m).
+flock -w 600 9 || { echo "!! could not get the deploy lock within 10 minutes" >&2; exit 1; }
+export DEPLOY_LOCK_HELD=1
+cd "$APP_DIR"
+branch="$(git rev-parse --abbrev-ref HEAD)"
+[ "$branch" = "main" ] || { echo "!! $APP_DIR is on branch $branch, expected main" >&2; exit 1; }
+# Old deploys ran npm install, which rewrote the lockfile; drop that drift.
+git checkout -- package-lock.json 2>/dev/null || true
+# data/leads.db.gz is no longer tracked, so moving to main deletes it: unpack it first if it is the only copy.
+if [ ! -s data/leads.db ] && [ -s data/leads.db.gz ]; then gunzip -k data/leads.db.gz; fi
+# Fetch only: the checkout (and so the code the running processes restart
+# into) stays as it is until deploy-remote.sh's preflight has passed.
+git fetch --quiet origin main
+TARGET_SHA="$(git rev-parse FETCH_HEAD)"
+export TARGET_SHA APP_DIR
+DEPLOY_SCRIPTS_DIR="$(mktemp -d)/scripts"
+export DEPLOY_SCRIPTS_DIR
+git archive "$TARGET_SHA" scripts/deploy-remote.sh scripts/check-deploy-env.mjs | tar -x -C "${DEPLOY_SCRIPTS_DIR%/scripts}"
+rc=0
+bash "$DEPLOY_SCRIPTS_DIR/deploy-remote.sh" || rc=$?
+rm -rf "${DEPLOY_SCRIPTS_DIR%/scripts}"
+exit "$rc"
 '''
 
-cmd = ['ssh', '-o', 'StrictHostKeyChecking=no', '-i', key, 'ubuntu@130.61.146.177', 'bash -s']
-res = subprocess.run(cmd, input=commands.replace('\r', '').encode('utf-8'), capture_output=True)
 
-out = res.stdout.decode('utf-8', errors='replace')
-err = res.stderr.decode('utf-8', errors='replace')
-sys.stdout.buffer.write(b"STDOUT:\n" + out.encode('utf-8') + b"\nSTDERR:\n" + err.encode('utf-8'))
+def main() -> int:
+    host = os.environ.get('SERVER_HOST', '').strip()
+    if not host:
+        print('SERVER_HOST is not set (e.g. SERVER_HOST=1.2.3.4 python3 scripts/deploy_remote_chadgtm.py)', file=sys.stderr)
+        return 2
+    user = os.environ.get('SERVER_USER', 'ubuntu').strip() or 'ubuntu'
+    key = os.path.expanduser(os.environ.get('SSH_KEY_PATH', '~/.oci/smartreach_id_rsa'))
+    if not os.path.isfile(key):
+        print(f'SSH key not found: {key} (set SSH_KEY_PATH)', file=sys.stderr)
+        return 2
+
+    cmd = [
+        'ssh',
+        '-o', 'StrictHostKeyChecking=accept-new',
+        '-o', 'BatchMode=yes',
+        '-o', 'ServerAliveInterval=30',
+        '-i', key,
+        f'{user}@{host}',
+        'bash -s',
+    ]
+    print(f'Deploying origin/main to {user}@{host}:/home/ubuntu/chad-gtm ...', flush=True)
+    # Output streams straight to this terminal. Application logs are never printed;
+    # read them on the VM with pm2 logs.
+    res = subprocess.run(cmd, input=BOOTSTRAP.replace('\r', '').encode('utf-8'))
+    if res.returncode == 0:
+        print('Deploy finished.')
+    else:
+        print(f'Deploy FAILED (exit {res.returncode}). See the output above and docs/OPERATIONS.md.', file=sys.stderr)
+    return res.returncode
+
+
+if __name__ == '__main__':
+    sys.exit(main())

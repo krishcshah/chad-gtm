@@ -12,8 +12,20 @@ import {
 } from "@smartreach/validation";
 import { nowIso } from "@smartreach/shared";
 import { formatZodActionError } from "./zod-action-error";
+import {
+  partitionCampaignSenders,
+  senderPartitionError,
+  SENDER_NOT_OWNED_ERROR,
+  type CampaignSenderRef,
+  type SenderPartition,
+} from "./campaign-sender-policy";
 
-const { campaigns, campaignSenders, campaignLeads, leads } = schema;
+const { campaigns, campaignSenders, campaignLeads, leads, senderAccounts } = schema;
+
+/** Who is saving/publishing; non-admin unless the caller says otherwise. */
+export interface CampaignActor {
+  isAdmin?: boolean;
+}
 
 export type DraftActionResult<T = undefined> =
   | { ok: true; data?: T; message?: string }
@@ -97,6 +109,39 @@ export async function ensureCampaignLeadSnapshot(
   return listLeads.length;
 }
 
+async function loadSenderRefs(db: Db, ids: string[]): Promise<CampaignSenderRef[]> {
+  if (ids.length === 0) return [];
+  return db
+    .select({
+      id: senderAccounts.id,
+      userId: senderAccounts.userId,
+      isSystemPool: senderAccounts.isSystemPool,
+      deletedAt: senderAccounts.deletedAt,
+    })
+    .from(senderAccounts)
+    .where(inArray(senderAccounts.id, ids));
+}
+
+/**
+ * Defense in depth (the server actions check first): the same ownership/pool
+ * partition as actions.ts. A manual campaign keeps only the user's own,
+ * non-deleted mailboxes; pool mailboxes only for admins.
+ */
+export async function partitionDraftSenders(
+  db: Db,
+  userId: string,
+  senderIds: readonly string[],
+  actor: CampaignActor = {},
+): Promise<SenderPartition> {
+  const unique = [...new Set(senderIds.filter((id) => typeof id === "string" && id))];
+  return partitionCampaignSenders({
+    senderIds: unique,
+    senders: await loadSenderRefs(db, unique),
+    userId,
+    isAdmin: actor.isAdmin === true,
+  });
+}
+
 async function replaceCampaignSenders(db: Db, campaignId: string, senderIds: string[]) {
   await db.delete(campaignSenders).where(eq(campaignSenders.campaignId, campaignId));
   if (senderIds.length) {
@@ -146,6 +191,7 @@ export async function saveCampaignDraftForUser(
   userId: string,
   input: unknown,
   workspaceId?: string | null,
+  actor: CampaignActor = {},
 ): Promise<DraftActionResult<{ id: string }>> {
   const parsed = campaignDraftSchema.safeParse(input);
   if (!parsed.success) return zodFail(parsed.error);
@@ -178,7 +224,8 @@ export async function saveCampaignDraftForUser(
       await db.update(campaigns).set(patch).where(eq(campaigns.id, d.id));
 
       if (keys.has("senderIds") && d.senderIds !== undefined) {
-        await replaceCampaignSenders(db, d.id, d.senderIds);
+        const { allowed } = await partitionDraftSenders(db, userId, d.senderIds, actor);
+        await replaceCampaignSenders(db, d.id, allowed);
       }
 
       return { ok: true, data: { id: d.id } };
@@ -215,7 +262,8 @@ export async function saveCampaignDraftForUser(
       .returning({ id: campaigns.id });
 
     if (d.senderIds?.length) {
-      await replaceCampaignSenders(db, row.id, d.senderIds);
+      const { allowed } = await partitionDraftSenders(db, userId, d.senderIds, actor);
+      if (allowed.length) await replaceCampaignSenders(db, row.id, allowed);
     }
 
     return { ok: true, data: { id: row.id } };
@@ -233,10 +281,19 @@ export async function publishCampaignForUser(
   input: unknown,
   _postalAddress?: string | null,
   workspaceId?: string | null,
+  actor: CampaignActor = {},
 ): Promise<DraftActionResult<{ id: string }>> {
   const parsed = campaignPublishSchema.safeParse(input);
   if (!parsed.success) return zodFail(parsed.error);
   const d = parsed.data as CampaignPublishInput;
+
+  // Only mailboxes this user may send from; refuse when none are left.
+  const senderPartition = await partitionDraftSenders(db, userId, d.senderIds, actor);
+  const senderIds = senderPartition.allowed;
+  if (senderIds.length === 0) {
+    const error = senderPartitionError(senderPartition) ?? SENDER_NOT_OWNED_ERROR;
+    return { ok: false, error, fieldErrors: { senderIds: [error] } };
+  }
 
   // Postal is optional — no start/publish gate.
   const status = d.startMode === "now" ? "running" : "scheduled";
@@ -290,7 +347,7 @@ export async function publishCampaignForUser(
           ...(workspaceId ? { workspaceId } : {}),
         })
         .where(eq(campaigns.id, d.id));
-      await replaceCampaignSenders(db, d.id, d.senderIds);
+      await replaceCampaignSenders(db, d.id, senderIds);
       const n = await ensureCampaignLeadSnapshot(db, d.id, d.leadListId);
       return {
         ok: true,
@@ -310,7 +367,7 @@ export async function publishCampaignForUser(
 
     await db
       .insert(campaignSenders)
-      .values(d.senderIds.map((senderId) => ({ campaignId: campaign.id, senderId })));
+      .values(senderIds.map((senderId) => ({ campaignId: campaign.id, senderId })));
 
     const listLeads = await db
       .select({ id: leads.id })

@@ -66,4 +66,9 @@ CREATE TABLE IF NOT EXISTS "ai_generations" (
 CREATE INDEX IF NOT EXISTS "ai_generations_run_idx" ON "ai_generations" ("run_id", "created_at");
 CREATE INDEX IF NOT EXISTS "ai_generations_user_idx" ON "ai_generations" ("user_id", "created_at");
 
-ALTER TABLE "chad_gtm_runs" ADD COLUMN IF NOT EXISTS "agent_run_id" text;
+-- chad_gtm_runs is created in 0012 on fresh databases; only patch it if present.
+DO $$ BEGIN
+  IF to_regclass('public.chad_gtm_runs') IS NOT NULL THEN
+    ALTER TABLE "chad_gtm_runs" ADD COLUMN IF NOT EXISTS "agent_run_id" text;
+  END IF;
+END $$;

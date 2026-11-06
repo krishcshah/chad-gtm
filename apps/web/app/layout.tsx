@@ -1,11 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import { ThemeProvider } from "next-themes";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "@smartreach/ui";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
-const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });
+const sans = Geist({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
+const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -17,7 +17,7 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: { default: "AutoGTM · Autonomous Go-To-Market", template: "%s · AutoGTM" },
   description:
-    "Autonomous Go-To-Market & Cold Outreach Engine. Turn any website URL into booked pipeline in 60 seconds with our proprietary AutoGTM Neural Core™, 100M+ global B2B leads, and turnkey admin-managed mailboxes.",
+    "Paste your website. AutoGTM researches your market, finds verified buyers, runs cold email from a managed mailbox pool, answers replies, and books meetings on your calendar.",
   icons: {
     icon: [
       { url: "/icon.svg?v=20261019", type: "image/svg+xml" },
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
-      <body className={`${inter.variable} ${mono.variable} font-sans antialiased bg-[#07090e] text-zinc-100`}>
+      <body className={`${sans.variable} ${mono.variable} font-sans antialiased bg-background text-zinc-100`}>
         <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" disableTransitionOnChange>
           {children}
           <Toaster />

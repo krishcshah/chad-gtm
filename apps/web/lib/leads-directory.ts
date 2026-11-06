@@ -75,6 +75,13 @@ export interface DirectorySearchParams {
   pageSize?: number;
   sortBy?: "default" | "name" | "company" | "team_size";
   sortOrder?: "asc" | "desc";
+  /**
+   * When false, free-text `query` matches only the fields a masked preview
+   * shows (name, title, company, industry, location), never email. Set by
+   * clampDirectorySearchParams for level "none" so the search can't be used
+   * to confirm guessed addresses. Default true.
+   */
+  searchContactFields?: boolean;
 }
 
 export interface DirectorySearchResult {
@@ -522,19 +529,19 @@ export function buildDirectoryWhereClause(params: DirectorySearchParams): { wher
 
   // General text search
   if (params.query && params.query.trim()) {
+    const includeEmail = params.searchContactFields !== false;
     if (isDirectoryFtsReady()) {
       whereClauses.push(`leads.id IN (SELECT rowid FROM leads_fts WHERE leads_fts MATCH ?)`);
-      bindings.push(toFtsMatchExpression(params.query.trim()));
+      const expr = toFtsMatchExpression(params.query.trim());
+      // FTS5 column filter: everything indexed except email.
+      bindings.push(includeEmail ? expr : `{full_name job_title company_name industry} : (${expr})`);
     } else {
       const q = `%${params.query.trim().toLowerCase()}%`;
-      whereClauses.push(`(
-        LOWER(full_name) LIKE ? OR
-        LOWER(job_title) LIKE ? OR
-        LOWER(company_name) LIKE ? OR
-        LOWER(email) LIKE ? OR
-        LOWER(location) LIKE ?
-      )`);
-      bindings.push(q, q, q, q, q);
+      const columns = includeEmail
+        ? ["full_name", "job_title", "company_name", "email", "location"]
+        : ["full_name", "job_title", "company_name", "location"];
+      whereClauses.push(`(${columns.map((c) => `LOWER(${c}) LIKE ?`).join(" OR ")})`);
+      columns.forEach(() => bindings.push(q));
     }
   }
 
@@ -722,6 +729,141 @@ export function searchLeadsDirectory(params: DirectorySearchParams): DirectorySe
       totalPages: 0,
     };
   }
+}
+
+/* ─── Directory entitlement (server-side paywall) ──────────────────────────
+ * The directory UI is only unlocked for admins and accounts with B2B access.
+ * Server actions must enforce the same thing, because their IDs ship in public
+ * client bundles. Everyone else gets what the autopilot lead matcher shows: one
+ * page of at most 10 leads, with contact details masked.
+ */
+
+export type DirectoryAccessLevel = "admin" | "paid" | "none";
+
+/** Preview for accounts without directory access: page 1, at most 10 rows. */
+export const DIRECTORY_PREVIEW_PAGE_SIZE = 10;
+/** Rows a paid (non-admin) account can export or copy into a list per call. */
+export const DIRECTORY_PAID_ROW_LIMIT = 1000;
+/** Admin caps (unchanged from before; keeps one call responsive). */
+export const DIRECTORY_ADMIN_EXPORT_LIMIT = 15000;
+export const DIRECTORY_ADMIN_SAVE_LIMIT = 5000;
+
+export const DIRECTORY_LOCKED_ERROR =
+  "Exporting or saving leads from the B2B directory needs directory access. Ask an admin to unlock it for your account.";
+
+/** Clamp search params to what this access level may page through. */
+export function clampDirectorySearchParams(
+  params: DirectorySearchParams,
+  level: DirectoryAccessLevel
+): DirectorySearchParams {
+  if (level !== "none") return { ...params };
+  return {
+    ...params,
+    // Masked preview: free text never matches email (no guess-the-address oracle).
+    searchContactFields: false,
+    page: 1,
+    pageSize: Math.min(DIRECTORY_PREVIEW_PAGE_SIZE, Math.max(1, Number(params.pageSize) || DIRECTORY_PREVIEW_PAGE_SIZE)),
+  };
+}
+
+const MASK = "\u2022\u2022\u2022";
+
+/** "jane.doe@acme.com" -> "j•••@acme.com". Keeps the (public) company domain. */
+export function maskEmailAddress(email: string | null | undefined): string {
+  const v = (email ?? "").trim();
+  if (!v) return "";
+  const at = v.lastIndexOf("@");
+  if (at <= 0) return MASK;
+  return `${v[0]}${MASK}${v.slice(at)}`;
+}
+
+/** Strip contact details from a lead; name, title, company and location stay. */
+export function maskDirectoryLead(lead: DirectoryLead): DirectoryLead {
+  return {
+    ...lead,
+    email: maskEmailAddress(lead.email),
+    workEmail: lead.workEmail ? maskEmailAddress(lead.workEmail) : lead.workEmail,
+    personalEmail: lead.personalEmail ? maskEmailAddress(lead.personalEmail) : lead.personalEmail,
+    phone: lead.phone ? MASK : "",
+    linkedinUrl: "",
+    sourceFile: "",
+    rawAttributes: {},
+  };
+}
+
+/** Apply the paywall to a search result already computed with clamped params. */
+export function applyDirectoryAccess(
+  result: DirectorySearchResult,
+  level: DirectoryAccessLevel
+): DirectorySearchResult {
+  if (level !== "none") return result;
+  const pageSize = Math.min(result.pageSize, DIRECTORY_PREVIEW_PAGE_SIZE);
+  return {
+    ...result,
+    leads: result.leads.slice(0, pageSize).map(maskDirectoryLead),
+    page: 1,
+    pageSize,
+    totalPages: result.total > 0 ? 1 : 0,
+  };
+}
+
+/** Search with the paywall applied for this access level. */
+export function searchLeadsDirectoryForAccess(
+  params: DirectorySearchParams,
+  level: DirectoryAccessLevel
+): DirectorySearchResult {
+  return applyDirectoryAccess(searchLeadsDirectory(clampDirectorySearchParams(params, level)), level);
+}
+
+/** Max rows the autopilot lead matcher preview returns per call. */
+export const LEAD_MATCHER_MAX_PAGE_SIZE = 10;
+
+/**
+ * Search params for the autopilot lead matcher preview: the launch audience
+ * (work addresses in the given countries), page size capped.
+ */
+export function leadMatcherSearchParams(
+  industries: string[],
+  countries: string[],
+  page = 1,
+  pageSize = LEAD_MATCHER_MAX_PAGE_SIZE
+): DirectorySearchParams {
+  const size = Math.min(LEAD_MATCHER_MAX_PAGE_SIZE, Math.max(1, Math.floor(Number(pageSize)) || LEAD_MATCHER_MAX_PAGE_SIZE));
+  return {
+    industries: industries.length > 0 ? industries : undefined,
+    countries,
+    hasEmail: true,
+    hasWorkEmail: true,
+    page: Math.max(1, Math.floor(Number(page)) || 1),
+    pageSize: size,
+  };
+}
+
+/**
+ * Lead matcher preview. The UI only shows name, title, company and location,
+ * so contact details are always masked (preview level), whatever the
+ * caller's directory access.
+ */
+export function searchLeadMatcherPreview(
+  industries: string[],
+  countries: string[],
+  page = 1,
+  pageSize = LEAD_MATCHER_MAX_PAGE_SIZE
+): DirectorySearchResult {
+  return searchLeadsDirectoryForAccess(leadMatcherSearchParams(industries, countries, page, pageSize), "none");
+}
+
+/** Max rows per CSV export for this level; 0 means exports are blocked. */
+export function directoryExportLimit(level: DirectoryAccessLevel, requested?: number): number {
+  const cap =
+    level === "admin" ? DIRECTORY_ADMIN_EXPORT_LIMIT : level === "paid" ? DIRECTORY_PAID_ROW_LIMIT : 0;
+  const want = Number.isFinite(requested) && (requested as number) > 0 ? Math.floor(requested as number) : cap;
+  return Math.max(0, Math.min(cap, want));
+}
+
+/** Max rows copied into a lead list per call for this level; 0 means blocked. */
+export function directorySaveLimit(level: DirectoryAccessLevel): number {
+  return level === "admin" ? DIRECTORY_ADMIN_SAVE_LIMIT : level === "paid" ? DIRECTORY_PAID_ROW_LIMIT : 0;
 }
 
 /**

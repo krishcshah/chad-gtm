@@ -3,6 +3,13 @@ const fs = require('fs');
 const path = require('path');
 
 const BASE_URL = process.env.TEST_URL || 'https://130-61-146-177.sslip.io';
+
+// Never commit passwords: the demo password comes from the environment.
+const DEMO_PASSWORD = process.env.SEED_DEMO_PASSWORD;
+if (!DEMO_PASSWORD) {
+  console.error('Refusing to run: set SEED_DEMO_PASSWORD (the demo account password) in the environment.');
+  process.exit(1);
+}
 const ARTIFACTS_DIR = 'C:\\Users\\Krish Shah\\.gemini\\antigravity\\brain\\679bc895-7913-4e7c-8b06-3d1273091630\\screenshots';
 const CHROME_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
@@ -31,10 +38,10 @@ async function run() {
   await page.goto(`${BASE_URL}/login`, { waitUntil: 'networkidle2', timeout: 30000 });
   await sleep(1000);
 
-  console.log('Filling in demo credentials (demo@ratecompany.com / demo123)...');
+  console.log('Filling in demo credentials (demo@ratecompany.com / <SEED_DEMO_PASSWORD>)...');
   await page.waitForSelector('input[type="email"], input[name="email"]', { timeout: 10000 });
   await page.type('input[type="email"], input[name="email"]', 'demo@ratecompany.com');
-  await page.type('input[type="password"], input[name="password"]', 'demo123');
+  await page.type('input[type="password"], input[name="password"]', DEMO_PASSWORD);
 
   const submitBtn = await page.$('button[type="submit"]');
   if (submitBtn) {

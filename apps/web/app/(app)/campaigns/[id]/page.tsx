@@ -11,6 +11,8 @@ import { CampaignTabs } from "./campaign-tabs";
 import { SequenceEditor } from "./sequence-editor";
 import { EditCampaignDialog } from "./edit-campaign-dialog";
 import { AnalyticsSectionLoader } from "@/components/analytics-section-loader";
+import { getPostalHold } from "@/lib/postal-hold";
+import { PostalHoldNotice } from "../../postal-hold-notice";
 
 export const dynamic = "force-dynamic";
 
@@ -31,10 +33,12 @@ export default async function CampaignDetailPage({
   const c = await getCampaign(user.id, id, workspace.id, workspace.isDefault);
   if (!c) notFound();
 
-  const [sequence, template, allSenders] = await Promise.all([
+  const [sequence, template, allSenders, postalHold] = await Promise.all([
     getCampaignSequence(id),
     c.templateId ? getTemplate(user.id, c.templateId) : Promise.resolve(null),
     listSenders(user.id, workspace.id, workspace.isDefault),
+    // Compliance settings belong to the campaign owner (that is what the engine reads).
+    getPostalHold(c.userId, { campaignId: c.id }),
   ]);
 
   const total = Number(c.stats?.total ?? 0);
@@ -76,6 +80,8 @@ export default async function CampaignDetailPage({
           <CampaignActions id={c.id} status={c.status} showDeleteDirect />
         </div>
       </div>
+
+      <PostalHoldNotice hold={postalHold} scope="campaign" />
 
       <CampaignTabs
         initialTab={sp.tab === "sequence" ? "sequence" : "overview"}

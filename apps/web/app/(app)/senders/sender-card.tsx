@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Flame, Loader2, Settings2, Sliders } from "lucide-react";
+import { Check, Loader2, Settings2, Sliders } from "lucide-react";
 import { toast } from "sonner";
 import { Badge, Button, Progress, statusVariant, cn } from "@smartreach/ui";
-import { toggleSender, updateSenderDetails } from "@/lib/actions";
-import { parseSenderWarmup } from "@/lib/sender-warmup";
+import { toggleSender } from "@/lib/actions";
 import { SenderDetailDrawer, type SenderFullData } from "./sender-detail-drawer";
 
 export interface SenderCardData {
@@ -65,42 +64,12 @@ export function SenderCard({
   const [denied, setDenied] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const { warmup } = useMemo(() => parseSenderWarmup(s.signature), [s.signature]);
-  const [warmupEnabled, setWarmupEnabled] = useState(warmup.enabled);
-  const [warmupPending, startWarmupTransition] = useTransition();
-
   const pct = s.dailyLimit > 0 ? Math.min(100, (s.usedToday / s.dailyLimit) * 100) : 0;
   const paused = status === "paused";
 
   useEffect(() => {
     setStatus(s.status);
   }, [s.status]);
-
-  useEffect(() => {
-    setWarmupEnabled(warmup.enabled);
-  }, [warmup.enabled]);
-
-  const toggleWarmup = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const next = !warmupEnabled;
-    setWarmupEnabled(next);
-    startWarmupTransition(async () => {
-      const res = await updateSenderDetails(s.id, {
-        warmup: { enabled: next },
-      });
-      if (!res.ok) {
-        setWarmupEnabled(!next);
-        toast.error(res.error || "Failed to update warmup");
-      } else {
-        toast.success(
-          next
-            ? `Warmup enabled for ${s.senderName}`
-            : `Warmup disabled for ${s.senderName}`,
-        );
-        router.refresh();
-      }
-    });
-  };
 
   const toggle = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -178,11 +147,6 @@ export function SenderCard({
             </div>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            {warmupEnabled && (
-              <span className="flex items-center text-[10px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-md">
-                <Flame className="size-3 mr-0.5" /> Warmup
-              </span>
-            )}
             <Badge variant={statusVariant(status)} className="capitalize text-[10px]">
               {status}
             </Badge>
@@ -210,49 +174,6 @@ export function SenderCard({
           </div>
 
           <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-            {/* Small Warmup Toggle directly on the bottom right of the card */}
-            <button
-              type="button"
-              role="switch"
-              aria-checked={warmupEnabled}
-              onClick={toggleWarmup}
-              disabled={warmupPending}
-              title={
-                warmupEnabled
-                  ? "Warmup active — click to turn off"
-                  : "Warmup off — click to turn on"
-              }
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-medium transition-all border shrink-0",
-                warmupEnabled
-                  ? "border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
-                  : "border-border/60 bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-            >
-              <Flame
-                className={cn(
-                  "size-3",
-                  warmupEnabled
-                    ? "text-amber-400 fill-amber-400/20 animate-pulse"
-                    : "text-muted-foreground",
-                )}
-              />
-              <span className="text-[10px] hidden sm:inline">Warmup</span>
-              <span
-                className={cn(
-                  "relative inline-flex h-3.5 w-6 shrink-0 cursor-pointer rounded-full border-1 border-transparent transition-colors duration-200 ease-in-out",
-                  warmupEnabled ? "bg-amber-500" : "bg-muted-foreground/30",
-                )}
-              >
-                <span
-                  className={cn(
-                    "pointer-events-none inline-block size-2.5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out mt-[1px]",
-                    warmupEnabled ? "translate-x-3" : "translate-x-0.5",
-                  )}
-                />
-              </span>
-            </button>
-
             <Button
               type="button"
               variant="ghost"

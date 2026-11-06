@@ -1,4 +1,4 @@
-export const APP_NAME = "ChadGTM";
+export const APP_NAME = "AutoGTM";
 export const APP_TAGLINE = "Autonomous Go-To-Market & Cold Outreach Engine";
 
 export const LEAD_STATUSES = [

@@ -6,12 +6,14 @@
   "exports": {
     ".": "./src/index.ts",
     "./mailer": "./src/mailer.ts",
+    "./system-mailer": "./src/system-mailer.ts",
     "./rotation": "./src/rotation.ts",
     "./scheduler": "./src/scheduler.ts",
     "./processor": "./src/processor.ts",
     "./sync-replies": "./src/sync-replies.ts",
     "./worker": "./src/worker.ts",
-    "./ai": "./src/ai.ts"
+    "./ai": "./src/ai.ts",
+    "./reply-agent": "./src/reply-agent.ts"
   },
   "scripts": {
     "start": "tsx src/run.ts",

@@ -72,7 +72,7 @@ export function CampaignActions({
             size="sm"
             onClick={() => setConfirmOpen(true)}
             disabled={pending}
-            className="rounded-none border-red-900/60 bg-red-950/20 text-red-400 hover:bg-red-900/30 hover:text-red-300 text-xs font-mono uppercase tracking-wider h-8 px-2.5 gap-1.5"
+            className="rounded-lg border-red-900/60 bg-red-950/20 text-red-400 hover:bg-red-900/30 hover:text-red-300 text-xs font-mono uppercase tracking-wider h-8 px-2.5 gap-1.5"
           >
             <Trash2 className="size-3.5" />
             <span>Delete</span>
@@ -86,12 +86,12 @@ export function CampaignActions({
               size="icon"
               disabled={pending}
               aria-label="Campaign actions"
-              className="rounded-none hover:bg-zinc-900 hover:text-white border border-transparent hover:border-zinc-800"
+              className="rounded-lg hover:bg-zinc-900 hover:text-white border border-transparent hover:border-zinc-800"
             >
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="rounded-none border-zinc-800 bg-black font-mono">
+          <DropdownMenuContent align="end" className="rounded-lg border-zinc-800 bg-black font-mono">
             {status === "draft" ? (
               <DropdownMenuItem onClick={() => router.push(`/campaigns/new?draft=${id}`)}>
                 <Play className="h-4 w-4" /> Resume
@@ -124,7 +124,7 @@ export function CampaignActions({
 
       {/* Confirmation Modal */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="rounded-none border border-zinc-800 bg-zinc-950 font-mono text-zinc-100 max-w-md p-6">
+        <DialogContent className="rounded-lg border border-zinc-800 bg-zinc-950 font-mono text-zinc-100 max-w-md p-6">
           <DialogHeader className="space-y-2 text-left">
             <DialogTitle className="text-base font-bold uppercase tracking-wider text-white flex items-center gap-2">
               <Trash2 className="size-4 text-red-500" /> Delete Campaign
@@ -141,7 +141,7 @@ export function CampaignActions({
               size="sm"
               onClick={() => setConfirmOpen(false)}
               disabled={pending}
-              className="rounded-none border-zinc-800 bg-black text-xs font-mono uppercase tracking-wider hover:bg-zinc-900"
+              className="rounded-lg border-zinc-800 bg-black text-xs font-mono uppercase tracking-wider hover:bg-zinc-900"
             >
               Cancel
             </Button>
@@ -150,7 +150,7 @@ export function CampaignActions({
               size="sm"
               onClick={() => run("delete")}
               disabled={pending}
-              className="rounded-none bg-red-600 text-white hover:bg-red-700 text-xs font-mono uppercase tracking-wider font-semibold"
+              className="rounded-lg bg-red-600 text-white hover:bg-red-700 text-xs font-mono uppercase tracking-wider font-semibold"
             >
               {pending ? "Deleting..." : "Confirm Delete"}
             </Button>

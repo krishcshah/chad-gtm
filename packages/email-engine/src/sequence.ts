@@ -223,6 +223,9 @@ export async function resolveStepContent(
           apiKey: aiOptions?.apiKey,
           provider: aiOptions?.provider,
           model: aiOptions?.model,
+          // Real sends never ship heuristic copy: without a working model the
+          // approved baseline variant below is sent instead.
+          onFailure: "throw",
         });
 
         if (generated.subject) {

@@ -3,31 +3,29 @@
 import { revalidatePath } from "next/cache";
 import { requireWorkspace } from "./session";
 import { requireAdmin } from "./admin";
-import { grantB2BAccess, revokeB2BAccess } from "./b2b-access";
+import { grantB2BAccess, hasB2BAccess, revokeB2BAccess } from "./b2b-access";
+
+const B2B_UNLOCK_PENDING_MESSAGE =
+  "Thanks! Payments are checked by hand. Send your Stripe receipt to support and an admin will unlock the directory for your account.";
 
 /**
- * Server action for a user to claim / verify their $99 Stripe checkout and unlock lifetime access.
+ * Called after the $99 checkout. Payment isn't verified automatically (there
+ * is no Stripe API check or webhook), so this never grants access by itself:
+ * a session id typed by the user proves nothing. An admin grants access from
+ * the admin console after checking the payment in Stripe.
  */
-export async function unlockB2bAccessAction(stripeSessionOrReference?: string) {
+export async function unlockB2bAccessAction(_stripeSessionOrReference?: string) {
   try {
     const { user } = await requireWorkspace();
-
-    await grantB2BAccess(user.id, {
-      stripeSessionId: stripeSessionOrReference || undefined,
-      source: "stripe_checkout",
-    });
-
-    revalidatePath("/b2b-database");
-    revalidatePath("/leads");
-
-    return {
-      success: true,
-      message: "Congratulations! Lifetime access to the 300K+ B2B Database has been unlocked.",
-    };
+    if (await hasB2BAccess(user)) {
+      revalidatePath("/b2b-database");
+      return { success: true, message: "Directory access is already unlocked for your account." };
+    }
+    return { success: false, error: B2B_UNLOCK_PENDING_MESSAGE };
   } catch (err: any) {
     return {
       success: false,
-      error: err?.message || "Failed to unlock database access. Please contact support.",
+      error: err?.message || "Failed to check database access. Please contact support.",
     };
   }
 }

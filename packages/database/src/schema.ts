@@ -517,9 +517,26 @@ export const replies = pgTable(
         "lost",
       ],
     }),
+    /**
+     * Reply-agent lifecycle. NULL = not an agent-managed campaign.
+     * pending → (replied | escalated | skipped | failed).
+     */
+    agentStatus: text("agent_status", {
+      enum: ["pending", "processing", "replied", "escalated", "skipped", "failed"],
+    }),
+    /** Classified intent (interested, question, resource_request, ...). */
+    agentIntent: text("agent_intent"),
+    /** One-line explanation of what the agent decided and why. */
+    agentSummary: text("agent_summary"),
+    agentHandledAt: text("agent_handled_at"),
+    /** How many times the agent has tried this reply (retry budget). */
+    agentAttempts: integer("agent_attempts").notNull().default(0),
+    /** ISO time the agent claimed it (to recover replies stuck in processing). */
+    agentClaimedAt: text("agent_claimed_at"),
     createdAt: createdAt(),
   },
   (t) => [
+    index("replies_agent_status_idx").on(t.agentStatus),
     uniqueIndex("replies_message_unique").on(t.senderId, t.messageId),
     index("replies_user_idx").on(t.userId, t.receivedAt),
     index("replies_lead_idx").on(t.leadId),
@@ -614,7 +631,7 @@ export const uniboxMessages = pgTable(
     direction: text("direction", { enum: ["campaign", "inbound", "operator"] })
       .notNull()
       .default("operator"),
-    fromRole: text("from_role", { enum: ["automation", "lead", "operator"] })
+    fromRole: text("from_role", { enum: ["automation", "lead", "operator", "agent"] })
       .notNull()
       .default("operator"),
     fromName: text("from_name").notNull().default(""),
@@ -779,7 +796,16 @@ export const chadGtmRuns = pgTable(
     url: text("url").notNull(),
     companyName: text("company_name").notNull().default(""),
     status: text("status", {
-      enum: ["analyzing", "reviewing", "calibrating", "ready", "active", "paused", "completed"],
+      enum: [
+        "analyzing",
+        "needs_input",
+        "reviewing",
+        "calibrating",
+        "ready",
+        "active",
+        "paused",
+        "completed",
+      ],
     })
       .notNull()
       .default("analyzing"),
@@ -820,6 +846,19 @@ export const chadGtmRuns = pgTable(
     campaignId: text("campaign_id").references(() => campaigns.id, { onDelete: "set null" }),
     /** Optional link to the agent execution trace that produced this run. */
     agentRunId: text("agent_run_id"),
+    /** Where interested leads are sent to book (Calendly, Cal.com, HubSpot...). */
+    bookingUrl: text("booking_url"),
+    /** True when the run was launched end-to-end from a URL with no manual gates. */
+    autopilot: boolean("autopilot").notNull().default(false),
+    /**
+     * How the reply agent handles inbound replies:
+     *  autopilot — answer, share resources, and send the booking link itself
+     *  approve   — draft every reply and wait for the client to approve it
+     *  off       — classify only; humans reply from the UniBox
+     */
+    replyAgentMode: text("reply_agent_mode", { enum: ["autopilot", "approve", "off"] })
+      .notNull()
+      .default("autopilot"),
     approvedEmailSamples: jsonb("approved_email_samples")
       .$type<Array<{
         leadId?: string;
@@ -955,6 +994,103 @@ export const aiGenerations = pgTable(
     index("ai_generations_user_idx").on(t.userId, t.createdAt),
   ],
 );
+
+/* ─── Reply agent: knowledge base + human-in-the-loop requests ────────── */
+
+/**
+ * Things the reply agent may share or say on the client's behalf: case-study
+ * decks, reference customers, pricing notes, FAQ answers. Grows every time the
+ * client answers an escalation so the agent never asks the same thing twice.
+ */
+export const agentKnowledge = pgTable(
+  "agent_knowledge",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }),
+    kind: text("kind", { enum: ["resource", "faq", "fact"] })
+      .notNull()
+      .default("resource"),
+    title: text("title").notNull(),
+    content: text("content").notNull().default(""),
+    url: text("url"),
+    keywords: jsonb("keywords").$type<string[]>().notNull().default([]),
+    usageCount: integer("usage_count").notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("agent_knowledge_user_idx").on(t.userId, t.createdAt),
+    index("agent_knowledge_workspace_idx").on(t.workspaceId),
+  ],
+);
+
+/**
+ * Escalations from the reply agent to the client ("a lead asked for your case
+ * study deck — can you send it?"), plus draft approvals in approve mode.
+ */
+export const agentRequests = pgTable(
+  "agent_requests",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }),
+    runId: text("run_id").references(() => chadGtmRuns.id, { onDelete: "set null" }),
+    campaignId: text("campaign_id").references(() => campaigns.id, { onDelete: "set null" }),
+    replyId: text("reply_id").references(() => replies.id, { onDelete: "cascade" }),
+    leadId: text("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    kind: text("kind", {
+      enum: ["resource", "question", "approval", "referral", "booking_url", "other"],
+    })
+      .notNull()
+      .default("question"),
+    status: text("status", { enum: ["open", "resolved", "dismissed"] })
+      .notNull()
+      .default("open"),
+    title: text("title").notNull(),
+    /** What the lead actually asked, in the agent's words. */
+    question: text("question").notNull().default(""),
+    leadEmail: text("lead_email").notNull().default(""),
+    leadName: text("lead_name").notNull().default(""),
+    leadCompany: text("lead_company").notNull().default(""),
+    /** Agent's proposed reply (approve mode) or holding draft. */
+    draftReply: text("draft_reply").notNull().default(""),
+    /** What the client provided to resolve the request. */
+    resolution: text("resolution"),
+    resourceUrl: text("resource_url"),
+    notifiedAt: text("notified_at"),
+    resolvedAt: text("resolved_at"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("agent_requests_user_status_idx").on(t.userId, t.status, t.createdAt),
+    index("agent_requests_workspace_idx").on(t.workspaceId),
+    index("agent_requests_reply_idx").on(t.replyId),
+  ],
+);
+
+/**
+ * Engine liveness. Each worker process upserts its row every tick so the web
+ * app (/api/health, admin) can tell when sending has stopped.
+ */
+export const engineHeartbeats = pgTable("engine_heartbeats", {
+  /** "worker:<hostname>:<pid-agnostic name>" */
+  id: text("id").primaryKey(),
+  lastTickAt: text("last_tick_at").notNull(),
+  lastOkAt: text("last_ok_at"),
+  lastError: text("last_error"),
+  stats: jsonb("stats").$type<Record<string, unknown>>().notNull().default({}),
+  updatedAt: updatedAt(),
+});
 
 /* ─── Re-export auth tables so drizzle sees the whole graph ────────────── */
 export * from "./schema-auth";

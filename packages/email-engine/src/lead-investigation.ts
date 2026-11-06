@@ -4,7 +4,6 @@
  * and determines Outbound Maturity Stage (OUTBOUND_NEWBIE vs OUTBOUND_ACTIVE vs OUTBOUND_TECHNICAL_DEFECT).
  */
 
-import { execSync } from "node:child_process";
 import type { LeadProfile } from "./ai";
 
 export type OutboundMaturity =
@@ -57,76 +56,134 @@ export interface LeadResearchDossier {
 }
 
 /**
+ * Strict DNS hostname check. Only lowercase letters, digits, hyphens and dots;
+ * every label 1-63 chars without leading/trailing hyphen; at least two labels;
+ * an alphabetic (or punycode) TLD; 253 chars max. Anything else, including
+ * shell metacharacters, whitespace, IP literals and ports, is rejected.
+ */
+const HOSTNAME_LABEL = /^(?!-)[a-z0-9-]{1,63}(?<!-)$/;
+const HOSTNAME_TLD = /^(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/;
+
+export function isValidDomainName(domain: unknown): domain is string {
+  if (typeof domain !== "string") return false;
+  if (domain.length === 0 || domain.length > 253) return false;
+  if (!/^[a-z0-9.-]+$/.test(domain)) return false;
+  const labels = domain.split(".");
+  if (labels.length < 2) return false;
+  if (!labels.every((label) => HOSTNAME_LABEL.test(label))) return false;
+  return HOSTNAME_TLD.test(labels[labels.length - 1]);
+}
+
+/**
  * Safely extract root domain from website or email address.
+ * Returns "" unless the result is a strictly valid hostname.
  */
 export function extractCleanDomain(website?: string | null, email?: string | null): string {
   if (website && website.trim()) {
+    let candidate = "";
     try {
       let raw = website.trim();
       if (!/^https?:\/\//i.test(raw)) raw = `https://${raw}`;
-      const hostname = new URL(raw).hostname.toLowerCase();
-      return hostname.replace(/^www\./i, "");
+      candidate = new URL(raw).hostname.toLowerCase();
     } catch {
-      return website.trim().replace(/^https?:\/\//i, "").split("/")[0].replace(/^www\./i, "").toLowerCase();
+      candidate = website.trim().replace(/^https?:\/\//i, "").split("/")[0].toLowerCase();
     }
+    candidate = candidate.replace(/^www\./i, "").replace(/\.$/, "");
+    return isValidDomainName(candidate) ? candidate : "";
   }
   if (email && email.includes("@")) {
-    const domainPart = email.split("@")[1]?.toLowerCase().trim();
-    if (domainPart && !["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com"].includes(domainPart)) {
+    const domainPart = email.split("@")[1]?.toLowerCase().trim().replace(/\.$/, "");
+    if (
+      domainPart &&
+      isValidDomainName(domainPart) &&
+      !["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com"].includes(domainPart)
+    ) {
       return domainPart;
     }
   }
   return "";
 }
 
+/** TXT lookup function; returns the record chunks per TXT record. */
+export type TxtResolver = (hostname: string) => Promise<string[][]>;
+
+const DNS_TIMEOUT_MS = 2500;
+
+let defaultResolver: TxtResolver | null = null;
+
+async function getDefaultResolver(): Promise<TxtResolver> {
+  if (!defaultResolver) {
+    const { Resolver } = await import("node:dns/promises");
+    const resolver = new Resolver({ timeout: DNS_TIMEOUT_MS, tries: 1 });
+    defaultResolver = (hostname) => resolver.resolveTxt(hostname);
+  }
+  return defaultResolver;
+}
+
+/** DNS error codes that mean "the name has no TXT records / does not exist". */
+const NO_RECORD_CODES = new Set(["ENOTFOUND", "ENODATA", "NXDOMAIN"]);
+
+type TxtLookup = { status: "ok"; records: string[] } | { status: "missing" } | { status: "error" };
+
+async function lookupTxt(resolve: TxtResolver, hostname: string): Promise<TxtLookup> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const records = await Promise.race([
+      resolve(hostname),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(Object.assign(new Error("timeout"), { code: "ETIMEOUT" })), DNS_TIMEOUT_MS + 500);
+      }),
+    ]);
+    return { status: "ok", records: records.map((chunks) => chunks.join("")) };
+  } catch (e: any) {
+    if (e && NO_RECORD_CODES.has(e.code)) return { status: "missing" };
+    return { status: "error" };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /**
- * Perform empirical DNS audit using system resolver (nslookup).
+ * DNS audit via the Node resolver (no shell, no child process).
  * Checks _dmarc TXT record and root domain SPF TXT.
+ * Invalid hostnames are rejected before any lookup happens.
  */
-export function auditDomainDns(domain: string): { hasDefect: boolean; description?: string } {
-  if (!domain || domain.includes("localhost") || domain.endsWith(".local")) {
+export async function auditDomainDns(
+  domain: string,
+  resolveTxt?: TxtResolver
+): Promise<{ hasDefect: boolean; description?: string }> {
+  const normalized = typeof domain === "string" ? domain.trim().toLowerCase().replace(/\.$/, "") : "";
+  if (!isValidDomainName(normalized) || normalized.endsWith(".local") || normalized.endsWith(".localhost")) {
     return { hasDefect: false };
   }
 
   try {
+    const resolve = resolveTxt ?? (await getDefaultResolver());
+
     // 1. Check DMARC
-    let dmarcMissing = false;
-    try {
-      const dmarcCmd = `nslookup -type=txt _dmarc.${domain}`;
-      const dmarcOut = execSync(dmarcCmd, { timeout: 2500, stdio: ["pipe", "pipe", "pipe"] }).toString();
-      if (
-        dmarcOut.includes("Non-existent domain") ||
-        dmarcOut.includes("can't find") ||
-        dmarcOut.includes("NXDOMAIN") ||
-        !dmarcOut.toLowerCase().includes("v=dmarc1")
-      ) {
-        dmarcMissing = true;
-      }
-    } catch (e: any) {
-      const errOut = (e.stdout?.toString() || "") + (e.stderr?.toString() || "");
-      if (errOut.includes("Non-existent domain") || errOut.includes("can't find") || errOut.includes("NXDOMAIN")) {
-        dmarcMissing = true;
-      }
-    }
+    const dmarc = await lookupTxt(resolve, `_dmarc.${normalized}`);
+    const dmarcMissing =
+      dmarc.status === "missing" ||
+      (dmarc.status === "ok" && !dmarc.records.some((r) => r.toLowerCase().includes("v=dmarc1")));
 
     if (dmarcMissing) {
       return {
         hasDefect: true,
-        description: `Missing DMARC TXT record on _dmarc.${domain} (causes Yahoo and Google 2024 bulk filters to reject or quarantine outreach)`,
+        description: `Missing DMARC TXT record on _dmarc.${normalized} (causes Yahoo and Google 2024 bulk filters to reject or quarantine outreach)`,
       };
     }
 
     // 2. Check SPF
-    try {
-      const spfCmd = `nslookup -type=txt ${domain}`;
-      const spfOut = execSync(spfCmd, { timeout: 2500, stdio: ["pipe", "pipe", "pipe"] }).toString();
-      if (!spfOut.toLowerCase().includes("v=spf1")) {
-        return {
-          hasDefect: true,
-          description: `Missing SPF record on ${domain} root domain`,
-        };
-      }
-    } catch {}
+    const spf = await lookupTxt(resolve, normalized);
+    const spfMissing =
+      spf.status === "missing" ||
+      (spf.status === "ok" && !spf.records.some((r) => r.toLowerCase().includes("v=spf1")));
+    if (spfMissing) {
+      return {
+        hasDefect: true,
+        description: `Missing SPF record on ${normalized} root domain`,
+      };
+    }
 
     return { hasDefect: false };
   } catch {
@@ -238,7 +295,7 @@ export async function investigateLeadDossier(
       : { hasDefect: false, description: undefined };
 
   if (!dnsDefect.hasDefect && domain) {
-    dnsDefect = auditDomainDns(domain);
+    dnsDefect = await auditDomainDns(domain);
   }
 
   // 2. Assess Outbound Maturity
