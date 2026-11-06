@@ -23,7 +23,9 @@ data/*.db-wal
 data/*.db-shm
 *.db
 *.db-journal
-!data/leads.db.gz
+# lead directory: personal data, never committed (see README "Lead directory")
+data/*.gz
+data/*.csv
 
 # logs
 *.log
@@ -40,6 +42,7 @@ coverage/
 _forge_evidence/*.txt
 !_forge_evidence/MUST_INVENTORY.md
 .env*
+!.env.example
 qa-runs/**/fixtures/
 qa-runs/**/*.key
 qa-runs/**/secrets/

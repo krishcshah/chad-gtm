@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Back up the AutoGTM Postgres database with pg_dump (custom format).
+#
+#   scripts/backup-db.sh                    -> $BACKUP_DIR/chadgtm-<UTC timestamp>.dump
+#   scripts/backup-db.sh predeploy-<sha>    -> $BACKUP_DIR/chadgtm-predeploy-<sha>.dump
+#
+# Env (all optional):
+#   DATABASE_URL     default: read from $ENV_FILE (never printed)
+#   ENV_FILE         default: <repo>/apps/web/.env.local
+#   BACKUP_DIR       default: $HOME/backups
+#   RETENTION_DAYS   default: 7  (older chadgtm-*.dump files in BACKUP_DIR are removed)
+#
+# Restore: see docs/OPERATIONS.md ("Restore a backup").
+set -euo pipefail
+umask 077
+
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${ENV_FILE:-$REPO_DIR/apps/web/.env.local}"
+BACKUP_DIR="${BACKUP_DIR:-$HOME/backups}"
+RETENTION_DAYS="${RETENTION_DAYS:-7}"
+LABEL="${1:-$(date -u +%Y%m%d-%H%M%S)}"
+
+if [[ ! "$LABEL" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "[backup] invalid label: only letters, digits, '.', '_' and '-' are allowed" >&2
+  exit 2
+fi
+if [[ ! "$RETENTION_DAYS" =~ ^[0-9]+$ ]] || (( RETENTION_DAYS < 1 )); then
+  echo "[backup] RETENTION_DAYS must be a positive integer" >&2
+  exit 2
+fi
+command -v pg_dump >/dev/null || { echo "[backup] pg_dump not found (apt install postgresql-client)" >&2; exit 1; }
+
+if [[ -z "${DATABASE_URL:-}" ]]; then
+  if [[ ! -f "$ENV_FILE" ]]; then
+    echo "[backup] DATABASE_URL is not set and $ENV_FILE does not exist" >&2
+    exit 1
+  fi
+  # Last assignment wins, as with dotenv. Handles "quoted", 'quoted' and bare values.
+  line="$(grep -E '^[[:space:]]*(export[[:space:]]+)?DATABASE_URL=' "$ENV_FILE" | tail -n 1 || true)"
+  value="${line#*=}"
+  value="${value%$'\r'}"
+  dq='^"([^"]*)"' sq="^'([^']*)'"
+  if [[ "$value" =~ $dq ]] || [[ "$value" =~ $sq ]]; then
+    DATABASE_URL="${BASH_REMATCH[1]}"
+  else
+    DATABASE_URL="${value%%[[:space:]]#*}"
+    DATABASE_URL="${DATABASE_URL%"${DATABASE_URL##*[![:space:]]}"}"
+  fi
+  unset line value
+fi
+if [[ -z "$DATABASE_URL" ]]; then
+  echo "[backup] DATABASE_URL is empty in $ENV_FILE" >&2
+  exit 1
+fi
+
+mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
+target="$BACKUP_DIR/chadgtm-$LABEL.dump"
+tmp="$target.partial"
+trap 'rm -f "$tmp"' EXIT
+
+echo "[backup] dumping database to $target"
+pg_dump --format=custom --compress=6 --file="$tmp" --dbname="$DATABASE_URL"
+# A dump that pg_restore cannot list is not a backup.
+pg_restore --list "$tmp" >/dev/null
+mv -f "$tmp" "$target"
+trap - EXIT
+echo "[backup] ok: $(du -h "$target" | cut -f1) $target"
+
+find "$BACKUP_DIR" -maxdepth 1 -type f -name 'chadgtm-*.dump' -mtime +"$RETENTION_DAYS" ! -path "$target" -print -delete \
+  | sed 's/^/[backup] removed old backup /'

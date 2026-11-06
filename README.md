@@ -44,17 +44,35 @@ scripts/                 Ops + test scripts (e2e-reply-agent.ts, lead ingestion,
 
 ## Local development
 
-Requirements: Node 22 (`node:sqlite`), PostgreSQL 15+.
+Requirements: Node 22.13+ (`node:sqlite`), PostgreSQL 15+.
 
 ```bash
 npm ci
-cp .env.example apps/web/.env.local        # set DATABASE_URL, BETTER_AUTH_SECRET, ENCRYPTION_KEY
-cp apps/web/.env.local packages/email-engine/.env
+cp .env.example apps/web/.env.local        # fill DATABASE_URL, BETTER_AUTH_SECRET, ENCRYPTION_KEY, APP_URL, BETTER_AUTH_URL
+                                           # and set ENGINE_DRY_RUN=1 so a local engine never sends real mail
 npm run db:migrate                         # idempotent; baselines DBs built by runtime self-heal
-gunzip -k data/leads.db.gz && npm run leads:index
 npm run dev                                # web on :3000
 npm run engine                             # sending engine + IMAP sync + reply agent
 ```
+
+The engine reads `apps/web/.env.local` too, so no separate engine env file is needed. If you create
+`packages/email-engine/.env`, put only engine-specific overrides in it: it is loaded first and an
+empty `KEY=` line there hides the web value.
+
+### Lead directory
+
+The lead directory (`data/leads.db`, SQLite) holds personal data and is **not** in git. Get a copy
+from the project owner out of band and put it at `data/leads.db`, or build a local one from your own
+CSV export:
+
+```bash
+node scripts/ingest-leads.mjs --file /path/to/leads.csv --db data/leads.db
+npm run leads:index -- --db data/leads.db
+```
+
+Without it the directory is empty and autopilot finds no leads. See
+[docs/LEADS_OPERATIONS.md](docs/LEADS_OPERATIONS.md). (An older `data/leads.db.gz` remains in the git
+history until it is purged; do not re-add it.)
 
 Optional: `GEMINI_API_KEY` or `OPENAI_API_KEY` (or a key saved in Settings → AI) enables LLM research, per-lead copy, and LLM reply triage. Without one, research uses a grounded heuristic, sends use the approved baseline copy (never invented claims), and the reply agent uses heuristics.
 
@@ -74,7 +92,23 @@ E2E_MAILBOXES=/path/outside/repo/mailboxes.json npx tsx scripts/e2e-reply-agent.
 
 ## Deployment
 
-Pushing to `main` deploys to the Oracle VM (`.github/workflows/deploy.yml`): pull → install → **`db:migrate`** → build → `pm2 reload`. Run the engine as its own PM2 process (`npm run engine`). In production `/api/engine/tick` requires `CRON_SECRET`.
+Production is a single Oracle VM: checkout in `/home/ubuntu/chad-gtm`, PM2 processes `chadgtm-web`
+(:3005, behind Caddy at https://autogtm.tech) and `chadgtm-worker`, Postgres database `chadgtm`.
+
+Pushing to `main` runs `.github/workflows/deploy.yml` (needs the `SERVER_HOST`, `SERVER_USER` and
+`SSH_PRIVATE_KEY` repository secrets). It takes the deploy lock, `git pull --ff-only`, then
+`scripts/deploy-remote.sh`: `npm ci` → `pg_dump` backup → **`db:migrate`** → build →
+`pm2 reload chadgtm-web` / `chadgtm-worker` → health check on `/api/health`, printing PM2 logs and
+failing on error. Only the two AutoGTM processes are touched, never `pm2 all`.
+
+Manual deploy, same steps: `SERVER_HOST=<vm> python3 scripts/deploy_remote_chadgtm.py`.
+
+In production `/api/engine/tick` requires `CRON_SECRET`. `GET /api/health?strict=1` is the uptime
+check (also fails when the engine has not ticked for 10 minutes).
+
+Rollback, backup and restore (`scripts/backup-db.sh`), secret rotation
+(`scripts/rotate-encryption-key.ts`), monitoring and the full environment variable reference are in
+[docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ## License
 

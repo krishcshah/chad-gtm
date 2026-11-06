@@ -22,7 +22,7 @@
     "lint": "npm run typecheck"
   },
   "engines": {
-    "node": ">=20",
+    "node": ">=22.13",
     "npm": ">=10"
   },
   "dependencies": {

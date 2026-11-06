@@ -1,41 +1,76 @@
-name: Deploy to Oracle Cloud Always-Free
+name: Deploy AutoGTM to Oracle VM
+
+# Deploys main to /home/ubuntu/chad-gtm (pm2: chadgtm-web on :3005, chadgtm-worker).
+# Never touches /home/ubuntu/smart-reach or SmartReach's PM2 processes.
+# Steps: lock -> pull --ff-only -> npm ci -> pg_dump -> db:migrate -> build -> pm2 reload -> health check.
+# The server-side steps after the pull live in scripts/deploy-remote.sh.
+# Manual equivalent: scripts/deploy_remote_chadgtm.py. Runbook: docs/OPERATIONS.md.
+#
+# Repository secrets: SERVER_HOST, SERVER_USER, SSH_PRIVATE_KEY (a dedicated deploy key);
+# optional SERVER_FINGERPRINT (SHA256 host key fingerprint, recommended).
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
   deploy:
-    name: Deploy to Oracle Cloud
+    name: Deploy to Oracle VM
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Check deploy secrets
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          missing=""
+          [ -n "$SERVER_HOST" ] || missing="$missing SERVER_HOST"
+          [ -n "$SERVER_USER" ] || missing="$missing SERVER_USER"
+          [ -n "$SSH_PRIVATE_KEY" ] || missing="$missing SSH_PRIVATE_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing (Settings -> Secrets and variables -> Actions)"
+            exit 1
+          fi
 
-      - name: Execute remote deployment over SSH
+      - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.SERVER_FINGERPRINT }}
+          command_timeout: 45m
+          # Keep this block identical to BOOTSTRAP in scripts/deploy_remote_chadgtm.py.
           script: |
-            set -e
-            cd /home/ubuntu/smart-reach
-            echo "📥 Pulling latest commits from GitHub..."
-            git pull origin main
-
-            echo "📦 Installing workspace dependencies..."
-            npm install --no-audit
-
-            echo "🗄️ Applying database migrations (idempotent)..."
-            npm run db:migrate
-
-            echo "🏗️ Building Next.js web application..."
-            npm run build --workspace=@smartreach/web
-
-            echo "🔄 Reloading PM2 processes with zero downtime..."
-            pm2 reload all --update-env
-
-            echo "✅ Deployment successful! Live status:"
-            pm2 status
+            bash -s <<'DEPLOY'
+            set -euo pipefail
+            APP_DIR=/home/ubuntu/chad-gtm
+            LOCK_FILE=/home/ubuntu/.openoutreach-deploy.lock
+            # Same lock as SmartReach's deploy, so two builds never run at once on the VM.
+            exec 9>>"$LOCK_FILE"
+            echo "==> waiting for deploy lock $LOCK_FILE"
+            flock -w 1800 9 || { echo "!! could not get the deploy lock within 30 minutes" >&2; exit 1; }
+            export DEPLOY_LOCK_HELD=1
+            cd "$APP_DIR"
+            branch="$(git rev-parse --abbrev-ref HEAD)"
+            [ "$branch" = "main" ] || { echo "!! $APP_DIR is on branch $branch, expected main" >&2; exit 1; }
+            # Old deploys ran npm install, which rewrote the lockfile; drop that drift.
+            git checkout -- package-lock.json 2>/dev/null || true
+            PREVIOUS_SHA="$(git rev-parse --short=12 HEAD)"
+            export PREVIOUS_SHA
+            # data/leads.db.gz is no longer tracked, so the pull deletes it: unpack it first if it is the only copy.
+            if [ ! -s data/leads.db ] && [ -s data/leads.db.gz ]; then gunzip -k data/leads.db.gz; fi
+            git pull --ff-only origin main
+            exec bash scripts/deploy-remote.sh
+            DEPLOY
