@@ -8,6 +8,7 @@
 import { getDirectoryFacets } from "./leads-directory";
 import type { AiEngineOptions } from "./ai";
 import { crawlCompanyDomain, type CrawledCompanyProfile, type PricingTier } from "./gtm-crawler";
+import { matchIndustriesInText, RESEARCH_BLOCKED_MESSAGE, type TargetingSource } from "./autopilot-policy";
 
 export interface ScrapedCompanyData {
   url: string;
@@ -58,6 +59,15 @@ export interface IcpProfile {
   industries: string[];
   painPoints: string[];
   personas?: IcpPersona[];
+  /**
+   * Where industries/titles came from. "simulated" means hard-coded defaults
+   * that were not derived from the client; autopilot never launches on those.
+   */
+  targetingSource?: TargetingSource;
+  /** False when the targeting is not grounded in the client's site or notes. */
+  targetingGrounded?: boolean;
+  /** Client-facing explanation when targetingGrounded is false. */
+  targetingIssue?: string;
 }
 
 export interface GtmOffer {
@@ -381,6 +391,7 @@ export async function synthesizeGtmStrategy(
 ): Promise<SynthesizedGtmStrategy> {
   const facets = getDirectoryFacets();
   const topIndustries = facets.industries.slice(0, 40).map((i) => i.value);
+  const allIndustries = facets.industries.map((i) => i.value);
 
   const explicitProvider = (aiOptions?.provider || "").toLowerCase();
   const openAiKey = process.env.OPENAI_API_KEY;
@@ -392,7 +403,7 @@ export async function synthesizeGtmStrategy(
   const apiKey = provider === "openai" ? aiOptions?.apiKey || openAiKey : geminiKey;
 
   if (!apiKey) {
-    return simulateGtmStrategy(scraped, optionalNotes, topIndustries);
+    return simulateGtmStrategy(scraped, optionalNotes, topIndustries, allIndustries);
   }
 
   const prompt = buildResearchPrompt(scraped, optionalNotes, topIndustries);
@@ -408,6 +419,12 @@ export async function synthesizeGtmStrategy(
     const industries = Array.isArray(parsed.icpProfile?.industries)
       ? parsed.icpProfile.industries.filter((ind: string) => topIndustries.includes(ind))
       : [];
+    const modelTitles = Array.isArray(parsed.icpProfile?.targetTitles)
+      ? parsed.icpProfile.targetTitles.map((t: unknown) => String(t ?? "").trim()).filter(Boolean)
+      : [];
+    // The model only counts as the source of targeting if it actually chose
+    // directory industries and titles; otherwise the defaults below are invented.
+    const grounded = industries.length > 0 && modelTitles.length > 0 && !scraped.fetchFailed;
 
     return {
       companyName: parsed.companyName || scraped.domain,
@@ -457,14 +474,24 @@ export async function synthesizeGtmStrategy(
           "Leadership cannot see cost or performance in one place.",
         ]),
         personas: normalizePersonas(parsed.icpProfile?.personas),
+        targetingSource: grounded ? "ai" : "simulated",
+        targetingGrounded: grounded,
+        ...(grounded ? {} : { targetingIssue: ungroundedReason(scraped) }),
       },
       offers: normalizeOffers(parsed.offers, scraped.domain),
       scrapedData: scraped,
     };
   } catch (err) {
     console.error("[chad-gtm-research] AI synthesis failed, using grounded fallback:", err);
-    return simulateGtmStrategy(scraped, optionalNotes, topIndustries);
+    return simulateGtmStrategy(scraped, optionalNotes, topIndustries, allIndustries);
   }
+}
+
+function ungroundedReason(scraped: ScrapedCompanyData): string {
+  if (scraped.fetchFailed) {
+    return "We couldn't read your website (it may block automated visits or need a login), so we haven't sent anything. Retry, or add a short note about who you sell to.";
+  }
+  return RESEARCH_BLOCKED_MESSAGE;
 }
 
 function normalizeStringArray(value: unknown, min: number, fallback: string[]): string[] {
@@ -526,16 +553,29 @@ function normalizeOffers(value: unknown, domain: string): GtmOffer[] {
 function simulateGtmStrategy(
   scraped: ScrapedCompanyData,
   optionalNotes?: string,
-  topIndustries: string[] = []
+  topIndustries: string[] = [],
+  allIndustries: string[] = topIndustries
 ): SynthesizedGtmStrategy {
   const brandName =
     scraped.title && scraped.title.length < 40
       ? scraped.title.split(/[-|·–]/)[0].trim()
       : scraped.domain.split(".")[0];
 
-  const primaryIndustry = topIndustries[0] || "Software & Technology";
-  const secondaryIndustry = topIndustries[1] || "Internet";
-  const tertiaryIndustry = topIndustries[2] || "Information Technology";
+  // Heuristic targeting: only directory industries the client names on their
+  // own site or in their notes. Anything else would be invented, so the run is
+  // marked ungrounded and autopilot asks the client instead of launching.
+  const ownWords = [
+    optionalNotes || "",
+    scraped.fetchFailed ? "" : scraped.combinedCorpus || "",
+    scraped.fetchFailed ? "" : [scraped.title, scraped.description, ...(scraped.headings || [])].join(" "),
+  ].join(" \n ");
+  const namedIndustries = matchIndustriesInText(ownWords, allIndustries, 3);
+  const grounded = namedIndustries.length > 0;
+
+  const primaryIndustry = namedIndustries[0] || topIndustries[0] || "Software & Technology";
+  const secondaryIndustry = namedIndustries[1] || (grounded ? "" : topIndustries[1] || "Internet");
+  const tertiaryIndustry = namedIndustries[2] || (grounded ? "" : topIndustries[2] || "Information Technology");
+  const icpIndustries = [primaryIndustry, secondaryIndustry, tertiaryIndustry].filter(Boolean);
 
   const proofPoints = (scraped.caseStudySignals || []).slice(0, 3);
   const contrasts = (scraped.competitorSignals || []).slice(0, 2).map((signal) => ({
@@ -592,9 +632,16 @@ function simulateGtmStrategy(
       pricingModel: hasPricing ? "Published tiers" : "",
     },
     icpProfile: {
-      targetTitles: ["Founder", "VP of Operations", "Head of Engineering"],
+      // With grounded industries, aim at the owners/decision makers of those
+      // businesses rather than guessing a functional buyer.
+      targetTitles: grounded
+        ? ["Founder", "Owner", "CEO", "President"]
+        : ["Founder", "VP of Operations", "Head of Engineering"],
       companySizes: ["11-50", "51-200", "201-500"],
-      industries: [primaryIndustry, secondaryIndustry, tertiaryIndustry],
+      industries: icpIndustries,
+      targetingSource: grounded ? "heuristic" : "simulated",
+      targetingGrounded: grounded,
+      ...(grounded ? {} : { targetingIssue: ungroundedReason(scraped) }),
       painPoints: [
         "The current process is manual, fragmented, and hard to audit.",
         "Existing tools take too long to implement and maintain.",

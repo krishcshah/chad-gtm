@@ -3,6 +3,7 @@ import { schema } from "@smartreach/database";
 import { requireUser } from "@/lib/session";
 import { getDb, ensureChadGtmTables } from "@/lib/db";
 import { getDirectoryFacets } from "@/lib/leads-directory";
+import { loadLaunchContext, runLaunchState } from "@/lib/autopilot-state";
 import { ChadGtmWizard } from "./chad-gtm-wizard";
 import { AutopilotLauncher, type RunSummary } from "./autopilot-launcher";
 
@@ -44,11 +45,20 @@ export default async function ChadGtmPage({
       replyAgentMode: schema.chadGtmRuns.replyAgentMode,
       dailyEmailLimit: schema.chadGtmRuns.dailyEmailLimit,
       createdAt: schema.chadGtmRuns.createdAt,
+      icpProfile: schema.chadGtmRuns.icpProfile,
+      calibrationProfile: schema.chadGtmRuns.calibrationProfile,
     })
     .from(schema.chadGtmRuns)
     .where(eq(schema.chadGtmRuns.userId, user.id))
     .orderBy(desc(schema.chadGtmRuns.createdAt))
     .limit(30);
 
-  return <AutopilotLauncher runs={rows as RunSummary[]} />;
+  // One phase per run so a run without a campaign never shows as "Live".
+  const ctx = await loadLaunchContext(db, user.id);
+  const runs: RunSummary[] = rows.map(({ icpProfile, calibrationProfile, ...r }: any) => ({
+    ...r,
+    phase: runLaunchState({ ...r, icpProfile, calibrationProfile } as any, ctx).phase,
+  }));
+
+  return <AutopilotLauncher runs={runs} />;
 }
