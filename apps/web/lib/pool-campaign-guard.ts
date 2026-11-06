@@ -7,16 +7,23 @@
  * import their own leads into that list, edit those leads, or rewrite the
  * template/sequence, they could send arbitrary content to arbitrary addresses
  * from the shared pool. So for non-admins every such edit is refused when the
- * target list/template/campaign is used by a campaign that has a pool mailbox
- * attached. Booking link and reply-agent settings stay editable (separate
- * actions, not guarded here).
+ * target list/template/campaign is used by a pool campaign. Booking link and
+ * reply-agent settings stay editable (separate actions, not guarded here).
+ *
+ * A campaign is a pool campaign when the autopilot launcher linked it to a run
+ * (chad_gtm_runs.campaign_id), OR when a pool mailbox is attached to it. The
+ * run link is the primary signal: it does not change when the user edits the
+ * campaign's senders, and the engine falls back to the whole pool for a linked
+ * campaign with no senders. Relying on attached pool mailboxes alone let a
+ * client detach them (unlocking list/template/sequence) and still send from
+ * the pool.
  *
  * Not a "use server" module: helpers take a db and trusted ids.
  */
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 
-const { campaigns, campaignSenders, senderAccounts, leads } = schema;
+const { campaigns, campaignSenders, senderAccounts, leads, chadGtmRuns } = schema;
 
 export const POOL_CAMPAIGN_LOCKED_ERROR =
   "This list or copy belongs to an AutoGTM autopilot campaign that sends from shared mailboxes, so it can't be edited here. You can still change the booking link and reply-agent settings. Create a separate campaign with your own mailbox to send your own leads or copy.";
@@ -32,18 +39,37 @@ export function poolContentEditError(opts: { isAdmin: boolean; usedByPoolCampaig
 
 type CampaignFilter = { campaignId?: string; leadListId?: string; templateId?: string };
 
-/** True when a live (not deleted) campaign matching the filter has a pool mailbox attached. */
+/**
+ * True when a live (not deleted) campaign matching the filter is a pool
+ * campaign: linked to an autopilot run, or with a pool mailbox attached.
+ * Errors propagate (fail closed): callers turn them into a refused action.
+ */
 async function poolCampaignExists(db: Db, filter: CampaignFilter): Promise<boolean> {
-  const conds = [isNull(campaigns.deletedAt), eq(senderAccounts.isSystemPool, true)];
+  const conds = [
+    isNull(campaigns.deletedAt),
+    or(
+      sql`exists (select 1 from ${chadGtmRuns} where ${chadGtmRuns.campaignId} = ${campaigns.id})`,
+      sql`exists (select 1 from ${campaignSenders} inner join ${senderAccounts} on ${senderAccounts.id} = ${campaignSenders.senderId} where ${campaignSenders.campaignId} = ${campaigns.id} and ${senderAccounts.isSystemPool} = true)`,
+    ),
+  ];
   if (filter.campaignId) conds.push(eq(campaigns.id, filter.campaignId));
   if (filter.leadListId) conds.push(eq(campaigns.leadListId, filter.leadListId));
   if (filter.templateId) conds.push(eq(campaigns.templateId, filter.templateId));
   const rows: Array<{ id: string }> = await db
     .select({ id: campaigns.id })
     .from(campaigns)
-    .innerJoin(campaignSenders, eq(campaignSenders.campaignId, campaigns.id))
-    .innerJoin(senderAccounts, eq(senderAccounts.id, campaignSenders.senderId))
     .where(and(...conds))
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** True when the autopilot launcher linked this campaign to a run. Errors propagate. */
+export async function isAutopilotCampaign(db: Db, campaignId: string): Promise<boolean> {
+  if (!campaignId) return false;
+  const rows: Array<{ id: string }> = await db
+    .select({ id: chadGtmRuns.id })
+    .from(chadGtmRuns)
+    .where(eq(chadGtmRuns.campaignId, campaignId))
     .limit(1);
   return rows.length > 0;
 }
@@ -97,4 +123,29 @@ export async function poolTemplateEditError(db: Db, actor: Actor, templateId: st
 export async function poolCampaignEditError(db: Db, actor: Actor, campaignId: string | null | undefined): Promise<string | null> {
   if (actor.isAdmin || !campaignId) return null;
   return poolContentEditError({ isAdmin: false, usedByPoolCampaign: await campaignUsesPoolSenders(db, campaignId) });
+}
+
+export const POOL_CAMPAIGN_SENDERS_LOCKED_ERROR =
+  "This AutoGTM autopilot campaign sends from shared mailboxes picked by the launcher, so its mailboxes can't be changed here. Create a separate campaign to send from your own mailbox.";
+
+/**
+ * Pure decision for a sender-list change on an existing campaign. On a pool
+ * campaign (autopilot-linked, or with pool mailboxes attached) a non-admin may
+ * only resubmit exactly the mailboxes already attached: no adding, no
+ * removing, and in particular no detaching the pool mailboxes.
+ */
+export function poolCampaignSenderChangeError(opts: {
+  isAdmin: boolean;
+  isAutopilotCampaign: boolean;
+  attached: ReadonlyArray<{ id: string; isSystemPool: boolean }>;
+  requested: readonly string[];
+}): string | null {
+  if (opts.isAdmin) return null;
+  const hasPool = opts.attached.some((s) => s.isSystemPool);
+  if (!opts.isAutopilotCampaign && !hasPool) return null;
+  const current = new Set(opts.attached.map((s) => s.id));
+  const next = new Set(opts.requested.filter((id) => typeof id === "string" && id));
+  if (current.size !== next.size) return POOL_CAMPAIGN_SENDERS_LOCKED_ERROR;
+  for (const id of next) if (!current.has(id)) return POOL_CAMPAIGN_SENDERS_LOCKED_ERROR;
+  return null;
 }

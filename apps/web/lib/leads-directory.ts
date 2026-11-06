@@ -75,6 +75,13 @@ export interface DirectorySearchParams {
   pageSize?: number;
   sortBy?: "default" | "name" | "company" | "team_size";
   sortOrder?: "asc" | "desc";
+  /**
+   * When false, free-text `query` matches only the fields a masked preview
+   * shows (name, title, company, industry, location), never email. Set by
+   * clampDirectorySearchParams for level "none" so the search can't be used
+   * to confirm guessed addresses. Default true.
+   */
+  searchContactFields?: boolean;
 }
 
 export interface DirectorySearchResult {
@@ -522,19 +529,19 @@ export function buildDirectoryWhereClause(params: DirectorySearchParams): { wher
 
   // General text search
   if (params.query && params.query.trim()) {
+    const includeEmail = params.searchContactFields !== false;
     if (isDirectoryFtsReady()) {
       whereClauses.push(`leads.id IN (SELECT rowid FROM leads_fts WHERE leads_fts MATCH ?)`);
-      bindings.push(toFtsMatchExpression(params.query.trim()));
+      const expr = toFtsMatchExpression(params.query.trim());
+      // FTS5 column filter: everything indexed except email.
+      bindings.push(includeEmail ? expr : `{full_name job_title company_name industry} : (${expr})`);
     } else {
       const q = `%${params.query.trim().toLowerCase()}%`;
-      whereClauses.push(`(
-        LOWER(full_name) LIKE ? OR
-        LOWER(job_title) LIKE ? OR
-        LOWER(company_name) LIKE ? OR
-        LOWER(email) LIKE ? OR
-        LOWER(location) LIKE ?
-      )`);
-      bindings.push(q, q, q, q, q);
+      const columns = includeEmail
+        ? ["full_name", "job_title", "company_name", "email", "location"]
+        : ["full_name", "job_title", "company_name", "location"];
+      whereClauses.push(`(${columns.map((c) => `LOWER(${c}) LIKE ?`).join(" OR ")})`);
+      columns.forEach(() => bindings.push(q));
     }
   }
 
@@ -752,6 +759,8 @@ export function clampDirectorySearchParams(
   if (level !== "none") return { ...params };
   return {
     ...params,
+    // Masked preview: free text never matches email (no guess-the-address oracle).
+    searchContactFields: false,
     page: 1,
     pageSize: Math.min(DIRECTORY_PREVIEW_PAGE_SIZE, Math.max(1, Number(params.pageSize) || DIRECTORY_PREVIEW_PAGE_SIZE)),
   };

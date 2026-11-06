@@ -15,6 +15,9 @@ type SenderRow = {
   imapStatus?: string;
   signature?: string;
   smtpHost?: string;
+  smtpPort?: number;
+  imapHost?: string;
+  imapPort?: number;
   fromName?: string;
 };
 
@@ -256,3 +259,25 @@ describe("updateSenderDetailsForUser", () => {
 });
 
 void senderAccounts;
+
+describe("updateSenderDetailsForUser refuses internal mail endpoints", () => {
+  it.each([
+    [{ smtpHost: "127.0.0.1" }],
+    [{ smtpHost: "169.254.169.254" }],
+    [{ smtpHost: "localhost" }],
+    [{ imapHost: "10.0.0.5" }],
+    [{ smtpPort: 5432 }],
+    [{ imapPort: 80 }],
+  ])("%o", async (data) => {
+    store.senders[0] = { id: "snd-1", userId: "user-1", status: "active", signature: "", smtpPort: 587, imapPort: 993 };
+    const result = await updateSenderDetailsForUser(createStoreDb(), "user-1", "snd-1", data as never);
+    expect(result.ok).toBe(false);
+    expect(store.senders[0].smtpHost).toBeUndefined();
+  });
+
+  it("an unchanged (legacy) port does not block other edits", async () => {
+    store.senders[0] = { id: "snd-1", userId: "user-1", status: "active", signature: "", smtpPort: 1025 };
+    const result = await updateSenderDetailsForUser(createStoreDb(), "user-1", "snd-1", { smtpPort: 1025, fromName: "J" });
+    expect(result.ok).toBe(true);
+  });
+});

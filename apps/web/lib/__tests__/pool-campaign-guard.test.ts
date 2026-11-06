@@ -160,3 +160,123 @@ describe("server actions refuse pool-campaign edits for non-admins", () => {
     expect(r.ok).toBe(true);
   });
 });
+
+/* ── Finding: detaching pool senders unlocked an autopilot campaign ─────── */
+
+import { PgDialect } from "drizzle-orm/pg-core";
+import {
+  POOL_CAMPAIGN_SENDERS_LOCKED_ERROR,
+  campaignUsesPoolSenders,
+  poolCampaignSenderChangeError,
+} from "../pool-campaign-guard";
+import { updateCampaignSettings } from "../actions";
+
+describe("pool campaign = autopilot-linked campaign, not just attached pool mailboxes", () => {
+  it("the pool-campaign lookup matches campaigns linked from chad_gtm_runs", async () => {
+    let whereArg: any = null;
+    const c: any = {
+      from: () => c,
+      innerJoin: () => c,
+      where: (w: any) => {
+        whereArg = w;
+        return c;
+      },
+      limit: () => Promise.resolve([]),
+    };
+    await campaignUsesPoolSenders({ select: () => c }, "camp-1");
+    const rendered = new PgDialect().sqlToQuery(whereArg).sql;
+    expect(rendered).toContain('"chad_gtm_runs"');
+    expect(rendered).toContain('"campaign_id"');
+    // Pool mailboxes still count (a run can be deleted while pool senders stay).
+    expect(rendered).toContain('"is_system_pool"');
+  });
+
+  it("poolCampaignSenderChangeError (pure)", () => {
+    const pool = { id: "pool-1", isSystemPool: true };
+    const own = { id: "own-1", isSystemPool: false };
+    // Detaching every sender of an autopilot campaign is refused.
+    expect(
+      poolCampaignSenderChangeError({ isAdmin: false, isAutopilotCampaign: true, attached: [pool], requested: [] }),
+    ).toBe(POOL_CAMPAIGN_SENDERS_LOCKED_ERROR);
+    // Even when no pool mailbox is attached any more (engine falls back to the pool).
+    expect(
+      poolCampaignSenderChangeError({ isAdmin: false, isAutopilotCampaign: true, attached: [], requested: ["own-1"] }),
+    ).toBe(POOL_CAMPAIGN_SENDERS_LOCKED_ERROR);
+    // Swapping pool for own mailbox, or adding one, is refused.
+    expect(
+      poolCampaignSenderChangeError({ isAdmin: false, isAutopilotCampaign: true, attached: [pool], requested: ["own-1"] }),
+    ).toBe(POOL_CAMPAIGN_SENDERS_LOCKED_ERROR);
+    expect(
+      poolCampaignSenderChangeError({
+        isAdmin: false,
+        isAutopilotCampaign: true,
+        attached: [pool],
+        requested: ["pool-1", "own-1"],
+      }),
+    ).toBe(POOL_CAMPAIGN_SENDERS_LOCKED_ERROR);
+    // A non-autopilot campaign with a pool mailbox (admin-attached) is locked too.
+    expect(
+      poolCampaignSenderChangeError({ isAdmin: false, isAutopilotCampaign: false, attached: [pool], requested: [] }),
+    ).toBe(POOL_CAMPAIGN_SENDERS_LOCKED_ERROR);
+    // Resubmitting the same set (any order) is fine.
+    expect(
+      poolCampaignSenderChangeError({
+        isAdmin: false,
+        isAutopilotCampaign: true,
+        attached: [pool, own],
+        requested: ["own-1", "pool-1"],
+      }),
+    ).toBeNull();
+    // Manual campaigns and admins are unaffected.
+    expect(
+      poolCampaignSenderChangeError({ isAdmin: false, isAutopilotCampaign: false, attached: [own], requested: [] }),
+    ).toBeNull();
+    expect(
+      poolCampaignSenderChangeError({ isAdmin: true, isAutopilotCampaign: true, attached: [pool], requested: [] }),
+    ).toBeNull();
+  });
+
+  const CAMPAIGN = [{ id: "camp-auto", name: "Autopilot", userId: "u1" }];
+  const POOL_ATTACHED = [{ id: "pool-1", userId: "platform", isSystemPool: true, deletedAt: null }];
+  const RUN_LINK = [{ id: "run-1" }];
+
+  it("updateCampaignSettings refuses detaching pool senders from an autopilot campaign", async () => {
+    state.selects = [CAMPAIGN, POOL_ATTACHED, RUN_LINK];
+    const r = await updateCampaignSettings("camp-auto", { senderIds: [] });
+    expect(r).toMatchObject({ ok: false, error: POOL_CAMPAIGN_SENDERS_LOCKED_ERROR });
+    expect(state.writes).toEqual([]);
+  });
+
+  it("updateCampaignSettings refuses adding own senders to an autopilot campaign that has none left", async () => {
+    state.selects = [CAMPAIGN, [], RUN_LINK];
+    const r = await updateCampaignSettings("camp-auto", { senderIds: ["own-1"] });
+    expect(r).toMatchObject({ ok: false, error: POOL_CAMPAIGN_SENDERS_LOCKED_ERROR });
+    expect(state.writes).toEqual([]);
+  });
+
+  it("updateCampaignSettings on an autopilot campaign with the same senders saves other settings, leaves senders alone", async () => {
+    state.selects = [CAMPAIGN, POOL_ATTACHED, RUN_LINK];
+    const r = await updateCampaignSettings("camp-auto", { name: "Renamed", senderIds: ["pool-1"] });
+    expect(r.ok).toBe(true);
+    expect(state.writes).not.toContain("delete");
+  });
+
+  it("updateCampaignSettings still lets a client swap mailboxes on a manual campaign", async () => {
+    state.selects = [
+      CAMPAIGN,
+      [{ id: "own-1", userId: "u1", isSystemPool: false, deletedAt: null }],
+      [],
+      [{ id: "own-2", userId: "u1", isSystemPool: false, deletedAt: null }],
+    ];
+    const r = await updateCampaignSettings("camp-auto", { senderIds: ["own-2"] });
+    expect(r.ok).toBe(true);
+    expect(state.writes).toContain("delete");
+  });
+
+  it("the list/sequence of an autopilot campaign with no pool mailbox left is still locked", async () => {
+    // The guard query now matches on the run link, so the db reports a hit.
+    state.selects = [POOL_HIT];
+    const r = await saveCampaignSequence({ campaignId: "camp-auto", steps: [] });
+    expect(r).toMatchObject({ ok: false, error: POOL_CAMPAIGN_LOCKED_ERROR });
+  });
+});

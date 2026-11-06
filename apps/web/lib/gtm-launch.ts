@@ -15,7 +15,11 @@ import {
 } from "@smartreach/database";
 import { nowIso } from "@smartreach/shared";
 import type { Db } from "./db";
-import { getMatchingDirectoryLeadsForExport, type DirectoryLead } from "./leads-directory";
+import {
+  getMatchingDirectoryLeadsForExport,
+  type DirectoryAccessLevel,
+  type DirectoryLead,
+} from "./leads-directory";
 import type { CampaignResearchContext } from "./ai";
 import { ensureCampaignLeadSnapshot } from "./campaign-drafts";
 import { assertCanSend } from "./approval";
@@ -165,6 +169,49 @@ export function compactCustomFields(raw: Record<string, string> | undefined): Re
     out[key] = text.slice(0, 200);
   }
   return out;
+}
+
+/**
+ * Contact fields copied from a directory record into the owner's lead list.
+ *
+ * Autopilot needs the address to send, plus name/title/company to personalise.
+ * Phone, LinkedIn and the raw source attributes are paywalled directory data:
+ * an account without directory access ("none") must not be able to harvest
+ * them by launching (and pausing) autopilot runs, so they are only kept for
+ * "paid" and "admin".
+ */
+export function directoryLeadContactFields(
+  dl: Pick<DirectoryLead, "linkedinUrl" | "phone" | "rawAttributes">,
+  level: DirectoryAccessLevel
+): { linkedin: string | null; phone: string | null; customFields: Record<string, string> } {
+  if (level === "none") return { linkedin: null, phone: null, customFields: {} };
+  return {
+    linkedin: dl.linkedinUrl || null,
+    phone: dl.phone || null,
+    customFields: compactCustomFields(dl.rawAttributes),
+  };
+}
+
+/** The owner's directory access level; "none" whenever it can't be established. */
+export async function launchDirectoryAccess(db: Db, userId: string): Promise<DirectoryAccessLevel> {
+  try {
+    const [user]: Array<{ id: string; email: string | null; role: string | null; emailVerified: boolean | null }> =
+      await db
+        .select({
+          id: schema.users.id,
+          email: schema.users.email,
+          role: schema.users.role,
+          emailVerified: schema.users.emailVerified,
+        })
+        .from(schema.users)
+        .where(eq(schema.users.id, userId))
+        .limit(1);
+    if (!user) return "none";
+    const { getDirectoryAccessLevel } = await import("./b2b-access");
+    return await getDirectoryAccessLevel(user);
+  } catch {
+    return "none";
+  }
 }
 
 /**
@@ -349,6 +396,8 @@ export interface LaunchRunInput {
   dailyLimit: number;
   approvedSamples: any[];
   selectedOfferIndex?: number;
+  /** Owner's directory access; looked up (fail closed to "none") when omitted. */
+  directoryAccess?: DirectoryAccessLevel;
 }
 
 /**
@@ -411,6 +460,10 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
     throw new LaunchError(candidates.length > 0 ? "all_contacted" : "no_leads");
   }
 
+  // Paywalled contact details (phone, LinkedIn, raw attributes) only for
+  // accounts with directory access.
+  const directoryAccess = input.directoryAccess ?? (await launchDirectoryAccess(db, userId));
+
   const listId = crypto.randomUUID();
   await db.insert(schema.leadLists).values({
     id: listId,
@@ -435,13 +488,11 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
           lastName: dl.lastName,
           company: dl.companyName,
           website: dl.companyWebsite,
-          linkedin: dl.linkedinUrl,
           jobTitle: dl.jobTitle,
           location: dl.location,
-          phone: dl.phone,
           industry: dl.industry,
           status: "new" as const,
-          customFields: compactCustomFields(dl.rawAttributes),
+          ...directoryLeadContactFields(dl, directoryAccess),
           tags: ["autogtm", "b2b-verified"],
         }))
       )
