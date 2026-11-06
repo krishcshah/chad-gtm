@@ -1,13 +1,25 @@
 import * as React from "react";
 import { cn } from "./utils";
 
+export const controlClasses = [
+  "w-full min-w-0 rounded-md border border-border-strong bg-card text-sm text-foreground shadow-xs",
+  "transition-[border-color,box-shadow] duration-150 outline-none",
+  "placeholder:text-subtle-foreground",
+  "hover:border-subtle-foreground/50",
+  "focus-visible:border-brand focus-visible:ring-[3px] focus-visible:ring-ring",
+  "aria-[invalid=true]:border-destructive aria-[invalid=true]:ring-destructive/20",
+  "disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60",
+].join(" ");
+
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   ({ className, type, ...props }, ref) => (
     <input
-      type={type}
       ref={ref}
+      type={type}
       className={cn(
-        "flex h-9 w-full rounded-md border border-border bg-zinc-950/70 px-3 py-1.5 text-xs text-white shadow-2xs transition-all placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/30 focus-visible:border-brand-400/70 disabled:cursor-not-allowed disabled:opacity-50",
+        controlClasses,
+        "h-9 px-3 py-1",
+        "file:mr-3 file:h-7 file:rounded file:border-0 file:bg-muted file:px-2 file:text-xs file:font-medium file:text-foreground",
         className,
       )}
       {...props}

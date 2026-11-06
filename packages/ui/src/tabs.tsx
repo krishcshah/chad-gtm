@@ -5,37 +5,57 @@ import { cn } from "./utils";
 
 export const Tabs = TabsPrimitive.Root;
 
+type TabsVariant = "underline" | "pill";
+const TabsVariantContext = React.createContext<TabsVariant>("underline");
+
+/**
+ * `underline` (default) for page-level sections; `pill` for compact switches
+ * inside cards and toolbars.
+ */
 export const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.List
-    ref={ref}
-    className={cn("inline-flex h-9 items-center justify-center rounded-lg bg-zinc-950/80 p-1 text-zinc-400 border border-zinc-800/80 shadow-2xs", className)}
-    {...props}
-  />
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List> & { variant?: TabsVariant }
+>(({ className, variant = "underline", ...props }, ref) => (
+  <TabsVariantContext.Provider value={variant}>
+    <TabsPrimitive.List
+      ref={ref}
+      className={cn(
+        variant === "underline"
+          ? "flex items-center gap-5 overflow-x-auto border-b border-border"
+          : "inline-flex h-9 items-center gap-0.5 rounded-lg bg-muted p-0.5 ring-1 ring-inset ring-border",
+        className,
+      )}
+      {...props}
+    />
+  </TabsVariantContext.Provider>
 ));
 TabsList.displayName = "TabsList";
 
 export const TabsTrigger = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.Trigger
-    ref={ref}
-    className={cn(
-      "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-xs font-medium tracking-tight transition-all data-[state=active]:bg-zinc-800 data-[state=active]:text-white data-[state=active]:shadow-xs disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-3.5",
-      className,
-    )}
-    {...props}
-  />
-));
+>(({ className, ...props }, ref) => {
+  const variant = React.useContext(TabsVariantContext);
+  return (
+    <TabsPrimitive.Trigger
+      ref={ref}
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-[13px] font-medium outline-none transition-colors disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4",
+        variant === "underline"
+          ? "-mb-px h-10 border-b-2 border-transparent text-muted-foreground hover:text-foreground data-[state=active]:border-foreground data-[state=active]:text-foreground"
+          : "h-8 rounded-md px-3 text-muted-foreground hover:text-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm",
+        className,
+      )}
+      {...props}
+    />
+  );
+});
 TabsTrigger.displayName = "TabsTrigger";
 
 export const TabsContent = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>
 >(({ className, ...props }, ref) => (
-  <TabsPrimitive.Content ref={ref} className={cn("mt-4 focus-visible:outline-none", className)} {...props} />
+  <TabsPrimitive.Content ref={ref} className={cn("mt-5 outline-none", className)} {...props} />
 ));
 TabsContent.displayName = "TabsContent";

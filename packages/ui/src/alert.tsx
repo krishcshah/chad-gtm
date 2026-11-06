@@ -3,14 +3,15 @@ import { AlertCircle, CheckCircle2, Info, TriangleAlert } from "lucide-react";
 import * as React from "react";
 import { cn } from "./utils";
 
-const alertVariants = cva("relative w-full rounded-xl border px-4 py-3 text-sm flex gap-3", {
+const alertVariants = cva("relative flex w-full gap-3 rounded-lg border px-4 py-3 text-sm", {
   variants: {
     variant: {
-      default: "border-border bg-card/80 text-foreground",
-      info: "border-info/30 bg-info/10 text-info-foreground",
-      success: "border-success/30 bg-success/10 text-success-foreground",
-      warning: "border-warning/30 bg-warning/10 text-warning-foreground",
-      destructive: "border-destructive/30 bg-destructive/10 text-destructive",
+      default: "border-border bg-muted/60 text-foreground [&>svg]:text-muted-foreground",
+      info: "border-info/20 bg-info-soft text-foreground [&>svg]:text-info-text",
+      success: "border-success/20 bg-success-soft text-foreground [&>svg]:text-success-text",
+      warning: "border-warning/25 bg-warning-soft text-foreground [&>svg]:text-warning-text",
+      destructive: "border-destructive/20 bg-destructive-soft text-foreground [&>svg]:text-destructive-text",
+      brand: "border-brand/20 bg-brand-soft text-foreground [&>svg]:text-brand-text",
     },
   },
   defaultVariants: { variant: "default" },
@@ -22,26 +23,31 @@ const icons = {
   success: CheckCircle2,
   warning: TriangleAlert,
   destructive: AlertCircle,
+  brand: Info,
 };
 
+/** Inline message. Put an action button in `action` (right side on desktop). */
 export function Alert({
   className,
   variant = "default",
   icon = true,
+  action,
   children,
   ...props
-}: React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof alertVariants> & { icon?: boolean }) {
+}: React.HTMLAttributes<HTMLDivElement> &
+  VariantProps<typeof alertVariants> & { icon?: boolean; action?: React.ReactNode }) {
   const Icon = icons[variant ?? "default"];
   return (
     <div role="alert" className={cn(alertVariants({ variant }), className)} {...props}>
-      {icon && <Icon className="size-4 mt-0.5 shrink-0" aria-hidden />}
-      <div className="flex-1 min-w-0">{children}</div>
+      {icon && <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />}
+      <div className="min-w-0 flex-1">{children}</div>
+      {action ? <div className="flex shrink-0 items-start gap-2">{action}</div> : null}
     </div>
   );
 }
 export function AlertTitle({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("font-medium leading-none mb-1", className)} {...props} />;
+  return <div className={cn("font-medium leading-snug", className)} {...props} />;
 }
 export function AlertDescription({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("text-[13px] opacity-90 leading-relaxed", className)} {...props} />;
+  return <div className={cn("mt-0.5 text-[13px] leading-relaxed text-muted-foreground", className)} {...props} />;
 }

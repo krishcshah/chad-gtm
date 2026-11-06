@@ -28,7 +28,12 @@
     "./alert": "./src/alert.tsx",
     "./empty-state": "./src/empty-state.tsx",
     "./sheet": "./src/sheet.tsx",
-    "./utils": "./src/utils.ts"
+    "./utils": "./src/utils.ts",
+    "./misc": "./src/misc.tsx",
+    "./stat": "./src/stat.tsx",
+    "./segmented": "./src/segmented.tsx",
+    "./page-header": "./src/page-header.tsx",
+    "./state-panel": "./src/state-panel.tsx"
   },
   "peerDependencies": {
     "react": "^19.0.0",

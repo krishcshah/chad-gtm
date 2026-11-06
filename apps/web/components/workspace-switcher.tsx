@@ -2,21 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { Check, ChevronsUpDown, Loader2, Plus, Settings } from "lucide-react";
 import {
-  Briefcase,
-  Check,
-  ChevronDown,
-  Layers,
-  Plus,
-  Settings,
-  Sparkles,
-} from "lucide-react";
-import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -34,24 +23,33 @@ interface WorkspaceSwitcherProps {
   compact?: boolean;
 }
 
-export function WorkspaceSwitcher({
-  workspaces,
-  activeWorkspace,
-  className,
-  compact = false,
-}: WorkspaceSwitcherProps) {
+function WorkspaceAvatar({ name, className }: { name: string; className?: string }) {
+  return (
+    <span
+      className={cn(
+        "flex size-6 shrink-0 items-center justify-center rounded-md bg-primary text-[11px] font-semibold text-primary-foreground",
+        className,
+      )}
+      aria-hidden
+    >
+      {name.slice(0, 1).toUpperCase()}
+    </span>
+  );
+}
+
+export function WorkspaceSwitcher({ workspaces, activeWorkspace, className, compact = false }: WorkspaceSwitcherProps) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = React.useState(false);
-  const [isSwitching, setIsSwitching] = React.useState(false);
+  const [switching, setSwitching] = React.useState<string | null>(null);
 
   const handleSwitch = async (wsId: string) => {
-    if (wsId === activeWorkspace.id || isSwitching) return;
-    setIsSwitching(true);
+    if (wsId === activeWorkspace.id || switching) return;
+    setSwitching(wsId);
     try {
       await switchWorkspaceAction(wsId);
       router.refresh();
     } finally {
-      setIsSwitching(false);
+      setSwitching(null);
     }
   };
 
@@ -62,121 +60,68 @@ export function WorkspaceSwitcher({
           <button
             type="button"
             className={cn(
-              "group flex items-center justify-between rounded-lg border border-border/50 bg-card/50 hover:bg-accent/40 px-3 py-2 text-left transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring select-none",
-              compact ? "w-10 h-10 justify-center p-0" : "w-full",
-              className
+              "group flex items-center rounded-md text-left outline-none transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring",
+              compact ? "size-9 justify-center" : "w-full gap-2.5 px-1.5 py-1.5",
+              className,
             )}
-            title={`Active Workspace: ${activeWorkspace.name}`}
+            aria-label={`Workspace: ${activeWorkspace.name}. Switch workspace`}
           >
-            <div className={cn("flex items-center min-w-0", compact ? "justify-center" : "gap-2.5")}>
-              <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:bg-primary/20 transition-colors">
-                <Briefcase className="size-3.5" />
-              </div>
-              {!compact && (
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate text-xs font-semibold text-foreground">
-                      {activeWorkspace.name}
-                    </span>
-                    {activeWorkspace.isDefault && (
-                      <span className="shrink-0 rounded bg-muted/80 px-1 py-0.2 text-[9px] font-medium text-muted-foreground uppercase tracking-wide">
-                        Main
-                      </span>
-                    )}
-                  </div>
-                  <p className="truncate text-[10px] text-muted-foreground">
-                    {activeWorkspace.stats
-                      ? `${activeWorkspace.stats.senderCount} mailboxes · ${activeWorkspace.stats.leadCount} leads`
-                      : "Client Workspace"}
-                  </p>
-                </div>
-              )}
-            </div>
+            <WorkspaceAvatar name={activeWorkspace.name} />
             {!compact && (
-              <ChevronDown className="size-3.5 text-muted-foreground/70 shrink-0 group-hover:text-foreground transition-colors ml-1.5" />
+              <>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-medium leading-tight">{activeWorkspace.name}</span>
+                  {activeWorkspace.stats && (
+                    <span className="block truncate text-xs leading-tight text-subtle-foreground">
+                      {activeWorkspace.stats.senderCount} mailboxes · {activeWorkspace.stats.leadCount.toLocaleString()} leads
+                    </span>
+                  )}
+                </span>
+                {switching ? (
+                  <Loader2 className="size-4 shrink-0 animate-spin text-subtle-foreground" />
+                ) : (
+                  <ChevronsUpDown className="size-4 shrink-0 text-subtle-foreground" />
+                )}
+              </>
             )}
           </button>
         </DropdownMenuTrigger>
-
-        <DropdownMenuContent className="w-64 p-1.5" align="start" sideOffset={6}>
-          <DropdownMenuLabel className="px-2 py-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground flex items-center justify-between">
-            <span>Workspaces & Clients</span>
-            <span className="text-[10px] text-muted-foreground/60 lowercase font-mono">
-              {workspaces.length} total
-            </span>
-          </DropdownMenuLabel>
-
-          <DropdownMenuGroup className="space-y-0.5">
-            {workspaces.map((w) => {
-              const isActive = w.id === activeWorkspace.id;
-              return (
-                <DropdownMenuItem
-                  key={w.id}
-                  onClick={() => handleSwitch(w.id)}
-                  className={cn(
-                    "flex items-center justify-between rounded-lg px-2.5 py-2 cursor-pointer transition-colors",
-                    isActive
-                      ? "bg-primary/10 text-primary font-medium"
-                      : "hover:bg-accent/60 text-foreground"
+        <DropdownMenuContent className="w-64" align="start">
+          <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
+          {workspaces.map((w) => {
+            const active = w.id === activeWorkspace.id;
+            return (
+              <DropdownMenuItem key={w.id} onSelect={() => handleSwitch(w.id)} className="gap-2.5 py-2">
+                <WorkspaceAvatar name={w.name} className={active ? undefined : "bg-muted text-muted-foreground"} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{w.name}</span>
+                  {w.stats && (
+                    <span className="block truncate text-xs text-subtle-foreground">
+                      {w.stats.senderCount} mailboxes · {w.stats.campaignCount} campaigns
+                    </span>
                   )}
-                >
-                  <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
-                    <div
-                      className={cn(
-                        "flex size-6 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold",
-                        isActive
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground"
-                      )}
-                    >
-                      {w.name.slice(0, 1).toUpperCase()}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="truncate text-xs">{w.name}</span>
-                        {w.isDefault && (
-                          <span className="rounded bg-muted px-1 text-[9px] text-muted-foreground">
-                            Default
-                          </span>
-                        )}
-                      </div>
-                      {w.stats && (
-                        <p className="truncate text-[10px] text-muted-foreground/80 font-normal">
-                          {w.stats.senderCount} senders · {w.stats.campaignCount} campaigns
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  {isActive && <Check className="size-3.5 text-primary shrink-0 ml-1" />}
-                </DropdownMenuItem>
-              );
-            })}
-          </DropdownMenuGroup>
-
-          <DropdownMenuSeparator className="my-1.5" />
-
-          <DropdownMenuItem
-            onClick={() => setCreateOpen(true)}
-            className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-primary font-medium cursor-pointer hover:bg-primary/10 transition-colors"
-          >
-            <Plus className="size-3.5 text-primary" />
-            <span>New Client Workspace</span>
+                </span>
+                {switching === w.id ? (
+                  <Loader2 className="animate-spin" />
+                ) : active ? (
+                  <Check className="!text-foreground" />
+                ) : null}
+              </DropdownMenuItem>
+            );
+          })}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => setCreateOpen(true)}>
+            <Plus />
+            New workspace
           </DropdownMenuItem>
-
-          <DropdownMenuItem
-            onClick={() => router.push("/settings#workspaces")}
-            className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-muted-foreground cursor-pointer hover:bg-accent/60 transition-colors"
-          >
-            <Settings className="size-3.5" />
-            <span>Manage All Workspaces</span>
+          <DropdownMenuItem onSelect={() => router.push("/settings#workspaces")}>
+            <Settings />
+            Manage workspaces
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <CreateWorkspaceDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-      />
+      <CreateWorkspaceDialog open={createOpen} onOpenChange={setCreateOpen} />
     </>
   );
 }
