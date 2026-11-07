@@ -15,6 +15,7 @@ import {
   jsonb,
   pgTable,
   primaryKey,
+  smallint,
   text,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
@@ -356,6 +357,8 @@ export const campaigns = pgTable(
     agentOffer: text("agent_offer").notNull().default(""),
     startedAt: text("started_at"),
     completedAt: text("completed_at"),
+    /** True while an Autopilot campaign still has contacts to load (never auto-completes). */
+    audienceOpen: boolean("audience_open").notNull().default(false),
     deletedAt: text("deleted_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -403,6 +406,8 @@ export const campaignLeads = pgTable(
     attempts: integer("attempts").notNull().default(0),
     /** Next sequence step to send (1-based). Default 1 for single-template campaigns. */
     stepPosition: integer("step_position").notNull().default(1),
+    /** Autopilot sending tier: 1 target titles, 2 other decision-makers, 3 everyone else (null sorts last). */
+    priority: smallint("priority"),
     scheduledFor: text("scheduled_for"),
     sentAt: text("sent_at"),
     lastError: text("last_error"),
@@ -413,6 +418,7 @@ export const campaignLeads = pgTable(
     uniqueIndex("campaign_leads_campaign_lead_unique").on(t.campaignId, t.leadId),
     index("campaign_leads_sched_idx").on(t.campaignId, t.status, t.scheduledFor),
     index("campaign_leads_lead_idx").on(t.leadId),
+    index("campaign_leads_queue_order_idx").on(t.campaignId, t.status, t.stepPosition, t.priority),
   ],
 );
 
@@ -957,6 +963,8 @@ export const chadGtmRuns = pgTable(
     launchStartedAt: text("launch_started_at"),
     /** Set when the user removes an unlaunched run from the Autopilot list. */
     dismissedAt: text("dismissed_at"),
+    /** Autopilot audience: tier totals and cursors (apps/web/lib/autopilot-audience.ts). */
+    audience: jsonb("audience").$type<Record<string, any>>().notNull().default({}),
     approvedEmailSamples: jsonb("approved_email_samples")
       .$type<Array<{
         leadId?: string;

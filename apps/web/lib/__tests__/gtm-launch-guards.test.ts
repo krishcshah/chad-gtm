@@ -19,7 +19,16 @@ const dir = vi.hoisted(() => ({
 
 vi.mock("../leads-directory", () => ({
   getMatchingDirectoryLeadsForExport: vi.fn(() => dir.leads),
-  searchLeadMatcherPreview: vi.fn((industries: string[], countries: string[], page: number, pageSize: number, filters: any = {}) => {
+  getDirectoryDb: () => ({
+    // Keyset pages over the fixture rows (the audience reads the directory this way).
+    prepare: () => ({
+      all: (...args: any[]) => (dir.leads).filter((l: any) => Number(l.id) > Number(args[args.length - 2])).slice(0, Number(args[args.length - 1])),
+      get: () => ({ c: (dir.leads).length }),
+    }),
+  }),
+  buildDirectoryWhereClause: () => ({ whereSql: "", bindings: [] }),
+  mapDirectoryRow: (r: any) => r,
+    searchLeadMatcherPreview: vi.fn((industries: string[], countries: string[], page: number, pageSize: number, filters: any = {}) => {
     dir.previewCalls.push({ industries, countries, page, pageSize, filters });
     if (dir.previewThrows) throw new Error("directory unavailable");
     const total = filters?.jobTitles?.length ? dir.previewTotals.withTitles : dir.previewTotals.withoutTitles;
@@ -199,7 +208,7 @@ describe("buildRunSequence", () => {
       calibrationProfile: {},
     } as any);
     expect(seq.steps).toHaveLength(3);
-    expect(seq.steps.map((s) => s.delayDays)).toEqual([0, 3, 4]);
+    expect(seq.steps.map((s) => s.delayDays)).toEqual([0, 2, 2]);
     expect(seq.bodyText).toContain("Close the books in two days.");
     expect(seq.steps[1]!.subject.startsWith("re: ")).toBe(true);
   });
@@ -390,7 +399,8 @@ describe("launchRunCampaign launch claim and cleanup", () => {
     const firstVariant = ops.find((o) => o.op === "insert" && o.table === schema.sequenceStepVariants);
     const prompt = JSON.parse(firstVariant!.values.aiPrompt);
     expect(prompt.context.valueProposition).toBe("Close the books in two days.");
-    expect(prompt.instruction).toContain("Close the books in two days.");
+    // The offer travels in the context; the instruction only carries the step (copywriter.ts).
+    expect(prompt.instruction).toContain("Email 1 of 3");
   });
 
   it("stores how many launched leads match the target roles (#57)", async () => {

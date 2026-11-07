@@ -62,7 +62,7 @@ const good1 = {
   hook: "fact" as const,
   factIndex: 1,
   body:
-    "Hi Marco,\n\nSaw Haulio opened a second depot in Dallas. That's a second yard for you to dispatch from every morning.\n\nNorthwind puts every depot on one dispatch board and pushes route changes to drivers' phones, so Dallas runs from the same plan as home.\n\nOpen to seeing Dallas and your main yard on one board?\n\nSam\nNorthwind",
+    "Hi Marco,\n\nSaw Haulio opened a second depot in Dallas. That's a second yard for you to dispatch from every morning.\n\nNorthwind puts every depot on one dispatch board and pushes route changes to drivers' phones, so Dallas runs from the same plan as home.\n\nOpen to seeing Dallas and your main yard on one board?\n\nSam",
 };
 
 describe("prompt", () => {
@@ -383,7 +383,7 @@ describe("triggers and rewrites (v5)", () => {
     const req = base({ step: 2, prior: [{ step: 1, subject: "s", body: good1.body }] });
     const p = checkDraft(req, {
       subject: "",
-      body: "Hi Marco,\n\nWhen a route changes, Northwind pushes it to the driver's phone, so dispatch hears about it once.\n\nAre route changes sent by hand today, or from a tool?\n\nSam\nNorthwind",
+      body: "Hi Marco,\n\nWhen a route changes, Northwind pushes it to the driver's phone, so dispatch hears about it once.\n\nAre route changes sent by hand today, or from a tool?\n\nSam",
     });
     expect(p.join(" ")).toMatch(/immature/);
   });

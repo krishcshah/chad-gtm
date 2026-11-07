@@ -233,7 +233,7 @@ describe("LeadMatcher", () => {
     );
     await act(async () => {});
     expect(host.textContent).toContain("1,234");
-    expect(host.textContent).toContain("Up to 500 per run, from 1,234 matching contacts");
+    expect(host.textContent).toContain("All 1,234 matching contacts, best fit first");
     expect(host.textContent).toContain("People anyone contacted in the last 90 days and opted-out addresses are skipped.");
     expect(host.textContent).toContain("Ana Lopez");
     const remove = host.querySelector('[aria-label="Remove Logistics"]') as HTMLButtonElement;

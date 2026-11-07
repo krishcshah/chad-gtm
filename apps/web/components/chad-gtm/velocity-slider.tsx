@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import { ArrowLeft, Rocket } from "lucide-react";
 import { Button, Card, CardDescription, CardHeader, CardTitle } from "@smartreach/ui";
 import { AUTOPILOT_DAILY_DEFAULT, AUTOPILOT_DAILY_MAX, AUTOPILOT_DAILY_MIN } from "@/lib/autopilot-policy";
+import { EMAILS_PER_LEAD, PRICE_CENTS_PER_EMAIL, forecastFromDailyVolume, formatCost } from "@/lib/pricing";
 
 export const MIN_DAILY = AUTOPILOT_DAILY_MIN;
 export const MAX_DAILY = AUTOPILOT_DAILY_MAX;
@@ -49,6 +50,37 @@ export function DailyVolumeInput({
   );
 }
 
+/**
+ * What a daily volume means: every email counts (follow-ups included), each
+ * lead gets three, and the cost at the published price.
+ */
+export function VolumeForecast({ perDay, className }: { perDay: number; className?: string }) {
+  const f = forecastFromDailyVolume(perDay);
+  return (
+    <div className={className}>
+      <dl className="grid grid-cols-3 gap-3 rounded-lg bg-muted/60 p-4 text-[13px]">
+        <div>
+          <dt className="text-xs text-muted-foreground">New leads a day</dt>
+          <dd className="tabular mt-0.5 font-medium">about {f.newLeadsPerDay.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Leads a month</dt>
+          <dd className="tabular mt-0.5 font-medium">about {f.leadsPerMonth.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Cost a month</dt>
+          <dd className="tabular mt-0.5 font-medium">up to {formatCost(f.costCentsPerMonth)}</dd>
+        </div>
+      </dl>
+      <p className="mt-2 text-xs leading-relaxed text-subtle-foreground">
+        Each lead gets {EMAILS_PER_LEAD} emails (the first, then follow-ups two and four days later), and every one
+        counts toward this number. Due follow-ups go first; new leads use what's left. {PRICE_CENTS_PER_EMAIL}¢ per
+        email sent, {f.emailsPerMonth.toLocaleString()} emails over a month of weekdays.
+      </p>
+    </div>
+  );
+}
+
 /** Guided setup, step 5: daily volume, then launch. */
 export function VelocitySlider({
   initialLimit = AUTOPILOT_DAILY_DEFAULT,
@@ -67,7 +99,6 @@ export function VelocitySlider({
   const [dailyLimit, setDailyLimit] = useState(initialLimit);
   const inputId = useId();
 
-  const weekly = dailyLimit * 5;
 
   return (
     <Card>
@@ -95,11 +126,8 @@ export function VelocitySlider({
           </div>
         </div>
 
-        <dl className="grid grid-cols-2 gap-3 rounded-lg bg-muted/60 p-4 text-[13px]">
-          <div>
-            <dt className="text-xs text-muted-foreground">Per week</dt>
-            <dd className="tabular mt-0.5 font-medium">Up to {weekly.toLocaleString()} emails</dd>
-          </div>
+        <VolumeForecast perDay={dailyLimit} />
+        <dl className="grid grid-cols-1 gap-3 rounded-lg bg-muted/60 p-4 text-[13px]">
           {sendingFrom ? (
             <div>
               <dt className="text-xs text-muted-foreground">Sends from</dt>

@@ -28,6 +28,7 @@ import { ensureChadGtmTables, getDb } from "@/lib/db";
 import { getTargetTitles } from "@/lib/gtm-launch";
 import { deriveRunPhase, type RunPhase } from "@/lib/autopilot-policy";
 import { getPostalHold } from "@/lib/postal-hold";
+import { PRICE_CENTS_PER_EMAIL, formatCost, getMonthlyUsage } from "@/lib/usage";
 import { Page } from "@/components/layout/page";
 import { PostalHoldNotice } from "../postal-hold-notice";
 import { ActivityFeed } from "./activity-feed";
@@ -53,7 +54,7 @@ export default async function DashboardPage() {
   await ensureChadGtmTables(db);
 
   // Everything here is for the active workspace (the Inbox's rule for replies).
-  const [postalHold, stats, activity, activeCampaigns, recentReplyRows, gtmRuns] = await Promise.all([
+  const [postalHold, stats, activity, activeCampaigns, recentReplyRows, gtmRuns, usage] = await Promise.all([
     getPostalHold(user.id),
     getDashboardStats(user.id, workspace.id, workspace.isDefault),
     getRecentActivity(user.id, 20, { workspaceId: workspace.id, isDefault: workspace.isDefault }),
@@ -78,6 +79,7 @@ export default async function DashboardPage() {
       )
       .orderBy(desc(schema.chadGtmRuns.createdAt))
       .limit(6),
+    getMonthlyUsage(db, { userId: user.id, workspaceId: workspace.isDefault ? null : workspace.id }).catch(() => null),
   ]);
   const recentReplies = recentReplyRows.map((r) => r.reply);
 
@@ -192,6 +194,24 @@ export default async function DashboardPage() {
         />
         <Stat bare label="Leads in play" value={stats.totalLeads.toLocaleString()} hint="Across your lead lists" />
       </Card>
+
+      {usage ? (
+        <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[13px] font-medium">
+              This month: {usage.emailsSent.toLocaleString()} emails sent
+            </p>
+            <p className="mt-1 text-[13px] text-muted-foreground">
+              {usage.leadsContacted.toLocaleString()} new leads contacted and {usage.followUpsSent.toLocaleString()}{" "}
+              follow-ups. Every email counts, at {PRICE_CENTS_PER_EMAIL}¢ each.
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="tabular text-[22px] font-semibold leading-none tracking-[-0.03em]">{formatCost(usage.costCents)}</p>
+            <p className="mt-1 text-xs text-subtle-foreground">so far this month</p>
+          </div>
+        </Card>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">

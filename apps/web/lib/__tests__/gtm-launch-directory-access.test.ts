@@ -10,7 +10,18 @@ vi.mock("../approval", () => ({
   assertCanSend: vi.fn(async () => undefined),
   isApprovedToSend: vi.fn(async () => true),
 }));
-vi.mock("../leads-directory", () => ({ getMatchingDirectoryLeadsForExport: vi.fn(() => st.leads) }));
+vi.mock("../leads-directory", () => ({
+  getDirectoryDb: () => ({
+    // Keyset pages over the fixture rows (the audience reads the directory this way).
+    prepare: () => ({
+      all: (...args: any[]) => (st.leads).filter((l: any) => Number(l.id) > Number(args[args.length - 2])).slice(0, Number(args[args.length - 1])),
+      get: () => ({ c: (st.leads).length }),
+    }),
+  }),
+  buildDirectoryWhereClause: () => ({ whereSql: "", bindings: [] }),
+  mapDirectoryRow: (r: any) => r,
+  getMatchingDirectoryLeadsForExport: vi.fn(() => st.leads),
+}));
 vi.mock("../campaign-drafts", () => ({ ensureCampaignLeadSnapshot: vi.fn(async () => 1) }));
 vi.mock("../b2b-access", () => ({
   getDirectoryAccessLevel: vi.fn(async () => {

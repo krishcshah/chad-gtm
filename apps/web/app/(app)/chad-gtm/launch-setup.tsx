@@ -603,10 +603,10 @@ export function audienceText(a: PlanAudience): string {
   if (total === 0) {
     return "No contacts match this plan, so the launch would fail. Retry the research with a note about who you sell to.";
   }
-  const split = a.strictRoles
+  const order = a.strictRoles
     ? "only people with your job titles"
-    : `${a.roleMatches.toLocaleString()} match your job titles${a.bySize ? " and company size" : ""}, ${a.otherRoles.toLocaleString()} are others in your industries`;
-  return `Up to ${a.perRun.toLocaleString()} people per run, picked from ${total.toLocaleString()} matching contacts (${split}). ${LAUNCH_AUDIENCE_NOTE}`;
+    : `${a.roleMatches.toLocaleString()} with your job titles${a.bySize ? " and company size" : ""} first, then ${a.otherRoles.toLocaleString()} other decision-makers and people in your industries`;
+  return `All ${total.toLocaleString()} matching contacts, in priority order: ${order}. Each gets three emails over five days. ${LAUNCH_AUDIENCE_NOTE}`;
 }
 
 function PlanRow({ label, values }: { label: string; values: string[] }) {

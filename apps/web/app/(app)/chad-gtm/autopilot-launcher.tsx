@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, ChevronDown, ListChecks } from "lucide-react";
 import {
@@ -19,6 +19,8 @@ import {
 } from "@smartreach/ui";
 import Link from "next/link";
 import { startAutopilotAction, type AutopilotOutcome } from "@/lib/autopilot-actions";
+import { AUTOPILOT_DAILY_DEFAULT } from "@/lib/autopilot-policy";
+import { DailyVolumeInput, VolumeForecast } from "@/components/chad-gtm/velocity-slider";
 import { hasCompliantIdentity, type RunPhase } from "@/lib/autopilot-policy";
 import { Page } from "@/components/layout/page";
 import { GUIDED_SETUP_HREF, LaunchDetailsForm } from "./launch-setup";
@@ -83,6 +85,9 @@ export function AutopilotLauncher({
     if (pending) setUrl((current) => current || pending);
   }, []);
   const [booking, setBooking] = useState("");
+  // The one control the client sets: emails per day (follow-ups included).
+  const [dailyLimit, setDailyLimit] = useState(AUTOPILOT_DAILY_DEFAULT);
+  const volumeId = useId();
   const [notes, setNotes] = useState("");
   const [showMore, setShowMore] = useState(false);
   const [running, setRunning] = useState(false);
@@ -112,7 +117,7 @@ export function AutopilotLauncher({
     setError(null);
     setRunning(true);
     start(async () => {
-      const res = await startAutopilotAction({ url, bookingUrl: booking, notes });
+      const res = await startAutopilotAction({ url, bookingUrl: booking, notes, dailyLimit });
       setRunning(false);
       if (!res.ok) {
         setError(res.error);
@@ -186,6 +191,22 @@ export function AutopilotLauncher({
                 className="h-11 text-[15px]"
               />
             </Field>
+
+            <div>
+              <div className="flex items-baseline justify-between gap-3">
+                <label htmlFor={volumeId} className="text-[13px] font-medium">
+                  Emails per day
+                </label>
+                <span className="tabular text-[22px] font-semibold leading-none tracking-[-0.03em]">
+                  {dailyLimit}
+                  <span className="ml-1 text-sm font-normal text-muted-foreground">a day</span>
+                </span>
+              </div>
+              <div className="mt-3">
+                <DailyVolumeInput id={volumeId} value={dailyLimit} onChange={setDailyLimit} disabled={running} />
+              </div>
+              <VolumeForecast perDay={dailyLimit} className="mt-3" />
+            </div>
 
             {error && (
               <Alert

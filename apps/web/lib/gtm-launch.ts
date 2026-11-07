@@ -19,6 +19,15 @@ import {
 } from "./leads-directory";
 import type { CampaignResearchContext } from "./ai";
 import { ensureCampaignLeadSnapshot } from "./campaign-drafts";
+import {
+  TIERS,
+  applyPriorities,
+  audienceGates,
+  insertAudienceLeads,
+  newAudienceState,
+  pickNextLeads,
+  refillTarget,
+} from "./autopilot-audience";
 import { assertCanSend } from "./approval";
 import { modeFromRun } from "./lead-conversations";
 import {
@@ -40,7 +49,12 @@ type RunRow = typeof schema.chadGtmRuns.$inferSelect;
 
 export { CONTACT_COOLDOWN_DAYS, recentlyContactedEmails, suppressedEmailsFor };
 /** Leads provisioned per autopilot campaign. */
-export const LEADS_PER_CAMPAIGN = 500;
+/**
+ * No cap: Autopilot works through every matching contact (three priority
+ * tiers, loaded in rolling batches; see autopilot-audience.ts). Kept as an
+ * export for older callers that show "per run" numbers.
+ */
+export const LEADS_PER_CAMPAIGN = Number.POSITIVE_INFINITY;
 
 export function buildCampaignContext(
   run: RunRow,
@@ -60,6 +74,19 @@ export function buildCampaignContext(
     painPoints: Array.isArray(icp.painPoints) ? icp.painPoints : [],
     targetTitles: Array.isArray(icp.targetTitles) ? icp.targetTitles : [],
     isOutboundInfrastructure: isOwnOffer,
+    // What the product does and what it can prove, from the sender's own site:
+    // the copywriter may claim nothing else.
+    capabilities: [
+      ...(Array.isArray(overview.valuePropositions) ? overview.valuePropositions : []),
+      ...(Array.isArray(overview.keyDifferentiators) ? overview.keyDifferentiators : []),
+    ]
+      .map((x: unknown) => String(x ?? "").trim())
+      .filter(Boolean)
+      .slice(0, 6),
+    proofPoints: (Array.isArray(overview.proofPoints) ? overview.proofPoints : [])
+      .map((x: unknown) => String(x ?? "").trim())
+      .filter(Boolean)
+      .slice(0, 3),
   };
 }
 
@@ -455,28 +482,26 @@ export function buildRunSequence(run: RunRow, approvedSamples: any[] = [], selec
       delayDays: 0,
       subject,
       bodyText,
-      prompt: [
-        calibratedProfile.customAiInstruction ||
-          `Company: ${companyName}. Value offer: ${activeOffer.valueProp}. Angle: ${activeOffer.angle}. Call to action: ${activeOffer.cta}. Write a first-touch cold email in 35-70 words. No pleasantries, no self-intro, no feature dump. One specific observation, one friction, one low-friction permission question.`,
-        `SPINTAX: include {Hi|Hey|Hello} and at least one other {a|b} variant group. Never spin names, companies, numbers, or factual claims.`,
-        `Do not mention DNS, mailboxes, inbox warmup, or deliverability unless the campaign explicitly asks for it.`,
-      ].join("\n\n"),
+      // The copywriter has its own rules per email; only a note the user wrote is passed on.
+      prompt: calibratedProfile.customAiInstruction || "Email 1 of 3: first touch.",
     },
     {
-      delayDays: 3,
+      // Follow-up 1, two days after email 1, in the same thread.
+      delayDays: 2,
       subject: reSubject,
       bodyText: ensureOutreachSpintax(
         `Hi {{first_name}},\n\nOne more thought on this — ${lowerFirst((activeOffer.valueProp || "").replace(/\.$/, "")) || "happy to share how it would apply to {{company}}"}.\n\nWorth a look, or should I leave it?\n\n{{sender_name}}`
       ),
-      prompt: `Write follow-up #1 (sent 3 days after initial message) for ${companyName}. Recipient is {{job_title}} at {{company}}. Never say "just checking in" or "following up". Add one new, specific reason this matters, grounded in: ${activeOffer.valueProp}. Strictly under 35 words. Low-friction permission CTA.`,
+      prompt: "Email 2 of 3: follow-up 1.",
     },
     {
-      delayDays: 4,
+      // Follow-up 2, two days after follow-up 1 (day 4), same thread.
+      delayDays: 2,
       subject: reSubject,
       bodyText: ensureOutreachSpintax(
         `Hi {{first_name}},\n\nAssuming the timing isn't right for {{company}}.\n\nShould I close the loop for now, or check back next quarter?\n\n{{sender_name}}`
       ),
-      prompt: `Write follow-up #2 (final breakup email, sent 7 days after initial outreach) for ${companyName}. Recipient is {{job_title}} at {{company}}. Zero guilt, polite permission close. Under 25 words. Ask if we should close the loop or check back next quarter.`,
+      prompt: "Email 3 of 3: follow-up 2, the final email.",
     },
   ];
 
@@ -549,36 +574,27 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
   // screen read offers[0] (#51).
   const offers = withChosenOfferFirst(((run.offers as any[]) ?? []) as any[], input.selectedOfferIndex ?? 0);
 
-  // Leads: over-fetch, then drop anyone another campaign contacted recently.
-  // Company size and "only these job titles" apply here too (#57).
-  const leadOffset = stableHash(run.id) % 5000;
-  const { leads: candidates, roleMatches: roleMatchCount } = fetchTargetedLeadsWithSplit(
+  // Leads: every matching contact, in three priority tiers (target titles,
+  // other decision-makers, everyone else in the industries). Launch loads the
+  // first batch; topUpAutopilotAudiences() keeps the queue filled after that.
+  // Cooldown, suppression and work-address rules apply to every batch.
+  const audienceStart = newAudienceState({
     industries,
-    getTargetTitles(run),
-    LEADS_PER_CAMPAIGN * 2,
-    leadOffset,
-    { teamSizes: runTeamSizes(run), strictRoles: runStrictRoles(run) }
-  );
-  // Title-query leads come first in `candidates`.
-  const roleEmails = new Set(candidates.slice(0, roleMatchCount).map((c) => c.email.toLowerCase()));
-  const candidateEmails = candidates.map((c) => c.email.toLowerCase());
-  const contacted = await recentlyContactedEmails(db, candidateEmails);
-  // Opt-outs: the owner's suppressions plus global unsubscribes/bounces/complaints.
-  const suppressed = await suppressedEmailsFor(db, userId, candidateEmails);
-  const matchingDirectoryLeads = candidates
-    .filter((c) => {
-      const e = c.email.toLowerCase();
-      return !contacted.has(e) && !suppressed.has(e);
-    })
-    .slice(0, LEADS_PER_CAMPAIGN);
-
-  if (matchingDirectoryLeads.length === 0) {
-    throw new LaunchError(candidates.length > 0 ? "all_contacted" : "no_leads");
+    targetTitles: getTargetTitles(run),
+    teamSizes: runTeamSizes(run),
+    strictRoles: runStrictRoles(run),
+  });
+  const gates = audienceGates(db, { userId, contactable: toContactableLeads });
+  const { picked, state: audience } = await pickNextLeads(audienceStart, refillTarget(dailyLimit).batch, gates);
+  if (picked.length === 0) {
+    const total = TIERS.reduce((n, t) => n + audienceStart.tiers[`${t}`].total, 0);
+    throw new LaunchError(total > 0 ? "all_contacted" : "no_leads");
   }
-  const roleMatched = matchingDirectoryLeads.filter((l) => roleEmails.has(l.email.toLowerCase())).length;
+  // With no target titles everyone counts as a role match (as before tiers existed).
+  const roleMatched = audienceStart.targetTitles.length ? picked.filter((p) => p.tier === 1).length : picked.length;
   const launchAudience = {
     roleMatches: roleMatched,
-    otherRoles: matchingDirectoryLeads.length - roleMatched,
+    otherRoles: picked.length - roleMatched,
     at: nowIso(),
   };
 
@@ -628,32 +644,13 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
       name: `${companyName} AutoGTM Leads (${dateStr})`,
     });
 
-    const CHUNK = 100;
-    for (let i = 0; i < matchingDirectoryLeads.length; i += CHUNK) {
-      const batch = matchingDirectoryLeads.slice(i, i + CHUNK);
-      await db
-        .insert(schema.leads)
-        .values(
-          batch.map((dl) => ({
-            id: crypto.randomUUID(),
-            userId,
-            workspaceId,
-            listId,
-            email: normalizeEmail(dl.email),
-            firstName: dl.firstName,
-            lastName: dl.lastName,
-            company: dl.companyName,
-            website: dl.companyWebsite,
-            jobTitle: dl.jobTitle,
-            location: dl.location,
-            industry: dl.industry,
-            status: "new" as const,
-            ...directoryLeadContactFields(dl, directoryAccess),
-            tags: ["autogtm", "b2b-verified"],
-          }))
-        )
-        .onConflictDoNothing();
-    }
+    const leadTiers = await insertAudienceLeads(db, {
+      picked,
+      userId,
+      workspaceId,
+      listId,
+      contactFields: (dl) => directoryLeadContactFields(dl, directoryAccess),
+    });
 
     const sequence = buildRunSequence({ ...senderRun, offers }, approvedSamples, 0);
     const { activeOffer, subject: finalSubject, bodyText: finalBodyText, bodyHtml: finalBodyHtml, steps } = sequence;
@@ -692,6 +689,8 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
       trackOpens: true,
       // The run's reply mode carries over: the campaign is where it is stored from now on.
       leadConversationMode: modeFromRun(run.replyAgentMode),
+      // More contacts to load later: never auto-complete while this is true.
+      audienceOpen: !audience.exhausted,
       // Business hours, Monday–Friday, in the prospects' timezone (AUTOPILOT_TIMEZONE).
       ...autopilotSendingWindow(),
     });
@@ -748,6 +747,8 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
       // sequences in parallel). Matches existed, so this is all_contacted.
       throw new LaunchError("all_contacted");
     }
+    // Sending order: Priority 1 first, then 2, then 3.
+    await applyPriorities(db, campaignId, leadTiers);
 
     // Link the run while the campaign is still a draft, and only if no other
     // launch linked one first. Releases the claim in the same write.
@@ -761,6 +762,7 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
         approvedEmailSamples: approvedSamples,
         offers,
         calibrationProfile: { ...profileWithoutFailure, launchAudience },
+        audience,
         launchStartedAt: null,
         updatedAt: nowIso(),
       })
@@ -782,5 +784,5 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
     .set({ status: "running", startedAt, updatedAt: startedAt })
     .where(eq(schema.campaigns.id, campaignId));
 
-  return { campaignId, leadCount: matchingDirectoryLeads.length };
+  return { campaignId, leadCount: picked.length };
 }

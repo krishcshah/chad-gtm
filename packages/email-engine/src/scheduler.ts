@@ -338,7 +338,14 @@ export async function scheduleCampaign(
           : sql`1=1`,
       ),
     )
-    .orderBy(asc(schema.campaignLeads.createdAt))
+    // Due follow-ups first so every lead gets all three emails on time, then
+    // Autopilot's priority tiers (1 target titles, 2 other decision-makers,
+    // 3 everyone else; null last), then oldest first.
+    .orderBy(
+      desc(schema.campaignLeads.stepPosition),
+      sql`${schema.campaignLeads.priority} asc nulls last`,
+      asc(schema.campaignLeads.createdAt),
+    )
     .limit(claimLimit);
 
   if (claimable.length === 0) {
@@ -348,6 +355,11 @@ export async function scheduleCampaign(
     if (campaign.stopOnReply) await cancelRepliedQueuedLeads(db, campaign.id, nowIsoS);
     // Nothing queued → maybe complete
     const remaining = await pendingWork(db, campaign.id);
+    // An Autopilot campaign with contacts still to load is between batches,
+    // not finished: the audience top-up adds the next tier shortly.
+    if (remaining === 0 && (campaign as { audienceOpen?: boolean }).audienceOpen) {
+      return { enqueued: 0, note: "waiting-for-leads" };
+    }
     if (remaining === 0) {
       await db
         .update(schema.campaigns)
@@ -550,6 +562,7 @@ export async function scheduleCampaign(
       steps: sequenceSteps,
       lead,
       senderName: senderFirstName,
+      campaignLeadId: cl.id,
       aiOptions: await loadEngineAiOptions(db, campaign.userId),
     });
     if ("error" in content) {

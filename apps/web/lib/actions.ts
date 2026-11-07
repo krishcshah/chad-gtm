@@ -1924,7 +1924,8 @@ export async function setUniboxReplyTag(input: {
   try {
     const [row] = await db
       .update(schema.replies)
-      .set({ tag: parsed.data.tag })
+      // A person's tag wins over automatic tagging when the lead writes again (#86).
+      .set({ tag: parsed.data.tag, tagSource: parsed.data.tag ? "human" : null })
       .where(and(eq(schema.replies.id, parsed.data.replyId), eq(schema.replies.userId, user.id)))
       .returning({
         id: schema.replies.id,

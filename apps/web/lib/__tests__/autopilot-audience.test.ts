@@ -66,9 +66,18 @@ describe("tiers", () => {
     expect(counts).toEqual({ "1": 10, "2": 40, "3": 50 });
   });
 
-  it("refills about a week of sending once the queue drops below three days", () => {
-    expect(refillTarget(60)).toEqual({ low: 180, batch: 420 });
-    expect(refillTarget(5)).toEqual({ low: 90, batch: 210 });
+  it("keeps about a week of new leads waiting and adds about two weeks at a time", () => {
+    // 60 emails a day = 20 new leads a day (3 emails each).
+    expect(refillTarget(60)).toEqual({ low: 100, batch: 200 });
+    // 300 a day = 100 new leads a day.
+    expect(refillTarget(300)).toEqual({ low: 500, batch: 1000 });
+  });
+
+  it("strict roles only ever uses Priority 1", () => {
+    const s = newAudienceState({ industries: ["Logistics"], targetTitles: ["coo"], countries: ["United States"], strictRoles: true, count: () => 7 });
+    expect(s.tiers["2"].exhausted && s.tiers["3"].exhausted).toBe(true);
+    expect(tierQueryParams(2, s)).toBeNull();
+    expect(s.tiers["1"].total).toBe(7);
   });
 });
 

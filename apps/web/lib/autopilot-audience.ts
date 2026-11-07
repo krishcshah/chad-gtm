@@ -13,7 +13,10 @@
  * address in an allowed country, 90-day cross-customer cooldown, the owner's
  * and global suppressions, and de-duplication within the campaign.
  */
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { normalizeEmail, schema } from "@smartreach/database";
 import { autopilotCountries } from "./autopilot-policy";
+import { recentlyContactedEmails, suppressedEmailsFor } from "./contact-guards";
 import { buildDirectoryWhereClause, getDirectoryDb, mapDirectoryRow, type DirectoryLead } from "./leads-directory";
 
 export type Tier = 1 | 2 | 3;
@@ -52,6 +55,10 @@ export interface AudienceState {
   industries: string[];
   targetTitles: string[];
   countries: string[];
+  /** Company sizes from the run's profile (directory team-size values); empty = any size. */
+  teamSizes?: string[];
+  /** "Only these job titles": Priority 2 and 3 are never contacted. */
+  strictRoles?: boolean;
   tiers: Record<`${Tier}`, TierState>;
   /** Total contacts added to the campaign across tiers. */
   added: number;
@@ -78,10 +85,15 @@ export function classifyTier(jobTitle: string | null | undefined, targetTitles: 
 }
 
 /** Directory filter used to fetch candidates for a tier (classification is re-checked in code). */
-export function tierQueryParams(tier: Tier, state: Pick<AudienceState, "industries" | "targetTitles" | "countries">) {
+export function tierQueryParams(
+  tier: Tier,
+  state: Pick<AudienceState, "industries" | "targetTitles" | "countries" | "teamSizes" | "strictRoles">,
+) {
+  if (state.strictRoles && tier > 1) return null;
   const base = {
     industries: state.industries.length > 0 ? state.industries : undefined,
     countries: state.countries,
+    ...(state.teamSizes?.length ? { teamSizes: state.teamSizes } : {}),
     hasEmail: true,
     hasWorkEmail: true,
   };
@@ -111,7 +123,7 @@ export const directoryCount: DirectoryCount = (params) => {
 
 /** Counts for the three tiers. Tiers overlap in the directory, so 2 and 3 are derived. */
 export function countAudience(
-  state: Pick<AudienceState, "industries" | "targetTitles" | "countries">,
+  state: Pick<AudienceState, "industries" | "targetTitles" | "countries" | "teamSizes" | "strictRoles">,
   count: DirectoryCount = directoryCount,
 ): Record<`${Tier}`, number> {
   const safe = (p: ReturnType<typeof tierQueryParams>) => {
@@ -123,8 +135,10 @@ export function countAudience(
       return 0;
     }
   };
+  const p1Only = safe(tierQueryParams(1, state));
+  if (state.strictRoles) return { "1": p1Only, "2": 0, "3": 0 };
   const all = safe(tierQueryParams(3, state));
-  const p1 = Math.min(all, safe(tierQueryParams(1, state)));
+  const p1 = Math.min(all, p1Only);
   const senior = safe(tierQueryParams(2, state));
   const p2 = Math.max(0, Math.min(all - p1, senior));
   return { "1": p1, "2": p2, "3": Math.max(0, all - p1 - p2) };
@@ -134,19 +148,27 @@ export function newAudienceState(input: {
   industries: string[];
   targetTitles: string[];
   countries?: string[];
+  teamSizes?: string[];
+  strictRoles?: boolean;
   count?: DirectoryCount;
   now?: Date;
 }): AudienceState {
   const countries = input.countries ?? autopilotCountries();
-  const base = { industries: input.industries, targetTitles: input.targetTitles, countries };
+  const base = {
+    industries: input.industries,
+    targetTitles: input.targetTitles,
+    countries,
+    teamSizes: input.teamSizes ?? [],
+    strictRoles: Boolean(input.strictRoles),
+  };
   const totals = countAudience(base, input.count);
   const now = (input.now ?? new Date()).toISOString();
   const tier = (t: Tier): TierState => ({
     total: totals[`${t}`],
     cursor: 0,
     added: 0,
-    // No target titles means there is no Priority 1 query to run.
-    exhausted: t === 1 && input.targetTitles.length === 0,
+    // No target titles means there is no Priority 1 query; strict roles means only Priority 1.
+    exhausted: (t === 1 && input.targetTitles.length === 0) || (t > 1 && Boolean(input.strictRoles)),
   });
   return { version: 1, ...base, tiers: { "1": tier(1), "2": tier(2), "3": tier(3) }, added: 0, exhausted: false, countedAt: now, updatedAt: now };
 }
@@ -187,6 +209,8 @@ export async function pickNextLeads(
   const next: AudienceState = JSON.parse(JSON.stringify(state));
   const picked: PickedLead[] = [];
   const seen = new Set<string>();
+  // Gate verdicts already looked up in this batch (lower tiers re-scan rows).
+  const verdict = new Map<string, boolean>();
 
   for (const tier of TIERS) {
     const ts = next.tiers[`${tier}`];
@@ -212,8 +236,13 @@ export async function pickNextLeads(
         const lead = cls <= tier ? filters.contactable([row], next.countries)[0] : undefined;
         return { row, cls, lead };
       });
-      const emails = considered.filter((c) => c.lead).map((c) => c.lead!.email.toLowerCase());
-      const blocked = emails.length ? await filters.blocked(emails) : new Set<string>();
+      const unchecked = [
+        ...new Set(considered.filter((c) => c.lead).map((c) => c.lead!.email.toLowerCase())),
+      ].filter((e) => !verdict.has(e));
+      if (unchecked.length) {
+        const hit = await filters.blocked(unchecked);
+        for (const e of unchecked) verdict.set(e, hit.has(e));
+      }
       let full = false;
       for (const c of considered) {
         if (picked.length >= want) {
@@ -223,7 +252,7 @@ export async function pickNextLeads(
         ts.cursor = Number(c.row.id) || ts.cursor;
         if (!c.lead) continue;
         const key = c.lead.email.toLowerCase();
-        if (seen.has(key) || blocked.has(key)) continue;
+        if (seen.has(key) || verdict.get(key)) continue;
         seen.add(key);
         // Record the tier the title earns, so a late-found Priority 1 contact still goes first.
         picked.push({ lead: c.lead, tier: c.cls });
@@ -244,9 +273,117 @@ export async function pickNextLeads(
   return { picked, state: next };
 }
 
-/** How many leads a campaign should have waiting: about a week of sending. */
+/**
+ * How many not-yet-contacted leads a campaign keeps waiting. Each lead takes
+ * three emails, so new leads per day ≈ daily limit / 3: refill when fewer
+ * than about a week of new leads remain, adding about two weeks' worth.
+ */
 export function refillTarget(dailyLimit: number): { low: number; batch: number } {
   const d = Math.max(30, Math.min(500, Math.round(dailyLimit || 30)));
-  return { low: d * 3, batch: Math.min(5000, d * 7) };
+  const perDay = Math.ceil(d / 3);
+  return { low: perDay * 5, batch: Math.min(5000, Math.max(200, perDay * 10)) };
+}
+
+/* ─── Database side ──────────────────────────────────────────────────── */
+
+type Db = any;
+
+/** The gates every new contact must pass: cooldown, suppression, not already in the list. */
+export function audienceGates(
+  db: Db,
+  input: { userId: string; listId?: string | null; contactable: BatchFilters["contactable"] },
+): BatchFilters {
+  return {
+    contactable: input.contactable,
+    blocked: async (emails: string[]) => {
+      if (!emails.length) return new Set<string>();
+      const [contacted, suppressed] = await Promise.all([
+        recentlyContactedEmails(db, emails),
+        suppressedEmailsFor(db, input.userId, emails),
+      ]);
+      const out = new Set<string>([...contacted, ...suppressed]);
+      if (input.listId) {
+        const existing: Array<{ email: string }> = await db
+          .select({ email: schema.leads.email })
+          .from(schema.leads)
+          .where(
+            and(
+              eq(schema.leads.listId, input.listId),
+              inArray(sql`lower(${schema.leads.email})`, emails.map((e) => e.toLowerCase())),
+            ),
+          );
+        for (const r of existing) out.add(String(r.email).toLowerCase());
+      }
+      return out;
+    },
+  };
+}
+
+/** Insert picked contacts into the campaign's list; returns new lead id → tier. */
+export async function insertAudienceLeads(
+  db: Db,
+  input: {
+    picked: PickedLead[];
+    userId: string;
+    workspaceId: string | null;
+    listId: string;
+    contactFields: (lead: DirectoryLead) => Record<string, unknown>;
+  },
+): Promise<Map<string, Tier>> {
+  const ids = new Map<string, Tier>();
+  const CHUNK = 200;
+  for (let i = 0; i < input.picked.length; i += CHUNK) {
+    const rows = input.picked.slice(i, i + CHUNK).map(({ lead, tier }) => {
+      const id = crypto.randomUUID();
+      ids.set(id, tier);
+      return {
+        id,
+        userId: input.userId,
+        workspaceId: input.workspaceId,
+        listId: input.listId,
+        email: normalizeEmail(lead.email),
+        firstName: lead.firstName,
+        lastName: lead.lastName,
+        company: lead.companyName,
+        website: lead.companyWebsite,
+        jobTitle: lead.jobTitle,
+        location: lead.location,
+        industry: lead.industry,
+        status: "new" as const,
+        ...input.contactFields(lead),
+        tags: ["autogtm", "b2b-verified", `priority-${tier}`],
+      };
+    });
+    await db.insert(schema.leads).values(rows).onConflictDoNothing();
+  }
+  return ids;
+}
+
+/** Stamp each new campaign_leads row with its lead's tier (scheduler order). */
+export async function applyPriorities(db: Db, campaignId: string, tiers: Map<string, Tier>) {
+  for (const tier of TIERS) {
+    const leadIds = [...tiers].filter(([, t]) => t === tier).map(([id]) => id);
+    for (let i = 0; i < leadIds.length; i += 500) {
+      await db
+        .update(schema.campaignLeads)
+        .set({ priority: tier })
+        .where(and(eq(schema.campaignLeads.campaignId, campaignId), inArray(schema.campaignLeads.leadId, leadIds.slice(i, i + 500))));
+    }
+  }
+}
+
+/** Not-yet-contacted leads waiting in a campaign (step 1, still queued). */
+export async function waitingNewLeads(db: Db, campaignId: string): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(schema.campaignLeads)
+    .where(
+      and(
+        eq(schema.campaignLeads.campaignId, campaignId),
+        eq(schema.campaignLeads.stepPosition, 1),
+        inArray(schema.campaignLeads.status, ["queued", "scheduled"]),
+      ),
+    );
+  return Number(row?.n ?? 0);
 }
 

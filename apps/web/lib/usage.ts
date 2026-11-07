@@ -10,12 +10,18 @@
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 
-/** OWNER: price per email sent, in US cents. Keep in sync with the landing page. */
-export const PRICE_CENTS_PER_EMAIL = 5;
-/** Outreach plus two follow-ups. */
-export const EMAILS_PER_LEAD = 3;
-/** Sending runs Monday to Friday. */
-export const SENDING_DAYS_PER_MONTH = 22;
+import { costCents, monthBounds } from "./pricing";
+
+export {
+  EMAILS_PER_LEAD,
+  PRICE_CENTS_PER_EMAIL,
+  SENDING_DAYS_PER_MONTH,
+  costCents,
+  forecastFromDailyVolume,
+  formatCents,
+  formatCost,
+  monthBounds,
+} from "./pricing";
 
 export interface Usage {
   /** Start of the period (UTC, inclusive) and end (exclusive). */
@@ -26,31 +32,6 @@ export interface Usage {
   leadsContacted: number;
   followUpsSent: number;
   costCents: number;
-}
-
-export function monthBounds(now = new Date()): { from: string; to: string } {
-  const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-  return { from: from.toISOString(), to: to.toISOString() };
-}
-
-export function costCents(emails: number): number {
-  return Math.max(0, Math.round(emails)) * PRICE_CENTS_PER_EMAIL;
-}
-
-export function formatCents(cents: number): string {
-  return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
-}
-
-/** What a daily volume adds up to over a month of sending days. */
-export function forecastFromDailyVolume(perDay: number) {
-  const emails = Math.max(0, Math.round(perDay)) * SENDING_DAYS_PER_MONTH;
-  return {
-    emailsPerMonth: emails,
-    newLeadsPerDay: Math.floor(perDay / EMAILS_PER_LEAD),
-    leadsPerMonth: Math.round(emails / EMAILS_PER_LEAD),
-    costCentsPerMonth: costCents(emails),
-  };
 }
 
 /** Emails sent, leads contacted and cost for an owner (optionally one workspace) this month. */

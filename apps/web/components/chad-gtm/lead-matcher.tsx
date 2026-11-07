@@ -77,7 +77,7 @@ export function LeadMatcher({
         setAudience({
           roleMatches: res.roleMatches ?? res.total,
           otherRoles: res.otherRoles ?? 0,
-          perRun: res.perRun ?? 500,
+          perRun: res.perRun ?? Number.POSITIVE_INFINITY,
           bySize: Boolean(res.bySize),
           sampleMatchesTitles: Boolean(res.sampleMatchesTitles),
         });
@@ -145,9 +145,9 @@ export function LeadMatcher({
                   "Counting contacts…"
                 ) : totalLeads === null ? null : (
                   <>
-                    Up to {(audience?.perRun ?? 500).toLocaleString()} per run, from{" "}
+                    All{" "}
                     <span className="tabular font-semibold text-foreground">{totalLeads.toLocaleString()}</span>{" "}
-                    matching contacts{isPending ? ", updating…" : ""}
+                    matching contacts, best fit first{isPending ? ", updating…" : ""}
                   </>
                 )}
               </p>

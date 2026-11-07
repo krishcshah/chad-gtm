@@ -299,15 +299,15 @@ describe("PlanPreviewCard", () => {
     sampleEmails: [],
   };
 
-  it("shows the launch audience: per-run cap, the split and the 90-day skip (#56)", async () => {
+  it("shows the launch audience: every match in priority order and the 90-day skip (#56)", async () => {
     const { host, unmount } = await render(
       <PlanPreviewCard
         preview={{ ...basePreview, audience: { roleMatches: 300, otherRoles: 700, perRun: 500, strictRoles: false } }}
       />,
     );
-    expect(host.textContent).toContain("Up to 500 people per run");
-    expect(host.textContent).toContain("picked from 1,000 matching contacts");
-    expect(host.textContent).toContain("300 match your job titles, 700 are others in your industries");
+    expect(host.textContent).toContain("All 1,000 matching contacts, in priority order");
+    expect(host.textContent).toContain("300 with your job titles first, then 700 other decision-makers and people in your industries");
+    expect(host.textContent).toContain("Each gets three emails over five days.");
     expect(host.textContent).toContain("People anyone contacted in the last 90 days and opted-out addresses are skipped.");
     await unmount();
   });
@@ -318,7 +318,7 @@ describe("PlanPreviewCard", () => {
         preview={{ ...basePreview, audience: { roleMatches: 300, otherRoles: 700, perRun: 500, strictRoles: true } }}
       />,
     );
-    expect(strict.host.textContent).toContain("picked from 300 matching contacts (only people with your job titles)");
+    expect(strict.host.textContent).toContain("All 300 matching contacts, in priority order: only people with your job titles.");
     await strict.unmount();
 
     const none = await render(

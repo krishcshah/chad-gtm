@@ -198,7 +198,7 @@ const STEP_BRIEF: Record<Step, string> = {
    A weak fact is worse than no fact.
 2. Then one sentence (25 words or fewer, not counting proof) on what changes for them with ONE capability (two at most), tied to exactly that situation. Describe the change in your own words; don't paste the capability wording. A proof point may follow as its own sentence, quoted exactly as written; never reword it or present it as the result of one capability. Otherwise leave proof out.
 3. End with ONE low-effort interest question tied to the hook, answerable with "yes"; start it with the CTA LEAD-IN given below. A yes gets them your booking link, so ask about interest, not about how they work, and never promise a custom demo or anything built for them. Never ask them to name colleagues or give internal numbers. Not "Worth a look?", not a meeting time, not a link. This is the only question in the email.
-4. Length 50 to 90 words, no sentence over 30 words. "Hi {first name}," on its own line, two or three short paragraphs, then the sign-off: the sender's first name, and the sender's company on the next line.
+4. Length 50 to 90 words, no sentence over 30 words. "Hi {first name}," on its own line, two or three short paragraphs, then the sender's first name alone on the last line (the mailbox adds the full signature).
 5. Subject: 2 to 4 words naming the hook's specific object, lowercase except proper nouns. Not "X at {company}", not a question, nothing salesy.`,
   2: `EMAIL 2 OF 3: first follow-up, two days after email 1, in the same thread. They did not reply.
 - It must make sense even if it is the only email they read: never open with a reference to the last email ("Also", "Another thought", "The other thing").
@@ -238,7 +238,6 @@ Shiftly fills a call-out from the qualified staff who are free, in order, so the
 Open to seeing how that would work across both clinics?
 
 Jo
-Shiftly
 
 Email 1, role hook (no usable fact):
 Subject: friday night call-outs
@@ -251,7 +250,6 @@ Shiftly offers the open shift to everyone qualified and free, in order, and book
 Open to seeing what Friday cover looks like with it?
 
 Jo
-Shiftly
 
 Email 2:
 Hi Maria,
@@ -261,7 +259,6 @@ Shiftly can start from the rota you have now. The rules you keep in your head (n
 Do you build each clinic's rota separately today, or as one?
 
 Jo
-Shiftly
 
 Email 3:
 Hi Maria,
@@ -269,7 +266,6 @@ Hi Maria,
 Two extra clinics means two extra rotas, which is why I got in touch about filling call-outs automatically. Is scheduling at the new sites with the site managers instead?
 
 Jo
-Shiftly
 
 Bad: "Northside Health is trusted by 40,000 patients, so I'd guess your schedule is complex. Who handles scheduling, and how many shifts do you fill a week?" It reads a patient count as their staffing load, guesses, and asks a stranger for names and numbers.`;
 
@@ -464,7 +460,7 @@ ${capabilitiesOf(s).map((c, i) => `${i + 1}. ${c}`).join("\n") || "- (none)"}
 ${list(s.painPoints ?? [])}
 - Proof you may use (numbers exactly as written):
 ${list(s.proofPoints ?? [])}
-- Sign-off: ${req.senderFirstName || "(no name)"}, then ${s.companyName} on the next line
+- Sign-off: ${req.senderFirstName || "(no name)"} alone on the last line (the full signature is added for you)
 
 TODAY: ${(req.now ?? new Date()).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "UTC" })}
 

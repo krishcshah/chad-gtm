@@ -17,7 +17,7 @@ import {
   Label,
   Textarea,
 } from "@smartreach/ui";
-import { DailyVolumeInput } from "@/components/chad-gtm/velocity-slider";
+import { DailyVolumeInput, VolumeForecast } from "@/components/chad-gtm/velocity-slider";
 import { LeadConversationsControl } from "@/components/lead-conversations/lead-conversations-control";
 import { LEAD_CONVERSATIONS_LABEL, type LeadConversationState } from "@/lib/lead-conversations";
 
@@ -406,6 +406,7 @@ export function VolumeCard({
             onCommit(v);
           }}
         />
+        <VolumeForecast perDay={value} />
         <p className="text-xs leading-relaxed text-muted-foreground">
           This is your ceiling. Each mailbox sends at most 30 cold emails a day and the shared pool is split fairly
           between customers, so busy days can send fewer.

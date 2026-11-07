@@ -111,6 +111,8 @@ export async function startAutopilotAction(input: {
   url: string;
   bookingUrl?: string;
   notes?: string;
+  /** Emails per day, follow-ups included (clamped to the allowed range). */
+  dailyLimit?: number;
 }): Promise<Result<AutopilotOutcome>> {
   const user = await requireUser();
   const url = String(input?.url || "").trim();
@@ -125,6 +127,13 @@ export async function startAutopilotAction(input: {
   const analysis = await analyzeWebsiteAction(url, input.notes, { autopilot: true, bookingUrl });
   if (!analysis.ok || !analysis.runId) {
     return { ok: false, error: analysis.error || "We couldn't analyze that website. Check the address and try again." };
+  }
+  if (input.dailyLimit !== undefined && Number.isFinite(Number(input.dailyLimit))) {
+    // Saved on the run before launch; launch reads it from there.
+    await getDb()
+      .update(schema.chadGtmRuns)
+      .set({ dailyEmailLimit: clampAutopilotDaily(Number(input.dailyLimit)), updatedAt: new Date().toISOString() })
+      .where(and(eq(schema.chadGtmRuns.id, analysis.runId), eq(schema.chadGtmRuns.userId, user.id)));
   }
   return advanceAutopilotRun(analysis.runId, user.id);
 }
