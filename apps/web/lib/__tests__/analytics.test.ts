@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 import {
   buildAnalyticsSummary,
+  campaignRates,
   computeAnalyticsRates,
   eachDateInclusive,
+  leadsEmailedSql,
+  repliedLeadsSql,
   toDateKey,
+  type CampaignTotals,
 } from "../analytics";
 
 describe("F13a analytics rates + empty range", () => {
@@ -64,5 +69,51 @@ describe("F13a analytics rates + empty range", () => {
       "2026-09-22",
     ]);
     expect(toDateKey("2026-09-22T15:30:00.000Z")).toBe("2026-09-22");
+  });
+});
+
+describe("#91 one definition per metric", () => {
+  const totals = (over: Partial<CampaignTotals> = {}): CampaignTotals => ({
+    emailsSent: 30,
+    leadsEmailed: 10,
+    repliedLeads: 2,
+    openedLeads: 5,
+    bouncedEmails: 1,
+    ...over,
+  });
+
+  it("campaignRates divides replies, opens and bounces by leads emailed, not emails sent", () => {
+    const r = campaignRates(totals());
+    expect(r.replyRate).toBe(20);
+    expect(r.openRate).toBe(50);
+    expect(r.bounceRate).toBe(10);
+  });
+
+  it("no leads emailed gives 0 for every rate", () => {
+    const r = campaignRates(totals({ leadsEmailed: 0 }));
+    expect(r.replyRate).toBe(0);
+    expect(r.openRate).toBe(0);
+    expect(r.bounceRate).toBe(0);
+  });
+
+  it("rates are capped at 100 when more leads replied than were emailed", () => {
+    const r = campaignRates(totals({ leadsEmailed: 2, repliedLeads: 5, openedLeads: 9, bouncedEmails: 4 }));
+    expect(r.replyRate).toBe(100);
+    expect(r.openRate).toBe(100);
+    expect(r.bounceRate).toBe(100);
+  });
+
+  it("computeAnalyticsRates caps replyRate at 100", () => {
+    expect(computeAnalyticsRates(3, 7, 0).replyRate).toBe(100);
+  });
+
+  it("the campaign SQL counts leads (distinct, non-dry-run) and repliers (distinct lead or address)", () => {
+    const dialect = new PgDialect();
+    const emailed = dialect.sqlToQuery(leadsEmailedSql("c1"));
+    expect(emailed.sql).toContain("count(distinct ej.lead_id)");
+    expect(emailed.sql).toContain("ej.dry_run = false");
+    expect(emailed.params).toEqual(["c1"]);
+    const replied = dialect.sqlToQuery(repliedLeadsSql("c1"));
+    expect(replied.sql).toContain("count(distinct coalesce(r.lead_id, lower(r.from_email)))");
   });
 });

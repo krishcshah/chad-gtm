@@ -7,6 +7,14 @@
  * `pickSenderIndex` is pure so it can be unit-tested without a database.
  */
 import { schema } from "@smartreach/database";
+import {
+  HARD_MAX_PER_SENDER_PER_DAY,
+  localDateKey,
+  RAMP_START_PER_DAY,
+  RAMP_STEP_PER_DAY,
+  rampedDailyCap,
+  senderDailyCap,
+} from "@smartreach/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { EngineDb, SenderRow } from "./db-port";
 
@@ -30,8 +38,20 @@ export function noteHourlySend(senderId: string): void {
   cachedHourly.set(senderId, (cachedHourly.get(senderId) ?? 0) + 1);
 }
 
+/**
+ * The UTC date (YYYY-MM-DD). Mailbox counters use the UTC day: one stated
+ * platform day, so a shared mailbox's 30 a day holds whoever sends from it.
+ */
 export function todayKey(d = new Date()): string {
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * The campaign's local date: its daily limit counts per day in its own
+ * sending timezone (an invalid timezone falls back to UTC).
+ */
+export function campaignDayKey(c: { sendingTimezone?: string | null }, now: Date = new Date()): string {
+  return localDateKey(now, c.sendingTimezone || "UTC");
 }
 
 export async function loadDailyUsage(
@@ -55,46 +75,9 @@ export async function loadDailyUsage(
   return map;
 }
 
-/**
- * Absolute ceiling for any single mailbox, regardless of campaign settings.
- * Shared-pool deliverability depends on this being non-negotiable.
- */
-export const HARD_MAX_PER_SENDER_PER_DAY = 30;
-
-/** New mailboxes start here and climb by RAMP_STEP_PER_DAY each day. */
-export const RAMP_START_PER_DAY = 10;
-export const RAMP_STEP_PER_DAY = 5;
-
-/**
- * Daily ceiling from mailbox age: 10 on the day it was added, +5 per full day,
- * up to `max` (30). Mailboxes older than the ramp (or with no usable
- * creation time) get `max`, so existing mailboxes are unaffected.
- */
-export function rampedDailyCap(
-  createdAt: string | Date | null | undefined,
-  now: Date = new Date(),
-  max: number = HARD_MAX_PER_SENDER_PER_DAY,
-): number {
-  if (!createdAt) return max;
-  const t = createdAt instanceof Date ? createdAt.getTime() : Date.parse(createdAt);
-  if (!Number.isFinite(t)) return max;
-  const days = Math.max(0, Math.floor((now.getTime() - t) / 86_400_000));
-  return Math.min(max, RAMP_START_PER_DAY + RAMP_STEP_PER_DAY * days);
-}
-
-/** Today's cap for one sender: its own limit, the campaign's, the hard 30, and the ramp. */
-export function senderDailyCap(
-  sender: Pick<SenderRow, "dailyLimit"> & { createdAt?: string | null },
-  perCampaignSenderDailyCap: number = HARD_MAX_PER_SENDER_PER_DAY,
-  now: Date = new Date(),
-): number {
-  return Math.min(
-    sender.dailyLimit ?? HARD_MAX_PER_SENDER_PER_DAY,
-    perCampaignSenderDailyCap ?? HARD_MAX_PER_SENDER_PER_DAY,
-    HARD_MAX_PER_SENDER_PER_DAY,
-    rampedDailyCap(sender.createdAt, now),
-  );
-}
+// The caps live in @smartreach/shared so the web app shows the same numbers
+// the engine enforces. Re-exported for engine modules and tests.
+export { HARD_MAX_PER_SENDER_PER_DAY, RAMP_START_PER_DAY, RAMP_STEP_PER_DAY, rampedDailyCap, senderDailyCap };
 
 export interface PickSenderOptions {
   now?: Date;
@@ -149,7 +132,12 @@ export function senderHasCapacity(
  */
 export async function recordSend(
   db: EngineDb,
-  opts: { userId: string; entityType: "sender" | "campaign"; entityId: string; date?: string },
+  opts: {
+    userId: string;
+    entityType: "sender" | "campaign" | "sender_reply";
+    entityId: string;
+    date?: string;
+  },
 ): Promise<number> {
   const date = opts.date ?? todayKey();
   try {
@@ -213,12 +201,17 @@ export async function reserveSendSlot(
     campaignId: string;
     senderCap: number;
     campaignCap: number;
+    /** Mailbox counter date (UTC day). */
     date?: string;
+    /** Campaign counter date (the campaign's local day); defaults to `date`. */
+    campaignDate?: string;
   },
 ): Promise<{ ok: true } | { ok: false; reason: "sender-cap" | "campaign-cap" }> {
   const date = opts.date ?? todayKey();
+  const campaignDate = opts.campaignDate ?? date;
 
   const reserve = async (entityType: "sender" | "campaign", entityId: string, cap: number) => {
+    const day = entityType === "campaign" ? campaignDate : date;
     const rows: { count: number }[] = await db
       .insert(schema.usageCounters)
       .values({
@@ -226,7 +219,7 @@ export async function reserveSendSlot(
         userId: opts.userId,
         entityType,
         entityId,
-        date,
+        date: day,
         count: 1,
       })
       .onConflictDoUpdate({
@@ -276,11 +269,16 @@ export async function releaseSendSlot(
     userId: string;
     senderId?: string;
     campaignId?: string;
+    /** Mailbox counter date (UTC day). */
     date?: string;
+    /** Campaign counter date (the campaign's local day); defaults to `date`. */
+    campaignDate?: string;
   },
 ): Promise<void> {
   const date = opts.date ?? todayKey();
+  const campaignDate = opts.campaignDate ?? date;
   const decrement = async (entityType: "sender" | "campaign", entityId: string) => {
+    const day = entityType === "campaign" ? campaignDate : date;
     await db
       .update(schema.usageCounters)
       .set({ count: sql`GREATEST(${schema.usageCounters.count} - 1, 0)` })
@@ -288,7 +286,7 @@ export async function releaseSendSlot(
         and(
           eq(schema.usageCounters.entityType, entityType),
           eq(schema.usageCounters.entityId, entityId),
-          eq(schema.usageCounters.date, date),
+          eq(schema.usageCounters.date, day),
         ),
       );
   };

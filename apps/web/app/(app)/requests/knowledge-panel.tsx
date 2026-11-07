@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition, type FormEvent } from "react";
+import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, FileText, HelpCircle, Plus, Trash2 } from "lucide-react";
+import { BookOpen, FileText, HelpCircle, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   Button,
   Card,
@@ -36,7 +36,7 @@ export function KnowledgePanel({ items }: { items: KnowledgeView[] }) {
   const [adding, setAdding] = useState(false);
 
   return (
-    <Card className="lg:sticky lg:top-6">
+    <Card id="knowledge" className="scroll-mt-20 lg:sticky lg:top-6 lg:scroll-mt-6">
       <CardHeader
         actions={
           <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
@@ -46,7 +46,7 @@ export function KnowledgePanel({ items }: { items: KnowledgeView[] }) {
         }
       >
         <CardTitle>Knowledge base</CardTitle>
-        <CardDescription>The only links and answers the agent may use. It shares them when a lead asks.</CardDescription>
+        <CardDescription>The only links and answers the agent may use in this workspace. It shares them when a lead asks.</CardDescription>
       </CardHeader>
 
       {items.length === 0 ? (
@@ -64,13 +64,14 @@ export function KnowledgePanel({ items }: { items: KnowledgeView[] }) {
         </ul>
       )}
 
-      <AddKnowledgeDialog open={adding} onOpenChange={setAdding} />
+      <KnowledgeDialog open={adding} onOpenChange={setAdding} />
     </Card>
   );
 }
 
 function KnowledgeRow({ item }: { item: KnowledgeView }) {
   const router = useRouter();
+  const [editing, setEditing] = useState(false);
   const Icon = item.kind === "resource" ? FileText : HelpCircle;
 
   const remove = async () => {
@@ -104,6 +105,16 @@ function KnowledgeRow({ item }: { item: KnowledgeView }) {
           {item.keywords.length > 0 ? ` · ${item.keywords.slice(0, 3).join(", ")}` : null}
         </p>
       </div>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        className="shrink-0"
+        aria-label={`Edit ${item.title}`}
+        onClick={() => setEditing(true)}
+      >
+        <Pencil aria-hidden />
+      </Button>
+      <KnowledgeDialog item={item} open={editing} onOpenChange={setEditing} />
       <ConfirmDialog
         title={`Remove "${item.title}"?`}
         description="The agent will no longer share this with leads. This cannot be undone."
@@ -119,14 +130,36 @@ function KnowledgeRow({ item }: { item: KnowledgeView }) {
   );
 }
 
-function AddKnowledgeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+/** Adds a knowledge item, or edits `item` in place (same id, so the usage count is kept). */
+function KnowledgeDialog({
+  item,
+  open,
+  onOpenChange,
+}: {
+  item?: KnowledgeView;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const router = useRouter();
-  const [kind, setKind] = useState<Kind>("resource");
-  const [title, setTitle] = useState("");
-  const [url, setUrl] = useState("");
-  const [content, setContent] = useState("");
-  const [keywords, setKeywords] = useState("");
+  const editing = Boolean(item);
+  const [kind, setKind] = useState<Kind>(item ? (item.kind === "resource" ? "resource" : "faq") : "resource");
+  const [title, setTitle] = useState(item?.title ?? "");
+  const [url, setUrl] = useState(item?.url ?? "");
+  const [content, setContent] = useState(item?.content ?? "");
+  const [keywords, setKeywords] = useState(item?.keywords.join(", ") ?? "");
   const [pending, start] = useTransition();
+
+  // Editing: start from the saved item each time the dialog opens (or the item changes).
+  // Adding keeps whatever was typed before a Cancel.
+  useEffect(() => {
+    if (!open || !item) return;
+    setKind(item.kind === "resource" ? "resource" : "faq");
+    setTitle(item.title);
+    setUrl(item.url ?? "");
+    setContent(item.content);
+    setKeywords(item.keywords.join(", "));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, item?.id]);
 
   const reset = () => {
     setTitle("");
@@ -138,10 +171,18 @@ function AddKnowledgeDialog({ open, onOpenChange }: { open: boolean; onOpenChang
   const submit = (event: FormEvent) => {
     event.preventDefault();
     start(async () => {
-      const res = await saveKnowledgeAction({ kind, title, url, content, keywords });
+      const res = await saveKnowledgeAction({
+        id: item?.id,
+        // A fact stays a fact unless it is turned into a link or resource.
+        kind: item?.kind === "fact" && kind === "faq" ? "fact" : kind,
+        title,
+        url,
+        content,
+        keywords,
+      });
       if (!res.ok) return void toast.error(res.error);
-      toast.success(res.message || "Added");
-      reset();
+      toast.success(res.message || (editing ? "Saved" : "Added"));
+      if (!editing) reset();
       onOpenChange(false);
       router.refresh();
     });
@@ -151,8 +192,12 @@ function AddKnowledgeDialog({ open, onOpenChange }: { open: boolean; onOpenChang
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add to knowledge base</DialogTitle>
-          <DialogDescription>The agent shares this when a lead asks for something that matches.</DialogDescription>
+          <DialogTitle>{editing ? "Edit knowledge item" : "Add to knowledge base"}</DialogTitle>
+          <DialogDescription>
+            {editing
+              ? "Changes apply to the agent's next reply. The usage count is kept."
+              : "The agent shares this when a lead asks for something that matches."}
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="flex flex-col gap-5">
           <SegmentedControl<Kind>
@@ -198,7 +243,7 @@ function AddKnowledgeDialog({ open, onOpenChange }: { open: boolean; onOpenChang
               Cancel
             </Button>
             <Button type="submit" loading={pending}>
-              Save
+              {editing ? "Save changes" : "Save"}
             </Button>
           </DialogFooter>
         </form>

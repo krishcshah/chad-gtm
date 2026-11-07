@@ -128,6 +128,7 @@ describe("account approvals", () => {
         emailVerified: false,
         createdAt: "2026-11-06T10:00:00.000Z",
         approvedAt: null,
+        revokedAt: null,
         website: "acme.com",
       },
     ]);

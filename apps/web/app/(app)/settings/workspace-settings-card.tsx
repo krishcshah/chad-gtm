@@ -88,7 +88,8 @@ export function WorkspaceSettingsCard({
       <CardHeader>
         <CardTitle>Workspaces</CardTitle>
         <CardDescription>
-          Each workspace has its own mailboxes, leads, campaigns and blocklist. Use one per client or brand.
+          Each workspace has its own leads, campaigns, Autopilot runs, knowledge base and sender details (company name,
+          postal address, booking link). Your blocklist applies to all of them. Use one per client or brand.
         </CardDescription>
       </CardHeader>
 
@@ -112,7 +113,7 @@ export function WorkspaceSettingsCard({
                 ) : null}
                 {ws.stats ? (
                   <p className="tabular mt-1 text-xs text-subtle-foreground">
-                    {plural(ws.stats.senderCount, "mailbox", "mailboxes")} ·{" "}
+                    {ws.stats.senderCount > 0 ? `${plural(ws.stats.senderCount, "mailbox", "mailboxes")} · ` : null}
                     {plural(ws.stats.leadCount, "lead", "leads")} ·{" "}
                     {plural(ws.stats.campaignCount, "campaign", "campaigns")}
                   </p>
@@ -176,7 +177,7 @@ export function WorkspaceSettingsCard({
           if (!open) setDeleting(null);
         }}
         title={deleting ? `Delete ${deleting.name}?` : "Delete workspace?"}
-        description="Its mailboxes, leads, sequences and campaigns are deleted for good, and you are switched to your default workspace. This cannot be undone."
+        description="Its leads, lead lists, campaigns, Autopilot runs, Needs you requests, knowledge base and sender details (company name, postal address, booking link, notification settings) are deleted for good, and you are switched to your default workspace. Your sign-in, AI and other workspaces are not affected. Blocklist entries and opt-outs are kept, so those people stay protected. This cannot be undone."
         confirmLabel="Delete workspace"
         destructive
         onConfirm={async () => {

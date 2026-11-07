@@ -3,9 +3,10 @@
 import { useId, useState } from "react";
 import { ArrowLeft, Rocket } from "lucide-react";
 import { Button, Card, CardDescription, CardHeader, CardTitle } from "@smartreach/ui";
+import { AUTOPILOT_DAILY_DEFAULT, AUTOPILOT_DAILY_MAX, AUTOPILOT_DAILY_MIN } from "@/lib/autopilot-policy";
 
-export const MIN_DAILY = 30;
-export const MAX_DAILY = 500;
+export const MIN_DAILY = AUTOPILOT_DAILY_MIN;
+export const MAX_DAILY = AUTOPILOT_DAILY_MAX;
 /** Each pool mailbox sends at most this many emails a day. */
 const PER_MAILBOX = 30;
 
@@ -50,21 +51,23 @@ export function DailyVolumeInput({
 
 /** Guided setup, step 5: daily volume, then launch. */
 export function VelocitySlider({
-  initialLimit = 60,
+  initialLimit = AUTOPILOT_DAILY_DEFAULT,
   onLaunch,
   isLaunching = false,
   onBack,
+  sendingFrom,
 }: {
   initialLimit?: number;
   onLaunch: (dailyLimit: number) => void;
   isLaunching?: boolean;
   onBack?: () => void;
+  /** The shared pool the emails go out from, with one persona as an example. */
+  sendingFrom?: { poolSize: number; exampleName: string };
 }) {
   const [dailyLimit, setDailyLimit] = useState(initialLimit);
   const inputId = useId();
 
   const weekly = dailyLimit * 5;
-  const mailboxes = Math.max(1, Math.ceil(dailyLimit / PER_MAILBOX));
 
   return (
     <Card>
@@ -97,17 +100,34 @@ export function VelocitySlider({
             <dt className="text-xs text-muted-foreground">Per week</dt>
             <dd className="tabular mt-0.5 font-medium">Up to {weekly.toLocaleString()} emails</dd>
           </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Mailboxes used</dt>
-            <dd className="tabular mt-0.5 font-medium">
-              {mailboxes} {mailboxes === 1 ? "mailbox" : "mailboxes"}
-            </dd>
-          </div>
+          {sendingFrom ? (
+            <div>
+              <dt className="text-xs text-muted-foreground">Sends from</dt>
+              <dd className="tabular mt-0.5 font-medium">
+                One of {sendingFrom.poolSize} AutoGTM {sendingFrom.poolSize === 1 ? "mailbox" : "mailboxes"}
+              </dd>
+              {sendingFrom.exampleName ? (
+                <dd className="mt-0.5 text-xs text-subtle-foreground">for example {sendingFrom.exampleName}</dd>
+              ) : null}
+            </div>
+          ) : (
+            <div>
+              <dt className="text-xs text-muted-foreground">Sends from</dt>
+              <dd className="mt-0.5 font-medium">Shared AutoGTM pool</dd>
+            </div>
+          )}
         </dl>
+        {sendingFrom ? (
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Each lead gets every email from the same mailbox, under that mailbox&apos;s name and signature.
+          </p>
+        ) : null}
 
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Emails go out Monday to Friday during business hours, spaced out across warmed mailboxes from our pool. No
-          mailbox sends more than {PER_MAILBOX} a day, which protects your deliverability.
+          Emails go out Monday to Friday during business hours from AutoGTM&apos;s shared mailbox pool. Each lead hears
+          from one mailbox for the whole sequence. No mailbox sends more than {PER_MAILBOX} cold emails a day, and the
+          pool&apos;s daily capacity is shared fairly between customers, so on busy days fewer emails than this may go
+          out.
         </p>
       </div>
 

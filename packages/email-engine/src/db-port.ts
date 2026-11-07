@@ -33,11 +33,18 @@ export interface SenderRow {
   imapStatus: "untested" | "ok" | "failed";
   lastSyncAt: string | null;
   repliedCount: number;
+  imapFailCount?: number;
+  imapAttemptedAt?: string | null;
+  failureCount?: number;
+  failedReason?: string | null;
+  lastRetestAt?: string | null;
 }
 
 export interface CampaignRow {
   id: string;
   userId: string;
+  /** The campaign's workspace (sender identity, scope); null = the owner's default. */
+  workspaceId?: string | null;
   name: string;
   status: "draft" | "scheduled" | "running" | "paused" | "completed" | "archived";
   leadListId: string | null;
@@ -56,6 +63,10 @@ export interface CampaignRow {
   retryCount: number;
   lastSenderIdx: number;
   senderCapUntil: string | null;
+  sendBlockReason?: string | null;
+  sendBlockSince?: string | null;
+  leadConversationMode?: "default" | "agent" | "approve" | "manual";
+  agentOffer?: string;
   startedAt: string | null;
   completedAt: string | null;
 }

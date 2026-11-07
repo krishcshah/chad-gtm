@@ -12,7 +12,8 @@
     "./connection": "./src/connection.ts",
     "./compliance": "./src/compliance.ts",
     "./spintax": "./src/spintax.ts",
-    "./sequence-pick": "./src/sequence-pick.ts"
+    "./sequence-pick": "./src/sequence-pick.ts",
+    "./workspace-profile": "./src/workspace-profile.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -12,27 +12,23 @@ vi.mock("../system-mailer", () => ({
   sendSystemEmail: system.sendSystemEmail,
 }));
 
+import { schema } from "@smartreach/database";
 import { notifyClientOfRequest } from "../reply-agent";
 import type { SenderRow } from "../db-port";
+import { conversationDb } from "./fixtures/conversation-db";
 
-function fakeDb(owner: { email: string; name: string } | null) {
-  const updates: any[] = [];
-  const db: any = {
-    select: () => ({
-      from: () => ({
-        where: () => ({ limit: async () => (owner ? [owner] : []) }),
-      }),
-    }),
-    update: () => ({
-      set: (values: any) => ({
-        where: async () => {
-          updates.push(values);
-          return [];
-        },
-      }),
-    }),
-  };
-  return { db, updates };
+/** Owner row and (optionally) the workspace's Notifications settings. */
+function fakeDb(
+  owner: { email: string; name: string } | null,
+  workspace: { id: string; notifyEmail: string; notifyEscalations: boolean; notifyReminders: boolean } | null = null,
+) {
+  const { db, writes } = conversationDb(
+    new Map<unknown, any>([
+      [schema.users, () => (owner ? [owner] : [])],
+      [schema.workspaces, () => (workspace ? [workspace] : [])],
+    ]),
+  );
+  return { db, updates: () => writes.filter((w) => w.op === "update").map((w) => w.set) };
 }
 
 const SENDER = { id: "s1", email: "pool@mailbox.com" } as unknown as SenderRow;
@@ -61,10 +57,11 @@ describe("notifyClientOfRequest", () => {
     expect(msg.to).toBe("client@acme.com");
     expect(msg.subject).toBe("Your agent needs you: Case study");
     expect(msg.text).toContain("Hi Dana");
-    expect(updates).toEqual([{ notifiedAt: NOW.toISOString() }]);
+    expect(updates()).toEqual([{ notifiedAt: NOW.toISOString() }]);
   });
 
-  it("falls back to the pool mailbox when the system mailer is not configured", async () => {
+  it("never sends from a pool mailbox when the system mailer is not configured", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
     const poolSend = vi.fn().mockResolvedValue({ messageId: "m" });
     const { db, updates } = fakeDb({ email: "client@acme.com", name: "" });
 
@@ -74,8 +71,39 @@ describe("notifyClientOfRequest", () => {
     });
 
     expect(system.sendSystemEmail).not.toHaveBeenCalled();
-    expect(poolSend).toHaveBeenCalledWith(SENDER, expect.objectContaining({ to: "client@acme.com" }));
-    expect(updates).toHaveLength(1);
+    expect(poolSend).not.toHaveBeenCalled();
+    // Nothing was sent, so notified_at stays empty (the item is in Needs you).
+    expect(updates()).toHaveLength(0);
+    info.mockRestore();
+  });
+
+  it("sends to the workspace's notify address when one is set", async () => {
+    system.configured = true;
+    system.sendSystemEmail.mockResolvedValue({ messageId: "m" });
+    const { db, updates } = fakeDb(
+      { email: "client@acme.com", name: "Dana" },
+      { id: "w1", notifyEmail: "sales@acme.com", notifyEscalations: true, notifyReminders: true },
+    );
+
+    await notifyClientOfRequest(db, SENDER, "u1", "Pricing", "How much?", "lead@x.com", { now: () => NOW }, { workspaceId: "w1" });
+
+    expect(system.sendSystemEmail).toHaveBeenCalledTimes(1);
+    expect(system.sendSystemEmail.mock.calls[0][0].to).toBe("sales@acme.com");
+    expect(updates()).toEqual([{ notifiedAt: NOW.toISOString() }]);
+  });
+
+  it("skips entirely when the workspace turned 'Email when a lead needs you' off", async () => {
+    system.configured = true;
+    system.sendSystemEmail.mockResolvedValue({ messageId: "m" });
+    const { db, updates } = fakeDb(
+      { email: "client@acme.com", name: "Dana" },
+      { id: "w1", notifyEmail: "sales@acme.com", notifyEscalations: false, notifyReminders: true },
+    );
+
+    await notifyClientOfRequest(db, SENDER, "u1", "Pricing", "How much?", "lead@x.com", { now: () => NOW }, { workspaceId: "w1" });
+
+    expect(system.sendSystemEmail).not.toHaveBeenCalled();
+    expect(updates()).toHaveLength(0);
   });
 
   it("does not set notified_at when the send fails", async () => {
@@ -86,7 +114,7 @@ describe("notifyClientOfRequest", () => {
     await expect(
       notifyClientOfRequest(db, SENDER, "u1", "t", "q", "lead@x.com", { now: () => NOW }),
     ).rejects.toThrow("SMTP down");
-    expect(updates).toHaveLength(0);
+    expect(updates()).toHaveLength(0);
   });
 
   it("does nothing when the owner has no email", async () => {
@@ -94,6 +122,6 @@ describe("notifyClientOfRequest", () => {
     const { db, updates } = fakeDb(null);
     await notifyClientOfRequest(db, SENDER, "u1", "t", "q", "lead@x.com", {});
     expect(system.sendSystemEmail).not.toHaveBeenCalled();
-    expect(updates).toHaveLength(0);
+    expect(updates()).toHaveLength(0);
   });
 });

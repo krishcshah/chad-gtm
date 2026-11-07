@@ -1,5 +1,5 @@
 import { requireWorkspace } from "@/lib/session";
-import { listAllTicketsForAdmin, listUserTickets } from "@/lib/support";
+import { listUserTickets } from "@/lib/support";
 import { TICKET_CATEGORIES, type TicketCategory } from "@/lib/support-types";
 import { isAdmin } from "@/lib/admin";
 import { SupportHubView } from "@/components/support/support-hub-view";
@@ -25,8 +25,8 @@ export default async function SupportPage({
   const params = await searchParams;
   const userIsAdmin = isAdmin(user);
 
-  // Admins see every ticket; everyone else sees their own.
-  const tickets = userIsAdmin ? await listAllTicketsForAdmin(user) : await listUserTickets(user.id);
+  // Support is everyone's own tickets, admins included. Triage happens in Admin › Support.
+  const tickets = await listUserTickets(user.id);
 
   return (
     <SupportHubView

@@ -13,6 +13,7 @@ import {
   type StoredImportJob,
 } from "@/lib/import-storage";
 import { importLeads } from "@/lib/actions";
+import { runWithImportLock, type ImportLockResult } from "@/lib/import-lock";
 
 interface ImportJobContextType {
   activeJob: StoredImportJob | null;
@@ -34,11 +35,16 @@ export function useImportJob() {
 }
 
 const CHUNK_SIZE = 1000;
+/** How often a tab that is not running the import refreshes its progress. */
+const WATCH_INTERVAL_MS = 2000;
 
 export function ImportJobProvider({ children }: { children: React.ReactNode }) {
   const [activeJob, setActiveJob] = useState<StoredImportJob | null>(null);
   const isProcessingRef = useRef(false);
   const shouldCancelRef = useRef(false);
+  /** True while another tab holds this job's lock and this tab only watches. */
+  const busyRef = useRef(false);
+  const watchTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -56,15 +62,25 @@ export function ImportJobProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const processJob = useCallback(
+  /** Runs the import; only called while this tab holds the job's lock. */
+  const runJob = useCallback(
     async (jobToProcess: StoredImportJob) => {
-      if (isProcessingRef.current) return;
-      isProcessingRef.current = true;
-      shouldCancelRef.current = false;
-
       let currentJob = { ...jobToProcess };
 
       try {
+        // Another tab may have processed part of this job: continue from the
+        // stored progress so no chunk is sent twice.
+        const stored = await getActiveImportJob();
+        if (!stored || stored.id !== currentJob.id) {
+          setActiveJob(stored ? { ...stored } : null);
+          return;
+        }
+        currentJob = { ...stored };
+        if (currentJob.status !== "running") {
+          setActiveJob({ ...currentJob });
+          return;
+        }
+
         const total = currentJob.totalRows;
 
         while (currentJob.processedRows < total && currentJob.status === "running") {
@@ -76,6 +92,13 @@ export function ImportJobProvider({ children }: { children: React.ReactNode }) {
             setActiveJob({ ...currentJob });
             toast.info("Import stopped");
             break;
+          }
+
+          // Stopped or dismissed from another tab.
+          const latest = await getActiveImportJob();
+          if (!latest || latest.id !== currentJob.id || latest.status !== "running") {
+            setActiveJob(latest ? { ...latest } : null);
+            return;
           }
 
           const startIndex = currentJob.processedRows;
@@ -109,8 +132,16 @@ export function ImportJobProvider({ children }: { children: React.ReactNode }) {
             currentJob.imported += res.data.imported;
             currentJob.skipped += res.data.skipped;
             currentJob.invalid += res.data.invalid;
+            currentJob.blocked = (currentJob.blocked ?? 0) + (res.data.blocked ?? 0);
             currentJob.processedRows = Math.min(startIndex + chunk.length, total);
             currentJob.updatedAt = Date.now();
+
+            // Keep a stop made in another tab while this chunk was in flight.
+            const stopped = await getActiveImportJob();
+            if (stopped && stopped.id === currentJob.id && stopped.status !== "running") {
+              currentJob.status = stopped.status;
+              currentJob.error = stopped.error;
+            }
 
             await saveImportJob(currentJob);
             setActiveJob({ ...currentJob });
@@ -135,11 +166,57 @@ export function ImportJobProvider({ children }: { children: React.ReactNode }) {
         await saveImportJob(currentJob);
         setActiveJob({ ...currentJob });
         toast.error("Import failed", { description: "Open the import page to see how far it got." });
-      } finally {
-        isProcessingRef.current = false;
       }
     },
     [router],
+  );
+
+  const stopWatching = useCallback(() => {
+    if (watchTimerRef.current) clearInterval(watchTimerRef.current);
+    watchTimerRef.current = null;
+    busyRef.current = false;
+  }, []);
+
+  /**
+   * Another tab is running this import: show its stored progress. When the
+   * job ends, stop. While it still runs, hand it back to the resume effect,
+   * which takes the lock once the other tab has closed (or watches again).
+   */
+  const watchOtherTab = useCallback(
+    (jobId: string) => {
+      if (watchTimerRef.current) return;
+      busyRef.current = true;
+      watchTimerRef.current = setInterval(() => {
+        void getActiveImportJob()
+          .then((stored) => {
+            if (!busyRef.current) return;
+            stopWatching();
+            setActiveJob(stored && (stored.id === jobId || stored.status === "running") ? { ...stored } : null);
+          })
+          .catch(() => {});
+      }, WATCH_INTERVAL_MS);
+    },
+    [stopWatching],
+  );
+
+  useEffect(() => stopWatching, [stopWatching]);
+
+  const processJob = useCallback(
+    async (jobToProcess: StoredImportJob) => {
+      if (isProcessingRef.current || busyRef.current) return;
+      isProcessingRef.current = true;
+      shouldCancelRef.current = false;
+      let result: ImportLockResult = "ran";
+      try {
+        result = await runWithImportLock(jobToProcess.id, () => runJob(jobToProcess));
+      } catch (err: unknown) {
+        console.error("Error in background import process:", err);
+      } finally {
+        isProcessingRef.current = false;
+      }
+      if (result === "busy") watchOtherTab(jobToProcess.id);
+    },
+    [runJob, watchOtherTab],
   );
 
   // Resume running job whenever activeJob changes to running and not currently executing
@@ -173,6 +250,7 @@ export function ImportJobProvider({ children }: { children: React.ReactNode }) {
         imported: 0,
         skipped: 0,
         invalid: 0,
+        blocked: 0,
         status: "running",
         error: null,
         mapping,

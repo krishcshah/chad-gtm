@@ -4,12 +4,14 @@ import { Card, CardDescription, CardHeader, CardTitle, EmptyState } from "@smart
 import { timeAgo } from "@smartreach/shared";
 import { hostOf } from "@/components/chad-gtm/working-panel";
 import type { RunSummary } from "./autopilot-launcher";
-import { GUIDED_SETUP_HREF, PhaseBadge } from "./launch-setup";
+import { guidedSetupHref, PhaseBadge } from "./launch-setup";
+import { MODE_LABEL } from "@/lib/lead-conversations";
 
+// Same names as "Lead conversations" everywhere else.
 const REPLY_MODE: Record<string, string> = {
-  autopilot: "Replies handled automatically",
-  approve: "Replies need your approval",
-  off: "Reply agent off",
+  autopilot: MODE_LABEL.agent,
+  approve: MODE_LABEL.approve,
+  off: MODE_LABEL.manual,
 };
 
 /** Every autopilot run for this user, newest first. */
@@ -37,7 +39,7 @@ export function RunList({ runs }: { runs: RunSummary[] }) {
             return (
               <li key={r.id}>
                 <Link
-                  href={r.phase === "draft" ? GUIDED_SETUP_HREF : `/chad-gtm/${r.id}`}
+                  href={r.phase === "draft" ? guidedSetupHref(r.id) : `/chad-gtm/${r.id}`}
                   className="group flex items-center gap-3 px-5 py-3.5 outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50"
                 >
                   <span
@@ -53,7 +55,7 @@ export function RunList({ runs }: { runs: RunSummary[] }) {
                     </span>
                     <span className="mt-0.5 block truncate text-xs text-subtle-foreground" suppressHydrationWarning>
                       {host} · {r.dailyEmailLimit.toLocaleString()} a day ·{" "}
-                      {REPLY_MODE[r.replyAgentMode] ?? "Reply agent on"} · {timeAgo(r.createdAt)}
+                      {REPLY_MODE[r.replyAgentMode] ?? MODE_LABEL.agent} · {timeAgo(r.createdAt)}
                     </span>
                   </span>
                   <ChevronRight

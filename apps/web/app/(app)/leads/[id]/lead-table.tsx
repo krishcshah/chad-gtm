@@ -19,8 +19,9 @@ import {
   PageHeader,
   PermissionDenied,
 } from "@smartreach/ui";
-import { bulkTagLeads, fetchLeadsPage, updateLeadStatus } from "@/lib/actions";
+import { addSuppression, bulkTagLeads, fetchLeadsPage, updateLeadStatus } from "@/lib/actions";
 import { asCustomFields, isNextRedirect, isPermissionError } from "@/lib/lead-form";
+import type { ActiveListCampaign } from "@/lib/lead-list-guard";
 import { LeadFormDialog, type LeadFormLead } from "./lead-form-dialog";
 import { DeleteLeadsDialog, DeleteListDialog, RenameListDialog } from "./lead-manage-dialogs";
 import { downloadLeadsCsv } from "./lead-export";
@@ -39,6 +40,8 @@ export interface LeadRow {
   customFields?: Record<string, string> | null;
   jobTitle?: string | null;
   createdAt?: string | Date | null;
+  /** Strongest Blocklist source that applies to this address, if any (#32). */
+  blockSource?: string | null;
 }
 
 const PAGE_SIZE = 50;
@@ -64,6 +67,9 @@ export function LeadTable({
   initialSearch,
   initialStatus,
   tags,
+  readOnly = false,
+  activeCampaigns,
+  deleteBlockedReason,
 }: {
   listName: string;
   listId: string;
@@ -73,6 +79,12 @@ export function LeadTable({
   initialSearch: string;
   initialStatus: string;
   tags: TagOpt[];
+  /** Autopilot list for a non-admin: no adding, importing or editing (#41). */
+  readOnly?: boolean;
+  /** Running, scheduled or paused campaigns that still send to this list (#33). */
+  activeCampaigns?: ActiveListCampaign[];
+  /** Why the list can't be deleted right now (null when it can). */
+  deleteBlockedReason?: string | null;
 }) {
   const router = useRouter();
   const [rows, setRows] = useState<LeadRow[]>(() => initialRows.map(normalizeRow));
@@ -222,6 +234,18 @@ export function LeadTable({
     });
   };
 
+  const blockAddress = (row: LeadRow) => {
+    start(async () => {
+      const res = await addSuppression({ value: row.email, kind: "email" });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, blockSource: "manual" } : r)));
+      toast.success(res.message ?? `Blocked ${row.email}`);
+    });
+  };
+
   const toggleAll = (checked: boolean) => setSelected(checked ? new Set(rows.map((r) => r.id)) : new Set());
 
   const toggleOne = (id: string, checked: boolean) =>
@@ -303,9 +327,9 @@ export function LeadTable({
     <>
       <PageHeader
         eyebrow={
-          <Link href="/campaigns" className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground">
+          <Link href="/campaigns#lead-lists" className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground">
             <ArrowLeft className="size-4" aria-hidden />
-            Campaigns & leads
+            Lead lists
           </Link>
         }
         title={title}
@@ -330,19 +354,32 @@ export function LeadTable({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button variant="outline" onClick={openCreate}>
-              <Plus />
-              Add lead
-            </Button>
-            <Button asChild>
-              <Link href={importHref}>
-                <Upload />
-                Import CSV
-              </Link>
-            </Button>
+            {readOnly ? null : (
+              <>
+                <Button variant="outline" onClick={openCreate}>
+                  <Plus />
+                  Add lead
+                </Button>
+                <Button asChild>
+                  <Link href={importHref}>
+                    <Upload />
+                    Import CSV
+                  </Link>
+                </Button>
+              </>
+            )}
           </>
         }
       />
+
+      {readOnly && !denied ? (
+        <Alert variant="info" className="mb-4">
+          <AlertDescription className="mt-0 text-foreground">
+            Autopilot picked these leads, so you can&apos;t add, import or edit them here. You can still tag them,
+            change their status, or block or delete someone so they aren&apos;t emailed.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {denied ? (
         <PermissionDenied />
@@ -350,20 +387,26 @@ export function LeadTable({
         <EmptyState
           icon={UserPlus}
           title="This list is empty"
-          description="Import a CSV to add many contacts at once, or add a single lead by hand."
+          description={
+            readOnly
+              ? "Autopilot adds leads to this list when it finds people to email."
+              : "Import a CSV to add many contacts at once, or add a single lead by hand."
+          }
           action={
-            <>
-              <Button asChild size="sm">
-                <Link href={importHref}>
-                  <Upload />
-                  Import CSV
-                </Link>
-              </Button>
-              <Button size="sm" variant="outline" onClick={openCreate}>
-                <Plus />
-                Add lead
-              </Button>
-            </>
+            readOnly ? undefined : (
+              <>
+                <Button asChild size="sm">
+                  <Link href={importHref}>
+                    <Upload />
+                    Import CSV
+                  </Link>
+                </Button>
+                <Button size="sm" variant="outline" onClick={openCreate}>
+                  <Plus />
+                  Add lead
+                </Button>
+              </>
+            )
           }
         />
       ) : (
@@ -407,10 +450,12 @@ export function LeadTable({
               loading={listPending}
               statusDisabled={pending}
               filtered={filtered}
+              readOnly={readOnly}
               onToggleAll={toggleAll}
               onToggleOne={toggleOne}
               onEdit={openEdit}
               onDelete={(row) => setDeleteRequest({ mode: "one", leads: [{ id: row.id, email: row.email }] })}
+              onBlock={blockAddress}
               onStatusChange={changeStatus}
               onClearFilters={clearFilters}
             />
@@ -479,10 +524,12 @@ export function LeadTable({
           listId={listId}
           name={title}
           leadCount={totalCount}
+          activeCampaigns={activeCampaigns}
+          deleteBlockedReason={deleteBlockedReason}
           onOpenChange={setDeleteListOpen}
           onDeleted={() => {
             toast.success(`Deleted "${title}"`);
-            router.push("/campaigns");
+            router.push("/campaigns#lead-lists");
             router.refresh();
           }}
         />

@@ -13,6 +13,7 @@ import {
   type DraftStep,
   type DraftVariant,
 } from "@/lib/sequence-draft";
+import { AI_NO_PROMPT_LABEL, aiCopyState } from "@/lib/sequence-labels";
 import type { ReusableSequence } from "@/lib/sequence-templates";
 import { SaveSequenceDialog } from "./save-sequence-dialog";
 import { SequenceComposer } from "./sequence-composer";
@@ -27,6 +28,8 @@ export function SequenceBuilder({
   templates,
   onTemplateSaved,
   onTemplateApplied,
+  onTemplateRenamed,
+  onTemplateDeleted,
   campaignName,
   leadListId,
   error,
@@ -36,6 +39,8 @@ export function SequenceBuilder({
   templates: TemplateOpt[];
   onTemplateSaved: (tpl: TemplateOpt) => void;
   onTemplateApplied: (templateId: string) => void;
+  onTemplateRenamed?: (id: string, name: string) => void;
+  onTemplateDeleted?: (id: string) => void;
   campaignName: string;
   leadListId?: string;
   error?: string;
@@ -99,7 +104,13 @@ export function SequenceBuilder({
           {steps.length > 1 ? ` over ${plural(span, "day")}` : ""}
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <SequenceLibrary templates={templates} onApplySequence={applySequence} onApplySingle={applySingle} />
+          <SequenceLibrary
+            templates={templates}
+            onApplySequence={applySequence}
+            onApplySingle={applySingle}
+            onTemplateRenamed={onTemplateRenamed}
+            onTemplateDeleted={onTemplateDeleted}
+          />
           <Button type="button" variant="ghost" size="sm" onClick={() => setSaveOpen(true)}>
             <BookmarkPlus />
             Save as template
@@ -130,7 +141,9 @@ export function SequenceBuilder({
             {steps.map((item, index) => {
               const current = index === stepIndex;
               const subject = item.variants[0]?.subject?.trim();
-              const ai = item.variants.some((v) => v.aiGenerateOnTheFly);
+              const aiState = aiCopyState(item.variants);
+              const ai = aiState === "ai";
+              const aiNoPrompt = aiState === "ai_no_prompt";
               return (
                 <li key={item.key}>
                   <button
@@ -174,6 +187,7 @@ export function SequenceBuilder({
                             .join(" · ")}
                         </span>
                       )}
+                      {aiNoPrompt && <span className="mt-1 block text-xs text-warning-text">{AI_NO_PROMPT_LABEL}</span>}
                     </span>
                   </button>
                 </li>

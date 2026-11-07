@@ -1,7 +1,7 @@
 /**
  * Lead create/update/delete + list rename — pure of Next session/revalidate for unit tests.
  */
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, notInArray } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import {
   leadCreateSchema,
@@ -207,12 +207,33 @@ export async function updateLeadStatusForUser(
   const parsed = updateLeadStatusSchema.safeParse(input);
   if (!parsed.success) return zodFail(parsed.error);
   try {
+    // A bounced, opted-out or blocked lead stays that way: the picker can't
+    // move it back into the funnel (the Blocklist is the source of truth, #32).
+    // 'blocked' too, so a legacy blocked lead with no blocklist row can't be
+    // made sendable again by calling this action directly.
     const [row] = await db
       .update(leads)
       .set({ status: parsed.data.status, updatedAt: nowIso() })
-      .where(and(eq(leads.id, parsed.data.leadId), eq(leads.userId, userId), isNull(leads.deletedAt)))
+      .where(
+        and(
+          eq(leads.id, parsed.data.leadId),
+          eq(leads.userId, userId),
+          isNull(leads.deletedAt),
+          notInArray(leads.status, ["bounced", "unsubscribed", "blocked"]),
+        ),
+      )
       .returning({ id: leads.id, status: leads.status });
-    if (!row) return { ok: false, error: "Lead not found" };
+    if (!row) {
+      const [existing] = await db
+        .select({ id: leads.id })
+        .from(leads)
+        .where(and(eq(leads.id, parsed.data.leadId), eq(leads.userId, userId), isNull(leads.deletedAt)))
+        .limit(1);
+      if (existing) {
+        return { ok: false, error: "This lead bounced, unsubscribed or is blocked, so its status can't be changed." };
+      }
+      return { ok: false, error: "Lead not found" };
+    }
     return { ok: true, data: { leadId: row.id, status: row.status }, message: `Status set to ${row.status}` };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Something went wrong" };

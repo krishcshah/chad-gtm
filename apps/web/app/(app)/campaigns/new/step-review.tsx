@@ -3,6 +3,8 @@
 import { useState, useSyncExternalStore } from "react";
 import { Alert, Button, DataList, SegmentedControl, cn } from "@smartreach/ui";
 import type { DraftStep } from "@/lib/sequence-draft";
+import { AI_NO_PROMPT_LABEL, aiCopyState } from "@/lib/sequence-labels";
+import { LeadConversationsControl } from "@/components/lead-conversations/lead-conversations-control";
 import type { LeadListOpt, ScheduleSettings, SenderOpt } from "./wizard-types";
 import {
   SAMPLE_LEAD,
@@ -31,6 +33,8 @@ export function StepReview({
   steps,
   settings,
   onEdit,
+  draftId,
+  workspaceDefaultLabel,
 }: {
   name: string;
   list: LeadListOpt | undefined;
@@ -38,20 +42,26 @@ export function StepReview({
   steps: DraftStep[];
   settings: ScheduleSettings;
   onEdit: (step: number) => void;
+  /** Saved draft: the "Lead conversations" choice saves straight onto it. */
+  draftId?: string | null;
+  /** The workspace default ("Manual", "Agent", …), shown before a draft exists. */
+  workspaceDefaultLabel?: string | null;
 }) {
   const [view, setView] = useState<"raw" | "sample">("raw");
   const s = settings;
   const leadCount = list?.leadCount ?? 0;
   const span = sequenceSpanDays(steps);
   const hydrated = useHydrated();
-  // The start time is shown in the viewer's timezone, which the server does not know.
+  // The start time is a wall time in the sending timezone; it is formatted
+  // in the viewer's locale, which the server does not know.
+  const startTz = s.sendingTimezone.replace(/_/g, " ");
   const startText =
     s.startMode === "now"
       ? "Right away"
       : !s.scheduledAt
         ? "No start time set"
         : hydrated
-          ? formatLocalDateTime(s.scheduledAt)
+          ? `${formatLocalDateTime(s.scheduledAt)} (${startTz})`
           : "At the scheduled time";
 
   return (
@@ -63,8 +73,8 @@ export function StepReview({
         </Alert>
       ) : s.scheduledAt ? (
         <Alert variant="info">
-          <span className="font-medium">{name.trim() || "Untitled campaign"}</span> is scheduled to start {hydrated ? startText : "at the scheduled time"}{" "}
-          (your local time). Nothing is sent before then.
+          <span className="font-medium">{name.trim() || "Untitled campaign"}</span> is scheduled to start {hydrated ? startText : "at the scheduled time"}.
+          Nothing is sent before then.
         </Alert>
       ) : (
         <Alert
@@ -132,7 +142,7 @@ export function StepReview({
               { label: "Start", value: startText },
               { label: "Sending window", value: `${s.windowStart} to ${s.windowEnd}, ${s.sendingTimezone}` },
               { label: "Days", value: s.businessDaysOnly ? "Weekdays only" : "Every day" },
-              { label: "Gap between emails", value: `${s.minDelay} to ${s.maxDelay} seconds` },
+              { label: "Gap between emails (per mailbox)", value: `${s.minDelay} to ${s.maxDelay} seconds` },
               { label: "Per mailbox limit", value: `${s.perSender} emails a day` },
               { label: "Stop on reply", value: s.stopOnReply ? "On" : "Off" },
               { label: "Retry failed emails", value: s.retryFailed ? `On, up to ${plural(s.retryCount, "retry", "retries")}` : "Off" },
@@ -141,6 +151,20 @@ export function StepReview({
           />
         </ReviewSection>
       </div>
+
+      <section className="flex min-w-0 flex-col gap-3">
+        <h3 className="text-sm font-semibold text-foreground">Lead conversations</h3>
+        {draftId ? (
+          <div className="max-w-md">
+            <LeadConversationsControl target={{ campaignId: draftId }} label="Who answers replies" />
+          </div>
+        ) : (
+          <p className="text-[13px] text-muted-foreground">
+            Uses your workspace default{workspaceDefaultLabel ? `: ${workspaceDefaultLabel}` : ""}. You can change it on the
+            campaign page.
+          </p>
+        )}
+      </section>
 
       <ReviewSection
         title="Sequence steps"
@@ -172,9 +196,10 @@ export function StepReview({
             const bodyRaw = (v?.bodyText || "").replace(/\n{2,}/g, "\n").trim();
             const subject = view === "sample" ? renderWithSampleLead(subjectRaw) : subjectRaw;
             const body = view === "sample" ? renderWithSampleLead(bodyRaw) : bodyRaw;
+            const aiState = aiCopyState(st.variants);
             const notes = [
               st.variants.length > 1 ? "A/B test" : null,
-              st.variants.some((x) => x.aiGenerateOnTheFly) ? "Written by AI per lead" : null,
+              aiState === "ai" ? "Written by AI per lead" : aiState === "ai_no_prompt" ? AI_NO_PROMPT_LABEL : null,
             ].filter(Boolean);
             return (
               <li key={st.key} className="flex flex-col gap-1 px-4 py-3.5">

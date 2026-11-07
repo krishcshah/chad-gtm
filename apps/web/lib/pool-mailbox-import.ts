@@ -117,7 +117,14 @@ export async function planPoolMailboxImport<T extends PoolImportCandidate>(opts:
   existingEmails: ReadonlySet<string>;
   existingDomainCounts: ReadonlyMap<string, number>;
   tester: ConnectionTester<T>;
+  /**
+   * Default true. False for dedicated (one-customer, non-pool) mailboxes:
+   * the shared-pool per-domain cap does not apply to them. Every other check
+   * (duplicates, missing domain, login test) still runs.
+   */
+  enforceDomainCap?: boolean;
 }): Promise<PoolImportPlan<T>> {
+  const enforceDomainCap = opts.enforceDomainCap !== false;
   const seen = new Set(opts.existingEmails);
   const domainCounts = new Map(opts.existingDomainCounts);
   const toInsert: PoolImportPlanItem<T>[] = [];
@@ -134,7 +141,7 @@ export async function planPoolMailboxImport<T extends PoolImportCandidate>(opts:
       rejected.push({ row: candidate.row, error: `${email} has no domain` });
       continue;
     }
-    if ((domainCounts.get(domain) ?? 0) >= MAX_POOL_MAILBOXES_PER_DOMAIN) {
+    if (enforceDomainCap && (domainCounts.get(domain) ?? 0) >= MAX_POOL_MAILBOXES_PER_DOMAIN) {
       rejected.push({ row: candidate.row, error: poolDomainCapError(domain) });
       continue;
     }

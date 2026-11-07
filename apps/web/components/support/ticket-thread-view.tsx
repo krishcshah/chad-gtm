@@ -31,6 +31,7 @@ import { addTicketMessageAction, updateTicketStatusAction } from "@/lib/support-
 import type { SupportTicketDTO, SupportTicketMessageDTO, TicketStatus } from "@/lib/support-types";
 import { TicketCategoryBadge } from "./ticket-category-badge";
 import { TICKET_STATUS_META, TicketStatusBadge, ticketStatusLabel } from "./ticket-status-badge";
+import { customerStatusAction, statusAfterReply } from "@/lib/support-status";
 
 const STATUS_ORDER: TicketStatus[] = ["open", "in_progress", "resolved", "closed"];
 
@@ -114,19 +115,26 @@ export function TicketThreadView({
 
   const pageUrl = safeHttpUrl(ticket.url);
 
+  const statusAfterMyReply = statusAfterReply(ticket.status, isAdminUser);
   const replyHint =
-    !isAdminUser && ticket.status === "resolved"
-      ? "Replying reopens this ticket."
-      : isAdminUser && ticket.status === "open"
+    statusAfterMyReply === ticket.status
+      ? null
+      : isAdminUser
         ? "Replying marks this ticket as in progress."
-        : null;
+        : "Replying reopens this ticket.";
+  const customerAction = customerStatusAction(ticket.status);
+  // Admins opening someone else's ticket came from the admin queue, so lead back there.
+  const backToAdminQueue = isAdminUser && ticket.userId !== currentUserId;
 
   return (
     <Page width="narrow">
       <PageHeader
         eyebrow={
-          <Link href="/support" className="inline-flex items-center gap-1.5 hover:text-foreground">
-            <ArrowLeft className="size-4" aria-hidden /> Support
+          <Link
+            href={backToAdminQueue ? "/admin?tab=support" : "/support"}
+            className="inline-flex items-center gap-1.5 hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" aria-hidden /> {backToAdminQueue ? "Admin queue" : "Support"}
           </Link>
         }
         title={ticket.heading}
@@ -154,24 +162,30 @@ export function TicketThreadView({
           </>
         }
         actions={
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" loading={statusPending}>
-                Status: {ticketStatusLabel(ticket.status)}
-                <ChevronDown aria-hidden />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Set status</DropdownMenuLabel>
-              <DropdownMenuRadioGroup value={ticket.status} onValueChange={(v) => changeStatus(v as TicketStatus)}>
-                {STATUS_ORDER.map((s) => (
-                  <DropdownMenuRadioItem key={s} value={s}>
-                    {TICKET_STATUS_META[s].label}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          isAdminUser ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" loading={statusPending}>
+                  Status: {ticketStatusLabel(ticket.status)}
+                  <ChevronDown aria-hidden />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Set status</DropdownMenuLabel>
+                <DropdownMenuRadioGroup value={ticket.status} onValueChange={(v) => changeStatus(v as TicketStatus)}>
+                  {STATUS_ORDER.map((s) => (
+                    <DropdownMenuRadioItem key={s} value={s}>
+                      {TICKET_STATUS_META[s].label}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Button variant="outline" loading={statusPending} onClick={() => changeStatus(customerAction.to)}>
+              {customerAction.label}
+            </Button>
+          )
         }
       />
 

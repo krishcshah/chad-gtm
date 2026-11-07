@@ -33,6 +33,10 @@ export interface CampaignResearchContext {
   targetTitles?: string[];
   /** Only true for AutoGTM's own outbound-infrastructure offer. */
   isOutboundInfrastructure?: boolean;
+  /** Claims the sender may make about themselves, taken from their own website. */
+  proofPoints?: string[];
+  /** What the sender's product does, from their own website. The only capabilities an email may claim. */
+  capabilities?: string[];
 }
 
 export interface LeadResearchDossier {
@@ -460,7 +464,11 @@ function buildCampaignDossier(
     context.valueProposition || `a faster way to handle ${friction.area}`;
 
   const frictionPoke = chosenPain.endsWith(".") ? chosenPain : `${chosenPain}.`;
-  const customAssetDeliverable = `Put together a 90-second teardown of how ${offerName} changes ${friction.area} for ${companyName}.`;
+  // State the offer plainly. Never promise an asset (video, teardown, deck)
+  // that nobody has made.
+  const customAssetDeliverable = context.valueProposition
+    ? `${offerName}: ${context.valueProposition.trim().replace(/\.$/, "")}.`
+    : "";
   const lowFrictionCta = (context.cta || "Worth a quick look?").replace(/[.?!]+$/, "?");
 
   return {

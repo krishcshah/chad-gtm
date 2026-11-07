@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  effectiveConversationTags,
   groupUniboxConversations,
   normalizeThreadSubject,
   summarizeUniboxThreads,
@@ -171,5 +172,64 @@ describe("groupUniboxConversations", () => {
     const listed = summarizeUniboxThreads(rows);
     expect(listed).toHaveLength(1);
     expect(listed[0]?.threadKey).toBe(uniboxConversationKey(rows[0]!));
+  });
+});
+
+describe("conversation tags: a tag you set wins (#86)", () => {
+  const at = (h: number) => `2026-09-22T0${h}:00:00.000Z`;
+
+  it("keeps your meeting_booked when a newer reply is auto-tagged interested, and shows it as detected", () => {
+    const grouped = groupUniboxConversations([
+      { ...reply({ id: "new", subject: "Re: Intro", receivedAt: at(3) }), tag: "interested", tagSource: null },
+      { ...reply({ id: "old", subject: "Intro", receivedAt: at(1) }), tag: "meeting_booked", tagSource: "human" },
+    ]);
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]).toMatchObject({
+      tag: "meeting_booked",
+      tagSource: "human",
+      tagReplyId: "old",
+      detectedTag: "interested",
+    });
+  });
+
+  it("does not repeat a detected tag that equals yours", () => {
+    const grouped = groupUniboxConversations([
+      { ...reply({ id: "new", subject: "Re: Intro", receivedAt: at(3) }), tag: "interested", tagSource: "auto" },
+      { ...reply({ id: "old", subject: "Intro", receivedAt: at(1) }), tag: "interested", tagSource: "human" },
+    ]);
+    expect(grouped[0]).toMatchObject({ tag: "interested", tagSource: "human", detectedTag: null });
+  });
+
+  it("a tag you cleared keeps the conversation untagged even with an older automatic tag", () => {
+    const grouped = groupUniboxConversations([
+      { ...reply({ id: "new", subject: "Re: Intro", receivedAt: at(3) }), tag: null, tagSource: "human" },
+      { ...reply({ id: "old", subject: "Intro", receivedAt: at(1) }), tag: "interested", tagSource: "auto" },
+    ]);
+    expect(grouped[0]).toMatchObject({ tag: null, tagSource: "human", tagReplyId: "new", detectedTag: null });
+  });
+
+  it("without a human tag behaves as before: newest automatic tag, nothing detected", () => {
+    const grouped = groupUniboxConversations([
+      { ...reply({ id: "new", subject: "Re: Intro", receivedAt: at(3) }) },
+      { ...reply({ id: "old", subject: "Intro", receivedAt: at(1) }), tag: "not_interested" },
+    ]);
+    expect(grouped[0]).toMatchObject({ tag: "not_interested", tagSource: "auto", tagReplyId: "old", detectedTag: null });
+    const untagged = groupUniboxConversations([reply({ id: "x", subject: "Hi", receivedAt: at(1) })]);
+    expect(untagged[0]).toMatchObject({ tag: null, tagSource: null, tagReplyId: "x", detectedTag: null });
+  });
+
+  it("effectiveConversationTags counts one tag per conversation", () => {
+    const tags = effectiveConversationTags([
+      { ...reply({ id: "a1", subject: "Intro", receivedAt: at(1) }), tag: "meeting_booked" },
+      { ...reply({ id: "a2", subject: "Re: Intro", receivedAt: at(2) }), tag: "meeting_booked" },
+      { ...reply({ id: "b1", subject: "Other", receivedAt: at(1), leadId: "lead-2" }), tag: "interested" },
+      { ...reply({ id: "b2", subject: "Re: Other", receivedAt: at(3), leadId: "lead-2" }), tag: "meeting_booked", tagSource: "auto" },
+      { ...reply({ id: "b0", subject: "Other", receivedAt: at(0), leadId: "lead-2" }), tag: "interested", tagSource: "human" },
+      { ...reply({ id: "c1", subject: "Third", receivedAt: at(1), leadId: "lead-3" }) },
+    ]);
+    expect(tags).toHaveLength(3);
+    expect(tags.filter((t) => t === "meeting_booked")).toHaveLength(1);
+    expect(tags.filter((t) => t === "interested")).toHaveLength(1);
+    expect(tags.filter((t) => t === null)).toHaveLength(1);
   });
 });

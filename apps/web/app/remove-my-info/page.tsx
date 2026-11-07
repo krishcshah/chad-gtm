@@ -1,5 +1,6 @@
 import { PublicPageHeader, PublicShell } from "../public-shell";
 import { PublicRemoveMyInfoForm } from "./public-remove-form";
+import { SUPPORT_EMAIL } from "@/lib/system-emails";
 
 export const metadata = {
   title: "Remove my info",
@@ -8,8 +9,8 @@ export const metadata = {
 
 const steps = [
   "Tell us which email address to remove and what data you mean.",
-  "We log the request in our compliance queue and process it within 72 hours.",
-  "Your address is removed from lead search and added to our suppression list, so it is not imported again.",
+  "We add the address to our suppression list straight away, so no AutoGTM customer can email it.",
+  "Within 72 hours we delete it from lead search and from our customers' lead lists.",
 ];
 
 export default function RemoveMyInfoPage() {
@@ -46,10 +47,10 @@ export default function RemoveMyInfoPage() {
           <p>
             Prefer email? Send your request to{" "}
             <a
-              href="mailto:hence-body-eskimo@duck.com"
+              href={`mailto:${SUPPORT_EMAIL}`}
               className="font-medium text-foreground underline decoration-border-strong underline-offset-4 hover:decoration-foreground"
             >
-              hence-body-eskimo@duck.com
+              {SUPPORT_EMAIL}
             </a>
             .
           </p>

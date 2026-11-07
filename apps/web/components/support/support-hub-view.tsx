@@ -100,17 +100,13 @@ export function SupportHubView({
     <Page>
       <PageHeader
         title="Support"
-        description={
-          isAdminUser
-            ? "Every ticket from every account. Reply in the thread and set the status when it is handled."
-            : "Report a problem, ask a question or suggest an improvement. Our replies appear in the ticket."
-        }
+        description="Report a problem, ask a question or suggest an improvement. Our replies appear in the ticket."
         actions={
           <>
             {isAdminUser ? (
               <Button asChild variant="outline">
-                <Link href="/admin">
-                  <ShieldCheck /> Admin
+                <Link href="/admin?tab=support">
+                  <ShieldCheck /> Open admin queue
                 </Link>
               </Button>
             ) : null}
@@ -146,7 +142,7 @@ export function SupportHubView({
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={isAdminUser ? "Search subject, details or email" : "Search your tickets"}
+                placeholder="Search your tickets"
                 aria-label="Search tickets"
                 className="pl-9"
               />
@@ -201,7 +197,7 @@ export function SupportHubView({
             <Card className="overflow-hidden">
               <ul className="divide-y divide-border">
                 {visible.map((t) => (
-                  <TicketRow key={t.id} ticket={t} showAuthor={isAdminUser || t.userEmail !== userEmail} />
+                  <TicketRow key={t.id} ticket={t} showAuthor={t.userEmail !== userEmail} />
                 ))}
               </ul>
             </Card>

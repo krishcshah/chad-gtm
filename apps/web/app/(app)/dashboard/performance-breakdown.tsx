@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { ArrowUpRight, Rocket } from "lucide-react";
 import {
-  Badge,
   Button,
   Card,
   CardDescription,
@@ -15,20 +14,28 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  statusVariant,
 } from "@smartreach/ui";
+import { describeSendBlock, type SendBlockCampaign } from "@/lib/send-block";
+import { CampaignStatusBadge } from "../campaign-status-badge";
+import { CampaignSendStatus } from "../campaign-send-status";
 
-interface CampaignItem {
-  id: string;
+interface CampaignItem extends SendBlockCampaign {
   name: string;
-  status: string;
   total: number;
   sent: number;
   replied: number;
 }
 
 /** Campaign pacing on the overview: how far each campaign has got through its leads. */
-export function PerformanceBreakdown({ campaigns = [] }: { campaigns: CampaignItem[] }) {
+export function PerformanceBreakdown({
+  campaigns = [],
+  postalHeld = false,
+}: {
+  campaigns: CampaignItem[];
+  /** The engine holds every send (no postal address): sending campaigns show "Held". */
+  postalHeld?: boolean;
+}) {
+  const now = new Date();
   return (
     <Card>
       <CardHeader
@@ -58,7 +65,7 @@ export function PerformanceBreakdown({ campaigns = [] }: { campaigns: CampaignIt
               <TableRow className="hover:bg-transparent">
                 <TableHead>Campaign</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-[32%]">Sent</TableHead>
+                <TableHead className="w-[32%]">Leads emailed</TableHead>
                 <TableHead className="text-right">Replies</TableHead>
               </TableRow>
             </TableHeader>
@@ -72,15 +79,14 @@ export function PerformanceBreakdown({ campaigns = [] }: { campaigns: CampaignIt
                         {c.name}
                       </Link>
                       <span className="text-xs text-subtle-foreground">{c.total.toLocaleString()} leads</span>
+                      <CampaignSendStatus view={describeSendBlock(c, now)} compact className="mt-1" />
                     </TableCell>
                     <TableCell>
-                      <Badge variant={statusVariant(c.status)} dot className="capitalize">
-                        {c.status}
-                      </Badge>
+                      <CampaignStatusBadge status={c.status} held={postalHeld} />
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <Progress value={pct} className="h-1.5 flex-1" aria-label={`${pct}% sent`} />
+                        <Progress value={pct} className="h-1.5 flex-1" aria-label={`${pct}% of leads emailed`} />
                         <span className="tabular w-16 shrink-0 text-right text-xs text-muted-foreground">
                           {c.sent.toLocaleString()} / {c.total.toLocaleString()}
                         </span>

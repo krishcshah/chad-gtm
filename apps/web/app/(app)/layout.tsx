@@ -10,7 +10,8 @@ import { SidebarProvider } from "@/components/layout/sidebar-context";
 import { AppShell, AppMainContent } from "@/components/layout/app-shell";
 import { PageTracker } from "@/components/page-tracker";
 import { countOpenAgentRequests } from "@/lib/autopilot-actions";
-import { approvalRequired, isApprovedToSend } from "@/lib/approval";
+import { loadInboxBadgeSignals } from "@/lib/unibox-query";
+import { approvalRequired, getSendAccess, type SendAccess } from "@/lib/approval";
 import { ApprovalBanner } from "./approval-banner";
 import { isAdmin } from "@/lib/admin";
 
@@ -37,14 +38,23 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     console.error("[AppLayout] Failed to list workspaces:", err);
   }
 
+  // Replies nobody is answering (Manual campaigns, conversations you took over). Started now so it
+  // runs alongside the other lookups; a recent count is reused rather than recounted every render.
+  const awaitingPromise = loadInboxBadgeSignals(user.id, workspace).then(
+    (s) => s.awaiting,
+    (err) => {
+      console.error("[AppLayout] Failed to count replies awaiting you:", err);
+      return 0;
+    },
+  );
   const openRequests = await countOpenAgentRequests();
 
-  let showApprovalBanner = false;
+  let access: SendAccess = "approved";
   let emailOnApprove = false;
   if (approvalRequired()) {
     try {
-      showApprovalBanner = !(await isApprovedToSend(user.id));
-      if (showApprovalBanner) {
+      access = await getSendAccess(user.id);
+      if (access === "pending") {
         const { isSystemMailerConfigured } = await import("@smartreach/email-engine/system-mailer");
         emailOnApprove = isSystemMailerConfigured();
       }
@@ -52,6 +62,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       console.error("[AppLayout] Failed to check approval:", err);
     }
   }
+  const awaitingReply = await awaitingPromise;
 
   return (
     <SidebarProvider>
@@ -64,9 +75,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             workspaces={workspaces}
             activeWorkspace={workspace}
             openRequests={openRequests}
+            awaitingReply={awaitingReply}
           />
           <AppMainContent>
-            {showApprovalBanner && <ApprovalBanner emailOnApprove={emailOnApprove} />}
+            {access !== "approved" && <ApprovalBanner access={access} emailOnApprove={emailOnApprove} />}
             {children}
           </AppMainContent>
           <CommandPalette isAdmin={isAdmin(user)} />

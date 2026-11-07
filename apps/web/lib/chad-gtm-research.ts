@@ -182,7 +182,8 @@ ${JSON.stringify(topIndustries)}
 5. Three bespoke outbound offers. Each must be specific to THIS company:
    - Angle 1 — Acute Pain Relief: the daily friction their buyer already complains about.
    - Angle 2 — Direct ROI & Velocity: measurable speed, cost, or revenue impact (only if the crawl supports it).
-   - Angle 3 — Zero-Risk Proof: a teardown, benchmark, audit, or pilot the buyer can evaluate in under 10 minutes.
+   - Angle 3 — Proof: a result, customer type or way of working the crawl actually shows, framed as why the buyer can trust it.
+   An AI agent sends these emails and nobody makes custom work for prospects, so NEVER offer a free audit, teardown, benchmark, report, video, pilot or any deliverable unless the website itself sells it. The ask is interest in a conversation.
    CTAs must be one short permission question, under 12 words. No calendar links. No "15-minute call".
 
 Respond STRICTLY with a valid JSON object matching this exact schema:
@@ -723,10 +724,10 @@ function normalizeOffers(value: unknown, domain: string): GtmOffer[] {
       cta: "Open to seeing the math?",
     },
     {
-      title: "Zero-Risk Teardown",
-      angle: "Zero-Risk Proof",
-      valueProp: "A short, specific teardown of where the current workflow leaks time.",
-      cta: "Mind if I send it over?",
+      title: "How It Works",
+      angle: "Proof",
+      valueProp: `A plain walkthrough of how ${domain} would fit the team's current workflow.`,
+      cta: "Want me to explain how it would work?",
     },
   ];
 }

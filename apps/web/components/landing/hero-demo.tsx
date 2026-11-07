@@ -20,7 +20,7 @@ type Step = { icon: LucideIcon; title: string; detail: string };
 const STEPS: Step[] = [
   { icon: Globe, title: "Read your website", detail: "northwind.io · 23 pages" },
   { icon: Target, title: "Picked your buyers", detail: "Heads of Ops at US logistics companies" },
-  { icon: Users, title: "Found the people", detail: "500 matches from 100M+ contacts" },
+  { icon: Users, title: "Ranked the people", detail: "18,240 matches in 100M+ contacts" },
   { icon: PenLine, title: "Wrote every email", detail: "One per person, plus two follow-ups" },
   { icon: Send, title: "Sent from managed mailboxes", detail: "Business hours, safe daily caps" },
   { icon: Inbox, title: "Answered the replies", detail: "Pricing question, case study request" },

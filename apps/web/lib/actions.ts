@@ -22,7 +22,6 @@ import {
   suppressionImportSchema,
   suppressionListQuerySchema,
   templateSchema,
-  workspaceSettingsSchema,
 } from "@smartreach/validation";
 import {
   bulkDeleteLeadsForUser,
@@ -43,7 +42,10 @@ import {
   poolActivationBlocker,
   verdictFromConnectionTest,
 } from "./pool-mailbox-import";
-import { normalizeEmail, nowIso } from "@smartreach/shared";
+import { effectiveGapRange, normalizeEmail, nowIso } from "@smartreach/shared";
+import { jobMaxAttempts, sendingSettingsPatch } from "./campaign-settings";
+import { recordContactHistory, suppressedEmailsFor } from "./contact-guards";
+import { classifyImportEmail, directoryRowsToLeadValues, IMPORT_EMAIL_RE } from "./lead-import-rules";
 import {
   ensureCampaignLeadSnapshot,
   getCampaignWizardStateForUser,
@@ -61,7 +63,15 @@ import { requireUser } from "./session";
 import { isAdmin } from "./admin";
 import { APPROVAL_REQUIRED_ERROR, assertCanSend } from "./approval";
 import { mailHostError, senderEndpointPatchError, senderEndpointsError } from "./mail-host-guard";
-import { campaignStartPostalError } from "./campaign-start-guard";
+import { campaignIdentityStartError } from "./campaign-start-guard";
+import { campaignStartError, loadAttachedSenderRefs } from "./campaign-start";
+import { loadComplianceIdentity } from "./gtm-launch";
+import { releaseCampaignJobs } from "@smartreach/email-engine/processor";
+import {
+  MAILBOX_OUT_OF_SERVICE_MESSAGE,
+  recordReplySend,
+  replyMailboxBlockReason,
+} from "@smartreach/email-engine";
 import {
   isAutopilotCampaign,
   poolCampaignEditError,
@@ -71,8 +81,15 @@ import {
   poolTemplateEditError,
 } from "./pool-campaign-guard";
 import { getWorkspacePostalAddress } from "./queries";
+import { WORKSPACE_HOLDS_POOL_ERROR, workspaceHoldsPoolMailboxes } from "./pool-ownership";
 import {
-  campaignSendersStartError,
+  NO_RETRYABLE_FAILED_LEADS_ERROR,
+  autopilotSettingsLockError,
+  campaignCommandError,
+  syncRunStatusForCampaign,
+} from "./outreach-control";
+import { clampAutopilotDaily } from "./autopilot-policy";
+import {
   partitionCampaignSenders,
   senderPartitionError,
   type CampaignSenderRef,
@@ -80,6 +97,11 @@ import {
 import type { LeadProfile } from "./ai";
 import { ACTIVE_WORKSPACE_COOKIE, getActiveWorkspace, type WorkspaceItem } from "./workspaces";
 import { formatZodActionError } from "./zod-action-error";
+import { suppressionRemovalError } from "./suppression-rules";
+import { recordUnsubscribe } from "./unsubscribe-record";
+import { applyReplyTagEffects } from "./reply-tag-effects";
+import { loadRecipientBlock, manualReplyBlockError, type RecipientBlock } from "./recipient-guard";
+import { activeCampaignsForList, listDeleteError } from "./lead-list-guard";
 import {
   getAnalyticsSeriesForUser,
   getAnalyticsSummaryForUser,
@@ -95,6 +117,14 @@ import {
   type UniboxThreadMessage,
 } from "./unibox-thread";
 import { serializeSequenceTemplate, type TemplateStepItem } from "./sequence-templates";
+import {
+  claimReplyForHuman,
+  conversationKey,
+  loadConversationHandlers,
+  newerReplyInConversation,
+  recordHumanSend,
+  releaseHumanClaim,
+} from "./lead-conversations-server";
 
 const {
   leadLists,
@@ -134,11 +164,6 @@ async function sendApprovalError(userId: string): Promise<string | null> {
   }
 }
 
-/** CAMPAIGN_POSTAL_REQUIRED_ERROR unless the campaign owner saved a postal address. */
-async function campaignPostalError(ownerId: string): Promise<string | null> {
-  return campaignStartPostalError(await getWorkspacePostalAddress(ownerId));
-}
-
 type DbHandle = ReturnType<typeof getDb>;
 
 async function loadSenderRefs(db: DbHandle, ids: string[]): Promise<CampaignSenderRef[]> {
@@ -153,19 +178,6 @@ async function loadSenderRefs(db: DbHandle, ids: string[]): Promise<CampaignSend
     })
     .from(senderAccounts)
     .where(inArray(senderAccounts.id, unique));
-}
-
-async function loadAttachedSenderRefs(db: DbHandle, campaignId: string): Promise<CampaignSenderRef[]> {
-  return db
-    .select({
-      id: senderAccounts.id,
-      userId: senderAccounts.userId,
-      isSystemPool: senderAccounts.isSystemPool,
-      deletedAt: senderAccounts.deletedAt,
-    })
-    .from(campaignSenders)
-    .innerJoin(senderAccounts, eq(senderAccounts.id, campaignSenders.senderId))
-    .where(eq(campaignSenders.campaignId, campaignId));
 }
 
 /** Requested sender ids from a wizard payload (undefined when the field is absent). */
@@ -244,6 +256,10 @@ export async function deleteLeadList(listId: string): Promise<ActionResult> {
   const user = await requireUser();
   const db = getDb();
   try {
+    // A campaign still sending to the list would silently stop: refuse until
+    // it is archived. A failed lookup throws, so nothing is deleted.
+    const blocked = listDeleteError(await activeCampaignsForList(db, user.id, listId));
+    if (blocked) return { ok: false, error: blocked };
     const now = nowIso();
     await db
       .update(leadLists)
@@ -292,7 +308,7 @@ const STANDARD_KEY_TO_COLUMN: Record<string, string> = {
 };
 
 export async function importLeads(input: unknown): Promise<
-  ActionResult<{ imported: number; skipped: number; invalid: number; listId: string }>
+  ActionResult<{ imported: number; skipped: number; blocked: number; invalid: number; listId: string }>
 > {
   const user = await requireUser();
   const workspace = await getActiveWorkspace(user.id);
@@ -327,15 +343,24 @@ export async function importLeads(input: unknown): Promise<
     return { ok: false, error: "Map a column to Email before importing", fieldErrors: { email: ["Required"] } };
   }
 
-  // Load existing emails in this list so we can skip duplicates in one query.
+  // Load the list's active emails so we can skip duplicates in one query
+  // (a deleted lead can be imported again, as when adding it by hand).
   const existing = await db
     .select({ email: leads.email })
     .from(leads)
-    .where(and(eq(leads.listId, targetListId)));
-  const existingSet = new Set(existing.map((r) => r.email));
+    .where(and(eq(leads.listId, targetListId), isNull(leads.deletedAt)));
+  const existingSet = new Set(existing.map((r) => normalizeEmail(r.email)));
+  // Your blocklist plus everyone's opt-outs (unsubscribe, bounce, complaint,
+  // removal request): skipped and reported, never imported as New.
+  const blockedSet = await suppressedEmailsFor(
+    db,
+    user.id,
+    rows.map((row) => normalizeEmail(row[emailColumn] ?? "")).filter((e) => IMPORT_EMAIL_RE.test(e)),
+  );
 
   let imported = 0;
   let skipped = 0;
+  let blocked = 0;
   let invalid = 0;
   const seenInBatch = new Set<string>();
   const CHUNK = 500;
@@ -349,12 +374,17 @@ export async function importLeads(input: unknown): Promise<
   for (const row of rows) {
     const rawEmail = row[emailColumn] ?? "";
     const email = normalizeEmail(rawEmail);
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+    const verdict = classifyImportEmail(email, { existing: existingSet, seen: seenInBatch, blocked: blockedSet });
+    if (verdict === "invalid") {
       invalid++;
       continue;
     }
-    if (existingSet.has(email) || seenInBatch.has(email)) {
+    if (verdict === "duplicate") {
       skipped++;
+      continue;
+    }
+    if (verdict === "blocked") {
+      blocked++;
       continue;
     }
     seenInBatch.add(email);
@@ -408,7 +438,7 @@ export async function importLeads(input: unknown): Promise<
     listId: targetListId,
   });
   revalidatePath("/leads");
-  return { ok: true, data: { imported, skipped, invalid, listId: targetListId } };
+  return { ok: true, data: { imported, skipped, blocked, invalid, listId: targetListId } };
 }
 
 /** Server action: cursor-paginated leads for the table's "load more". */
@@ -928,15 +958,65 @@ export async function upsertTemplate(input: {
   }
 }
 
+/**
+ * Why `user` may not rename or delete `templateId`, or null when they may:
+ * it must be their own live template, not one Autopilot made (admins
+ * excepted), and not used by an Autopilot or pool campaign (#105).
+ */
+async function ownTemplateChangeError(
+  db: DbHandle,
+  user: { id: string; email?: string | null; role?: string | null },
+  templateId: string,
+): Promise<string | null> {
+  const [tpl] = await db
+    .select({ id: emailTemplates.id, source: emailTemplates.source })
+    .from(emailTemplates)
+    .where(and(eq(emailTemplates.id, templateId), eq(emailTemplates.userId, user.id), isNull(emailTemplates.deletedAt)))
+    .limit(1);
+  if (!tpl) return "Template not found.";
+  if (tpl.source === "autopilot" && !isAdmin(user)) {
+    return "This template was made by Autopilot and can't be changed here.";
+  }
+  return poolTemplateEditError(db, { id: user.id, isAdmin: isAdmin(user) }, templateId);
+}
+
+export async function renameTemplate(
+  templateId: string,
+  name: string,
+): Promise<ActionResult<{ id: string; name: string }>> {
+  const user = await requireUser();
+  const trimmed = String(name ?? "").trim();
+  if (!trimmed) return { ok: false, error: "Enter a name for the template." };
+  if (trimmed.length > 120) return { ok: false, error: "Keep the name under 120 characters." };
+  const db = getDb();
+  try {
+    const guard = await ownTemplateChangeError(db, user, String(templateId ?? ""));
+    if (guard) return { ok: false, error: guard };
+    // A sequence template's display name is this column (parseSequenceTemplate prefers it).
+    await db
+      .update(emailTemplates)
+      .set({ name: trimmed, updatedAt: nowIso() })
+      .where(and(eq(emailTemplates.id, templateId), eq(emailTemplates.userId, user.id)));
+    await logActivity(user.id, "template.renamed", `Renamed template to "${trimmed}"`);
+    revalidatePath("/campaigns/new");
+    return { ok: true, data: { id: templateId, name: trimmed }, message: `Renamed to “${trimmed}”` };
+  } catch (e) {
+    return err(e);
+  }
+}
+
 export async function deleteTemplate(templateId: string): Promise<ActionResult> {
   const user = await requireUser();
   const db = getDb();
   try {
+    // Same guards as rename: a template a live Autopilot or pool campaign uses stays.
+    const guard = await ownTemplateChangeError(db, user, String(templateId ?? ""));
+    if (guard) return { ok: false, error: guard };
     await db
       .update(emailTemplates)
       .set({ deletedAt: nowIso() })
       .where(and(eq(emailTemplates.id, templateId), eq(emailTemplates.userId, user.id)));
-    revalidatePath("/templates");
+    revalidatePath("/campaigns/new");
     return { ok: true, message: "Template deleted" };
   } catch (e) {
     return err(e);
@@ -1042,15 +1122,24 @@ export async function publishCampaign(input: unknown): Promise<ActionResult<{ id
   const db = getDb();
   const poolError = await poolCampaignEditError(db, { id: user.id, isAdmin: isAdmin(user) }, payloadCampaignId(input));
   if (poolError) return { ok: false, error: poolError };
+  // A new manual campaign can't target an Autopilot list (its prospects are Autopilot's).
+  const rawListId = (input as { leadListId?: unknown } | null | undefined)?.leadListId;
+  const poolListError = await poolListEditError(
+    db,
+    { id: user.id, isAdmin: isAdmin(user) },
+    typeof rawListId === "string" ? rawListId : null,
+  );
+  if (poolListError) return { ok: false, error: poolListError };
   // Publishing starts sending (now or at the scheduled time).
   const approvalError = await sendApprovalError(user.id);
   if (approvalError) return { ok: false, error: approvalError };
-  const postalAddress = await getWorkspacePostalAddress(user.id);
-  const postalError = campaignStartPostalError(postalAddress);
-  if (postalError) return { ok: false, error: postalError };
+  // The campaign lands in the active workspace, so its sender identity is checked (#72).
+  const workspace = await getActiveWorkspace(user.id);
+  const postalAddress = await getWorkspacePostalAddress(user.id, workspace.id);
+  const identityError = campaignIdentityStartError(await loadComplianceIdentity(db, user.id, workspace.id));
+  if (identityError) return { ok: false, error: identityError };
   const senderError = await manualCampaignSenderError(db, user, requestedSenderIds(input));
   if (senderError) return { ok: false, error: senderError, fieldErrors: { senderIds: [senderError] } };
-  const workspace = await getActiveWorkspace(user.id);
   const result = await publishCampaignForUser(db, user.id, input, postalAddress, workspace.id, {
     isAdmin: isAdmin(user),
   });
@@ -1121,6 +1210,8 @@ export async function createCampaign(input: unknown): Promise<ActionResult<{ id:
   return publishCampaign(input);
 }
 
+const AUTOPILOT_DUPLICATE_ERROR = "Autopilot campaigns can't be duplicated. Start a new Autopilot run instead.";
+
 export async function getCampaignWizardState(
   id: string,
 ): Promise<ActionResult<import("./campaign-drafts").CampaignWizardState>> {
@@ -1130,7 +1221,7 @@ export async function getCampaignWizardState(
 
 export async function campaignAction(
   campaignId: string,
-  action: "start" | "pause" | "resume" | "archive" | "delete" | "duplicate",
+  action: "start" | "pause" | "resume" | "archive" | "delete" | "unarchive" | "retry_failed",
 ): Promise<ActionResult> {
   const user = await requireUser();
   const db = getDb();
@@ -1145,47 +1236,124 @@ export async function campaignAction(
           : and(eq(campaigns.id, campaignId), eq(campaigns.userId, user.id))
       );
     if (!c) return { ok: false, error: "Campaign not found" };
+    // Completed and archived campaigns are never started or resumed; deleted ones are gone.
+    const commandError = campaignCommandError(c, action);
+    if (commandError) return { ok: false, error: commandError };
 
-    switch (action) {
-      case "start":
-      case "resume": {
-        // Duplicate/draft campaigns had no lead snapshot — without this the
-        // engine sees 0 queued leads and immediately completes.
-        if (!c.leadListId) {
-          return { ok: false, error: "Campaign is missing a lead list" };
-        }
-        const approvalError = await sendApprovalError(user.id);
-        if (approvalError) return { ok: false, error: approvalError };
-        const postalError = await campaignPostalError(c.userId);
-        if (postalError) return { ok: false, error: postalError };
-        const senderError = campaignSendersStartError({
-          attached: await loadAttachedSenderRefs(db, campaignId),
-          ownerId: c.userId,
-          actorIsAdmin: userIsAdmin,
-          isAutopilotCampaign: await isAutopilotCampaign(db, campaignId),
+    if (action === "unarchive") {
+      // Back to paused: nothing is sent until someone resumes it.
+      await db.update(campaigns).set({ status: "paused", updatedAt: nowIso() }).where(eq(campaigns.id, campaignId));
+      const runIds = await syncRunStatusForCampaign(db, campaignId, "paused");
+      const [pending] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(campaignLeads)
+        .where(and(eq(campaignLeads.campaignId, campaignId), inArray(campaignLeads.status, ["queued", "scheduled"])));
+      const n = Number(pending?.n ?? 0);
+      await logActivity(user.id, "campaign.unarchive", `Unarchived campaign "${c.name}"`, campaignId);
+      revalidateOutreach(runIds);
+      return {
+        ok: true,
+        message: `Unarchived. It's paused; ${n} ${n === 1 ? "lead still has" : "leads still have"} emails to send when you resume it.`,
+      };
+    }
+
+    if (action === "retry_failed") {
+      // Failed leads none of whose emails bounced: bounced addresses are never retried.
+      const retryable: Array<{ id: string }> = await db
+        .select({ id: campaignLeads.id })
+        .from(campaignLeads)
+        .where(
+          and(
+            eq(campaignLeads.campaignId, campaignId),
+            eq(campaignLeads.status, "failed"),
+            sql`not exists (select 1 from ${emailJobs} where ${emailJobs.campaignLeadId} = ${campaignLeads.id} and ${emailJobs.status} = 'bounced')`,
+          ),
+        );
+      if (retryable.length === 0) return { ok: false, error: NO_RETRYABLE_FAILED_LEADS_ERROR };
+      const wasCompleted = c.status === "completed";
+      if (wasCompleted) {
+        // Sending starts again: the same checks as Resume, before any write.
+        const startError = await campaignStartError(db, {
+          campaignId,
+          actor: { id: user.id, isAdmin: userIsAdmin },
         });
-        if (senderError) return { ok: false, error: senderError };
-        await ensureCampaignLeadSnapshot(db, campaignId, c.leadListId);
+        if (startError) return { ok: false, error: startError };
+      }
+      const ids = retryable.map((r) => r.id);
+      // Their failed jobs go first: (campaign_lead_id, step_position) is
+      // unique, so the scheduler could not enqueue them again otherwise.
+      await db.delete(emailJobs).where(and(inArray(emailJobs.campaignLeadId, ids), eq(emailJobs.status, "failed")));
+      await db
+        .update(campaignLeads)
+        .set({ status: "queued", attempts: 0, lastError: null, scheduledFor: null, updatedAt: nowIso() })
+        .where(and(inArray(campaignLeads.id, ids), eq(campaignLeads.status, "failed")));
+      let runIds: string[] = [];
+      if (wasCompleted) {
         await db
           .update(campaigns)
           .set({ status: "running", startedAt: c.startedAt ?? nowIso(), updatedAt: nowIso() })
           .where(eq(campaigns.id, campaignId));
+        runIds = await syncRunStatusForCampaign(db, campaignId, "running");
+      }
+      await logActivity(user.id, "campaign.retry_failed", `Retried failed leads in campaign "${c.name}"`, campaignId);
+      revalidateOutreach(runIds);
+      return {
+        ok: true,
+        message: `Re-queued ${ids.length} failed ${ids.length === 1 ? "lead" : "leads"}. They go out in the next sending window.`,
+      };
+    }
+
+    // Autopilot runs that mirror this campaign's new status (none for a manual campaign).
+    let outreachRunIds: string[] = [];
+    switch (action) {
+      case "start":
+      case "resume": {
+        // One check for every start path: lead list, owner approval,
+        // company + postal address, and mailboxes this campaign may use.
+        const startError = await campaignStartError(db, {
+          campaignId,
+          actor: { id: user.id, isAdmin: userIsAdmin },
+        });
+        if (startError) return { ok: false, error: startError };
+        // Duplicate/draft campaigns had no lead snapshot — without this the
+        // engine sees 0 queued leads and immediately completes.
+        await ensureCampaignLeadSnapshot(db, campaignId, c.leadListId!);
+        await db
+          .update(campaigns)
+          .set({
+            status: "running",
+            startedAt: c.startedAt ?? nowIso(),
+            sendBlockReason: null,
+            sendBlockSince: null,
+            updatedAt: nowIso(),
+          })
+          .where(eq(campaigns.id, campaignId));
+        // Campaign first, then its run: the engine-visible state never runs ahead.
+        outreachRunIds = await syncRunStatusForCampaign(db, campaignId, "running");
         break;
       }
       case "pause":
-        await db.update(campaigns).set({ status: "paused", updatedAt: nowIso() }).where(eq(campaigns.id, campaignId));
-        break;
       case "archive":
         await db
           .update(campaigns)
-          .set({ status: "archived", updatedAt: nowIso() })
+          .set({ status: action === "pause" ? "paused" : "archived", updatedAt: nowIso() })
           .where(eq(campaigns.id, campaignId));
+        // An archived campaign's run ends (completed); it keeps its campaignId
+        // so history, KPIs and replies stay attached.
+        outreachRunIds = await syncRunStatusForCampaign(db, campaignId, action === "pause" ? "paused" : "archived");
+        // Take its queued emails out of the shared send queue; the leads get
+        // fresh, paced send times if the campaign runs again. If this fails
+        // the engine's own sweep releases them on its next tick.
+        await releaseCampaignJobs(db, campaignId, action === "pause" ? "campaign-paused" : "campaign-archived").catch(
+          (e) => console.error("[campaignAction] releasing queued jobs failed:", e),
+        );
         break;
       case "delete":
         await db
           .update(campaigns)
           .set({ deletedAt: nowIso(), status: "archived", updatedAt: nowIso() })
           .where(eq(campaigns.id, campaignId));
+        outreachRunIds = await syncRunStatusForCampaign(db, campaignId, "archived", true);
         await db
           .update(emailJobs)
           .set({ status: "cancelled" })
@@ -1196,52 +1364,23 @@ export async function campaignAction(
             )
           );
         break;
-      case "duplicate": {
-        const [copy] = await db
-          .insert(campaigns)
-          .values({
-            userId: user.id,
-            workspaceId: c.workspaceId,
-            name: `${c.name} (copy)`,
-            status: "draft",
-            leadListId: c.leadListId,
-            templateId: c.templateId,
-            businessDaysOnly: c.businessDaysOnly,
-            sendingTimezone: c.sendingTimezone,
-            sendingWindowStart: c.sendingWindowStart,
-            sendingWindowEnd: c.sendingWindowEnd,
-            dailyLimit: c.dailyLimit,
-            minDelaySec: c.minDelaySec,
-            maxDelaySec: c.maxDelaySec,
-            maxEmailsPerSenderPerDay: c.maxEmailsPerSenderPerDay,
-            stopOnReply: c.stopOnReply,
-            retryFailed: c.retryFailed,
-            retryCount: c.retryCount,
-            trackOpens: c.trackOpens,
-          })
-          .returning({ id: campaigns.id });
-        // The copy is a manual campaign: never carry shared pool mailboxes
-        // (or anyone else's) over to it, except for admins.
-        const copySenderIds = await copyableSenderIds(db, user, campaignId);
-        if (copySenderIds.length) {
-          await db
-            .insert(campaignSenders)
-            .values(copySenderIds.map((senderId) => ({ campaignId: copy.id, senderId })));
-        }
-        // Prefill campaign_leads so Start does not race an empty queue
-        if (c.leadListId) {
-          await ensureCampaignLeadSnapshot(db, copy.id, c.leadListId);
-        }
-        break;
-      }
     }
 
-    await logActivity(user.id, `campaign.${action}`, `${action === "start" ? "Started" : action === "resume" ? "Resumed" : action === "pause" ? "Paused" : action === "archive" ? "Archived" : action === "delete" ? "Deleted" : "Duplicated"} campaign "${c.name}"`, campaignId);
-    revalidatePath("/campaigns");
-    revalidatePath("/dashboard");
+    await logActivity(user.id, `campaign.${action}`, `${action === "start" ? "Started" : action === "resume" ? "Resumed" : action === "pause" ? "Paused" : action === "archive" ? "Archived" : "Deleted"} campaign "${c.name}"`, campaignId);
+    revalidateOutreach(outreachRunIds);
     return { ok: true, message: `Campaign ${action === "start" ? "started" : `${action}d`}` };
   } catch (e) {
     return err(e);
+  }
+}
+
+/** Refresh the pages that show a campaign's outreach state (and its Autopilot runs). */
+function revalidateOutreach(runIds: string[]) {
+  revalidatePath("/campaigns");
+  revalidatePath("/dashboard");
+  if (runIds.length > 0) {
+    revalidatePath("/chad-gtm");
+    for (const id of runIds) revalidatePath(`/chad-gtm/${id}`);
   }
 }
 
@@ -1260,6 +1399,7 @@ export async function duplicateCampaignToDraft(
       .from(campaigns)
       .where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, user.id), isNull(campaigns.deletedAt)));
     if (!c) return { ok: false, error: "Campaign not found" };
+    if (await isAutopilotCampaign(db, campaignId)) return { ok: false, error: AUTOPILOT_DUPLICATE_ERROR };
 
     const copyName = `${c.name} (Copy)`;
     const [copy] = await db
@@ -1329,6 +1469,9 @@ export async function updateCampaignSettings(
     trackOpens?: boolean;
     minDelaySec?: number;
     maxDelaySec?: number;
+    maxEmailsPerSenderPerDay?: number;
+    retryFailed?: boolean;
+    retryCount?: number;
     senderIds?: string[];
   },
 ): Promise<ActionResult> {
@@ -1340,6 +1483,12 @@ export async function updateCampaignSettings(
       .from(campaigns)
       .where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, user.id), isNull(campaigns.deletedAt)));
     if (!c) return { ok: false, error: "Campaign not found" };
+
+    // Autopilot fixes the schedule, pace, daily volume and stop-on-reply on
+    // purpose: a non-admin can't change them here (nothing is written).
+    const isAutopilot = await isAutopilotCampaign(db, campaignId);
+    const autopilotLock = autopilotSettingsLockError({ isAdmin: isAdmin(user), isAutopilot, current: c, input });
+    if (autopilotLock) return { ok: false, error: autopilotLock };
 
     // Validate mailboxes before changing anything. On a pool campaign
     // (autopilot-linked, or with shared mailboxes attached) a non-admin can't
@@ -1353,7 +1502,7 @@ export async function updateCampaignSettings(
       let lockedNoop = false;
       if (!userIsAdmin) {
         const attached = await loadAttachedSenderRefs(db, campaignId);
-        const autopilot = await isAutopilotCampaign(db, campaignId);
+        const autopilot = isAutopilot;
         const lockError = poolCampaignSenderChangeError({
           isAdmin: false,
           isAutopilotCampaign: autopilot,
@@ -1378,17 +1527,46 @@ export async function updateCampaignSettings(
 
     const updateData: Record<string, unknown> = { updatedAt: nowIso() };
     if (typeof input.name === "string" && input.name.trim()) updateData.name = input.name.trim();
-    if (typeof input.dailyLimit === "number") updateData.dailyLimit = Math.max(1, input.dailyLimit);
+    if (typeof input.dailyLimit === "number" && Number.isFinite(input.dailyLimit)) {
+      // Autopilot campaigns keep Autopilot's 30-500 range (only admins get here with a change).
+      updateData.dailyLimit = isAutopilot ? clampAutopilotDaily(input.dailyLimit) : Math.max(1, Math.round(input.dailyLimit));
+    }
     if (typeof input.sendingWindowStart === "string") updateData.sendingWindowStart = input.sendingWindowStart;
     if (typeof input.sendingWindowEnd === "string") updateData.sendingWindowEnd = input.sendingWindowEnd;
     if (typeof input.sendingTimezone === "string") updateData.sendingTimezone = input.sendingTimezone;
     if (typeof input.businessDaysOnly === "boolean") updateData.businessDaysOnly = input.businessDaysOnly;
     if (typeof input.stopOnReply === "boolean") updateData.stopOnReply = input.stopOnReply;
     if (typeof input.trackOpens === "boolean") updateData.trackOpens = input.trackOpens;
-    if (typeof input.minDelaySec === "number") updateData.minDelaySec = input.minDelaySec;
-    if (typeof input.maxDelaySec === "number") updateData.maxDelaySec = input.maxDelaySec;
+    if (typeof input.minDelaySec === "number" || typeof input.maxDelaySec === "number") {
+      // Saved as the engine uses them: 45 s to an hour between two emails from one mailbox.
+      const gap = effectiveGapRange(
+        typeof input.minDelaySec === "number" ? input.minDelaySec : c.minDelaySec,
+        typeof input.maxDelaySec === "number" ? input.maxDelaySec : c.maxDelaySec,
+      );
+      updateData.minDelaySec = gap.min;
+      updateData.maxDelaySec = gap.max;
+    }
+    const sending = sendingSettingsPatch(input);
+    Object.assign(updateData, sending);
 
     await db.update(campaigns).set(updateData).where(eq(campaigns.id, campaignId));
+    if (isAutopilot && typeof updateData.dailyLimit === "number") {
+      // Keep the run's daily volume (Autopilot page, admin demand) in step.
+      await db
+        .update(schema.chadGtmRuns)
+        .set({ dailyEmailLimit: updateData.dailyLimit, updatedAt: nowIso() })
+        .where(eq(schema.chadGtmRuns.campaignId, campaignId));
+    }
+
+    if ("retryFailed" in sending || "retryCount" in sending) {
+      // Apply the retry change to email that has not been sent yet.
+      const nextRetryFailed = (sending.retryFailed as boolean | undefined) ?? c.retryFailed;
+      const nextRetryCount = (sending.retryCount as number | undefined) ?? c.retryCount;
+      await db
+        .update(emailJobs)
+        .set({ maxAttempts: jobMaxAttempts(nextRetryFailed, nextRetryCount) })
+        .where(and(eq(emailJobs.campaignId, campaignId), inArray(emailJobs.status, ["pending", "retry"])));
+    }
 
     if (targetSenderIds) {
       await db.delete(campaignSenders).where(eq(campaignSenders.campaignId, campaignId));
@@ -1462,14 +1640,35 @@ export async function testSenderConnection(input: unknown): Promise<
 
 export async function getUniboxThread(
   key: UniboxThreadKey,
-): Promise<ActionResult<{ messages: UniboxThreadMessage[] }>> {
+): Promise<ActionResult<{ messages: UniboxThreadMessage[]; recipientBlock: RecipientBlock | null }>> {
   const user = await requireUser();
   const db = getDb();
   try {
     const ctx = await resolveUniboxThreadContext(db, user.id, key);
     if (!ctx) return { ok: false, error: "Thread not found" };
     const messages = await loadUniboxThreadMessages(db, user.id, ctx);
-    return { ok: true, data: { messages } };
+    // Opted out or blocklisted: the composer warns (or blocks). Display only;
+    // sendUniboxReply checks again, so a failed lookup here shows no banner.
+    let recipientBlock: RecipientBlock | null = null;
+    try {
+      const [who] = ctx.replyId
+        ? await db
+            .select({ email: schema.replies.fromEmail })
+            .from(schema.replies)
+            .where(and(eq(schema.replies.id, ctx.replyId), eq(schema.replies.userId, user.id)))
+            .limit(1)
+        : ctx.leadId
+          ? await db
+              .select({ email: leads.email })
+              .from(leads)
+              .where(and(eq(leads.id, ctx.leadId), eq(leads.userId, user.id)))
+              .limit(1)
+          : [];
+      recipientBlock = who?.email ? await loadRecipientBlock(db, user.id, who.email) : null;
+    } catch (e) {
+      console.error("[getUniboxThread] recipient check failed", e);
+    }
+    return { ok: true, data: { messages, recipientBlock } };
   } catch (e) {
     return err(e);
   }
@@ -1478,12 +1677,19 @@ export async function getUniboxThread(
 export async function sendUniboxReply(input: {
   replyId: string;
   body: string;
-}): Promise<ActionResult<{ message: UniboxThreadMessage }>> {
+  /** The person confirmed "Send mine" while the agent was drafting. */
+  force?: boolean;
+  /** Newest reply in this conversation the person had on screen. */
+  seenLatestReplyId?: string;
+  /** The person ticked "Send anyway" for an address on their own blocklist. */
+  confirmBlocked?: boolean;
+}): Promise<ActionResult<{ message: UniboxThreadMessage; takenOver: boolean }>> {
   const user = await requireUser();
   const body = input?.body?.toString().trim();
   if (!body) return { ok: false, error: "Write something before sending" };
 
   const db = getDb();
+  let claimed: { replyId: string; previous: string | null } | null = null;
   try {
     const [reply] = await db
       .select()
@@ -1509,6 +1715,98 @@ export async function sendUniboxReply(input: {
       const approvalError = await sendApprovalError(user.id);
       if (approvalError) return { ok: false, error: approvalError };
     }
+    // A paused mailbox still answers warm conversations; a failed or retired one never sends.
+    if (replyMailboxBlockReason(sender)) return { ok: false, error: MAILBOX_OUT_OF_SERVICE_MESSAGE };
+
+    // Opted out (anyone's unsubscribe/bounce/complaint): never. On your own
+    // blocklist: only after "Send anyway". A failed lookup throws (not sent).
+    const recipientBlock = await loadRecipientBlock(db, user.id, reply.fromEmail);
+    const blockError = manualReplyBlockError(recipientBlock, input.confirmBlocked === true);
+    if (blockError) {
+      return { ok: false, error: blockError, fieldErrors: { recipient: [recipientBlock?.level ?? "global"] } };
+    }
+
+    // The lead wrote again since the person last looked: read it first.
+    let since = reply.receivedAt;
+    if (input.seenLatestReplyId && input.seenLatestReplyId !== reply.id) {
+      const [seen] = await db
+        .select({ receivedAt: schema.replies.receivedAt })
+        .from(schema.replies)
+        .where(and(eq(schema.replies.id, input.seenLatestReplyId), eq(schema.replies.userId, user.id)))
+        .limit(1);
+      if (seen?.receivedAt && seen.receivedAt > since) since = seen.receivedAt;
+    }
+    const newer = await newerReplyInConversation(db, user.id, reply, since);
+    if (newer) {
+      const who = (newer.fromName || reply.fromName || newer.fromEmail).trim().split(/\s+/)[0] || newer.fromEmail;
+      return {
+        ok: false,
+        error: `${who} wrote again. Read the new message, then send.`,
+        fieldErrors: { conversation: ["newer"] },
+      };
+    }
+
+    // Who handles the conversation before this send (decides take-over).
+    const handlerView =
+      reply.leadId && reply.campaignId
+        ? (await loadConversationHandlers(db, user.id, [{ leadId: reply.leadId, campaignId: reply.campaignId }])).get(
+            conversationKey(reply.leadId, reply.campaignId),
+          )
+        : undefined;
+
+    // Claim the message so the agent cannot also answer it.
+    const previous = (reply.agentStatus as string | null) ?? null;
+    const claim = await claimReplyForHuman(db, {
+      userId: user.id,
+      replyId: reply.id,
+      previous,
+      force: input.force === true,
+      nowIso: nowIso(),
+    });
+    if (!claim.ok) {
+      if (claim.agentSending) {
+        // Too late for "Send mine": the agent's reply is going out now. Never send both.
+        return {
+          ok: false,
+          error: "The agent already started sending its reply, so yours wasn't sent. Check the conversation first.",
+          fieldErrors: { conversation: ["changed"] },
+        };
+      }
+      if (claim.current === "processing") {
+        return { ok: false, error: "The agent is drafting a reply to this message.", fieldErrors: { agent: ["drafting"] } };
+      }
+      return {
+        ok: false,
+        error: "This conversation changed while you were writing. Check it, then send.",
+        fieldErrors: { conversation: ["changed"] },
+      };
+    }
+    claimed = { replyId: reply.id, previous };
+
+    // File the message under the customer's workspace (the lead's, else the
+    // campaign's), never a shared pool mailbox's.
+    const [leadWs] = reply.leadId
+      ? await db
+          .select({ workspaceId: schema.leads.workspaceId })
+          .from(schema.leads)
+          .where(eq(schema.leads.id, reply.leadId))
+          .limit(1)
+      : [];
+    const [campaignWs] =
+      !leadWs?.workspaceId && reply.campaignId
+        ? await db
+            .select({ workspaceId: schema.campaigns.workspaceId })
+            .from(schema.campaigns)
+            .where(eq(schema.campaigns.id, reply.campaignId))
+            .limit(1)
+        : [];
+    const activeWs = await getActiveWorkspace(user.id);
+    const workspaceId =
+      (sender.isSystemPool ? null : sender.workspaceId) ||
+      leadWs?.workspaceId ||
+      campaignWs?.workspaceId ||
+      activeWs?.id ||
+      null;
 
     const { sendMail } = await import("@smartreach/email-engine/mailer");
     const subject = reply.subject?.startsWith("Re:") ? reply.subject : `Re: ${reply.subject ?? ""}`.trim();
@@ -1534,13 +1832,14 @@ export async function sendUniboxReply(input: {
       inReplyTo: reply.messageId || undefined,
       references: reply.messageId || undefined,
     });
+    claimed = null; // sent: the claim stays
+    // Replies are counted apart from cold sends (never throws).
+    await recordReplySend(db, { senderId: sender.id, userId: user.id });
 
     const sentAt = nowIso();
     const rowId = crypto.randomUUID();
     const fromName = (sender.fromName || sender.senderName || "").trim();
     const fromEmail = sender.email;
-    const activeWs = await getActiveWorkspace(user.id);
-    const workspaceId = sender.workspaceId || activeWs?.id || null;
 
     await db.insert(schema.uniboxMessages).values({
       id: rowId,
@@ -1570,27 +1869,41 @@ export async function sendUniboxReply(input: {
       sentAt,
     });
 
-    await db
-      .update(schema.replies)
-      .set({
-        readAt: nowIso(),
-        // A human answered — the agent must not also reply to this message.
-        ...(reply.agentStatus && reply.agentStatus !== "replied"
-          ? { agentStatus: "replied" as const, agentHandledAt: nowIso() }
-          : {}),
-      })
-      .where(eq(schema.replies.id, reply.id));
-    await db
-      .update(schema.agentRequests)
-      .set({ status: "resolved", resolution: "Answered manually from the UniBox", resolvedAt: nowIso(), updatedAt: nowIso() })
-      .where(and(eq(schema.agentRequests.replyId, reply.id), eq(schema.agentRequests.status, "open")));
+    // A person answered: the agent stands down in this conversation. Without
+    // an open Needs you card, answering yourself also takes it over.
+    const takenOver = Boolean(
+      handlerView && !handlerView.openRequestId && (handlerView.handledBy === "agent" || handlerView.handledBy === "approve"),
+    );
+    await recordHumanSend(db, {
+      userId: user.id,
+      workspaceId,
+      leadId: reply.leadId,
+      campaignId: reply.campaignId,
+      replyId: reply.id,
+      takeOver: takenOver,
+      nowIso: sentAt,
+    });
     await logActivity(user.id, "unibox.replied", `Replied to ${reply.fromEmail}`, reply.campaignId, {
       replyId: reply.id,
       uniboxMessageId: rowId,
     });
+    if (recipientBlock) {
+      await logActivity(
+        user.id,
+        "unibox.replied_to_blocked",
+        `Replied to ${reply.fromEmail} although they're on your blocklist`,
+        reply.campaignId,
+        { replyId: reply.id, uniboxMessageId: rowId },
+      );
+    }
     revalidatePath("/unibox");
-    return { ok: true, data: { message }, message: `Reply sent to ${reply.fromEmail}` };
+    revalidatePath("/requests");
+    return { ok: true, data: { message, takenOver }, message: `Reply sent to ${reply.fromEmail}` };
   } catch (e) {
+    if (claimed) {
+      // Nothing went out: give the message back (the agent retries one it was drafting).
+      await releaseHumanClaim(db, claimed).catch(() => undefined);
+    }
     return {
       ok: false,
       error: e instanceof Error ? e.message : "Failed to send reply (check SMTP settings)",
@@ -1601,6 +1914,8 @@ export async function sendUniboxReply(input: {
 export async function setUniboxReplyTag(input: {
   replyId: string;
   tag: string | null;
+  /** With 'not_interested': also stop every campaign and the agent for this person. */
+  stopContacting?: boolean;
 }): Promise<ActionResult<{ replyId: string; tag: string | null }>> {
   const user = await requireUser();
   const parsed = setUniboxReplyTagSchema.safeParse(input);
@@ -1611,13 +1926,48 @@ export async function setUniboxReplyTag(input: {
       .update(schema.replies)
       .set({ tag: parsed.data.tag })
       .where(and(eq(schema.replies.id, parsed.data.replyId), eq(schema.replies.userId, user.id)))
-      .returning({ id: schema.replies.id, tag: schema.replies.tag });
+      .returning({
+        id: schema.replies.id,
+        tag: schema.replies.tag,
+        leadId: schema.replies.leadId,
+        fromEmail: schema.replies.fromEmail,
+        userId: schema.replies.userId,
+      });
     if (!row) return { ok: false, error: "Reply not found" };
+    // Tags have stated effects (lead funnel; "Not interested" can stop all
+    // contact). Retagging never resumes a sequence.
+    const [lead] = row.leadId
+      ? await db
+          .select({ workspaceId: leads.workspaceId })
+          .from(leads)
+          .where(and(eq(leads.id, row.leadId), eq(leads.userId, user.id)))
+          .limit(1)
+      : [];
+    const effect = await applyReplyTagEffects(db, {
+      ownerId: user.id,
+      workspaceId: lead?.workspaceId ?? null,
+      leadId: row.leadId ?? null,
+      fromEmail: row.fromEmail,
+      tag: parsed.data.tag,
+      stopContacting: parsed.data.stopContacting === true,
+      nowIso: nowIso(),
+    });
+    if (effect.stopped) {
+      await logActivity(user.id, "unibox.stopped_contacting", `Stopped contacting ${row.fromEmail}`, null, {
+        replyId: row.id,
+      });
+    }
     revalidatePath("/unibox");
+    revalidatePath("/leads");
+    revalidatePath("/blocklist");
     return {
       ok: true,
       data: { replyId: row.id, tag: row.tag ?? null },
-      message: parsed.data.tag ? `Tagged as ${parsed.data.tag}` : "Tag cleared",
+      message: effect.stopped
+        ? `Tagged Not interested. No more emails will go to ${row.fromEmail}.`
+        : parsed.data.tag
+          ? `Tagged as ${parsed.data.tag}`
+          : "Tag cleared",
     };
   } catch (e) {
     return err(e);
@@ -1625,33 +1975,42 @@ export async function setUniboxReplyTag(input: {
 }
 
 /** Check IMAP mailboxes for new inbound replies for active workspace senders on demand. */
-export async function syncUniboxRepliesAction(): Promise<ActionResult<{ found: number }>> {
+/**
+ * "Check for new replies" (#70): the user's own mailboxes in the active
+ * workspace plus the mailboxes (shared pool included) that sent for their
+ * campaigns in the last 30 days, read in parallel with a 10s limit each.
+ * Replies are attributed to their real owner, as the background worker does.
+ */
+export async function syncUniboxRepliesAction(): Promise<
+  ActionResult<{ found: number; checked: number; lastCheckedAt: string }>
+> {
   const user = await requireUser();
   const workspace = await getActiveWorkspace(user.id);
   const db = getDb();
   try {
     const { syncSenderReplies } = await import("@smartreach/email-engine");
-    const { wsCondition } = await import("./queries");
-    const conds = [
-      eq(senderAccounts.userId, user.id),
-      isNull(senderAccounts.deletedAt),
-      sql`${senderAccounts.imapHost} != ''`,
-    ];
-    const sWs = wsCondition(senderAccounts.workspaceId, workspace.id, workspace.isDefault);
-    if (sWs) conds.push(sWs);
-
-    const senders = await db
-      .select()
-      .from(senderAccounts)
-      .where(and(...conds));
-
-    let totalFound = 0;
-    for (const sender of senders) {
-      const res = await syncSenderReplies(db as any, sender as any);
-      totalFound += res.found;
+    const { foundForUser, loadInboxSyncCandidates, pickMailboxesToCheck, withSyncTimeout } = await import("./inbox-sync");
+    const now = new Date();
+    const candidates = await loadInboxSyncCandidates(db, {
+      userId: user.id,
+      workspaceId: workspace.id,
+      isDefault: workspace.isDefault,
+      now,
+    });
+    const { toSync, recentlyChecked } = pickMailboxesToCheck(candidates, now);
+    const outcomes = await Promise.allSettled(
+      toSync.map((sender) => withSyncTimeout(() => syncSenderReplies(db as any, sender as any))),
+    );
+    let found = 0;
+    let checked = recentlyChecked;
+    for (const o of outcomes) {
+      if (o.status !== "fulfilled") continue;
+      // Pool mailboxes record other customers' replies too; count only ours (#70).
+      found += foundForUser(o.value, user.id);
+      if (!o.value.error) checked++;
     }
     revalidatePath("/unibox");
-    return { ok: true, data: { found: totalFound } };
+    return { ok: true, data: { found, checked, lastCheckedAt: nowIso() } };
   } catch (e) {
     return err(e);
   }
@@ -1671,36 +2030,8 @@ export async function sendTestEmail(): Promise<ActionResult> {
 
 /* ═══ COMPLIANCE: suppressions + workspace settings (F15–F17) ═══ */
 
-export async function upsertWorkspaceSettings(input: unknown): Promise<ActionResult> {
-  const user = await requireUser();
-  const parsed = workspaceSettingsSchema.safeParse(input);
-  if (!parsed.success) return zodFail(parsed.error);
-  const db = getDb();
-  const d = parsed.data;
-  try {
-    await db
-      .insert(schema.workspaceSettings)
-      .values({
-        userId: user.id,
-        companyName: d.companyName,
-        postalAddress: d.postalAddress,
-        unsubscribeBaseUrl: d.unsubscribeBaseUrl || "",
-      })
-      .onConflictDoUpdate({
-        target: schema.workspaceSettings.userId,
-        set: {
-          companyName: d.companyName,
-          postalAddress: d.postalAddress,
-          unsubscribeBaseUrl: d.unsubscribeBaseUrl || "",
-          updatedAt: nowIso(),
-        },
-      });
-    revalidatePath("/settings");
-    return { ok: true, message: "Compliance settings saved" };
-  } catch (e) {
-    return err(e);
-  }
-}
+// Sender details (company name, postal address) are saved per workspace by
+// saveSenderIdentityAction in ./workspace-profile-actions.
 
 export async function addSuppression(input: unknown): Promise<ActionResult<{ id: string }>> {
   const user = await requireUser();
@@ -1742,7 +2073,7 @@ export async function addSuppression(input: unknown): Promise<ActionResult<{ id:
         .limit(1);
       revalidatePath("/settings");
       revalidatePath("/blocklist");
-      return { ok: true, data: { id: existing?.id ?? "" }, message: "Already on suppression list" };
+      return { ok: true, data: { id: existing?.id ?? "" }, message: "Already on your blocklist" };
     }
     await logActivity(user.id, "suppression.added", `Suppressed ${value}`);
     revalidatePath("/settings");
@@ -1757,12 +2088,43 @@ export async function removeSuppression(id: string): Promise<ActionResult> {
   const user = await requireUser();
   const db = getDb();
   try {
+    const [row] = await db
+      .select({
+        id: schema.suppressions.id,
+        value: schema.suppressions.value,
+        kind: schema.suppressions.kind,
+        source: schema.suppressions.source,
+      })
+      .from(schema.suppressions)
+      .where(and(eq(schema.suppressions.id, id), eq(schema.suppressions.userId, user.id)))
+      .limit(1);
+    if (!row) return { ok: false, error: "Entry not found" };
+    // Unsubscribes, bounces, complaints and erasures protect every customer.
+    const removalError = suppressionRemovalError(row.source, isAdmin(user));
+    if (removalError) return { ok: false, error: removalError };
     await db
       .delete(schema.suppressions)
-      .where(and(eq(schema.suppressions.id, id), eq(schema.suppressions.userId, user.id)));
+      .where(and(eq(schema.suppressions.id, row.id), eq(schema.suppressions.userId, user.id)));
+    // Leads this entry had blocked can be emailed again. Only 'blocked' leads
+    // change; unsubscribed and bounced leads never do.
+    const value = row.value.trim().toLowerCase();
+    await db
+      .update(leads)
+      .set({ status: "new", updatedAt: nowIso() })
+      .where(
+        and(
+          eq(leads.userId, user.id),
+          eq(leads.status, "blocked"),
+          row.kind === "domain" || value.startsWith("@")
+            ? sql`lower(${leads.email}) like ${"%" + value.replace(/[\\%_]/g, "\\$&")}`
+            : sql`lower(${leads.email}) = ${value}`,
+        ),
+      );
+    await logActivity(user.id, "suppression.removed", `Unblocked ${row.value}`);
     revalidatePath("/settings");
     revalidatePath("/blocklist");
-    return { ok: true, message: "Removed from suppression list" };
+    revalidatePath("/leads");
+    return { ok: true, message: `Unblocked ${row.value}` };
   } catch (e) {
     return err(e);
   }
@@ -1778,23 +2140,22 @@ export async function listSuppressions(params: unknown = {}): Promise<
       reason: string;
       source: string;
       createdAt: string;
+      workspaceName: string | null;
     }[];
     nextCursor: string | null;
   }>
 > {
   const user = await requireUser();
-  const workspace = await getActiveWorkspace(user.id);
   const parsed = suppressionListQuerySchema.safeParse(params ?? {});
   if (!parsed.success) return zodFail(parsed.error);
   try {
+    // The blocklist is account-wide: every workspace's entries are listed.
     const { listSuppressions: queryList } = await import("./queries");
     const { items, nextCursor } = await queryList(user.id, {
       cursor: parsed.data.cursor,
       limit: parsed.data.limit,
       search: parsed.data.search,
       kind: parsed.data.kind,
-      workspaceId: workspace.id,
-      isDefault: workspace.isDefault,
     });
     return {
       ok: true,
@@ -1926,60 +2287,9 @@ export async function processUnsubscribe(token: string): Promise<ActionResult<{ 
   if (!verified.ok) return { ok: false, error: verified.error };
   const db = getDb();
   try {
-    const matchingLeads = await db
-      .select({ id: schema.leads.id, workspaceId: schema.leads.workspaceId })
-      .from(schema.leads)
-      .where(and(eq(schema.leads.userId, verified.userId), eq(schema.leads.email, verified.email)));
-
-    const workspaceId = matchingLeads[0]?.workspaceId ?? null;
-
-    await db
-      .insert(schema.suppressions)
-      .values({
-        userId: verified.userId,
-        workspaceId,
-        value: verified.email,
-        kind: "email",
-        reason: "One-click unsubscribe",
-        source: "unsubscribe",
-      })
-      .onConflictDoNothing();
-
-    await db
-      .update(schema.leads)
-      .set({ status: "unsubscribed", updatedAt: nowIso() })
-      .where(
-        and(
-          eq(schema.leads.userId, verified.userId),
-          eq(schema.leads.email, verified.email),
-          isNull(schema.leads.deletedAt),
-        ),
-      );
-
-    // Cancel all pending/processing/retry email jobs for this recipient
-    await db
-      .update(schema.emailJobs)
-      .set({ status: "cancelled", lastError: "unsubscribed", updatedAt: nowIso() })
-      .where(
-        and(
-          eq(schema.emailJobs.toEmail, verified.email),
-          inArray(schema.emailJobs.status, ["pending", "retry", "processing"]),
-        ),
-      );
-
-    // Cancel campaign_leads entries for leads with this email
-    if (matchingLeads.length > 0) {
-      const leadIds = matchingLeads.map((l) => l.id);
-      await db
-        .update(schema.campaignLeads)
-        .set({ status: "cancelled", lastError: "unsubscribed", updatedAt: nowIso() })
-        .where(
-          and(
-            inArray(schema.campaignLeads.leadId, leadIds),
-            inArray(schema.campaignLeads.status, ["queued", "scheduled"]),
-          ),
-        );
-    }
+    // Same upsert as an unsubscribe by reply: a private block for this
+    // address becomes a global opt-out. Matches leads case-insensitively.
+    await recordUnsubscribe(db, { userId: verified.userId, email: verified.email });
 
     await logActivity(
       verified.userId,
@@ -2115,6 +2425,11 @@ export async function deleteWorkspaceAction(
       return { ok: false, error: "Workspace not found" };
     }
 
+    // Deleting it would cascade to shared pool mailboxes and every customer's history.
+    if (await workspaceHoldsPoolMailboxes(db, workspaceId)) {
+      return { ok: false, error: WORKSPACE_HOLDS_POOL_ERROR };
+    }
+
     // Check count of user workspaces
     const allWorkspaces = await db
       .select({ id: schema.workspaces.id, isDefault: schema.workspaces.isDefault })
@@ -2123,6 +2438,16 @@ export async function deleteWorkspaceAction(
 
     if (allWorkspaces.length <= 1) {
       return { ok: false, error: "You cannot delete your only workspace. Create another workspace first before deleting this one." };
+    }
+
+    // Keep the 90-day re-contact cooldown for this workspace's prospects before
+    // its campaigns disappear. Opt-outs survive on their own (workspace_id is
+    // set to NULL). If the ledger cannot be written, delete nothing.
+    try {
+      await recordContactHistory(db, { userId: user.id, workspaceId });
+    } catch (e) {
+      console.error("[deleteWorkspaceAction] could not record contact history:", e);
+      return { ok: false, error: "The workspace could not be deleted. Try again." };
     }
 
     // If the workspace being deleted was default, promote another workspace to default
@@ -2356,56 +2681,7 @@ export async function improveSequenceCopy(input: unknown): Promise<ActionResult<
   }
 }
 
-export async function saveWorkspaceAiSettings(input: {
-  provider: string;
-  model: string;
-  apiKey?: string;
-}): Promise<ActionResult<{ provider: string; model: string }>> {
-  try {
-    const user = await requireUser();
-    const { ensureAiColumns } = await import("./db");
-
-    const db = getDb();
-    await ensureAiColumns(db);
-
-    const updateValues: Record<string, any> = {
-      aiProvider: input.provider || "google",
-      aiModel: input.model || "gemini-3.8-flash",
-      updatedAt: new Date().toISOString(),
-    };
-
-    if (input.apiKey && input.apiKey.trim()) {
-      updateValues.aiApiKeyEnc = encryptSecret(input.apiKey.trim());
-    }
-
-    const [existing] = await db
-      .select({ userId: schema.workspaceSettings.userId })
-      .from(schema.workspaceSettings)
-      .where(eq(schema.workspaceSettings.userId, user.id))
-      .limit(1);
-
-    if (existing) {
-      await db
-        .update(schema.workspaceSettings)
-        .set(updateValues)
-        .where(eq(schema.workspaceSettings.userId, user.id));
-    } else {
-      await db.insert(schema.workspaceSettings).values({
-        userId: user.id,
-        ...updateValues,
-      });
-    }
-
-    revalidatePath("/settings");
-    return {
-      ok: true,
-      data: { provider: updateValues.aiProvider, model: updateValues.aiModel },
-      message: "AI settings updated successfully",
-    };
-  } catch (e) {
-    return err(e);
-  }
-}
+// AI settings are managed by AutoGTM (#80): there is no per-user key or model to save.
 
 /* ─── Apollo Lead Directory Actions ────────────────────────────────────────── */
 
@@ -2464,7 +2740,7 @@ export async function saveDirectoryLeadsToCampaignListAction(input: {
   searchParams?: DirectorySearchParams;
   listName?: string;
   listId?: string;
-}): Promise<ActionResult<{ leadListId: string; count: number }>> {
+}): Promise<ActionResult<{ leadListId: string; count: number; skipped: number }>> {
   try {
     const user = await requireUser();
     const saveLimit = directorySaveLimit(await getDirectoryAccessLevel(user));
@@ -2485,10 +2761,14 @@ export async function saveDirectoryLeadsToCampaignListAction(input: {
       };
     }
 
+    // The list and its leads belong to the workspace you're in (an existing
+    // list keeps its own workspace).
+    const workspace = await getActiveWorkspace(user.id);
+    let leadsWorkspaceId: string | null = workspace.id;
     let targetListId = input.listId;
     if (targetListId) {
       const [ownList] = await db
-        .select({ id: schema.leadLists.id })
+        .select({ id: schema.leadLists.id, workspaceId: schema.leadLists.workspaceId })
         .from(schema.leadLists)
         .where(
           and(
@@ -2501,12 +2781,14 @@ export async function saveDirectoryLeadsToCampaignListAction(input: {
       if (!ownList) return { ok: false, error: "Lead list not found" };
       const poolError = await poolListEditError(db, { id: user.id, isAdmin: isAdmin(user) }, targetListId);
       if (poolError) return { ok: false, error: poolError };
+      leadsWorkspaceId = ownList.workspaceId ?? workspace.id;
     } else {
-      const listName = input.listName || `Apollo Leads - ${new Date().toLocaleDateString()}`;
+      const listName = input.listName || `Directory leads - ${new Date().toISOString().slice(0, 10)}`;
       const [newList] = await db
         .insert(schema.leadLists)
         .values({
           userId: user.id,
+          workspaceId: workspace.id,
           name: listName,
         })
         .returning();
@@ -2537,48 +2819,45 @@ export async function saveDirectoryLeadsToCampaignListAction(input: {
       return { ok: false, error: "No matching leads found to import" };
     }
 
+    // Skip people already on the list (active rows), repeats, and anyone on
+    // your blocklist or opted out (incl. removal requests).
+    const rowEmails = rows.map((r) => String(r.email ?? "").trim().toLowerCase()).filter(Boolean);
+    const existingRows: Array<{ email: string }> = await db
+      .select({ email: sql<string>`lower(${schema.leads.email})` })
+      .from(schema.leads)
+      .where(and(eq(schema.leads.listId, targetListId), isNull(schema.leads.deletedAt)));
+    const suppressed = await suppressedEmailsFor(db, user.id, rowEmails);
+    const { values: leadValues, skipped } = directoryRowsToLeadValues(rows, {
+      userId: user.id,
+      workspaceId: leadsWorkspaceId,
+      listId: targetListId,
+      existing: new Set(existingRows.map((r) => r.email)),
+      suppressed,
+    });
+
+    // Count only rows actually inserted (a conflict inserts nothing).
     let insertedCount = 0;
-    // Chunk inserts into batches of 200 for fast Drizzle insertion
     const chunkSize = 200;
-    for (let i = 0; i < rows.length; i += chunkSize) {
-      const chunk = rows.slice(i, i + chunkSize);
-      const batchValues = [];
-
-      for (const r of chunk) {
-        if (!r.email) continue;
-        const customObj = r.raw_data ? JSON.parse(r.raw_data) : {};
-        if (r.work_email) customObj.work_email = r.work_email;
-        if (r.personal_email) customObj.personal_email = r.personal_email;
-
-        batchValues.push({
-          id: crypto.randomUUID(),
-          userId: user.id,
-          listId: targetListId,
-          email: r.email,
-          firstName: r.first_name || "",
-          lastName: r.last_name || "",
-          company: r.company_name || "",
-          jobTitle: r.job_title || "",
-          website: r.company_website || "",
-          linkedin: r.linkedin_url || "",
-          location: r.location || "",
-          industry: r.industry || "",
-          customFields: customObj,
-        });
-      }
-
-      if (batchValues.length > 0) {
-        try {
-          await db.insert(schema.leads).values(batchValues).onConflictDoNothing();
-          insertedCount += batchValues.length;
-        } catch {
-          // Fallback to row-by-row on error
-          for (const val of batchValues) {
-            try {
-              await db.insert(schema.leads).values(val).onConflictDoNothing();
-              insertedCount++;
-            } catch {}
-          }
+    for (let i = 0; i < leadValues.length; i += chunkSize) {
+      const batchValues = leadValues.slice(i, i + chunkSize);
+      try {
+        const inserted: Array<{ id: string }> = await db
+          .insert(schema.leads)
+          .values(batchValues)
+          .onConflictDoNothing()
+          .returning({ id: schema.leads.id });
+        insertedCount += inserted.length;
+      } catch {
+        // Fallback to row-by-row on error
+        for (const val of batchValues) {
+          try {
+            const inserted: Array<{ id: string }> = await db
+              .insert(schema.leads)
+              .values(val)
+              .onConflictDoNothing()
+              .returning({ id: schema.leads.id });
+            insertedCount += inserted.length;
+          } catch {}
         }
       }
     }
@@ -2593,8 +2872,8 @@ export async function saveDirectoryLeadsToCampaignListAction(input: {
     revalidatePath("/leads");
     return {
       ok: true,
-      data: { leadListId: targetListId, count: insertedCount },
-      message: `Successfully added ${insertedCount.toLocaleString()} leads to your campaign list!`,
+      data: { leadListId: targetListId, count: insertedCount, skipped },
+      message: `Added ${insertedCount.toLocaleString()} people to the list`,
     };
   } catch (e) {
     return err(e);
@@ -2883,6 +3162,10 @@ export async function sendManualTestEmailAction(input: {
       const approvalError = await sendApprovalError(user.id);
       if (approvalError) return { ok: false, error: approvalError };
     }
+
+    // Test sends never go to anyone who opted out or is on your blocklist.
+    const recipientBlock = await loadRecipientBlock(db, user.id, input.toEmail.trim());
+    if (recipientBlock) return { ok: false, error: recipientBlock.message };
 
     const { sendMail } = await import("@smartreach/email-engine/mailer");
     const result = await sendMail(senderRow as never, {

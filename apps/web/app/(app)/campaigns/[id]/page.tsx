@@ -1,21 +1,47 @@
 import { cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import { formatDate, formatDateTime } from "@smartreach/shared";
-import { Badge, Button, Card, PageHeader, Stat, StatePanel, statusVariant } from "@smartreach/ui";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  PageHeader,
+  Stat,
+  StatePanel,
+} from "@smartreach/ui";
 import { requireWorkspace } from "@/lib/session";
+import { isAdmin } from "@/lib/admin";
 import { getCampaign, getTemplate, listSenders } from "@/lib/queries";
 import { getCampaignSequence } from "@/lib/actions";
 import { getPostalHold } from "@/lib/postal-hold";
+import { describeSendBlock } from "@/lib/send-block";
+import { loadCampaignCapacity } from "@/lib/sending-capacity";
+import { getDb } from "@/lib/db";
+import { getCampaignLeadConversation } from "@/lib/lead-conversations-server";
+import { LeadConversationsControl } from "@/components/lead-conversations/lead-conversations-control";
 import { AnalyticsSectionLoader } from "@/components/analytics-section-loader";
 import { Page } from "@/components/layout/page";
 import { PostalHoldNotice } from "../../postal-hold-notice";
+import { CampaignSendStatus } from "../../campaign-send-status";
+import { CampaignStatusBadge } from "../../campaign-status-badge";
 import { formatPercent } from "../format";
 import { CampaignHeaderActions } from "./campaign-header-actions";
+import { AddNewLeadsButton } from "./add-new-leads-button";
 import { CampaignTabs } from "./campaign-tabs";
 import { DeliveryCard, MailboxesCard, ScheduleCard, SequenceSummaryCard } from "./overview-cards";
 import { SequenceEditor } from "./sequence-editor";
+import { VariantResults } from "./variant-results";
+import { getVariantStatsForCampaign } from "@/lib/analytics";
+import { summarizeVariantStats, type VariantStatRow } from "@/lib/variant-stats";
 
 export const dynamic = "force-dynamic";
 
@@ -50,13 +76,19 @@ export default async function CampaignDetailPage({
   const c = await loadCampaign(user.id, id, workspace.id, workspace.isDefault);
   if (!c) notFound();
 
-  const [sequence, template, allSenders, postalHold] = await Promise.all([
+  const [sequence, template, allSenders, postalHold, leadConversation, capacity, variantRows] = await Promise.all([
     getCampaignSequence(id),
     c.templateId ? getTemplate(user.id, c.templateId) : Promise.resolve(null),
     listSenders(user.id, workspace.id, workspace.isDefault),
     // Compliance settings belong to the campaign owner (that is what the engine reads).
     getPostalHold(c.userId, { campaignId: c.id }),
+    getCampaignLeadConversation(user.id, c.id),
+    loadCampaignCapacity(getDb(), c, c.senders),
+    getVariantStatsForCampaign(user.id, id).catch(() => [] as VariantStatRow[]),
   ]);
+  // The postal hold has its own notice below, so the status line skips it.
+  const sendStatus = describeSendBlock(c, new Date(), { skipPostal: true });
+  const linkedRunId = leadConversation?.target.kind === "campaign" ? leadConversation.target.runId : null;
 
   const { total, sent, replied, failed, bounced, pending } = c.stats;
   const pct = total > 0 ? Math.min(100, Math.round((sent / total) * 100)) : 0;
@@ -66,6 +98,19 @@ export default async function CampaignDetailPage({
   const denied = sequenceError ? isDenied(sequenceError) : false;
   const retryHref = `/campaigns/${c.id}?tab=sequence`;
   const mailboxCount = c.senders.length;
+  // Autopilot writes this campaign's emails; admins keep the editor.
+  const autopilotRunId = c.autopilotRunId;
+  const managed = Boolean(autopilotRunId) && !isAdmin(user);
+  // Pool campaigns send from the shared mailbox pool, not mailboxes the user owns (#67).
+  const usesPool = c.senders.some((s) => s.isSystemPool);
+  const mailboxPhrase = usesPool
+    ? "the shared AutoGTM mailbox pool"
+    : `${mailboxCount} ${mailboxCount === 1 ? "mailbox" : "mailboxes"}`;
+  // The campaign emails a copy of its list; offer to add leads that joined later (#40).
+  const showAddNewLeads =
+    c.newListLeads > 0 &&
+    ["running", "scheduled", "paused"].includes(c.status) &&
+    !((c.isAutopilot || usesPool) && !isAdmin(user));
 
   return (
     <Page>
@@ -79,29 +124,35 @@ export default async function CampaignDetailPage({
         title={c.name}
         description={
           <>
-            {c.leadListId ? (
+            {c.leadListId && c.leadListDeleted ? (
+              <>Its lead list was deleted. Sends from {mailboxPhrase}.</>
+            ) : c.leadListId ? (
               <>
-                Sends to{" "}
+                {c.leadListCopiedAt ? "Sends to the leads that were in " : "Sends to "}
                 <Link
                   href={`/leads/${c.leadListId}`}
                   className="font-medium text-foreground underline decoration-border-strong underline-offset-4 hover:decoration-foreground"
                 >
                   {c.leadListName ?? "its lead list"}
                 </Link>
-                {" "}from {mailboxCount} {mailboxCount === 1 ? "mailbox" : "mailboxes"}.
+                {c.leadListCopiedAt
+                  ? ` on ${formatDate(c.leadListCopiedAt)}, from ${mailboxPhrase}.`
+                  : ` from ${mailboxPhrase}.`}
+                {showAddNewLeads ? (
+                  <span className="ml-2 inline-flex align-middle">
+                    <AddNewLeadsButton campaignId={c.id} count={c.newListLeads} />
+                  </span>
+                ) : null}
               </>
             ) : (
-              <>
-                No lead list attached. Sends from {mailboxCount} {mailboxCount === 1 ? "mailbox" : "mailboxes"}.
-              </>
+              <>No lead list attached. Sends from {mailboxPhrase}.</>
             )}
           </>
         }
         meta={
           <>
-            <Badge variant={statusVariant(c.status)} dot className="capitalize">
-              {c.status}
-            </Badge>
+            <CampaignStatusBadge status={c.status} held={postalHold.held} />
+            {autopilotRunId ? <Badge variant="neutral">Autopilot</Badge> : null}
             {c.status === "scheduled" && c.scheduledAt ? (
               <span className="text-[13px] text-muted-foreground">Starts {formatDateTime(c.scheduledAt)}</span>
             ) : null}
@@ -118,21 +169,25 @@ export default async function CampaignDetailPage({
               email: s.email,
               status: s.status,
             }))}
+            autopilotRunId={autopilotRunId}
+            managed={managed}
+            failed={c.stats.failed}
           />
         }
       />
 
       <PostalHoldNotice hold={postalHold} scope="campaign" />
+      <CampaignSendStatus view={sendStatus} />
 
       <Card className="grid grid-cols-2 gap-px overflow-hidden bg-border lg:grid-cols-4 [&>*]:bg-card">
         <Stat bare label="Leads" value={total.toLocaleString()} hint={`${pending.toLocaleString()} not contacted yet`} />
-        <Stat bare label="Emails sent" value={sent.toLocaleString()} hint={`${pct}% of leads`} />
+        <Stat bare label="Leads emailed" value={sent.toLocaleString()} hint={`${pct}% of leads`} />
         <Stat
           bare
           label="Replies"
           value={replied.toLocaleString()}
           delta={sent > 0 ? { value: formatPercent(replied, sent), tone: replied > 0 ? "success" : "neutral" } : undefined}
-          hint="Reply rate on sent email"
+          hint="Share of leads emailed who replied"
         />
         <Stat bare label="Failed" value={failed.toLocaleString()} hint={`${bounced.toLocaleString()} bounced`} />
       </Card>
@@ -150,10 +205,15 @@ export default async function CampaignDetailPage({
                 heading="Activity"
                 description="Emails sent, replies and bounces per day."
               />
-              <SequenceSummaryCard steps={steps} error={sequenceError} templateName={template?.name ?? null} />
+              <SequenceSummaryCard
+                steps={steps}
+                error={sequenceError}
+                templateName={template?.name ?? null}
+                managed={managed}
+              />
             </div>
             <div className="flex min-w-0 flex-col gap-6">
-              <DeliveryCard total={total} sent={sent} pending={pending} dailyLimit={c.dailyLimit} />
+              <DeliveryCard total={total} sent={sent} pending={pending} capacity={capacity} />
               <ScheduleCard
                 dailyLimit={c.dailyLimit}
                 windowStart={c.sendingWindowStart}
@@ -164,19 +224,78 @@ export default async function CampaignDetailPage({
                 maxDelaySec={c.maxDelaySec}
                 stopOnReply={c.stopOnReply}
                 trackOpens={c.trackOpens}
+                capacity={capacity}
+                maxEmailsPerSenderPerDay={c.maxEmailsPerSenderPerDay}
+                retryFailed={c.retryFailed}
+                retryCount={c.retryCount}
+                managedByAutopilot={managed}
               />
+              {leadConversation ? (
+                <Card>
+                  <CardHeader
+                    actions={
+                      linkedRunId ? (
+                        <Button asChild variant="ghost" size="sm">
+                          <Link href={`/chad-gtm/${linkedRunId}`}>
+                            Autopilot run <ArrowUpRight />
+                          </Link>
+                        </Button>
+                      ) : undefined
+                    }
+                  >
+                    <CardTitle>Lead conversations</CardTitle>
+                    <CardDescription>
+                      Who answers replies from this campaign&apos;s leads.
+                      {linkedRunId ? " Also shown on the Autopilot run." : ""}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <LeadConversationsControl
+                      target={{ campaignId: c.id }}
+                      initialState={leadConversation}
+                      showOffer
+                      label="Who answers"
+                    />
+                  </CardContent>
+                </Card>
+              ) : null}
               <MailboxesCard senders={c.senders} />
             </div>
           </div>
         }
         sequence={
-          sequence.ok && sequence.data ? (
-            <SequenceEditor
-              campaignId={c.id}
-              initialSteps={sequence.data.steps}
-              templateName={template?.name ?? null}
-              hasTemplate={Boolean(c.templateId)}
-            />
+          managed && autopilotRunId ? (
+            <div className="flex flex-col gap-6">
+              <Alert
+                variant="info"
+                action={
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`/chad-gtm/${autopilotRunId}`}>Open in Autopilot</Link>
+                  </Button>
+                }
+              >
+                <AlertTitle>Managed by Autopilot</AlertTitle>
+                <AlertDescription>
+                  Autopilot writes these emails for each lead from your plan, so they can&apos;t be edited here.
+                </AlertDescription>
+              </Alert>
+              <SequenceSummaryCard
+                steps={steps}
+                error={sequenceError}
+                templateName={template?.name ?? null}
+                managed
+              />
+            </div>
+          ) : sequence.ok && sequence.data ? (
+            <div className="flex flex-col gap-6">
+              <VariantResults steps={summarizeVariantStats(variantRows, { trackOpens: c.trackOpens })} />
+              <SequenceEditor
+                campaignId={c.id}
+                initialSteps={sequence.data.steps}
+                templateName={template?.name ?? null}
+                hasTemplate={Boolean(c.templateId)}
+              />
+            </div>
           ) : (
             <StatePanel
               kind={denied ? "permission" : "error"}

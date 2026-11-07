@@ -77,6 +77,69 @@ describe("SwipeCardDeck", () => {
     expect(deck[1].rejectedReason).toBe("Too generic");
     await unmount();
   });
+
+  it("shows the mailbox signature outside the editable body and never edits it in", async () => {
+    const onComplete = vi.fn();
+    const signed: EmailCalibrationSample = {
+      ...sample("1"),
+      sender: { name: "Sam Rivera", signature: "Sam Rivera\nGrowth lead", poolSize: 12 },
+    };
+    const { host, unmount } = await render(<SwipeCardDeck samples={[signed]} onComplete={onComplete} />);
+
+    const sig = host.querySelector('[data-testid="sample-signature"]');
+    expect(sig?.textContent).toContain("Signature added by the sending mailbox:");
+    expect(sig?.textContent).toContain("Growth lead");
+    expect(host.textContent).toContain("changes from lead to lead");
+
+    await act(async () => button(host, "Edit")!.click());
+    const textarea = document.body.querySelector("textarea") as HTMLTextAreaElement;
+    expect(textarea.value).toBe("Body 1");
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    await act(async () => {
+      setValue.call(textarea, "Body 1, edited");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const save = Array.from(document.body.querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "Save and approve",
+    ) as HTMLButtonElement;
+    await act(async () => save.click());
+
+    await act(async () => button(host, "Rewrite my emails")!.click());
+    const deck = onComplete.mock.calls[0][0] as EmailCalibrationSample[];
+    expect(deck[0].bodyText).toBe("Body 1, edited");
+    expect(deck[0].bodyText).not.toContain("Growth lead");
+    await unmount();
+  });
+
+  it("shows one sign-off, joined the way the engine sends it (#66)", async () => {
+    const signed: EmailCalibrationSample = {
+      ...sample("1"),
+      bodyText: "Worth a chat?\n\nBest,\nSam",
+      sender: { name: "Sam Rivera", signature: "Sam Rivera\nGrowth lead", poolSize: 12 },
+    };
+    const { host, unmount } = await render(<SwipeCardDeck samples={[signed]} onComplete={vi.fn()} />);
+    const body = host.querySelector('[data-testid="sample-signature"]')?.parentElement;
+    expect(body?.textContent).toBe("Worth a chat?\n\nBest,\nSignature added by the sending mailbox: Sam Rivera\nGrowth lead");
+    await unmount();
+  });
+
+  it("says which pool persona a sample is from (#71)", async () => {
+    const signed: EmailCalibrationSample = {
+      ...sample("1"),
+      sender: { name: "Sam Rivera", signature: "", poolSize: 12 },
+    };
+    const one = await render(<SwipeCardDeck samples={[signed]} onComplete={vi.fn()} />);
+    expect(one.host.querySelector('[data-testid="sample-from"]')?.textContent).toBe(
+      "From Sam Rivera · one of 12 AutoGTM mailboxes",
+    );
+    await one.unmount();
+
+    const empty = await render(
+      <SwipeCardDeck samples={[{ ...sample("1"), sender: { name: "", signature: "", poolSize: 0 } }]} onComplete={vi.fn()} />,
+    );
+    expect(empty.host.querySelector('[data-testid="sample-from"]')?.textContent).toBe("From an AutoGTM mailbox");
+    await empty.unmount();
+  });
 });
 
 describe("CalibrationRefinementView", () => {
@@ -120,9 +183,21 @@ describe("VelocitySlider", () => {
   it("launches with the chosen daily limit", async () => {
     const onLaunch = vi.fn();
     const { host, unmount } = await render(<VelocitySlider initialLimit={60} onLaunch={onLaunch} />);
-    expect(host.textContent).toContain("2 mailboxes");
+    // Every active pool mailbox can send; no made-up "mailboxes used" count (#62).
+    expect(host.textContent).toContain("Shared AutoGTM pool");
+    expect(host.textContent).not.toContain("Mailboxes used");
     await act(async () => button(host, "Start outreach")!.click());
     expect(onLaunch).toHaveBeenCalledWith(60);
+    await unmount();
+  });
+
+  it("names the shared pool instead of a mailbox count when the sending pool is known", async () => {
+    const { host, unmount } = await render(
+      <VelocitySlider initialLimit={60} onLaunch={() => {}} sendingFrom={{ poolSize: 12, exampleName: "Sam Rivera" }} />,
+    );
+    expect(host.textContent).toContain("One of 12 AutoGTM mailboxes");
+    expect(host.textContent).toContain("for example Sam Rivera");
+    expect(host.textContent).not.toContain("Mailboxes used");
     await unmount();
   });
 });
@@ -154,10 +229,12 @@ describe("StrategyReviewBoard", () => {
 describe("LeadMatcher", () => {
   it("shows the real matching count and keeps one industry selected", async () => {
     const { host, unmount } = await render(
-      <LeadMatcher initialIndustries={["Logistics"]} allAvailableIndustries={["Logistics", "Retail"]} onProceed={() => {}} />,
+      <LeadMatcher runId="r1" initialIndustries={["Logistics"]} allAvailableIndustries={["Logistics", "Retail"]} onProceed={() => {}} />,
     );
     await act(async () => {});
     expect(host.textContent).toContain("1,234");
+    expect(host.textContent).toContain("Up to 500 per run, from 1,234 matching contacts");
+    expect(host.textContent).toContain("People anyone contacted in the last 90 days and opted-out addresses are skipped.");
     expect(host.textContent).toContain("Ana Lopez");
     const remove = host.querySelector('[aria-label="Remove Logistics"]') as HTMLButtonElement;
     await act(async () => remove.click());

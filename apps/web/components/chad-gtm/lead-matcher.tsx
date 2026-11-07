@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { ArrowLeft, ArrowRight, Plus, Search, Users, X } from "lucide-react";
 import {
   Alert,
@@ -12,6 +12,7 @@ import {
   EmptyState,
   Input,
   Skeleton,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -20,6 +21,7 @@ import {
   TableRow,
 } from "@smartreach/ui";
 import { searchMatchingLeadsAction } from "@/lib/chad-gtm-actions";
+import { LAUNCH_AUDIENCE_NOTE } from "@/lib/autopilot-policy";
 import type { DirectoryLead } from "@/lib/leads-directory";
 
 /**
@@ -27,36 +29,58 @@ import type { DirectoryLead } from "@/lib/leads-directory";
  * matching contacts from the directory. At least one industry stays selected.
  */
 export function LeadMatcher({
+  runId,
   initialIndustries,
   allAvailableIndustries,
   onProceed,
   onBack,
+  initialStrictRoles = false,
 }: {
+  /** The run whose job titles launch will use; the counts and sample follow them. */
+  runId: string;
   initialIndustries: string[];
   allAvailableIndustries: string[];
-  onProceed: (selectedIndustries: string[]) => void | Promise<void>;
+  /** strictRoles: only people with the job titles are contacted (no industry top-up). */
+  onProceed: (selectedIndustries: string[], strictRoles: boolean) => void | Promise<void>;
   onBack?: () => void;
+  initialStrictRoles?: boolean;
 }) {
   const [selectedIndustries, setSelectedIndustries] = useState<string[]>(
     initialIndustries.length > 0 ? initialIndustries : allAvailableIndustries.slice(0, 3),
   );
+  const [strictRoles, setStrictRoles] = useState(initialStrictRoles);
+  const strictId = useId();
   const [industrySearch, setIndustrySearch] = useState("");
   const [totalLeads, setTotalLeads] = useState<number | null>(null);
   const [sampleLeads, setSampleLeads] = useState<DirectoryLead[]>([]);
+  const [audience, setAudience] = useState<{
+    roleMatches: number;
+    otherRoles: number;
+    perRun: number;
+    bySize: boolean;
+    sampleMatchesTitles: boolean;
+  } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [lastRemovedBlocked, setLastRemovedBlocked] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [proceeding, setProceeding] = useState(false);
   const requestId = useRef(0);
 
-  const queryLeads = (industries: string[]) => {
+  const queryLeads = (industries: string[], strict: boolean = strictRoles) => {
     const id = ++requestId.current;
     startTransition(async () => {
-      const res = await searchMatchingLeadsAction(industries, 1, 10);
+      const res = await searchMatchingLeadsAction(runId, industries, 1, 10, { strictRoles: strict });
       if (id !== requestId.current) return; // A newer selection is already loading.
       if (res.ok) {
         setTotalLeads(res.total);
         setSampleLeads(res.leads);
+        setAudience({
+          roleMatches: res.roleMatches ?? res.total,
+          otherRoles: res.otherRoles ?? 0,
+          perRun: res.perRun ?? 500,
+          bySize: Boolean(res.bySize),
+          sampleMatchesTitles: Boolean(res.sampleMatchesTitles),
+        });
         setLoadError(null);
       } else {
         setLoadError("We couldn't load matching contacts. Change the selection or try again.");
@@ -65,9 +89,9 @@ export function LeadMatcher({
   };
 
   useEffect(() => {
-    queryLeads(selectedIndustries);
+    queryLeads(selectedIndustries, strictRoles);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIndustries]);
+  }, [selectedIndustries, strictRoles]);
 
   const toggleIndustry = (ind: string) => {
     if (selectedIndustries.includes(ind)) {
@@ -92,7 +116,7 @@ export function LeadMatcher({
   const proceed = async () => {
     setProceeding(true);
     try {
-      await onProceed(selectedIndustries);
+      await onProceed(selectedIndustries, strictRoles);
     } finally {
       setProceeding(false);
     }
@@ -121,11 +145,44 @@ export function LeadMatcher({
                   "Counting contacts…"
                 ) : totalLeads === null ? null : (
                   <>
+                    Up to {(audience?.perRun ?? 500).toLocaleString()} per run, from{" "}
                     <span className="tabular font-semibold text-foreground">{totalLeads.toLocaleString()}</span>{" "}
                     matching contacts{isPending ? ", updating…" : ""}
                   </>
                 )}
               </p>
+            </div>
+            {audience && totalLeads !== null && totalLeads > 0 && (
+              <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                {strictRoles ? (
+                  <>
+                    {audience.roleMatches.toLocaleString()} match your job titles{audience.bySize ? " and company size" : ""}.
+                    Others in your industries are not contacted.
+                  </>
+                ) : (
+                  <>
+                    {audience.roleMatches.toLocaleString()} match your job titles{audience.bySize ? " and company size" : ""},{" "}
+                    {audience.otherRoles.toLocaleString()} are others in your industries.
+                  </>
+                )}{" "}
+                {LAUNCH_AUDIENCE_NOTE}
+              </p>
+            )}
+            <div className="mt-3 flex items-start justify-between gap-4 rounded-lg border border-border px-4 py-3">
+              <div className="min-w-0">
+                <label htmlFor={strictId} className="cursor-pointer text-[13px] font-medium">
+                  Only contact people with these job titles
+                </label>
+                <p id={`${strictId}-hint`} className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Off: if too few people match your job titles, we fill the run with others in your industries.
+                </p>
+              </div>
+              <Switch
+                id={strictId}
+                checked={strictRoles}
+                onCheckedChange={setStrictRoles}
+                aria-describedby={`${strictId}-hint`}
+              />
             </div>
             <ul className="mt-2.5 flex flex-wrap gap-2" aria-label="Selected industries">
               {selectedIndustries.map((ind) => (
@@ -195,9 +252,13 @@ export function LeadMatcher({
         <CardHeader>
           <CardTitle>Sample contacts</CardTitle>
           <CardDescription>
-            {totalLeads && totalLeads > 0
-              ? `The first ${Math.min(10, sampleLeads.length)} of ${totalLeads.toLocaleString()} people we can reach with this selection.`
-              : "People we can reach with this selection."}
+            {totalLeads === 0
+              ? "No contacts match this selection yet. Add an industry."
+              : sampleLeads.length > 0
+                ? audience?.sampleMatchesTitles
+                  ? `${Math.min(10, sampleLeads.length)} of the people who match your job titles.`
+                  : `${Math.min(10, sampleLeads.length)} of the people in your industries.`
+                : "People we can reach with this selection."}
           </CardDescription>
         </CardHeader>
         {loadError && (

@@ -35,6 +35,8 @@ function fakeDb(selectResults: any[][]) {
       },
       where: () => c,
       innerJoin: () => c,
+      // The identity read resolves the default workspace (ORDER BY is_default).
+      orderBy: () => c,
       limit: () => Promise.resolve(result),
       then: (resolve: any, reject: any) => Promise.resolve(result).then(resolve, reject),
     };
@@ -52,16 +54,21 @@ function fakeDb(selectResults: any[][]) {
       return c;
     },
     update: () => {
-      const c: any = { set: () => c, where: () => Promise.resolve() };
+      const done: any = {
+        returning: () => Promise.resolve([{ id: "r1" }]),
+        then: (resolve: any, reject: any) => Promise.resolve().then(resolve, reject),
+      };
+      const c: any = { set: () => c, where: () => done };
       return c;
     },
+    delete: () => ({ where: () => Promise.resolve() }),
   };
   return { db, inserts, fromTables };
 }
 
 describe("suppressedEmailsFor", () => {
   it("applies the owner's own rows (any source) and everyone's global opt-outs", async () => {
-    expect([...GLOBAL_SUPPRESSION_SOURCES].sort()).toEqual(["bounce", "complaint", "unsubscribe"]);
+    expect([...GLOBAL_SUPPRESSION_SOURCES].sort()).toEqual(["bounce", "complaint", "erasure", "unsubscribe"]);
     const rows = [
       { value: "own-manual@acme.com", userId: "owner", source: "manual" },
       { value: "other-unsub@acme.com", userId: "someone-else", source: "unsubscribe" },

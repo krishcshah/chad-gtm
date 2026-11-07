@@ -20,7 +20,29 @@ import {
   Progress,
   Textarea,
 } from "@smartreach/ui";
+import { bodyAboveSignature, stripWarmupMarker } from "@smartreach/shared/signature";
 import { WorkingPanel } from "./working-panel";
+
+/**
+ * The sample as the lead receives it: the body, then the sending mailbox's
+ * signature, joined the way the engine joins them (one sign-off, not two).
+ */
+function SampleBody({ bodyText, signature }: { bodyText: string; signature: string }) {
+  const sig = stripWarmupMarker(signature);
+  const above = bodyAboveSignature(bodyText, sig);
+  return (
+    <div className="mt-3 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+      {above.body}
+      {sig ? (
+        <span data-testid="sample-signature">
+          {above.separator}
+          <span className="sr-only">Signature added by the sending mailbox: </span>
+          {sig}
+        </span>
+      ) : null}
+    </div>
+  );
+}
 
 export interface EmailCalibrationSample {
   id: string;
@@ -34,6 +56,11 @@ export interface EmailCalibrationSample {
   bodyHtml?: string;
   approved: boolean;
   rejectedReason?: string;
+  /**
+   * The pool mailbox persona this sample is shown as sent from. The signature
+   * is appended by the sending mailbox, so it is never part of bodyText.
+   */
+  sender?: { name: string; signature: string; poolSize: number };
 }
 
 const REJECTION_TAGS = [
@@ -261,6 +288,13 @@ export function SwipeCardDeck({
                   <p className="mt-0.5 text-xs text-subtle-foreground">
                     {[currentCard.recipientCompany, currentCard.recipientIndustry].filter(Boolean).join(" · ")}
                   </p>
+                  {currentCard.sender ? (
+                    <p data-testid="sample-from" className="mt-0.5 text-xs text-subtle-foreground">
+                      {currentCard.sender.poolSize > 0 && currentCard.sender.name
+                        ? `From ${currentCard.sender.name} · one of ${currentCard.sender.poolSize} AutoGTM ${currentCard.sender.poolSize === 1 ? "mailbox" : "mailboxes"}`
+                        : "From an AutoGTM mailbox"}
+                    </p>
+                  ) : null}
                 </div>
                 <Button variant="ghost" size="xs" onClick={() => startEdit(currentCard)}>
                   <Pencil />
@@ -269,11 +303,14 @@ export function SwipeCardDeck({
               </header>
               <div className="px-4 py-4">
                 <p className="text-sm font-semibold">{currentCard.subject}</p>
-                <div className="mt-3 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
-                  {currentCard.bodyText}
-                </div>
+                <SampleBody bodyText={currentCard.bodyText} signature={currentCard.sender?.signature ?? ""} />
               </div>
             </article>
+            {currentCard.sender?.signature?.trim() ? (
+              <p className="mt-2 text-xs text-subtle-foreground">
+                The signature comes from the mailbox that sends to each lead, so it changes from lead to lead.
+              </p>
+            ) : null}
 
             {showRejectMenu && (
               <fieldset className="mt-4 rounded-lg bg-muted/60 p-4">

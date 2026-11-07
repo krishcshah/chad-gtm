@@ -5,38 +5,40 @@
  * NOT a "use server" module: these helpers take a trusted user/workspace id and
  * must never be callable from the browser.
  */
-import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
-import {
-  applicableSuppressionValues,
-  ensureOutreachSpintax,
-  matchesSuppression,
-  schema,
-  suppressionCandidates,
-} from "@smartreach/database";
+import { and, eq, isNull, lt, or } from "drizzle-orm";
+import { ensureOutreachSpintax, loadWorkspaceProfile, normalizeEmail, schema } from "@smartreach/database";
 import { nowIso } from "@smartreach/shared";
 import type { Db } from "./db";
+import { CONTACT_COOLDOWN_DAYS, recentlyContactedEmails, suppressedEmailsFor } from "./contact-guards";
 import {
+  getDirectoryFacets,
   getMatchingDirectoryLeadsForExport,
+  searchLeadMatcherPreview,
   type DirectoryAccessLevel,
   type DirectoryLead,
 } from "./leads-directory";
 import type { CampaignResearchContext } from "./ai";
 import { ensureCampaignLeadSnapshot } from "./campaign-drafts";
 import { assertCanSend } from "./approval";
+import { modeFromRun } from "./lead-conversations";
 import {
+  LAUNCH_AUDIENCE_NOTE,
+  LAUNCH_CLAIM_TTL_MS,
   LAUNCH_FAILURE_MESSAGES,
   autopilotCountries,
   autopilotSendingWindow,
+  clampAutopilotDaily,
   complianceProblems,
   isAllowedCountry,
   pickWorkAddress,
+  teamSizeValuesForBrackets,
+  withChosenOfferFirst,
   type LaunchFailureCode,
 } from "./autopilot-policy";
 
 type RunRow = typeof schema.chadGtmRuns.$inferSelect;
 
-/** How long a prospect is off-limits to every client after one campaign touches them. */
-export const CONTACT_COOLDOWN_DAYS = 90;
+export { CONTACT_COOLDOWN_DAYS, recentlyContactedEmails, suppressedEmailsFor };
 /** Leads provisioned per autopilot campaign. */
 export const LEADS_PER_CAMPAIGN = 500;
 
@@ -109,37 +111,51 @@ export type DirectoryQuery = (
   offset: number
 ) => DirectoryLead[];
 
+export interface TargetedLeadOptions {
+  countries?: string[];
+  query?: DirectoryQuery;
+  /** Directory team-size facet values (runTeamSizes); applies to every query. */
+  teamSizes?: string[];
+  /** Only people with the target job titles: no industry-only top-up. */
+  strictRoles?: boolean;
+}
+
 /**
- * Prefer leads whose titles match the ICP, then top up with industry-only
- * matches. Prevents a campaign from starving when title formats vary wildly.
- * Only work addresses in the allowed countries are ever returned.
+ * Prefer leads whose titles match the ICP, then (unless strictRoles) top up
+ * with industry-only matches. Prevents a campaign from starving when title
+ * formats vary wildly. Only work addresses in the allowed countries are ever
+ * returned. roleMatches is how many leads came from the job-title query.
  */
-export function fetchTargetedLeads(
+export function fetchTargetedLeadsWithSplit(
   industries: string[],
   targetTitles: string[],
   desired: number,
   offset: number,
-  options: { countries?: string[]; query?: DirectoryQuery } = {}
-): DirectoryLead[] {
+  options: TargetedLeadOptions = {}
+): { leads: DirectoryLead[]; roleMatches: number } {
   const countries = options.countries ?? autopilotCountries();
   const query: DirectoryQuery = options.query ?? getMatchingDirectoryLeadsForExport;
+  const teamSizes = options.teamSizes && options.teamSizes.length > 0 ? options.teamSizes : undefined;
   const base = {
     industries: industries.length > 0 ? industries : undefined,
     countries,
     hasEmail: true,
     hasWorkEmail: true,
+    ...(teamSizes ? { teamSizes } : {}),
   };
   // A small share of "work" addresses are ISP mailboxes; over-fetch to cover them.
   const fetchSize = Math.ceil(desired * 1.25) + 5;
   if (targetTitles.length === 0) {
-    return toContactableLeads(query(base, fetchSize, offset), countries).slice(0, desired);
+    const leads = toContactableLeads(query(base, fetchSize, offset), countries).slice(0, desired);
+    return { leads, roleMatches: leads.length };
   }
 
   const targeted = toContactableLeads(query({ ...base, jobTitles: targetTitles }, fetchSize, offset), countries).slice(
     0,
     desired
   );
-  if (targeted.length >= desired) return targeted;
+  const roleMatches = targeted.length;
+  if (targeted.length >= desired || options.strictRoles) return { leads: targeted, roleMatches };
 
   const seen = new Set(targeted.map((lead) => lead.email.toLowerCase()));
   let fallback = toContactableLeads(query(base, desired * 3, offset), countries);
@@ -154,7 +170,77 @@ export function fetchTargetedLeads(
     seen.add(key);
     targeted.push(lead);
   }
-  return targeted;
+  return { leads: targeted, roleMatches };
+}
+
+/** fetchTargetedLeadsWithSplit, leads only. */
+export function fetchTargetedLeads(
+  industries: string[],
+  targetTitles: string[],
+  desired: number,
+  offset: number,
+  options: TargetedLeadOptions = {}
+): DirectoryLead[] {
+  return fetchTargetedLeadsWithSplit(industries, targetTitles, desired, offset, options).leads;
+}
+
+/**
+ * The run's company sizes ('11-50', ...) as the directory's team-size facet
+ * values. [] (no size filter) when none parse or the facet list is unavailable.
+ */
+export function runTeamSizes(
+  run: Pick<RunRow, "icpProfile">,
+  facets: () => string[] = () => getDirectoryFacets().teamSizes.map((v) => v.value)
+): string[] {
+  const brackets = (run.icpProfile as { companySizes?: unknown } | null)?.companySizes;
+  if (!Array.isArray(brackets) || brackets.length === 0) return [];
+  let available: string[] = [];
+  try {
+    available = facets();
+  } catch {
+    available = [];
+  }
+  return teamSizeValuesForBrackets(brackets.map((b) => String(b ?? "")), available);
+}
+
+/** icpProfile.strictRoles: only contact people with the target job titles. */
+export function runStrictRoles(run: Pick<RunRow, "icpProfile">): boolean {
+  return Boolean((run.icpProfile as { strictRoles?: unknown } | null)?.strictRoles);
+}
+
+export { LAUNCH_AUDIENCE_NOTE };
+
+export interface LaunchAudienceCounts {
+  /** Matching contacts with one of the target job titles (and company size, when set). */
+  roleMatches: number;
+  /** Others in the same industries that launch tops a run up with. */
+  otherRoles: number;
+}
+
+/**
+ * How many directory contacts a launch picks from, split the way launch
+ * picks them: title matches first, then others in the same industries.
+ * Counts only; zero on any directory error.
+ */
+export function launchAudienceCounts(input: {
+  industries: string[];
+  titles: string[];
+  teamSizes?: string[];
+  countries: string[];
+}): LaunchAudienceCounts {
+  try {
+    const teamSizes = input.teamSizes && input.teamSizes.length > 0 ? input.teamSizes : undefined;
+    const sizeFilter = teamSizes ? { teamSizes } : {};
+    const everyone = searchLeadMatcherPreview(input.industries, input.countries, 1, 1, sizeFilter).total;
+    if (input.titles.length === 0) return { roleMatches: everyone, otherRoles: 0 };
+    const roleMatches = searchLeadMatcherPreview(input.industries, input.countries, 1, 1, {
+      jobTitles: input.titles,
+      ...sizeFilter,
+    }).total;
+    return { roleMatches, otherRoles: Math.max(0, everyone - roleMatches) };
+  } catch {
+    return { roleMatches: 0, otherRoles: 0 };
+  }
 }
 
 export function compactCustomFields(raw: Record<string, string> | undefined): Record<string, string> {
@@ -214,61 +300,6 @@ export async function launchDirectoryAccess(db: Db, userId: string): Promise<Dir
   }
 }
 
-/**
- * Emails any client already put into a campaign inside the cooldown window.
- * Every client shares the same mailbox pool, so contacting one prospect from
- * two campaigns burns pool reputation and annoys the prospect.
- */
-export async function recentlyContactedEmails(db: Db, emails: string[], now = new Date()): Promise<Set<string>> {
-  const out = new Set<string>();
-  if (emails.length === 0) return out;
-  const since = new Date(now.getTime() - CONTACT_COOLDOWN_DAYS * 86_400_000).toISOString();
-  const CHUNK = 500;
-  for (let i = 0; i < emails.length; i += CHUNK) {
-    const batch = emails.slice(i, i + CHUNK);
-    const rows: Array<{ email: string }> = await db
-      .select({ email: schema.leads.email })
-      .from(schema.leads)
-      .innerJoin(schema.campaignLeads, eq(schema.campaignLeads.leadId, schema.leads.id))
-      .where(and(inArray(schema.leads.email, batch), gte(schema.campaignLeads.createdAt, since)));
-    for (const r of rows) out.add(r.email.toLowerCase());
-  }
-  return out;
-}
-
-/**
- * Emails that must not be provisioned for `userId`: the owner's own
- * suppressions (any source) plus everyone's global opt-outs (unsubscribe,
- * bounce, complaint; see GLOBAL_SUPPRESSION_SOURCES), matched by address or
- * "@domain". Same rule as the engine's send-time check.
- */
-export async function suppressedEmailsFor(db: Db, userId: string, emails: string[]): Promise<Set<string>> {
-  const out = new Set<string>();
-  const normalized = [...new Set(emails.filter(Boolean).map((e) => e.trim().toLowerCase()))];
-  if (normalized.length === 0) return out;
-  const candidates = [...new Set(normalized.flatMap(suppressionCandidates))];
-  const rows: Array<{ value: string; userId: string; source: string | null }> = [];
-  const CHUNK = 500;
-  for (let i = 0; i < candidates.length; i += CHUNK) {
-    const batch = candidates.slice(i, i + CHUNK);
-    const found = await db
-      .select({
-        value: schema.suppressions.value,
-        userId: schema.suppressions.userId,
-        source: schema.suppressions.source,
-      })
-      .from(schema.suppressions)
-      .where(inArray(sql`lower(${schema.suppressions.value})`, batch));
-    rows.push(...found);
-  }
-  const values = applicableSuppressionValues(rows, userId);
-  if (values.length === 0) return out;
-  for (const email of normalized) {
-    if (matchesSuppression(email, values)) out.add(email);
-  }
-  return out;
-}
-
 /** Plain, offer-grounded opener used when no swipe samples were approved. */
 export function defaultOpenerFromOffer(
   companyName: string,
@@ -299,14 +330,76 @@ export class LaunchError extends Error {
   }
 }
 
+/**
+ * Another launch of the same run holds the claim (or already linked a
+ * campaign). Nothing was created by this attempt.
+ */
+export class LaunchInProgressError extends Error {
+  constructor(message = "This campaign is already launching.") {
+    super(message);
+    this.name = "LaunchInProgressError";
+  }
+}
+
+/**
+ * Undo a launch that failed part-way, newest rows first (FK order). Deleting
+ * the campaign cascades its steps, variants, senders, campaign leads and
+ * jobs; deleting the list cascades its leads. Then release the claim.
+ * Best effort: failures are logged, never thrown, so the caller can rethrow
+ * the original error.
+ */
+async function undoFailedLaunch(
+  db: Db,
+  runId: string,
+  claimedAt: string,
+  created: { campaignId: string | null; templateId: string | null; listId: string | null }
+): Promise<void> {
+  const steps: Array<[string, () => Promise<unknown>]> = [];
+  const { campaignId, templateId, listId } = created;
+  if (campaignId) {
+    steps.push(["campaign", () => db.delete(schema.campaigns).where(eq(schema.campaigns.id, campaignId))]);
+  }
+  if (templateId) {
+    steps.push(["template", () => db.delete(schema.emailTemplates).where(eq(schema.emailTemplates.id, templateId))]);
+  }
+  if (listId) {
+    steps.push(["lead list", () => db.delete(schema.leadLists).where(eq(schema.leadLists.id, listId))]);
+  }
+  // Only release our own claim; a newer launch may hold it after the TTL.
+  steps.push([
+    "claim",
+    () =>
+      db
+        .update(schema.chadGtmRuns)
+        .set({ launchStartedAt: null })
+        .where(and(eq(schema.chadGtmRuns.id, runId), eq(schema.chadGtmRuns.launchStartedAt, claimedAt))),
+  ]);
+  for (const [label, step] of steps) {
+    try {
+      await step();
+    } catch (err) {
+      console.error(`[gtm-launch] cleanup of ${label} failed`, { runId, error: err });
+    }
+  }
+}
+
 export const COMPLIANCE_REQUIRED_ERROR =
   "Add your company name and physical postal address (Settings → Compliance) before launching. Anti-spam law requires them in every email.";
 
-/** The sender identity CAN-SPAM requires in every email (workspace compliance settings). */
+/**
+ * The sender identity CAN-SPAM requires in every email. With `workspaceId`
+ * (null = the default workspace) it is that workspace's (#73); without it,
+ * the legacy account row, for callers not yet scoped to a workspace.
+ */
 export async function loadComplianceIdentity(
   db: Db,
-  userId: string
-): Promise<{ companyName: string; postalAddress: string }> {
+  userId: string,
+  workspaceId?: string | null
+): Promise<{ companyName: string; postalAddress: string; workspaceName?: string }> {
+  if (workspaceId !== undefined) {
+    const ws = await loadWorkspaceProfile(db, { userId, workspaceId });
+    return { companyName: ws.companyName, postalAddress: ws.postalAddress, workspaceName: ws.workspaceName };
+  }
   const [row] = await db
     .select({
       companyName: schema.workspaceSettings.companyName,
@@ -338,7 +431,8 @@ export interface RunSequence {
  * personalization is unavailable, and what the client previews before launch.
  */
 export function buildRunSequence(run: RunRow, approvedSamples: any[] = [], selectedOfferIndex = 0): RunSequence {
-  const companyName = run.companyName || "Autonomous GTM";
+  // Launch always passes the workspace sender name; this fallback only shows in previews.
+  const companyName = run.companyName || "your company";
   const calibratedProfile = (run.calibrationProfile as any) || {};
   const offers = (run.offers as any[]) || [];
   const activeOffer = offers[selectedOfferIndex] || offers[0] || DEFAULT_OFFER;
@@ -408,24 +502,33 @@ export interface LaunchRunInput {
  * checked before anything is written, and the campaign is created as a draft
  * and only switched to "running" once fully provisioned, so a failure part-way
  * never leaves a live campaign behind.
+ *
+ * The run is claimed (launch_started_at) before the first write, so a second
+ * concurrent launch throws LaunchInProgressError without creating anything.
+ * A failure part-way deletes what this launch created and releases the claim.
  */
 export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<{ campaignId: string; leadCount: number }> {
   const { run, userId, workspaceId } = input;
   const approvedSamples = Array.isArray(input.approvedSamples) ? input.approvedSamples : [];
-  const dailyLimit = Math.min(500, Math.max(30, Math.round(input.dailyLimit || 30)));
+  const dailyLimit = clampAutopilotDaily(input.dailyLimit);
   const industries = (run.selectedIndustries as string[]) || [];
   const dateStr = new Date().toISOString().slice(0, 10);
-  const companyName = run.companyName || "Autonomous GTM";
   const calibratedProfile = (run.calibrationProfile as any) || {};
 
   // Only approved accounts may send from the shared pool.
   await assertCanSend(userId);
 
   // CAN-SPAM: the sender's identity and postal address go in every email.
-  const identity = await loadComplianceIdentity(db, userId);
+  // The campaign's workspace's identity, the one its footer will carry.
+  const identity = await loadComplianceIdentity(db, userId, workspaceId ?? null);
   if (Object.keys(complianceProblems(identity)).length > 0) {
     throw new Error(COMPLIANCE_REQUIRED_ERROR);
   }
+  // One sender per workspace: the email body, per-lead prompts and the agent
+  // name the legal sender the footer names, never the researched company.
+  const senderRun: RunRow = { ...run, companyName: identity.companyName.trim() || run.companyName };
+  // List, template and campaign names keep the researched company.
+  const companyName = run.companyName || identity.companyName || "your company";
 
   // Fail before writing anything if there is no capacity to send from.
   const systemSenders: Array<{ id: string }> = await db
@@ -442,9 +545,22 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
     throw new LaunchError("no_senders");
   }
 
+  // The offer chosen in setup goes first: the sequence, the agent and every
+  // screen read offers[0] (#51).
+  const offers = withChosenOfferFirst(((run.offers as any[]) ?? []) as any[], input.selectedOfferIndex ?? 0);
+
   // Leads: over-fetch, then drop anyone another campaign contacted recently.
+  // Company size and "only these job titles" apply here too (#57).
   const leadOffset = stableHash(run.id) % 5000;
-  const candidates = fetchTargetedLeads(industries, getTargetTitles(run), LEADS_PER_CAMPAIGN * 2, leadOffset);
+  const { leads: candidates, roleMatches: roleMatchCount } = fetchTargetedLeadsWithSplit(
+    industries,
+    getTargetTitles(run),
+    LEADS_PER_CAMPAIGN * 2,
+    leadOffset,
+    { teamSizes: runTeamSizes(run), strictRoles: runStrictRoles(run) }
+  );
+  // Title-query leads come first in `candidates`.
+  const roleEmails = new Set(candidates.slice(0, roleMatchCount).map((c) => c.email.toLowerCase()));
   const candidateEmails = candidates.map((c) => c.email.toLowerCase());
   const contacted = await recentlyContactedEmails(db, candidateEmails);
   // Opt-outs: the owner's suppressions plus global unsubscribes/bounces/complaints.
@@ -459,149 +575,212 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
   if (matchingDirectoryLeads.length === 0) {
     throw new LaunchError(candidates.length > 0 ? "all_contacted" : "no_leads");
   }
+  const roleMatched = matchingDirectoryLeads.filter((l) => roleEmails.has(l.email.toLowerCase())).length;
+  const launchAudience = {
+    roleMatches: roleMatched,
+    otherRoles: matchingDirectoryLeads.length - roleMatched,
+    at: nowIso(),
+  };
 
   // Paywalled contact details (phone, LinkedIn, raw attributes) only for
   // accounts with directory access.
   const directoryAccess = input.directoryAccess ?? (await launchDirectoryAccess(db, userId));
 
-  const listId = crypto.randomUUID();
-  await db.insert(schema.leadLists).values({
-    id: listId,
-    userId,
-    workspaceId,
-    name: `${companyName} AutoGTM Leads (${dateStr})`,
-  });
-
-  const CHUNK = 100;
-  for (let i = 0; i < matchingDirectoryLeads.length; i += CHUNK) {
-    const batch = matchingDirectoryLeads.slice(i, i + CHUNK);
-    await db
-      .insert(schema.leads)
-      .values(
-        batch.map((dl) => ({
-          id: crypto.randomUUID(),
-          userId,
-          workspaceId,
-          listId,
-          email: dl.email,
-          firstName: dl.firstName,
-          lastName: dl.lastName,
-          company: dl.companyName,
-          website: dl.companyWebsite,
-          jobTitle: dl.jobTitle,
-          location: dl.location,
-          industry: dl.industry,
-          status: "new" as const,
-          ...directoryLeadContactFields(dl, directoryAccess),
-          tags: ["autogtm", "b2b-verified"],
-        }))
+  // Claim the run before the first write. Postgres re-checks the WHERE after
+  // taking the row lock, so of two concurrent launches (double click, two
+  // tabs, Retry while launching) exactly one gets a row back.
+  const claimedAt = nowIso();
+  const claimed: Array<{ id: string }> = await db
+    .update(schema.chadGtmRuns)
+    .set({ launchStartedAt: claimedAt, updatedAt: claimedAt })
+    .where(
+      and(
+        eq(schema.chadGtmRuns.id, run.id),
+        eq(schema.chadGtmRuns.userId, userId),
+        isNull(schema.chadGtmRuns.campaignId),
+        // A deleted draft never launches (#55).
+        isNull(schema.chadGtmRuns.dismissedAt),
+        or(
+          isNull(schema.chadGtmRuns.launchStartedAt),
+          lt(schema.chadGtmRuns.launchStartedAt, new Date(Date.now() - LAUNCH_CLAIM_TTL_MS).toISOString())
+        )
       )
+    )
+    .returning({ id: schema.chadGtmRuns.id });
+  if (claimed.length === 0) {
+    throw new LaunchInProgressError();
+  }
+
+  // Everything created below is deleted again if the launch fails part-way.
+  const created: { listId: string | null; templateId: string | null; campaignId: string | null } = {
+    listId: null,
+    templateId: null,
+    campaignId: null,
+  };
+  let campaignId: string;
+  try {
+    const listId = crypto.randomUUID();
+    created.listId = listId;
+    await db.insert(schema.leadLists).values({
+      id: listId,
+      userId,
+      workspaceId,
+      name: `${companyName} AutoGTM Leads (${dateStr})`,
+    });
+
+    const CHUNK = 100;
+    for (let i = 0; i < matchingDirectoryLeads.length; i += CHUNK) {
+      const batch = matchingDirectoryLeads.slice(i, i + CHUNK);
+      await db
+        .insert(schema.leads)
+        .values(
+          batch.map((dl) => ({
+            id: crypto.randomUUID(),
+            userId,
+            workspaceId,
+            listId,
+            email: normalizeEmail(dl.email),
+            firstName: dl.firstName,
+            lastName: dl.lastName,
+            company: dl.companyName,
+            website: dl.companyWebsite,
+            jobTitle: dl.jobTitle,
+            location: dl.location,
+            industry: dl.industry,
+            status: "new" as const,
+            ...directoryLeadContactFields(dl, directoryAccess),
+            tags: ["autogtm", "b2b-verified"],
+          }))
+        )
+        .onConflictDoNothing();
+    }
+
+    const sequence = buildRunSequence({ ...senderRun, offers }, approvedSamples, 0);
+    const { activeOffer, subject: finalSubject, bodyText: finalBodyText, bodyHtml: finalBodyHtml, steps } = sequence;
+
+    const templateId = crypto.randomUUID();
+    created.templateId = templateId;
+    await db.insert(schema.emailTemplates).values({
+      id: templateId,
+      userId,
+      name: `${companyName} Calibrated Template`,
+      subject: finalSubject,
+      bodyText: finalBodyText,
+      bodyHtml: finalBodyHtml,
+      format: "text",
+      // Made by Autopilot: kept out of the manual wizard's template list (#105).
+      source: "autopilot",
+    });
+
+    campaignId = crypto.randomUUID();
+    created.campaignId = campaignId;
+    await db.insert(schema.campaigns).values({
+      id: campaignId,
+      userId,
+      workspaceId,
+      name: `AutoGTM: ${companyName}`,
+      // Draft until fully provisioned; flipped to running at the end.
+      status: "draft",
+      leadListId: listId,
+      templateId,
+      dailyLimit,
+      minDelaySec: 45,
+      maxDelaySec: 120,
+      maxEmailsPerSenderPerDay: 30, // hard per-mailbox ceiling
+      stopOnReply: true,
+      retryFailed: true,
+      trackOpens: true,
+      // The run's reply mode carries over: the campaign is where it is stored from now on.
+      leadConversationMode: modeFromRun(run.replyAgentMode),
+      // Business hours, Monday–Friday, in the prospects' timezone (AUTOPILOT_TIMEZONE).
+      ...autopilotSendingWindow(),
+    });
+
+    const styleExemplars: Array<{ subject: string; bodyText: string; recipientTitle?: string }> =
+      Array.isArray(calibratedProfile.styleExemplars) && calibratedProfile.styleExemplars.length > 0
+        ? calibratedProfile.styleExemplars
+        : approvedSamples
+            .filter((s) => s && s.approved !== false)
+            .slice(0, 3)
+            .map((s) => ({ subject: s.subject || "", bodyText: s.bodyText || "", recipientTitle: s.recipientTitle }));
+
+    const sendContext = buildCampaignContext({ ...senderRun, offers }, activeOffer);
+    const stepPrompt = (instruction: string) =>
+      JSON.stringify({
+        instruction,
+        context: sendContext,
+        styleExamples: styleExemplars,
+        negativeConstraints: calibratedProfile.rejectionConstraints || [],
+        requireSpintax: true,
+      });
+
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i]!;
+      const stepId = crypto.randomUUID();
+      await db.insert(schema.sequenceSteps).values({
+        id: stepId,
+        campaignId,
+        position: i + 1,
+        delayDays: step.delayDays,
+      });
+      await db.insert(schema.sequenceStepVariants).values({
+        id: crypto.randomUUID(),
+        stepId,
+        label: "A",
+        subject: step.subject,
+        bodyText: step.bodyText,
+        bodyHtml: i === 0 ? finalBodyHtml : `<p>${step.bodyText.replace(/\n/g, "<br/>")}</p>`,
+        aiGenerateOnTheFly: true,
+        aiPrompt: stepPrompt(step.prompt),
+      });
+    }
+
+    await db
+      .insert(schema.campaignSenders)
+      .values(systemSenders.map((s) => ({ campaignId, senderId: s.id })))
       .onConflictDoNothing();
+
+    const snapshot = await ensureCampaignLeadSnapshot(db, campaignId, listId);
+    if (snapshot === 0) {
+      // Fail closed: the snapshot's #31 rules left everyone out. The 90-day
+      // check above already covers the owner's recent campaigns, so the people
+      // left out are queued in another of the owner's live campaigns (no two
+      // sequences in parallel). Matches existed, so this is all_contacted.
+      throw new LaunchError("all_contacted");
+    }
+
+    // Link the run while the campaign is still a draft, and only if no other
+    // launch linked one first. Releases the claim in the same write.
+    const { launchFailure: _cleared, ...profileWithoutFailure } = calibratedProfile;
+    const linked: Array<{ id: string }> = await db
+      .update(schema.chadGtmRuns)
+      .set({
+        status: "active",
+        campaignId,
+        dailyEmailLimit: dailyLimit,
+        approvedEmailSamples: approvedSamples,
+        offers,
+        calibrationProfile: { ...profileWithoutFailure, launchAudience },
+        launchStartedAt: null,
+        updatedAt: nowIso(),
+      })
+      .where(and(eq(schema.chadGtmRuns.id, run.id), isNull(schema.chadGtmRuns.campaignId)))
+      .returning({ id: schema.chadGtmRuns.id });
+    if (linked.length === 0) {
+      throw new LaunchInProgressError();
+    }
+  } catch (err) {
+    await undoFailedLaunch(db, run.id, claimedAt, created);
+    throw err;
   }
 
-  const sequence = buildRunSequence(run, approvedSamples, input.selectedOfferIndex ?? 0);
-  const { activeOffer, subject: finalSubject, bodyText: finalBodyText, bodyHtml: finalBodyHtml, steps } = sequence;
-
-  const templateId = crypto.randomUUID();
-  await db.insert(schema.emailTemplates).values({
-    id: templateId,
-    userId,
-    name: `${companyName} Calibrated Template`,
-    subject: finalSubject,
-    bodyText: finalBodyText,
-    bodyHtml: finalBodyHtml,
-    format: "text",
-  });
-
-  const campaignId = crypto.randomUUID();
-  await db.insert(schema.campaigns).values({
-    id: campaignId,
-    userId,
-    workspaceId,
-    name: `AutoGTM: ${companyName}`,
-    // Draft until fully provisioned; flipped to running at the end.
-    status: "draft",
-    leadListId: listId,
-    templateId,
-    dailyLimit,
-    minDelaySec: 45,
-    maxDelaySec: 120,
-    maxEmailsPerSenderPerDay: 30, // hard per-mailbox ceiling
-    stopOnReply: true,
-    retryFailed: true,
-    trackOpens: true,
-    // Business hours, Monday–Friday, in the prospects' timezone (AUTOPILOT_TIMEZONE).
-    ...autopilotSendingWindow(),
-  });
-
-  const styleExemplars: Array<{ subject: string; bodyText: string; recipientTitle?: string }> =
-    Array.isArray(calibratedProfile.styleExemplars) && calibratedProfile.styleExemplars.length > 0
-      ? calibratedProfile.styleExemplars
-      : approvedSamples
-          .filter((s) => s && s.approved !== false)
-          .slice(0, 3)
-          .map((s) => ({ subject: s.subject || "", bodyText: s.bodyText || "", recipientTitle: s.recipientTitle }));
-
-  const sendContext = buildCampaignContext(run, activeOffer);
-  const stepPrompt = (instruction: string) =>
-    JSON.stringify({
-      instruction,
-      context: sendContext,
-      styleExamples: styleExemplars,
-      negativeConstraints: calibratedProfile.rejectionConstraints || [],
-      requireSpintax: true,
-    });
-
-  for (let i = 0; i < steps.length; i++) {
-    const step = steps[i]!;
-    const stepId = crypto.randomUUID();
-    await db.insert(schema.sequenceSteps).values({
-      id: stepId,
-      campaignId,
-      position: i + 1,
-      delayDays: step.delayDays,
-    });
-    await db.insert(schema.sequenceStepVariants).values({
-      id: crypto.randomUUID(),
-      stepId,
-      label: "A",
-      subject: step.subject,
-      bodyText: step.bodyText,
-      bodyHtml: i === 0 ? finalBodyHtml : `<p>${step.bodyText.replace(/\n/g, "<br/>")}</p>`,
-      aiGenerateOnTheFly: true,
-      aiPrompt: stepPrompt(step.prompt),
-    });
-  }
-
-  await db
-    .insert(schema.campaignSenders)
-    .values(systemSenders.map((s) => ({ campaignId, senderId: s.id })))
-    .onConflictDoNothing();
-
-  const snapshot = await ensureCampaignLeadSnapshot(db, campaignId, listId);
-  if (snapshot === 0) {
-    // Every lead row collided with an existing one; nothing would be sent.
-    throw new LaunchError("no_leads");
-  }
-
+  // Only now can anything send. If this write fails the run points at a
+  // draft campaign, which shows as Paused and Resume runs the normal checks.
   const startedAt = nowIso();
   await db
     .update(schema.campaigns)
     .set({ status: "running", startedAt, updatedAt: startedAt })
     .where(eq(schema.campaigns.id, campaignId));
-
-  const { launchFailure: _cleared, ...profileWithoutFailure } = calibratedProfile;
-  await db
-    .update(schema.chadGtmRuns)
-    .set({
-      status: "active",
-      campaignId,
-      dailyEmailLimit: dailyLimit,
-      approvedEmailSamples: approvedSamples,
-      calibrationProfile: profileWithoutFailure,
-      updatedAt: nowIso(),
-    })
-    .where(eq(schema.chadGtmRuns.id, run.id));
 
   return { campaignId, leadCount: matchingDirectoryLeads.length };
 }

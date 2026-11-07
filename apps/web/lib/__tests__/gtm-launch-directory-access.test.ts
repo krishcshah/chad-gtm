@@ -40,6 +40,8 @@ function fakeDb(selectResults: any[][]) {
       from: () => c,
       where: () => c,
       innerJoin: () => c,
+      // The identity read resolves the default workspace (ORDER BY is_default).
+      orderBy: () => c,
       limit: () => (result instanceof Error ? Promise.reject(result) : Promise.resolve(result)),
       then: (resolve: any, reject: any) =>
         (result instanceof Error ? Promise.reject(result) : Promise.resolve(result)).then(resolve, reject),
@@ -61,7 +63,11 @@ function fakeDb(selectResults: any[][]) {
       return c;
     },
     update: () => {
-      const c: any = { set: () => c, where: () => Promise.resolve() };
+      const done: any = {
+        returning: () => Promise.resolve([{ id: "r1" }]),
+        then: (resolve: any, reject: any) => Promise.resolve().then(resolve, reject),
+      };
+      const c: any = { set: () => c, where: () => done };
       return c;
     },
     delete: () => ({ where: () => Promise.resolve() }),

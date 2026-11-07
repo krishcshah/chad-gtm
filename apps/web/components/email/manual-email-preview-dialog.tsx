@@ -389,7 +389,7 @@ export function ManualEmailPreviewDialog({
               {testError}
             </p>
           ) : !loading && !loadError && senders.length === 0 ? (
-            <p className="text-xs text-muted-foreground">Connect a mailbox under Senders to send a test.</p>
+            <p className="text-xs text-muted-foreground">No mailbox is assigned yet. Contact support to send a test.</p>
           ) : null}
         </section>
 

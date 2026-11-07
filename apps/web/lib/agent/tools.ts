@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { schema } from "@smartreach/database";
+import { localDateKey } from "@smartreach/shared";
 import { auditDomainDns } from "@smartreach/email-engine/ai";
 import {
   scrapeCompanyWebsite,
@@ -16,7 +17,8 @@ import {
 import { getDirectoryAccessLevel } from "../b2b-access";
 import { getWorkspaceAiOptions } from "../ai";
 import { ensureChadGtmTables } from "../db";
-import { autopilotCountries } from "../autopilot-policy";
+import { AUTOPILOT_DAILY_DEFAULT, autopilotCountries } from "../autopilot-policy";
+import { initialRunReplyMode } from "../lead-conversations-server";
 import type { ToolDefinition } from "./types";
 
 const scrapedSchema = z
@@ -148,11 +150,13 @@ export const persistGtmRunTool: ToolDefinition<
       icpProfile: strategy.icpProfile,
       offers: strategy.offers,
       selectedIndustries: strategy.icpProfile.industries || [],
-      dailyEmailLimit: 30,
+      dailyEmailLimit: AUTOPILOT_DAILY_DEFAULT,
       approvedEmailSamples: [],
       agentRunId: ctx.run.id,
       bookingUrl: input.bookingUrl || strategy.scrapedData.bookingUrl || null,
       autopilot: Boolean(input.autopilot),
+      // "Lead conversations": the workspace default once it is set up.
+      replyAgentMode: await initialRunReplyMode(ctx.db, ctx.userId, ctx.workspaceId ?? null),
     });
 
     return { chadGtmRunId: runId };
@@ -339,7 +343,8 @@ export const getCampaignStatsTool: ToolDefinition<
       .limit(1);
     if (!campaign) throw new Error("Campaign not found");
 
-    const today = new Date().toISOString().slice(0, 10);
+    // The campaign counter is keyed by the campaign's local day.
+    const today = localDateKey(new Date(), campaign.sendingTimezone || "UTC");
     const [leadCount] = await ctx.db
       .select({ count: sql<number>`count(*)` })
       .from(schema.campaignLeads)

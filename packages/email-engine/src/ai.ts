@@ -28,6 +28,8 @@ export interface GeneratedScript {
 import { SUPPORTED_AI_MODELS, type AiModelDefinition } from "@smartreach/shared";
 export { SUPPORTED_AI_MODELS, type AiModelDefinition };
 
+import { inferStep, planAngles, writeEmail, type Step } from "./copywriter";
+import { researchCompany } from "./company-research";
 import {
   investigateLeadDossier,
   type CampaignResearchContext,
@@ -76,6 +78,14 @@ export interface GenerateOnTheFlyOptions extends AiEngineOptions {
    *             instead of heuristic text that may contain invented claims
    */
   onFailure?: "simulate" | "throw";
+  /** Which email of the sequence this is (1 outreach, 2 and 3 follow-ups). */
+  stepPosition?: number | null;
+  /** Emails already sent to this lead in this thread, oldest first. */
+  priorEmails?: Array<{ step: number; subject: string; body: string }>;
+  /** Subject of the first email; follow-ups reply in the same thread. */
+  threadSubject?: string;
+  /** Claims the sender may make about themselves (from their own website). */
+  proofPoints?: string[];
 }
 
 export interface ImproveCopyOptions extends AiEngineOptions {
@@ -677,6 +687,13 @@ export async function generateEmailScriptOnTheFly(
     return simulatePersonalizedScript(optionsWithDossier);
   }
 
+  // Campaigns with sender context use the copywriter (real company research,
+  // a brief per email, and a quality gate). Without context the legacy
+  // prompt below is kept for AutoGTM's own outbound offer.
+  if (campaignContext && !campaignContext.isOutboundInfrastructure && campaignContext.companyName?.trim()) {
+    return writeWithCopywriter(options, campaignContext, { provider, apiKey });
+  }
+
   const { lead, customInstruction, senderName, fallbackSubject } = options;
 
   const customFieldsFormatted =
@@ -806,6 +823,105 @@ Return ONLY valid JSON:
     console.warn("[ai-engine] Generation API failed, falling back to simulated script:", err);
     return simulatePersonalizedScript(optionsWithDossier);
   }
+}
+
+/** Drop the step boilerplate older campaigns stored in their prompts; keep anything a person wrote. */
+export function userNoteFromInstruction(instruction?: string): string {
+  return String(instruction || "")
+    .split(/\n+/)
+    .map((l) => l.trim())
+    .filter(
+      (l) =>
+        l &&
+        !/spintax|\b\d+\s*-\s*\d+ words|under \d+ words|write (?:a )?first-touch|write follow-up|first-touch cold email|do not mention dns|^company: .*value offer:/i.test(
+          l,
+        ),
+    )
+    .join("\n")
+    .slice(0, 600);
+}
+
+async function writeWithCopywriter(
+  options: GenerateOnTheFlyOptions,
+  context: CampaignResearchContext,
+  ai: { provider: string; apiKey: string },
+): Promise<GeneratedScript> {
+  const llm = (prompt: string, system: string) =>
+    callLlmJson(prompt, {
+      apiKey: ai.apiKey,
+      provider: ai.provider,
+      model: options.model,
+      timeoutMs: options.timeoutMs ?? 30_000,
+      system,
+    });
+  const step: Step = inferStep(options.stepPosition, options.customInstruction);
+  const lead = options.lead;
+  // Research only matters for the opener; follow-ups build on what was sent.
+  const research =
+    step === 1
+      ? await researchCompany(
+          { company: lead.company, website: lead.website, email: lead.email },
+          { llm },
+          {
+            senderOffer: [context.companyName, context.valueProposition || context.companySummary].filter(Boolean).join(": "),
+            recipientTitle: lead.jobTitle || undefined,
+            buyerPains: context.painPoints,
+          },
+        ).catch(() => null)
+      : null;
+  const prior = (options.priorEmails ?? [])
+    .filter((p) => p && p.body)
+    .map((p) => ({ step: inferStep(p.step), subject: p.subject, body: p.body, capabilities: (p as any).capabilities, pain: (p as any).pain }));
+  const sender = {
+    companyName: context.companyName,
+    companySummary: context.companySummary,
+    offerTitle: context.offerTitle,
+    valueProposition: context.valueProposition,
+    angle: context.angle,
+    cta: context.cta,
+    painPoints: context.painPoints,
+    capabilities: context.capabilities,
+    proofPoints: options.proofPoints ?? context.proofPoints,
+  };
+  const campaignKey = `${context.companyName}|${context.offerTitle || ""}`;
+  const angles = await planAngles(sender, llm, campaignKey);
+  const result = await writeEmail(
+    {
+      step,
+      angles,
+      sender,
+      senderFirstName: options.senderName || "",
+      recipient: {
+        firstName: lead.firstName,
+        lastName: lead.lastName,
+        jobTitle: lead.jobTitle,
+        company: lead.company,
+        industry: lead.industry,
+        location: lead.location,
+      },
+      research,
+      prior,
+      threadSubject: options.threadSubject,
+      seed: lead.email,
+      campaignKey,
+      styleExamples: options.styleExamples,
+      avoid: options.negativeConstraints,
+      instruction: userNoteFromInstruction(options.customInstruction),
+    },
+    llm,
+  );
+  const fact = result.hook === "fact" && result.factIndex ? research?.facts[result.factIndex - 1] : undefined;
+  const reason = fact
+    ? `Opened with a trigger from ${research?.domain || "their website"}: ${fact.fact}`
+    : `Role-based opener (${result.angle || "their title"})${
+        step === 1 ? (research?.fetched ? "; no trigger on their site was strong enough" : "; their website could not be read") : ""
+      }`;
+  return {
+    subject: result.subject,
+    bodyText: result.body,
+    bodyHtml: textToHtmlBlocks(result.body),
+    personalizationReason: reason,
+  };
 }
 
 export interface LlmJsonOptions extends AiEngineOptions {

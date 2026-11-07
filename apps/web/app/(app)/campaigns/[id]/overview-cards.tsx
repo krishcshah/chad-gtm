@@ -11,7 +11,14 @@ import {
   Progress,
   statusVariant,
 } from "@smartreach/ui";
+import {
+  capacityLabel,
+  effectiveGapRange,
+  HARD_MAX_PER_SENDER_PER_DAY,
+  type DailyCapacity,
+} from "@smartreach/shared";
 import { waitLabel, type StepSource } from "@/lib/sequence-draft";
+import { AI_NO_PROMPT_LABEL, AI_WRITTEN_LABEL, aiCopyState } from "@/lib/sequence-labels";
 import { OpenSequenceButton } from "./campaign-tabs";
 
 /** "90s", "2 min", "2.5 min" */
@@ -25,16 +32,17 @@ export function DeliveryCard({
   total,
   sent,
   pending,
-  dailyLimit,
+  capacity,
 }: {
   total: number;
   sent: number;
   pending: number;
-  dailyLimit: number | null;
+  /** What the campaign can really send per day (campaign limit, mailboxes, pool share). */
+  capacity: Pick<DailyCapacity, "perDay" | "limitedBy">;
 }) {
   const pct = total > 0 ? Math.min(100, Math.round((sent / total) * 100)) : 0;
   // Only leads still waiting for their first email count; failed leads are never retried here.
-  const days = dailyLimit && dailyLimit > 0 && pending > 0 ? Math.ceil(pending / dailyLimit) : null;
+  const days = capacity.perDay > 0 && pending > 0 ? Math.ceil(pending / capacity.perDay) : null;
 
   return (
     <Card>
@@ -58,7 +66,9 @@ export function DeliveryCard({
         ) : (
           <p className="text-xs leading-relaxed text-subtle-foreground">
             {pending.toLocaleString()} not contacted yet
-            {days ? ` · about ${days} more sending ${days === 1 ? "day" : "days"} at the daily limit` : ""}
+            {days
+              ? ` · about ${days} more sending ${days === 1 ? "day" : "days"} at up to ${capacity.perDay.toLocaleString()} a day`
+              : ""}
           </p>
         )}
       </CardContent>
@@ -76,6 +86,11 @@ export function ScheduleCard({
   maxDelaySec,
   stopOnReply,
   trackOpens,
+  capacity,
+  maxEmailsPerSenderPerDay,
+  retryFailed,
+  retryCount,
+  managedByAutopilot = false,
 }: {
   dailyLimit: number | null;
   windowStart: string | null;
@@ -86,27 +101,45 @@ export function ScheduleCard({
   maxDelaySec: number | null;
   stopOnReply: boolean | null;
   trackOpens: boolean | null;
+  capacity: Pick<DailyCapacity, "perDay" | "limitedBy">;
+  maxEmailsPerSenderPerDay?: number | null;
+  retryFailed?: boolean | null;
+  retryCount?: number | null;
+  /** Autopilot sets this schedule. */
+  managedByAutopilot?: boolean;
 }) {
+  // The gap the engine actually uses (stored values are clamped to 45-3600 s).
+  const gap = effectiveGapRange(minDelaySec ?? 120, maxDelaySec ?? 300);
+  const perMailbox = Math.min(HARD_MAX_PER_SENDER_PER_DAY, maxEmailsPerSenderPerDay ?? HARD_MAX_PER_SENDER_PER_DAY);
+  const attempts = retryCount ?? 0;
   return (
     <Card>
       <CardHeader>
         <CardTitle>Schedule</CardTitle>
-        <CardDescription>Change these in Settings.</CardDescription>
+        <CardDescription>
+          {managedByAutopilot ? "Set by Autopilot." : "Change these with the Settings button above."}
+        </CardDescription>
       </CardHeader>
       <CardContent className="pt-3">
         <DataList
           items={[
             { label: "Daily limit", value: dailyLimit ? `${dailyLimit.toLocaleString()} emails` : "No limit" },
+            { label: "Can send", value: capacityLabel(capacity) },
             {
               label: "Sending hours",
               value: `${windowStart || "09:00"}–${windowEnd || "17:00"} ${timezone || "UTC"}`,
             },
             { label: "Days", value: businessDaysOnly ? "Weekdays only" : "Every day" },
             {
-              label: "Gap between emails",
-              value: `${seconds(minDelaySec || 120)}–${seconds(maxDelaySec || 300)}`,
+              label: "Gap between emails (per mailbox)",
+              value: `${seconds(gap.min)}–${seconds(gap.max)}`,
             },
+            { label: "Per mailbox limit", value: `${perMailbox} a day` },
             { label: "Stop on reply", value: stopOnReply === false ? "Off" : "On" },
+            {
+              label: "Retry failed emails",
+              value: retryFailed ? `On, up to ${attempts} ${attempts === 1 ? "attempt" : "attempts"}` : "Off",
+            },
             { label: "Open tracking", value: trackOpens === false ? "Off" : "On" },
           ]}
         />
@@ -165,18 +198,23 @@ export function SequenceSummaryCard({
   steps,
   error,
   templateName,
+  managed = false,
 }: {
   steps: StepSource[] | null;
   error: string | null;
   templateName: string | null;
+  /** Autopilot writes this sequence: no edit shortcut. */
+  managed?: boolean;
 }) {
   return (
     <Card>
       <CardHeader
         actions={
-          <OpenSequenceButton>
-            Edit sequence <ArrowUpRight />
-          </OpenSequenceButton>
+          managed ? undefined : (
+            <OpenSequenceButton>
+              Edit sequence <ArrowUpRight />
+            </OpenSequenceButton>
+          )
         }
       >
         <CardTitle>Sequence</CardTitle>
@@ -205,8 +243,8 @@ export function SequenceSummaryCard({
         <ol className="mt-3 divide-y divide-border border-t border-border">
           {steps.map((step, index) => {
             const first = step.variants[0];
-            const ai = step.variants.some((v) => v.aiGenerateOnTheFly);
-            const subject = ai ? "Written by AI for each lead" : first?.subject?.trim() || "No subject";
+            const aiState = aiCopyState(step.variants);
+            const subject = aiState === "ai" ? AI_WRITTEN_LABEL : first?.subject?.trim() || "No subject";
             return (
               <li key={step.id} className="flex items-center gap-3 px-5 py-3">
                 <span className="tabular flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
@@ -214,6 +252,9 @@ export function SequenceSummaryCard({
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] font-medium">{subject}</span>
+                  {aiState === "ai_no_prompt" ? (
+                    <span className="block text-xs text-warning-text">{AI_NO_PROMPT_LABEL}</span>
+                  ) : null}
                   <span className="block text-xs text-subtle-foreground">
                     {waitLabel(step.delayDays, index)}
                     {step.variants.length > 1 ? " · A/B test" : ""}

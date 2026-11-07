@@ -7,7 +7,44 @@ import {
   ensureUnsubscribeFooter,
   listUnsubscribeHeaders,
   normalizeEmail,
+  applicableSuppressionValues,
+  GLOBAL_SUPPRESSION_SOURCES,
+  SUPPRESSION_SOURCES,
+  isGlobalSuppressionSource,
+  suppressionVerdict,
 } from "../compliance";
+import { suppressions } from "../schema";
+
+describe("suppressionVerdict (one recipient check for every send path)", () => {
+  it("another user's unsubscribe is a global block", () => {
+    expect(
+      suppressionVerdict([{ value: "dana@acme.com", userId: "user-b", source: "unsubscribe" }], "user-a"),
+    ).toEqual({ level: "global", source: "unsubscribe" });
+  });
+
+  it("the user's own manual domain row is an own block", () => {
+    expect(suppressionVerdict([{ value: "@acme.com", userId: "user-a", source: "manual" }], "user-a")).toEqual({
+      level: "own",
+      source: "manual",
+    });
+  });
+
+  it("another user's manual row does not apply", () => {
+    expect(suppressionVerdict([{ value: "dana@acme.com", userId: "user-b", source: "manual" }], "user-a")).toBeNull();
+  });
+
+  it("a global row wins over the user's own row", () => {
+    expect(
+      suppressionVerdict(
+        [
+          { value: "dana@acme.com", userId: "user-a", source: "not_interested" },
+          { value: "dana@acme.com", userId: null, source: "bounce" },
+        ],
+        "user-a",
+      ),
+    ).toEqual({ level: "global", source: "bounce" });
+  });
+});
 
 describe("unsubscribe tokens", () => {
   it("round-trips a valid token", () => {
@@ -85,5 +122,63 @@ describe("footers + headers", () => {
   });
   it("normalizes email", () => {
     expect(normalizeEmail("  A@B.Com ")).toBe("a@b.com");
+  });
+});
+
+describe("suppressions that outlive their owner", () => {
+  it("a global opt-out with no owner still blocks every user", () => {
+    const rows = [
+      { value: "gone@acme-example.com", userId: null, source: "unsubscribe" },
+      { value: "bounced@acme-example.com", userId: null, source: "bounce" },
+      { value: "erased@acme-example.com", userId: null, source: "erasure" },
+    ];
+    expect(applicableSuppressionValues(rows, "user-a")).toEqual([
+      "gone@acme-example.com",
+      "bounced@acme-example.com",
+      "erased@acme-example.com",
+    ]);
+  });
+
+  it("a private blocklist row with no owner blocks nobody", () => {
+    const rows = [
+      { value: "manual@acme-example.com", userId: null, source: "manual" },
+      { value: "import@acme-example.com", userId: null, source: "import" },
+    ];
+    expect(applicableSuppressionValues(rows, "user-a")).toEqual([]);
+  });
+
+  it("keeps unsubscribes, bounces and complaints global", () => {
+    for (const s of ["unsubscribe", "bounce", "complaint", "erasure"]) {
+      expect(GLOBAL_SUPPRESSION_SOURCES as readonly string[]).toContain(s);
+    }
+    expect(GLOBAL_SUPPRESSION_SOURCES as readonly string[]).not.toContain("manual");
+    expect(GLOBAL_SUPPRESSION_SOURCES as readonly string[]).not.toContain("not_interested");
+  });
+});
+
+describe("erasure requests", () => {
+  it("are a global source", () => {
+    expect(isGlobalSuppressionSource("erasure")).toBe(true);
+    expect(isGlobalSuppressionSource("not_interested")).toBe(false);
+    expect(isGlobalSuppressionSource(null)).toBe(false);
+  });
+
+  it("apply to every user, owned or not", () => {
+    const rows = [
+      { value: "erased@acme-example.com", userId: null, source: "erasure" },
+      { value: "erased2@acme-example.com", userId: "user-b", source: "erasure" },
+      { value: "mine@acme-example.com", userId: "user-b", source: "manual" },
+    ];
+    for (const u of ["user-a", "user-c"]) {
+      expect(applicableSuppressionValues(rows, u)).toEqual([
+        "erased@acme-example.com",
+        "erased2@acme-example.com",
+      ]);
+    }
+  });
+
+  it("SUPPRESSION_SOURCES matches the schema enum and contains every global source", () => {
+    expect([...SUPPRESSION_SOURCES].sort()).toEqual([...suppressions.source.enumValues].sort());
+    for (const s of GLOBAL_SUPPRESSION_SOURCES) expect(SUPPRESSION_SOURCES as readonly string[]).toContain(s);
   });
 });

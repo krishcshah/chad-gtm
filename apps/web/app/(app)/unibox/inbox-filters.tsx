@@ -1,6 +1,6 @@
 "use client";
 
-import { Inbox, Mail, MessageSquareWarning, type LucideIcon } from "lucide-react";
+import { Inbox, Mail, MessageSquareWarning, Reply, type LucideIcon } from "lucide-react";
 import { UNIBOX_REPLY_TAGS } from "@smartreach/shared";
 import {
   SegmentedControl,
@@ -17,16 +17,19 @@ import { tagLabel, tagVariant, type InboxView } from "./inbox-utils";
 export interface ViewCounts {
   all: number;
   unread: number;
+  /** Awaiting your reply. */
+  awaiting: number;
   needs_you: number;
 }
 
 const VIEWS: { value: InboxView; label: string; icon: LucideIcon }[] = [
   { value: "all", label: "All conversations", icon: Inbox },
   { value: "unread", label: "Unread", icon: Mail },
+  { value: "awaiting", label: "Awaiting your reply", icon: Reply },
   { value: "needs_you", label: "Needs you", icon: MessageSquareWarning },
 ];
 
-const SHORT_LABEL: Record<InboxView, string> = { all: "All", unread: "Unread", needs_you: "Needs you" };
+const SHORT_LABEL: Record<InboxView, string> = { all: "All", unread: "Unread", awaiting: "Awaiting", needs_you: "Needs you" };
 
 function dotTone(tag: string) {
   const v = tagVariant(tag);

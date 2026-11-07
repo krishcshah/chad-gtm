@@ -24,6 +24,38 @@ import { sendMail as realSendMail, type SendParams } from "./mailer";
 import { extractSenderFirstName } from "./sequence";
 import type { EngineDb, SenderRow } from "./db-port";
 import { loadUnapprovedOwners } from "./owner-approval";
+import { releaseHeldForApprovedOwners } from "./held-replies";
+import { addSuppression, isSuppressedFor, loadRecipientVerdict, RecipientSuppressedError } from "./suppression";
+import { setLeadStatusForEmail, stopAllCampaignsForEmail } from "./lead-outcomes";
+import { loadWorkspaceProfile, notificationRecipient, type WorkspaceNotifyProfile } from "./workspace-profile";
+
+export { RecipientSuppressedError } from "./suppression";
+import {
+  MAILBOX_OUT_OF_SERVICE_MESSAGE,
+  MailboxUnavailableError,
+  recordReplySend,
+  replyMailboxBlockReason,
+} from "./mailbox-health";
+import {
+  AGENT_SENDING_SUMMARY,
+  ANSWERED_SUMMARY,
+  NO_CAMPAIGN_SUMMARY,
+  OPTED_OUT_SUMMARY,
+  OUT_OF_OFFICE_SUMMARY,
+  OWNER_NOT_APPROVED_SUMMARY,
+  WAITING_ON_YOU_SUMMARY,
+  answeredAfter,
+  attachReplyToOpenRequest,
+  campaignStoppedSummary,
+  confirmStillOwned,
+  conversationEffective,
+  findOpenConversationRequest,
+  isCampaignStopped,
+  loadConversationContext,
+  markAgentSending,
+  outcomeForBlocker,
+  summaryForHandledByYou,
+} from "./lead-conversations";
 
 /* ─── Types ──────────────────────────────────────────────────────────── */
 
@@ -69,7 +101,7 @@ export interface Triage {
   source: "llm" | "heuristic";
 }
 
-export type AgentRequestKind = "resource" | "question" | "approval" | "referral" | "booking_url" | "other";
+export type AgentRequestKind = "resource" | "question" | "approval" | "referral" | "booking_url" | "handoff" | "other";
 
 export type AgentDecision =
   | {
@@ -87,6 +119,8 @@ export type AgentDecision =
       draft: string;
       tag: "interested" | null;
       summary: string;
+      /** Referrals: the address the lead pointed to, when their message has one. */
+      referralEmail?: string | null;
     }
   | { action: "skip"; summary: string; tag: "out_of_office" | "not_interested" | null };
 
@@ -98,9 +132,11 @@ export interface DecisionContext {
   leadFirstName: string;
   senderFirstName: string;
   companyName: string;
-  /** Agent replies already sent in this thread. */
+  /** The agent's own (autonomous) replies already sent in this conversation. */
   priorAgentReplies: number;
   maxAgentReplies?: number;
+  /** Another address in the lead's message (see extractReferralEmail). */
+  referralEmail?: string | null;
 }
 
 /* ─── Heuristic triage (no API key, or LLM failure) ───────────────────── */
@@ -167,6 +203,30 @@ export function heuristicTriage(subject: string, body: string): Triage {
     return { intent: "interested", confidence: 0.7, summary: "Positive reply", source: "heuristic" };
   }
   return { intent: "other", confidence: 0.3, summary: "Unclear reply", source: "heuristic" };
+}
+
+const EMAIL_IN_TEXT_RE = /[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}/gi;
+
+/**
+ * The address a lead pointed you to ("talk to jane@acme.com"): the first one
+ * in the lead's own words that is not in `exclude` (the lead, the mailbox).
+ * Quoted lines ("> ...") and everything after an "On ... wrote:" line are
+ * the earlier thread, so they are ignored. Null when there is none.
+ */
+export function extractReferralEmail(body: string | null | undefined, exclude: ReadonlyArray<string | null | undefined>): string | null {
+  const skip = new Set(exclude.map((e) => String(e ?? "").trim().toLowerCase()).filter(Boolean));
+  const own: string[] = [];
+  for (const line of String(body ?? "").split(/\r?\n/)) {
+    const t = line.trim();
+    if (/^on\b.+\bwrote:\s*$/i.test(t)) break;
+    if (t.startsWith(">")) continue;
+    own.push(line);
+  }
+  for (const match of own.join("\n").match(EMAIL_IN_TEXT_RE) || []) {
+    const email = match.replace(/^[._%+-]+/, "").toLowerCase();
+    if (!skip.has(email)) return email;
+  }
+  return null;
 }
 
 /* ─── Knowledge matching ──────────────────────────────────────────────── */
@@ -243,26 +303,18 @@ function bookingLine(url: string | null, warm = true): string {
  * ungroundedUrls(). Everything else escalates to the client.
  */
 export function decideAction(ctx: DecisionContext): AgentDecision {
-  const { triage, bookingUrl, knowledge, leadFirstName, senderFirstName } = ctx;
+  const { triage } = ctx;
   const max = ctx.maxAgentReplies ?? 4;
-  const hi = greet(leadFirstName);
-  const bye = signoff(senderFirstName);
 
   // 1. Never answer opt-outs or auto-replies.
   if (triage.intent === "out_of_office") {
-    return { action: "skip", summary: "Out-of-office auto-reply — sequence kept running.", tag: "out_of_office" };
+    return { action: "skip", summary: "Out-of-office reply; no answer sent.", tag: "out_of_office" };
   }
   if (triage.intent === "unsubscribe" || triage.intent === "not_interested") {
-    return { action: "skip", summary: "Lead opted out — suppressed, no reply sent.", tag: "not_interested" };
+    return { action: "skip", summary: AGENT_OPT_OUT_SUMMARY, tag: "not_interested" };
   }
 
-  const escalate = (
-    kind: AgentRequestKind,
-    title: string,
-    question: string,
-    draft = "",
-    summary = title,
-  ): AgentDecision => ({
+  const escalate: Escalate = (kind, title, question, draft = "", summary = title) => ({
     action: "escalate",
     kind,
     title,
@@ -274,17 +326,36 @@ export function decideAction(ctx: DecisionContext): AgentDecision {
     summary,
   });
 
-  // 2. Thread budget: long back-and-forths go to a human.
+  const normal = groundedDecision(ctx, escalate);
+
+  // 2. Reply limit: after `max` autonomous replies in this conversation the
+  // agent hands it to you, with what it would have said as the draft.
   if (ctx.priorAgentReplies >= max) {
+    const n = ctx.priorAgentReplies;
     return escalate(
-      "question",
-      "Conversation needs a human",
-      `The agent has already replied ${ctx.priorAgentReplies} times in this thread. Please take it from here.`,
-      triage.draft || "",
-      "Thread reply budget reached — handed to you.",
+      "handoff",
+      "Conversation handed to you",
+      `The agent has replied ${n} ${n === 1 ? "time" : "times"} in this conversation, so it's handing it to you.`,
+      normal.action === "reply" ? normal.body : normal.action === "escalate" ? normal.draft : "",
+      "Reply limit reached: handed to you.",
     );
   }
+  return normal;
+}
 
+type Escalate = (
+  kind: AgentRequestKind,
+  title: string,
+  question: string,
+  draft?: string,
+  summary?: string,
+) => Extract<AgentDecision, { action: "escalate" }>;
+
+/** What the agent would do without the reply limit (opt-outs and OOO are handled first). */
+function groundedDecision(ctx: DecisionContext, escalate: Escalate): AgentDecision {
+  const { triage, bookingUrl, knowledge, leadFirstName, senderFirstName } = ctx;
+  const hi = greet(leadFirstName);
+  const bye = signoff(senderFirstName);
   let decision: AgentDecision;
 
   switch (triage.intent) {
@@ -294,7 +365,7 @@ export function decideAction(ctx: DecisionContext): AgentDecision {
         decision = escalate(
           "booking_url",
           "Add your booking link",
-          "A lead wants to meet but no booking link is set. Add one so the agent can send it automatically.",
+          "A lead wants to meet but no booking link is set. Add one in Settings › Lead conversations so the agent can send it.",
           "",
           "Lead wants to meet — booking link missing.",
         );
@@ -394,13 +465,17 @@ export function decideAction(ctx: DecisionContext): AgentDecision {
       break;
     }
     case "referral": {
-      decision = escalate(
-        "referral",
-        "Lead referred you to someone else",
-        "The lead pointed to a colleague. Confirm the new contact before the agent reaches out.",
-        triage.draft || "",
-        "Referral — needs your OK to contact the new person.",
-      );
+      const email = ctx.referralEmail?.trim() || null;
+      decision = {
+        ...escalate(
+          "referral",
+          "Lead referred you to someone else",
+          `The lead pointed you to ${email || "someone else"}. Add them as a lead to this campaign, or reply to the lead yourself.`,
+          triage.draft || "",
+          "Referral: waiting on you.",
+        ),
+        referralEmail: email,
+      };
       break;
     }
     default: {
@@ -575,6 +650,10 @@ export interface ReplyAgentResult {
   reclaimed: number;
   /** Open requests the client was reminded about. */
   renotified: number;
+  /** Replies held because the owner's account is on hold (not approved). */
+  held: number;
+  /** Needs you cards opened for conversations held while the account was on hold. */
+  released: number;
 }
 
 /** Attempts before the agent gives up and hands the reply to the client. */
@@ -584,9 +663,71 @@ export const AGENT_STUCK_AFTER_MS = 10 * 60_000;
 /** Remind the client once about a request still open after this long. */
 export const AGENT_RENOTIFY_AFTER_MS = 24 * 3_600_000;
 export const AGENT_GAVE_UP_TITLE = "The agent couldn't handle this reply";
+/** The agent read an opt-out (decideAction); handleReply adds what happened to the blocklist. */
+export const AGENT_OPT_OUT_SUMMARY = "Lead opted out, so no reply was sent.";
+export const AGENT_OPT_OUT_BLOCKED_SUMMARY = `${AGENT_OPT_OUT_SUMMARY} Added to your blocklist.`;
+export const AGENT_OPT_OUT_BLOCK_FAILED_SUMMARY = `${AGENT_OPT_OUT_SUMMARY} Adding them to your blocklist failed; add them by hand.`;
 /** Shown on a reply the agent did not answer because the owner is not approved. */
-export const AGENT_OWNER_NOT_APPROVED_SUMMARY =
-  "Held: this account is not approved, so the agent did not answer. Reply from the UniBox once the account is approved.";
+export const AGENT_OWNER_NOT_APPROVED_SUMMARY = OWNER_NOT_APPROVED_SUMMARY;
+
+/** Held replies become Needs you cards once the owner is approved (never sends). */
+export { releaseHeldReplies, releaseHeldForApprovedOwners } from "./held-replies";
+
+/** The workspace a conversation's knowledge comes from (null: the owner has no workspace rows). */
+export interface KnowledgeProfile {
+  workspaceId: string | null;
+  isDefault: boolean;
+}
+
+/**
+ * The company the agent speaks for (#78): the same rule as the email footer
+ * (processor loadComplianceInfo). The workspace's company name, else the
+ * run's. The legacy account-wide name only when there is no workspace row at
+ * all, so a blank workspace never borrows another client's name.
+ */
+export function agentSenderCompany(ctx: {
+  settings: { companyName?: string | null } | null;
+  run: { companyName?: string | null } | null;
+  grounding: { companyName?: string | null };
+}): string {
+  const workspaceName = String(ctx.settings?.companyName ?? "").trim();
+  if (workspaceName) return workspaceName;
+  const runName = String(ctx.run?.companyName ?? "").trim();
+  if (runName) return runName;
+  return ctx.settings ? "" : String(ctx.grounding.companyName ?? "").trim();
+}
+
+/**
+ * From a loaded conversation: the campaign's (or run's) workspace, else the
+ * owner's default workspace. Legacy campaigns with no workspace belong to
+ * the default one, as everywhere else in the app.
+ */
+export function knowledgeProfile(ctx: {
+  workspaceId: string | null;
+  settings: { id: string; isDefault?: boolean } | null;
+}): KnowledgeProfile {
+  if (ctx.workspaceId) {
+    const isDefault = ctx.settings?.id === ctx.workspaceId && Boolean(ctx.settings?.isDefault);
+    return { workspaceId: ctx.workspaceId, isDefault };
+  }
+  if (ctx.settings?.id) return { workspaceId: ctx.settings.id, isDefault: true };
+  return { workspaceId: null, isDefault: false };
+}
+
+/**
+ * Knowledge is per workspace, and items with no workspace count as the
+ * default workspace's (the same rule as the Needs you list). workspaceId
+ * null means no workspace filter: every item of the owner.
+ */
+export function knowledgeScope(profile: KnowledgeProfile): { workspaceId: string | null; includeNull: boolean } {
+  if (!profile.workspaceId) return { workspaceId: null, includeNull: true };
+  return { workspaceId: profile.workspaceId, includeNull: profile.isDefault };
+}
+/** Needs you card opened when the mailbox a lead wrote to is failed or retired. */
+export const MAILBOX_OUT_OF_SERVICE_TITLE = "Reply held: mailbox out of service";
+/** Shown on a reply the agent did not answer because its mailbox is out of service. */
+export const MAILBOX_OUT_OF_SERVICE_SUMMARY =
+  "Held: the mailbox this lead wrote to is out of service, so the agent did not answer.";
 /** activity_logs.type of the once-a-day reminder digest sent to a client. */
 export const AGENT_REMINDER_DIGEST_TYPE = "agent.reminder_digest";
 /** At most one reminder digest per client per this window. */
@@ -704,6 +845,8 @@ export async function replyAgentTick(
     gaveUp: 0,
     reclaimed: 0,
     renotified: 0,
+    held: 0,
+    released: 0,
   };
   const now = deps.now?.() ?? new Date();
 
@@ -721,15 +864,16 @@ export async function replyAgentTick(
     .limit(limit);
 
   for (const row of pending) {
+    const claimedAt = now.toISOString();
     const claimed: any[] = await db
       .update(schema.replies)
-      .set({ agentStatus: "processing", agentClaimedAt: now.toISOString() })
+      .set({ agentStatus: "processing", agentClaimedAt: claimedAt })
       .where(and(eq(schema.replies.id, row.id), eq(schema.replies.agentStatus, "pending")))
       .returning({ id: schema.replies.id });
     if (claimed.length === 0) continue;
     result.processed++;
     try {
-      const outcome = await handleReply(db, row.id, deps);
+      const outcome = await handleReply(db, row.id, deps, claimedAt);
       result[outcome]++;
     } catch (err) {
       console.error("[reply-agent] failed", row.id, err);
@@ -740,7 +884,7 @@ export async function replyAgentTick(
         await db
           .update(schema.replies)
           .set({ agentStatus: "replied", agentHandledAt: now.toISOString() })
-          .where(eq(schema.replies.id, row.id))
+          .where(and(eq(schema.replies.id, row.id), eq(schema.replies.agentStatus, "processing")))
           .catch((e: unknown) => console.error("[reply-agent] could not record sent reply", row.id, e));
         result.replied++;
         continue;
@@ -755,6 +899,14 @@ export async function replyAgentTick(
     result.renotified = await renotifyStaleRequests(db, deps, now);
   } catch (err) {
     console.error("[reply-agent] re-notify failed", err);
+  }
+
+  // Accounts approved since their replies were held: open Needs you cards
+  // (never sends). Covers the admin button, scripts and legacy rows alike.
+  try {
+    result.released = await releaseHeldForApprovedOwners(db, now);
+  } catch (err) {
+    console.error("[reply-agent] releasing held replies failed", err);
   }
   return result;
 }
@@ -782,9 +934,13 @@ async function recordAgentFailure(
       agentClaimedAt: now.toISOString(),
       agentSummary: `Agent error (attempt ${attempts} of ${AGENT_MAX_ATTEMPTS}), retrying: ${message.slice(0, 160)}`,
     })
-    .where(eq(schema.replies.id, replyId));
+    // A person may have answered meanwhile ('human_replied'): never undo that.
+    .where(and(eq(schema.replies.id, replyId), eq(schema.replies.agentStatus, "processing")));
   result.retried++;
 }
+
+export const AGENT_SEND_INTERRUPTED =
+  "The worker stopped while sending this reply, so it may have reached the lead. Check the conversation before you answer.";
 
 /** Replies left in 'processing' by a worker that died: retry (counts as an attempt). */
 async function reclaimStuckReplies(
@@ -794,11 +950,12 @@ async function reclaimStuckReplies(
   result: ReplyAgentResult,
 ): Promise<number> {
   const cutoff = new Date(now.getTime() - AGENT_STUCK_AFTER_MS).toISOString();
-  const stuck: { id: string; agentAttempts: number | null; agentClaimedAt: string | null }[] = await db
+  const stuck: { id: string; agentAttempts: number | null; agentClaimedAt: string | null; agentSummary?: string | null }[] = await db
     .select({
       id: schema.replies.id,
       agentAttempts: schema.replies.agentAttempts,
       agentClaimedAt: schema.replies.agentClaimedAt,
+      agentSummary: schema.replies.agentSummary,
     })
     .from(schema.replies)
     .where(
@@ -827,7 +984,9 @@ async function reclaimStuckReplies(
       continue;
     }
     const attempts = Number(row.agentAttempts ?? 0) + 1;
-    if (attempts >= AGENT_MAX_ATTEMPTS) {
+    // The worker died mid-send: the email may have gone out. Never retry; a person checks.
+    const midSend = row.agentSummary === AGENT_SENDING_SUMMARY;
+    if (midSend || attempts >= AGENT_MAX_ATTEMPTS) {
       // Claim it first so two workers do not both give up on it.
       const claimed: any[] = await db
         .update(schema.replies)
@@ -843,7 +1002,7 @@ async function reclaimStuckReplies(
         )
         .returning({ id: schema.replies.id });
       if (claimed.length === 0) continue;
-      await giveUpOnReply(db, row.id, attempts, "The worker stopped while handling this reply.", deps, now);
+      await giveUpOnReply(db, row.id, attempts, midSend ? AGENT_SEND_INTERRUPTED : "The worker stopped while handling this reply.", deps, now);
       result.gaveUp++;
       reclaimed++;
       continue;
@@ -876,7 +1035,7 @@ async function giveUpOnReply(
   now: Date,
 ): Promise<void> {
   const nowIso = now.toISOString();
-  await db
+  const marked: any[] = await db
     .update(schema.replies)
     .set({
       agentStatus: "failed",
@@ -884,7 +1043,10 @@ async function giveUpOnReply(
       agentSummary: `Agent gave up after ${attempts} attempts: ${message.slice(0, 160)}`,
       agentHandledAt: nowIso,
     })
-    .where(eq(schema.replies.id, replyId));
+    // A person may have answered meanwhile ('human_replied'): leave it.
+    .where(and(eq(schema.replies.id, replyId), eq(schema.replies.agentStatus, "processing")))
+    .returning({ id: schema.replies.id });
+  if (marked.length === 0) return;
 
   const [reply] = await db.select().from(schema.replies).where(eq(schema.replies.id, replyId)).limit(1);
   if (!reply) return;
@@ -896,12 +1058,16 @@ async function giveUpOnReply(
     : [];
   const ownerId: string = run?.userId || reply.userId;
 
-  const existing: any[] = await db
-    .select({ id: schema.agentRequests.id })
-    .from(schema.agentRequests)
-    .where(and(eq(schema.agentRequests.replyId, replyId), eq(schema.agentRequests.status, "open")))
-    .limit(1);
-  if (existing.length > 0) return;
+  // One open card per conversation: join it instead of opening a second one.
+  const existing = await findOpenConversationRequest(db, {
+    leadId: reply.leadId,
+    campaignId: reply.campaignId,
+    replyId,
+  });
+  if (existing) {
+    await attachReplyToOpenRequest(db, existing.id, replyId, nowIso);
+    return;
+  }
 
   const requestId = crypto.randomUUID();
   const said = String(reply.bodyText || reply.snippet || "").replace(/\s+/g, " ").trim().slice(0, 500);
@@ -932,22 +1098,10 @@ async function giveUpOnReply(
   });
 
   if (deps.notifyClient !== false) {
-    const [sender] = await db
-      .select()
-      .from(schema.senderAccounts)
-      .where(eq(schema.senderAccounts.id, reply.senderId))
-      .limit(1);
-    if (sender) {
-      await notifyClientOfRequest(
-        db,
-        sender as SenderRow,
-        ownerId,
-        AGENT_GAVE_UP_TITLE,
-        said,
-        reply.fromEmail,
-        deps,
-      ).catch((err) => console.warn("[reply-agent] client notification failed", err));
-    }
+    // Same workspace the request was filed under, so reminders follow the same settings.
+    await notifyClientOfRequest(db, null, ownerId, AGENT_GAVE_UP_TITLE, said, reply.fromEmail, deps, {
+      workspaceId: run?.workspaceId ?? null,
+    }).catch((err) => console.warn("[reply-agent] client notification failed", err));
   }
   // Stamp it even if the email failed, so the 24h reminder logic has a baseline.
   await db.update(schema.agentRequests).set({ notifiedAt: nowIso }).where(eq(schema.agentRequests.id, requestId));
@@ -1004,6 +1158,10 @@ export async function remindersEnabledSince(db: EngineDb, now: Date): Promise<st
  */
 async function renotifyStaleRequests(db: EngineDb, deps: ReplyAgentDeps, now: Date): Promise<number> {
   if (deps.notifyClient === false) return 0;
+  // Reminders are only sent by the system mailer (never a pool mailbox).
+  // Without one, nothing is claimed and the requests stay in Needs you.
+  const { isSystemMailerConfigured } = await import("./system-mailer");
+  if (!isSystemMailerConfigured()) return 0;
   const since = await remindersEnabledSince(db, now);
   const cutoff = new Date(now.getTime() - AGENT_RENOTIFY_AFTER_MS).toISOString();
   const rows: any[] = await db
@@ -1057,9 +1215,30 @@ async function renotifyStaleRequests(db: EngineDb, deps: ReplyAgentDeps, now: Da
       .limit(1);
     if (recent.length > 0) continue;
 
-    // Claim each reminder (conditional on the notifiedAt we read) so it goes out once.
-    const claimed: any[] = [];
+    // Each request follows its workspace's Notifications setting; requests
+    // whose workspace turned reminders off are not claimed.
+    const profiles = new Map<string, WorkspaceNotifyProfile>();
+    const wanted: Array<{ req: any; profile: WorkspaceNotifyProfile }> = [];
     for (const req of reqs) {
+      const key = req.workspaceId ?? "";
+      let profile = profiles.get(key);
+      if (!profile) {
+        try {
+          profile = await loadWorkspaceProfile(db, { userId: ownerId, workspaceId: req.workspaceId ?? null });
+        } catch (err) {
+          console.warn("[reply-agent] notification settings unavailable; no reminder this tick", ownerId, err);
+          continue;
+        }
+        profiles.set(key, profile);
+      }
+      if (profile.notifyReminders === false) continue;
+      wanted.push({ req, profile });
+    }
+    if (wanted.length === 0) continue;
+
+    // Claim each reminder (conditional on the notifiedAt we read) so it goes out once.
+    const claimed: Array<{ req: any; profile: WorkspaceNotifyProfile }> = [];
+    for (const { req, profile } of wanted) {
       const ok: any[] = await db
         .update(schema.agentRequests)
         .set({ notifiedAt: now.toISOString() })
@@ -1071,29 +1250,20 @@ async function renotifyStaleRequests(db: EngineDb, deps: ReplyAgentDeps, now: Da
           ),
         )
         .returning({ id: schema.agentRequests.id });
-      if (ok.length > 0) claimed.push(req);
+      if (ok.length > 0) claimed.push({ req, profile });
     }
     if (claimed.length === 0) continue;
 
-    // Pool mailbox fallback (used only without a system mailer): the one that got the first lead's reply.
-    let sender: SenderRow | null = null;
-    const withReply = claimed.find((r) => r.replyId);
-    if (withReply) {
-      const [reply] = await db.select().from(schema.replies).where(eq(schema.replies.id, withReply.replyId)).limit(1);
-      const [s] = reply
-        ? await db.select().from(schema.senderAccounts).where(eq(schema.senderAccounts.id, reply.senderId)).limit(1)
-        : [];
-      sender = (s as SenderRow) ?? null;
-    }
     try {
-      await sendReminderDigest(db, sender, ownerId, claimed, deps);
+      const reminded = await sendReminderDigests(db, ownerId, claimed);
+      if (reminded.length === 0) continue;
       await db.insert(schema.activityLogs).values({
         id: crypto.randomUUID(),
         userId: ownerId,
         type: AGENT_REMINDER_DIGEST_TYPE,
-        message: `Reminded you about ${claimed.length} open request${claimed.length === 1 ? "" : "s"}`,
+        message: `Reminded you about ${reminded.length} open request${reminded.length === 1 ? "" : "s"}`,
         campaignId: null,
-        meta: { requestIds: claimed.map((r) => r.id) },
+        meta: { requestIds: reminded.map((r) => r.id) },
       });
       sent++;
     } catch (err) {
@@ -1123,67 +1293,130 @@ export function composeReminderDigest(
   return { subject, text };
 }
 
-async function sendReminderDigest(
+/**
+ * One digest per recipient address: requests whose workspaces send notices
+ * to the same address are listed together. Returns the requests whose
+ * digest was actually sent.
+ */
+async function sendReminderDigests(
   db: EngineDb,
-  sender: SenderRow | null,
   ownerId: string,
-  requests: any[],
-  deps: ReplyAgentDeps,
-): Promise<void> {
+  requests: Array<{ req: any; profile: WorkspaceNotifyProfile }>,
+): Promise<any[]> {
   const [owner] = await db
     .select({ email: schema.users.email, name: schema.users.name })
     .from(schema.users)
     .where(eq(schema.users.id, ownerId))
     .limit(1);
   if (!owner?.email) throw new Error("owner has no email");
+  const byRecipient = new Map<string, any[]>();
+  for (const { req, profile } of requests) {
+    const to = notificationRecipient(profile, owner.email);
+    const list = byRecipient.get(to) ?? [];
+    list.push(req);
+    byRecipient.set(to, list);
+  }
   const appUrl = (process.env.APP_URL || process.env.BETTER_AUTH_URL || "").replace(/\/$/, "");
-  const { subject, text } = composeReminderDigest(owner, requests, appUrl);
-  await deliverToClient(sender, { to: owner.email, subject, text, html: textToHtml(text) }, deps);
+  const sent: any[] = [];
+  for (const [to, reqs] of byRecipient) {
+    try {
+      const { subject, text } = composeReminderDigest(owner, reqs, appUrl);
+      if ((await deliverToClient({ to, subject, text, html: textToHtml(text) })) === "sent") sent.push(...reqs);
+    } catch (err) {
+      console.warn("[reply-agent] reminder digest failed", ownerId, err);
+    }
+  }
+  return sent;
 }
 
 /**
- * Send a notification to the client. Prefers the dedicated system sender
- * (neutral "AutoGTM" From, outside the cold-outreach pool); falls back to
- * `sender` only when no system mailer is configured. Throws on failure.
+ * Send a notification to the client through the dedicated system sender
+ * (neutral "AutoGTM" From). Never from a cold-outreach pool mailbox: that
+ * would hurt the pool's deliverability. Without a system mailer the notice
+ * is skipped and the item stays in the app (Needs you). Throws when a send
+ * fails.
  */
-async function deliverToClient(
-  sender: SenderRow | null,
-  message: { to: string; subject: string; text: string; html: string },
-  deps: ReplyAgentDeps,
-): Promise<void> {
+async function deliverToClient(message: { to: string; subject: string; text: string; html: string }): Promise<"sent" | "skipped"> {
   const { isSystemMailerConfigured, sendSystemEmail } = await import("./system-mailer");
-  if (isSystemMailerConfigured()) {
-    await sendSystemEmail(message);
-    return;
+  if (!isSystemMailerConfigured()) {
+    console.info("[reply-agent] no system mailer configured; the notice stays in Needs you only", message.subject);
+    return "skipped";
   }
-  if (!sender) throw new Error("no mailbox available for the client notification");
-  const send = deps.sendMail ?? realSendMail;
-  await send(sender, message);
+  await sendSystemEmail(message);
+  return "sent";
+}
+
+/**
+ * The agent read an opt-out. "Remove me" is a global unsubscribe; "not
+ * interested" blocks the address for this client only. Then every campaign
+ * of the owner stops mailing them. Misreading an intent as an opt-out
+ * over-suppresses, which is the safe direction. Returns the reply summary.
+ */
+export async function recordAgentOptOut(
+  db: EngineDb,
+  input: {
+    ownerId: string;
+    workspaceId: string | null;
+    email: string;
+    intent: "unsubscribe" | "not_interested";
+    nowIso: string;
+  },
+): Promise<string> {
+  const unsubscribe = input.intent === "unsubscribe";
+  try {
+    await addSuppression(db, {
+      userId: input.ownerId,
+      workspaceId: input.workspaceId,
+      email: input.email,
+      source: unsubscribe ? "unsubscribe" : "not_interested",
+      reason: unsubscribe ? "Asked to be removed (agent)" : "Replied not interested (agent)",
+    });
+  } catch (err) {
+    console.error("[reply-agent] adding an opt-out to the blocklist failed", input.email, err);
+    return AGENT_OPT_OUT_BLOCK_FAILED_SUMMARY;
+  }
+  // The blocklist row is what stops sends (every send re-checks it); these
+  // only tidy campaign and lead state, so a failure here is logged.
+  try {
+    await stopAllCampaignsForEmail(db, {
+      ownerId: input.ownerId,
+      email: input.email,
+      reason: "opted-out",
+      nowIso: input.nowIso,
+    });
+    if (unsubscribe) {
+      await setLeadStatusForEmail(db, {
+        ownerId: input.ownerId,
+        email: input.email,
+        status: "unsubscribed",
+        nowIso: input.nowIso,
+      });
+    }
+  } catch (err) {
+    console.error("[reply-agent] stopping campaigns after an opt-out failed", input.email, err);
+  }
+  return AGENT_OPT_OUT_BLOCKED_SUMMARY;
 }
 
 async function handleReply(
   db: EngineDb,
   replyId: string,
   deps: ReplyAgentDeps,
-): Promise<"replied" | "escalated" | "skipped"> {
+  /** agent_claimed_at this tick wrote when it claimed the reply. */
+  claimedAt: string,
+): Promise<"replied" | "escalated" | "held" | "skipped"> {
   const nowIso = (deps.now?.() ?? new Date()).toISOString();
   const [reply] = await db.select().from(schema.replies).where(eq(schema.replies.id, replyId)).limit(1);
   if (!reply) throw new Error("reply vanished");
 
-  const [run] = reply.campaignId
-    ? await db.select().from(schema.chadGtmRuns).where(eq(schema.chadGtmRuns.campaignId, reply.campaignId)).limit(1)
-    : [];
-  const [lead] = reply.leadId
-    ? await db.select().from(schema.leads).where(eq(schema.leads.id, reply.leadId)).limit(1)
-    : [];
-  const [sender] = await db
-    .select()
-    .from(schema.senderAccounts)
-    .where(eq(schema.senderAccounts.id, reply.senderId))
-    .limit(1);
+  // A tag you set in the Inbox (tag_source 'human') wins: the agent never
+  // overwrites it on the row it is processing (#86).
+  const keepHumanTag = reply.tagSource === "human";
 
+  // Every write is conditional on this tick's claim, so a person who answered
+  // meanwhile ('human_replied') is never overwritten.
   const finish = async (
-    status: "replied" | "escalated" | "skipped",
+    status: "replied" | "escalated" | "held" | "skipped",
     intent: string,
     summary: string,
     tag?: string | null,
@@ -1195,15 +1428,17 @@ async function handleReply(
         agentIntent: intent,
         agentSummary: summary,
         agentHandledAt: nowIso,
-        ...(tag !== undefined && tag !== null ? { tag: tag as any } : {}),
+        ...(tag !== undefined && tag !== null && !keepHumanTag ? { tag: tag as any, tagSource: "auto" as const } : {}),
       })
-      .where(eq(schema.replies.id, replyId));
+      .where(
+        and(
+          eq(schema.replies.id, replyId),
+          eq(schema.replies.agentStatus, "processing"),
+          eq(schema.replies.agentClaimedAt, claimedAt),
+        ),
+      );
     return status;
   };
-
-  if (!run || run.replyAgentMode === "off" || !sender) {
-    return finish("skipped", "other", run ? "Reply agent is off for this campaign." : "Not an autopilot campaign.");
-  }
 
   // Already answered (a worker sent the agent's email and then failed or
   // died before recording it): record it, never send a second email.
@@ -1211,22 +1446,101 @@ async function handleReply(
     return finish("replied", reply.agentIntent || "other", "The agent's reply was already sent.");
   }
 
+  // Who handles this conversation ("Lead conversations").
+  const ctx = reply.campaignId
+    ? await loadConversationContext(db, { leadId: reply.leadId, campaignId: reply.campaignId })
+    : null;
+  if (!ctx) return finish("skipped", "manual", NO_CAMPAIGN_SUMMARY);
+  const effective = conversationEffective(ctx);
+  if (effective.handledBy === "you") return finish("skipped", "manual", summaryForHandledByYou(effective.reason));
+  if (reply.tag === "out_of_office") return finish("skipped", "out_of_office", OUT_OF_OFFICE_SUMMARY);
+  // An open Needs you card pauses the whole conversation: join it.
+  if (ctx.openRequest) {
+    await attachReplyToOpenRequest(db, ctx.openRequest.id, replyId, nowIso);
+    return finish("escalated", "other", WAITING_ON_YOU_SUMMARY);
+  }
+  if (answeredAfter(ctx.lastOutboundAt, reply.receivedAt)) return finish("skipped", "answered", ANSWERED_SUMMARY);
+  // Paused, archived or deleted campaign: hold the reply for you (nothing is sent).
+  if (isCampaignStopped(ctx.campaign)) return finish("escalated", "held", campaignStoppedSummary(ctx.campaign));
+
+  const [sender] = await db
+    .select()
+    .from(schema.senderAccounts)
+    .where(eq(schema.senderAccounts.id, reply.senderId))
+    .limit(1);
+
+  const ownerId: string = ctx.ownerId;
+  // The effective workspace: the campaign's (or run's), else the owner's
+  // default one, so every new Needs you card shows in a workspace.
+  const workspaceId: string | null = ctx.workspaceId ?? ctx.settings?.id ?? null;
+  if (await isSuppressedFor(db, ownerId, reply.fromEmail)) return finish("skipped", "unsubscribe", OPTED_OUT_SUMMARY);
+
   // Approval can be revoked while replies keep arriving: the agent never
   // sends (from a pool mailbox or otherwise) for an owner who is not
-  // approved. The reply is held for a human instead.
-  if ((await loadUnapprovedOwners(db, [run.userId])).has(run.userId)) {
-    return finish("escalated", "other", AGENT_OWNER_NOT_APPROVED_SUMMARY);
+  // approved. The reply is held ('held', not Needs you); once the account is
+  // approved, releaseHeldReplies opens a Needs you card for it.
+  if ((await loadUnapprovedOwners(db, [ownerId])).has(ownerId)) {
+    return finish("held", "other", AGENT_OWNER_NOT_APPROVED_SUMMARY);
   }
 
-  const ownerId: string = run.userId;
-  const workspaceId: string | null = run.workspaceId ?? null;
+  const [lead] = reply.leadId
+    ? await db.select().from(schema.leads).where(eq(schema.leads.id, reply.leadId)).limit(1)
+    : [];
 
+  // A failed or retired mailbox never sends (a paused one still answers warm
+  // conversations). The conversation goes to Needs you with the reason.
+  if (replyMailboxBlockReason(sender)) {
+    const open = await findOpenConversationRequest(db, {
+      leadId: reply.leadId,
+      campaignId: reply.campaignId,
+      replyId,
+    });
+    if (open) {
+      await attachReplyToOpenRequest(db, open.id, replyId, nowIso);
+    } else {
+      await db.insert(schema.agentRequests).values({
+        id: crypto.randomUUID(),
+        userId: ownerId,
+        workspaceId,
+        runId: ctx.run?.id ?? null,
+        campaignId: reply.campaignId,
+        replyId,
+        leadId: reply.leadId,
+        kind: "other",
+        status: "open",
+        title: MAILBOX_OUT_OF_SERVICE_TITLE,
+        question: reply.snippet || "",
+        leadEmail: reply.fromEmail,
+        leadName: [lead?.firstName, lead?.lastName].filter(Boolean).join(" ") || reply.fromName || "",
+        leadCompany: lead?.company || "",
+        draftReply: "",
+      });
+      await db.insert(schema.activityLogs).values({
+        id: crypto.randomUUID(),
+        userId: ownerId,
+        type: "agent.escalated",
+        message: `Agent needs you: ${MAILBOX_OUT_OF_SERVICE_TITLE} (${reply.fromEmail})`,
+        campaignId: reply.campaignId,
+        meta: { replyId, kind: "other" },
+      });
+    }
+    return finish("escalated", "other", MAILBOX_OUT_OF_SERVICE_SUMMARY);
+  }
+
+  // Same rule as the Needs you knowledge list: this workspace's items, plus
+  // legacy items with no workspace when this is the default workspace.
+  const kScope = knowledgeScope(knowledgeProfile(ctx));
   const knowledgeRows: any[] = await db
     .select()
     .from(schema.agentKnowledge)
     .where(
-      workspaceId
-        ? and(eq(schema.agentKnowledge.userId, ownerId), eq(schema.agentKnowledge.workspaceId, workspaceId))
+      kScope.workspaceId
+        ? and(
+            eq(schema.agentKnowledge.userId, ownerId),
+            kScope.includeNull
+              ? or(eq(schema.agentKnowledge.workspaceId, kScope.workspaceId), isNull(schema.agentKnowledge.workspaceId))
+              : eq(schema.agentKnowledge.workspaceId, kScope.workspaceId),
+          )
         : eq(schema.agentKnowledge.userId, ownerId),
     )
     .orderBy(desc(schema.agentKnowledge.updatedAt))
@@ -1240,19 +1554,30 @@ async function handleReply(
     keywords: Array.isArray(k.keywords) ? k.keywords : [],
   }));
 
-  const priorAgentRows: any[] = reply.leadId
-    ? await db
-        .select({ c: sql<number>`count(*)` })
-        .from(schema.uniboxMessages)
-        .where(and(eq(schema.uniboxMessages.leadId, reply.leadId), eq(schema.uniboxMessages.fromRole, "agent" as any)))
-    : [{ c: 0 }];
+  // The reply budget counts the agent's own sends in this conversation
+  // (lead + campaign) only: not other campaigns, not drafts you approved.
+  const priorAgentRows: any[] =
+    reply.leadId && reply.campaignId
+      ? await db
+          .select({ c: sql<number>`count(*)` })
+          .from(schema.uniboxMessages)
+          .where(
+            and(
+              eq(schema.uniboxMessages.leadId, reply.leadId),
+              eq(schema.uniboxMessages.campaignId, reply.campaignId),
+              eq(schema.uniboxMessages.fromRole, "agent" as any),
+              eq(schema.uniboxMessages.approvedByUser, false),
+            ),
+          )
+      : [{ c: 0 }];
   const priorAgentReplies = Number(priorAgentRows[0]?.c || 0);
 
   const leadFirstName = String(lead?.firstName || reply.fromName?.split(/\s+/)[0] || "").trim();
   const senderFirstName = extractSenderFirstName(sender as SenderRow);
-  const overview: any = run.businessOverview || {};
-  const offers: any[] = Array.isArray(run.offers) ? run.offers : [];
-  const offer = offers[0] ? `${offers[0].title}: ${offers[0].valueProp}` : "";
+  const grounding = ctx.grounding;
+  // One sender per workspace: the agent speaks for the company the email
+  // footer names (the workspace's), the run's researched name only when blank.
+  const senderCompany = agentSenderCompany(ctx);
 
   let triage: Triage | null = null;
   try {
@@ -1261,10 +1586,10 @@ async function handleReply(
     triage = await triageFn({
       subject: reply.subject || "",
       body: reply.bodyText || reply.snippet || "",
-      companyName: run.companyName || "our company",
-      companySummary: overview.summary || "",
-      offer,
-      bookingUrl: run.bookingUrl || null,
+      companyName: senderCompany || "our company",
+      companySummary: grounding.summary,
+      offer: grounding.offer,
+      bookingUrl: grounding.bookingUrl,
       knowledge,
       leadFirstName,
       senderFirstName,
@@ -1275,59 +1600,112 @@ async function handleReply(
   }
   if (!triage) triage = heuristicTriage(reply.subject || "", reply.bodyText || reply.snippet || "");
 
-  const decision = decideAction({
+  let decision = decideAction({
     triage,
-    mode: run.replyAgentMode === "approve" ? "approve" : "autopilot",
-    bookingUrl: run.bookingUrl || null,
+    mode: effective.handledBy === "approve" ? "approve" : "autopilot",
+    bookingUrl: grounding.bookingUrl,
     knowledge,
     leadFirstName,
     senderFirstName,
-    companyName: run.companyName || "",
+    companyName: senderCompany,
     priorAgentReplies,
+    referralEmail: extractReferralEmail(reply.bodyText || reply.snippet || "", [reply.fromEmail, (sender as SenderRow)?.email]),
   });
 
   if (decision.action === "skip") {
+    if (triage.intent === "unsubscribe" || triage.intent === "not_interested") {
+      // The agent read an opt-out the sync keyword check missed: block the
+      // address itself. Say "Added to your blocklist" only once a row is written.
+      const summary = await recordAgentOptOut(db, {
+        ownerId,
+        workspaceId,
+        email: reply.fromEmail,
+        intent: triage.intent,
+        nowIso,
+      });
+      return finish("skipped", triage.intent, summary, decision.tag);
+    }
     return finish("skipped", triage.intent, decision.summary, decision.tag);
   }
 
+  // Triage can take a while: before any side effect, confirm the reply is
+  // still ours and nothing changed (someone answered, a card opened, the lead
+  // opted out, the campaign stopped, approval or the mailbox went away).
+  const check = await confirmStillOwned(db, {
+    replyId,
+    claimedAt,
+    leadId: reply.leadId,
+    campaignId: reply.campaignId,
+    fromEmail: reply.fromEmail,
+    senderId: reply.senderId,
+  });
+  if (check.blocker === "claim_lost") return "skipped"; // a person owns the reply now: write nothing
+  let blocker = decision.action === "reply" ? check.blocker : check.escalateBlocker;
+  if (decision.action === "reply" && check.blocker === "handled_by_you" && check.effective?.handledBy === "approve") {
+    // Switched to "Agent drafts, you approve" meanwhile: the draft waits for approval.
+    decision = {
+      action: "escalate",
+      kind: "approval",
+      title: "Approve reply",
+      question: triage.summary,
+      draft: decision.body,
+      tag: decision.tag === "interested" ? "interested" : null,
+      summary: "Draft ready for your approval.",
+    };
+    blocker = check.escalateBlocker;
+  }
+  if (blocker) {
+    if (blocker === "waiting_on_you" && check.ctx?.openRequest) {
+      await attachReplyToOpenRequest(db, check.ctx.openRequest.id, replyId, nowIso);
+    }
+    const out = outcomeForBlocker(blocker, check.effective ?? effective, check.ctx ? check.ctx.campaign : null);
+    if (!out) return "skipped";
+    return finish(out.status, out.intent, out.summary);
+  }
+
   if (decision.action === "escalate") {
-    // One open request per reply.
-    const existing: any[] = await db
-      .select({ id: schema.agentRequests.id })
-      .from(schema.agentRequests)
-      .where(and(eq(schema.agentRequests.replyId, replyId), eq(schema.agentRequests.status, "open")))
-      .limit(1);
-    if (existing.length === 0) {
-      await db.insert(schema.agentRequests).values({
-        id: crypto.randomUUID(),
-        userId: ownerId,
+    // One open request per conversation: join it instead of opening a second card.
+    const existing = await findOpenConversationRequest(db, {
+      leadId: reply.leadId,
+      campaignId: reply.campaignId,
+      replyId,
+    });
+    if (existing) {
+      await attachReplyToOpenRequest(db, existing.id, replyId, nowIso);
+      return finish("escalated", triage.intent, WAITING_ON_YOU_SUMMARY, decision.tag);
+    }
+    await db.insert(schema.agentRequests).values({
+      id: crypto.randomUUID(),
+      userId: ownerId,
+      workspaceId,
+      runId: ctx.run?.id ?? null,
+      campaignId: reply.campaignId,
+      replyId,
+      leadId: reply.leadId,
+      kind: decision.kind,
+      status: "open",
+      title: decision.title,
+      question: decision.question,
+      leadEmail: reply.fromEmail,
+      leadName: [lead?.firstName, lead?.lastName].filter(Boolean).join(" ") || reply.fromName || "",
+      leadCompany: lead?.company || "",
+      draftReply: decision.draft,
+      referralEmail: decision.kind === "referral" ? (decision.referralEmail ?? null) : null,
+    });
+    await db.insert(schema.activityLogs).values({
+      id: crypto.randomUUID(),
+      userId: ownerId,
+      type: "agent.escalated",
+      message: `Agent needs you: ${decision.title} (${reply.fromEmail})`,
+      campaignId: reply.campaignId,
+      meta: { replyId, kind: decision.kind },
+    });
+    if (deps.notifyClient !== false) {
+      await notifyClientOfRequest(db, sender as SenderRow, ownerId, decision.title, decision.question, reply.fromEmail, deps, {
         workspaceId,
-        runId: run.id,
-        campaignId: reply.campaignId,
-        replyId,
-        leadId: reply.leadId,
-        kind: decision.kind,
-        status: "open",
-        title: decision.title,
-        question: decision.question,
-        leadEmail: reply.fromEmail,
-        leadName: [lead?.firstName, lead?.lastName].filter(Boolean).join(" ") || reply.fromName || "",
-        leadCompany: lead?.company || "",
-        draftReply: decision.draft,
-      });
-      await db.insert(schema.activityLogs).values({
-        id: crypto.randomUUID(),
-        userId: ownerId,
-        type: "agent.escalated",
-        message: `Agent needs you: ${decision.title} (${reply.fromEmail})`,
-        campaignId: reply.campaignId,
-        meta: { replyId, kind: decision.kind },
-      });
-      if (deps.notifyClient !== false) {
-        await notifyClientOfRequest(db, sender as SenderRow, ownerId, decision.title, decision.question, reply.fromEmail, deps).catch(
-          (err) => console.warn("[reply-agent] client notification failed", err),
-        );
-      }
+      }).catch(
+        (err) => console.warn("[reply-agent] client notification failed", err),
+      );
     }
     return finish("escalated", triage.intent, decision.summary, decision.tag);
   }
@@ -1336,7 +1714,11 @@ async function handleReply(
   // As soon as SMTP accepts the email the reply is marked 'replied' (the
   // "sent" marker), before any other write. Errors after that point are
   // logged, never retried: retrying would email the lead a second time.
+  const sendDecision = decision;
   const finalIntent = triage.intent;
+  // Commit to sending on our own claim: a person's "Send mine" that won the
+  // race means we stay silent; once this is written their send is refused.
+  if (!(await markAgentSending(db, { replyId, claimedAt }))) return "skipped";
   let uniboxMessageId: string | null = null;
   try {
     const sent = await sendAgentReply(db, {
@@ -1344,36 +1726,38 @@ async function handleReply(
       sender: sender as SenderRow,
       ownerId,
       workspaceId,
-      body: decision.body,
+      body: sendDecision.body,
       nowIso,
       deps,
       onDelivered: async () => {
         deliveredReplies.add(replyId);
-        await finish("replied", finalIntent, decision.summary, decision.tag);
+        await finish("replied", finalIntent, sendDecision.summary, sendDecision.tag);
       },
     });
     uniboxMessageId = sent.uniboxMessageId;
   } catch (err) {
+    // The last-resort recipient check refused: nothing went out, never retry.
+    if (err instanceof RecipientSuppressedError) return finish("skipped", "unsubscribe", OPTED_OUT_SUMMARY);
     if (!isAgentReplyDelivered(err)) throw err; // nothing was sent: safe to retry
     console.error("[reply-agent] reply sent but recording failed", replyId, err);
     // Make sure the sent marker is there; if even this fails, the tick
     // records it (and the in-process guard prevents a second send).
-    await finish("replied", finalIntent, decision.summary, decision.tag).catch(() => {
+    await finish("replied", finalIntent, sendDecision.summary, sendDecision.tag).catch(() => {
       throw err;
     });
   }
   try {
-    if (decision.usedKnowledgeIds.length > 0) {
+    if (sendDecision.usedKnowledgeIds.length > 0) {
       await db
         .update(schema.agentKnowledge)
         .set({ usageCount: sql`${schema.agentKnowledge.usageCount} + 1`, updatedAt: nowIso })
-        .where(inArray(schema.agentKnowledge.id, decision.usedKnowledgeIds));
+        .where(inArray(schema.agentKnowledge.id, sendDecision.usedKnowledgeIds));
     }
     await db.insert(schema.activityLogs).values({
       id: crypto.randomUUID(),
       userId: ownerId,
       type: "agent.replied",
-      message: `Agent replied to ${reply.fromEmail}: ${decision.summary}`,
+      message: `Agent replied to ${reply.fromEmail}: ${sendDecision.summary}`,
       campaignId: reply.campaignId,
       meta: { replyId, uniboxMessageId },
     });
@@ -1395,6 +1779,8 @@ export async function sendAgentReply(
     nowIso: string;
     deps?: ReplyAgentDeps;
     fromRole?: "agent" | "operator";
+    /** An agent draft a person approved unchanged ("Agent, approved by you"). */
+    approvedByUser?: boolean;
     /**
      * Runs right after SMTP accepts the email, before anything else is
      * written: record the "sent" marker here.
@@ -1403,6 +1789,13 @@ export async function sendAgentReply(
   },
 ): Promise<{ uniboxMessageId: string; messageId: string }> {
   const { reply, sender } = input;
+  // A failed or retired mailbox never sends; nothing goes out, so callers' "not
+  // delivered" paths apply.
+  if (replyMailboxBlockReason(sender)) throw new MailboxUnavailableError(MAILBOX_OUT_OF_SERVICE_MESSAGE);
+  // Last resort for every caller (agent, Needs you): never email anyone who
+  // opted out or is on the owner's blocklist. A failed lookup throws too.
+  const verdict = await loadRecipientVerdict(db, input.ownerId, String(reply.fromEmail || ""));
+  if (verdict) throw new RecipientSuppressedError(String(reply.fromEmail || ""), verdict);
   const send = input.deps?.sendMail ?? realSendMail;
   const baseSubject = String(reply.subject || "").trim();
   const subject = /^re:/i.test(baseSubject) ? baseSubject : `Re: ${baseSubject || "your note"}`;
@@ -1428,6 +1821,8 @@ export async function sendAgentReply(
   } catch (err) {
     markerError = err;
   }
+  // Replies are counted apart from cold sends (never throws).
+  await recordReplySend(db, { senderId: sender.id, userId: input.ownerId });
   const uniboxMessageId = crypto.randomUUID();
   try {
     await db.insert(schema.uniboxMessages).values({
@@ -1445,6 +1840,7 @@ export async function sendAgentReply(
       subject,
       bodyText: input.body.trim(),
       bodyHtml: textToHtml(input.body),
+      approvedByUser: input.approvedByUser === true,
       sentAt: input.nowIso,
     });
   } catch (err) {
@@ -1456,12 +1852,14 @@ export async function sendAgentReply(
 
 export async function notifyClientOfRequest(
   db: EngineDb,
-  sender: SenderRow,
+  /** Unused: notices never go from a pool mailbox (kept so callers don't change). */
+  _sender: SenderRow | null,
   ownerId: string,
   title: string,
   question: string,
   leadEmail: string,
   deps: ReplyAgentDeps,
+  opts: { workspaceId?: string | null } = {},
 ): Promise<void> {
   const [owner] = await db
     .select({ email: schema.users.email, name: schema.users.name })
@@ -1469,20 +1867,22 @@ export async function notifyClientOfRequest(
     .where(eq(schema.users.id, ownerId))
     .limit(1);
   if (!owner?.email) return;
+  // Settings › Lead conversations › Notifications: off means in-app only.
+  const profile = await loadWorkspaceProfile(db, { userId: ownerId, workspaceId: opts.workspaceId ?? null });
+  if (profile.notifyEscalations === false) return;
   const appUrl = (process.env.APP_URL || process.env.BETTER_AUTH_URL || "").replace(/\/$/, "");
   const link = appUrl ? `${appUrl}/requests` : "your AutoGTM requests page";
   const firstName = String(owner.name || "").split(/\s+/)[0] || "there";
   const body = `Hi ${firstName},\n\nYour outreach agent needs a hand with a lead (${leadEmail}).\n\n${title}\n"${question}"\n\nAnswer it here and the agent will pick the conversation back up: ${link}\n\nAnything you share is saved, so the agent won't ask twice.\n\n— AutoGTM`;
   const message = {
-    to: owner.email,
+    to: notificationRecipient(profile, owner.email),
     subject: `Your agent needs you: ${title}`,
     text: body,
     html: textToHtml(body),
   };
-  // System mailer first, the pool mailbox that received the reply only as a
-  // fallback. Any send failure throws, so notified_at is only set after a
-  // successful send.
-  await deliverToClient(sender, message, deps);
+  // System mailer only. A send failure throws and a skipped notice returns,
+  // so notified_at is only set after an actual send.
+  if ((await deliverToClient(message)) !== "sent") return;
   await db
     .update(schema.agentRequests)
     .set({ notifiedAt: (deps.now?.() ?? new Date()).toISOString() })

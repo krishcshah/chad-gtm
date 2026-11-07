@@ -11,6 +11,7 @@ import { schema } from "@smartreach/database";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { EngineDb } from "./db-port";
 import { addSuppression } from "./suppression";
+import { ownerLeadIdsForEmail } from "./lead-outcomes";
 
 export interface HardBounceInput {
   email: string;
@@ -72,6 +73,31 @@ export async function recordHardBounce(db: EngineDb, input: HardBounceInput): Pr
     .update(schema.leads)
     .set({ status: "bounced", updatedAt: nowS })
     .where(eq(schema.leads.id, input.leadId));
+
+  // The same address in the owner's other lists is the same dead mailbox:
+  // mark those rows bounced and stop their open steps too.
+  const otherLeadIds = (await ownerLeadIdsForEmail(db, input.ownerUserId, input.email)).filter(
+    (id) => id !== input.leadId,
+  );
+  if (otherLeadIds.length > 0) {
+    await db
+      .update(schema.emailJobs)
+      .set({ status: "cancelled", lastError: "lead-bounced", updatedAt: nowS })
+      .where(and(inArray(schema.emailJobs.leadId, otherLeadIds), inArray(schema.emailJobs.status, ["pending", "retry"])));
+    await db
+      .update(schema.campaignLeads)
+      .set({ status: "failed", lastError: reason.slice(0, 500), updatedAt: nowS })
+      .where(
+        and(
+          inArray(schema.campaignLeads.leadId, otherLeadIds),
+          inArray(schema.campaignLeads.status, ["queued", "scheduled"]),
+        ),
+      );
+    await db
+      .update(schema.leads)
+      .set({ status: "bounced", updatedAt: nowS })
+      .where(inArray(schema.leads.id, otherLeadIds));
+  }
 
   if (!alreadyBounced) {
     await db.insert(schema.activityLogs).values({

@@ -16,6 +16,11 @@ export interface PostalHoldState {
   campaigns: number;
   /** Queued jobs the engine already held back for the missing address. */
   heldJobs: number;
+  /**
+   * Set (only) when an address is saved but incomplete while campaigns are
+   * sending: they keep sending for now, but can't start or resume.
+   */
+  incomplete?: true;
 }
 
 export const NO_POSTAL_HOLD: PostalHoldState = { held: false, campaigns: 0, heldJobs: 0 };

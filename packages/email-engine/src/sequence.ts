@@ -298,6 +298,13 @@ export async function advanceSequenceAfterSend(
 ): Promise<"completed" | "requeued"> {
   const { campaignId, campaignLeadId, stepPosition, sentAt, steps } = opts;
   const next = steps.find((s) => s.position === stepPosition + 1);
+  // Only a lead still 'scheduled' (this send's claim) moves on. A reply,
+  // unsubscribe or cancel that landed while the email was in flight already
+  // changed the status; it wins, and no follow-up is queued.
+  const stillScheduled = and(
+    eq(schema.campaignLeads.id, campaignLeadId),
+    eq(schema.campaignLeads.status, "scheduled"),
+  );
   if (!next || steps.length === 0) {
     await db
       .update(schema.campaignLeads)
@@ -308,12 +315,12 @@ export async function advanceSequenceAfterSend(
         lastError: null,
         updatedAt: sentAt,
       })
-      .where(eq(schema.campaignLeads.id, campaignLeadId));
+      .where(stillScheduled);
     return "completed";
   }
 
   const due = addCalendarDays(new Date(sentAt), next.delayDays).toISOString();
-  await db
+  const requeued: { id: string }[] = await db
     .update(schema.campaignLeads)
     .set({
       status: "queued",
@@ -324,8 +331,9 @@ export async function advanceSequenceAfterSend(
       lastError: null,
       updatedAt: sentAt,
     })
-    .where(eq(schema.campaignLeads.id, campaignLeadId));
-  return "requeued";
+    .where(stillScheduled)
+    .returning({ id: schema.campaignLeads.id });
+  return requeued.length > 0 ? "requeued" : "completed";
 }
 
 export { pickVariantEqualWeight, addCalendarDays };

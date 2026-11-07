@@ -1,7 +1,8 @@
 import { and, count, desc, eq, sql } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { getDb } from "./db";
-import { isAdmin, requireAdmin } from "./admin";
+import { isAdmin, requireAdmin, type AdminCandidate } from "./admin";
+import { statusAfterReply, ticketStatusChangeError } from "./support-status";
 
 export * from "./support-types";
 import type { TicketCategory, TicketStatus, SupportTicketDTO, SupportTicketMessageDTO } from "./support-types";
@@ -193,7 +194,7 @@ export async function getTicketDetails(
  */
 export async function addMessageToTicket(
   ticketId: string,
-  currentUser: { id: string; email?: string | null; name?: string | null },
+  currentUser: { id: string; name?: string | null } & NonNullable<AdminCandidate>,
   messageText: string
 ): Promise<{ ok: boolean; error?: string }> {
   const text = messageText?.trim();
@@ -230,13 +231,9 @@ export async function addMessageToTicket(
     createdAt: nowIso,
   });
 
-  // Automatically update ticket's updatedAt and status if applicable
-  const newStatus: TicketStatus =
-    userIsAdmin && ticket.status === "open"
-      ? "in_progress"
-      : ticket.status === "resolved" && !userIsAdmin
-      ? "open" // Customer re-opened with new reply
-      : (ticket.status as TicketStatus);
+  // Bump updatedAt; a support reply on an open ticket marks it in progress, and a
+  // customer reply on a resolved or closed ticket reopens it so support sees it.
+  const newStatus = statusAfterReply(ticket.status as TicketStatus, userIsAdmin);
 
   await db
     .update(schema.supportTickets)
@@ -253,7 +250,7 @@ export async function addMessageToTicket(
  * Update the lifecycle status of a support ticket.
  */
 export async function updateTicketStatus(
-  currentUser: { email?: string | null; id: string },
+  currentUser: { id: string } & NonNullable<AdminCandidate>,
   ticketId: string,
   newStatus: TicketStatus
 ): Promise<{ ok: boolean; error?: string }> {
@@ -266,10 +263,14 @@ export async function updateTicketStatus(
 
   if (!ticket) return { ok: false, error: "Ticket not found." };
 
-  const userIsAdmin = isAdmin(currentUser);
-  if (!userIsAdmin && ticket.userId !== currentUser.id) {
-    return { ok: false, error: "Unauthorized." };
-  }
+  // Customers may only mark their ticket resolved or reopen it; support sets the rest.
+  const error = ticketStatusChangeError({
+    isAdmin: isAdmin(currentUser),
+    isOwner: ticket.userId === currentUser.id,
+    from: ticket.status,
+    to: newStatus,
+  });
+  if (error) return { ok: false, error };
 
   const nowIso = new Date().toISOString();
   await db

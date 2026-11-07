@@ -1,8 +1,76 @@
-import { and, count, eq, gte, isNull, lte, sql } from "drizzle-orm";
+/**
+ * Campaign metrics: one definition, used on every page.
+ *
+ *  Emails sent     email_jobs with status 'sent' and dry_run = false (follow-ups included)
+ *  Leads emailed   distinct lead_id of those jobs
+ *  Replies         distinct coalesce(lead_id, lower(from_email)) in replies (people, not messages)
+ *  Opens           distinct coalesce(lead_id, job_id) of 'open' tracking events
+ *  Reply, open and bounce rates = that count / leads emailed, capped at 100
+ */
+import { and, count, eq, gte, isNull, lte, sql, type SQL } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { getDb } from "./db";
+import type { VariantStatRow } from "./variant-stats";
 
 const { campaigns, emailJobs, replies, emailTrackingEvents } = schema;
+
+/** Leads emailed for the campaign id in `campaignIdCol` (a column or a literal id). */
+export function leadsEmailedSql(campaignIdCol: unknown): SQL<number> {
+  return sql<number>`coalesce((select count(distinct ej.lead_id)::int from email_jobs ej where ej.campaign_id = ${campaignIdCol} and ej.status = 'sent' and ej.dry_run = false), 0)`;
+}
+
+/** Leads (or addresses, without a lead) who replied to the campaign in `campaignIdCol`. */
+export function repliedLeadsSql(campaignIdCol: unknown): SQL<number> {
+  return sql<number>`coalesce((select count(distinct coalesce(r.lead_id, lower(r.from_email)))::int from replies r where r.campaign_id = ${campaignIdCol}), 0)`;
+}
+
+export type CampaignTotals = {
+  /** Every delivered email, follow-ups included. */
+  emailsSent: number;
+  /** Each lead counted once. */
+  leadsEmailed: number;
+  repliedLeads: number;
+  openedLeads: number;
+  bouncedEmails: number;
+};
+
+/** Lifetime totals for one campaign (the caller checks ownership). */
+export async function getCampaignTotals(campaignId: string): Promise<CampaignTotals> {
+  const db = getDb();
+  const [[sentRow], [replyRow], [openRow], [bounceRow]] = await Promise.all([
+    db
+      .select({ emails: count(), leads: sql<number>`count(distinct ${emailJobs.leadId})` })
+      .from(emailJobs)
+      .where(and(eq(emailJobs.campaignId, campaignId), eq(emailJobs.status, "sent"), eq(emailJobs.dryRun, false))),
+    db
+      .select({ n: sql<number>`count(distinct coalesce(${replies.leadId}, lower(${replies.fromEmail})))` })
+      .from(replies)
+      .where(eq(replies.campaignId, campaignId)),
+    db
+      .select({
+        n: sql<number>`count(distinct coalesce(${emailTrackingEvents.leadId}, ${emailTrackingEvents.jobId}))`,
+      })
+      .from(emailTrackingEvents)
+      .where(and(eq(emailTrackingEvents.campaignId, campaignId), eq(emailTrackingEvents.type, "open")))
+      .catch(() => [{ n: 0 }]),
+    db
+      .select({ n: count() })
+      .from(emailJobs)
+      .where(and(eq(emailJobs.campaignId, campaignId), eq(emailJobs.status, "bounced"), eq(emailJobs.dryRun, false))),
+  ]);
+  return {
+    emailsSent: Number(sentRow?.emails ?? 0),
+    leadsEmailed: Number(sentRow?.leads ?? 0),
+    repliedLeads: Number(replyRow?.n ?? 0),
+    openedLeads: Number(openRow?.n ?? 0),
+    bouncedEmails: Number(bounceRow?.n ?? 0),
+  };
+}
+
+/** Reply, open and bounce rates per lead emailed (never per email). */
+export function campaignRates(t: CampaignTotals) {
+  return computeAnalyticsRates(t.leadsEmailed, t.repliedLeads, t.bouncedEmails, t.openedLeads);
+}
 
 export type AnalyticsRangeInput = {
   campaignId?: string;
@@ -73,8 +141,8 @@ export function computeAnalyticsRates(
   openCount: number = 0,
   clickCount: number = 0,
 ): Pick<AnalyticsSummary, "replyRate" | "bounceRate" | "openRate" | "clickRate"> {
-  const replyRate = leadsContacted === 0 ? 0 : (replyCount / leadsContacted) * 100;
-  const bounceRate = leadsContacted === 0 ? 0 : (bounceCount / leadsContacted) * 100;
+  const replyRate = leadsContacted === 0 ? 0 : Math.min(100, (replyCount / leadsContacted) * 100);
+  const bounceRate = leadsContacted === 0 ? 0 : Math.min(100, (bounceCount / leadsContacted) * 100);
   const openRate = leadsContacted === 0 ? 0 : Math.min(100, (openCount / leadsContacted) * 100);
   const clickRate = leadsContacted === 0 ? 0 : Math.min(100, (clickCount / leadsContacted) * 100);
   return {
@@ -316,4 +384,56 @@ export async function getAnalyticsSeriesForUser(
   }));
 
   return { points };
+}
+
+/**
+ * Sent, non-dry-run jobs of one campaign grouped by sequence step and A/B
+ * variant. Opens count leads with an open event on that job; replies count
+ * leads who replied to this campaign after that job was sent.
+ */
+export async function getVariantStatsForCampaign(userId: string, campaignId: string): Promise<VariantStatRow[]> {
+  await assertCampaignOwned(userId, campaignId);
+  const db = getDb();
+  const { sequenceStepVariants } = schema;
+  const rows = await db
+    .select({
+      stepPosition: emailJobs.stepPosition,
+      variantId: emailJobs.variantId,
+      label: sequenceStepVariants.label,
+      pausedAt: sequenceStepVariants.pausedAt,
+      sent: sql<number>`count(*)`,
+      leads: sql<number>`count(distinct ${emailJobs.leadId})`,
+      opened: sql<number>`count(distinct ${emailJobs.leadId}) filter (where exists (
+        select 1 from ${emailTrackingEvents}
+        where ${emailTrackingEvents.jobId} = ${emailJobs.id} and ${emailTrackingEvents.type} = 'open'
+      ))`,
+      replied: sql<number>`count(distinct ${emailJobs.leadId}) filter (where exists (
+        select 1 from ${replies}
+        where ${replies.campaignId} = ${emailJobs.campaignId}
+          and ${replies.leadId} = ${emailJobs.leadId}
+          and ${replies.receivedAt} >= ${emailJobs.sentAt}
+      ))`,
+    })
+    .from(emailJobs)
+    .leftJoin(sequenceStepVariants, eq(sequenceStepVariants.id, emailJobs.variantId))
+    .where(
+      and(
+        eq(emailJobs.campaignId, campaignId),
+        eq(emailJobs.status, "sent"),
+        eq(emailJobs.dryRun, false),
+        sql`${emailJobs.variantId} is not null`,
+      ),
+    )
+    .groupBy(emailJobs.stepPosition, emailJobs.variantId, sequenceStepVariants.label, sequenceStepVariants.pausedAt);
+
+  return rows.map((r) => ({
+    stepPosition: Number(r.stepPosition),
+    variantId: String(r.variantId),
+    label: r.label ?? null,
+    pausedAt: r.pausedAt ?? null,
+    sent: Number(r.sent) || 0,
+    leads: Number(r.leads) || 0,
+    opened: Number(r.opened) || 0,
+    replied: Number(r.replied) || 0,
+  }));
 }

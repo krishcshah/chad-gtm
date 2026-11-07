@@ -1,13 +1,16 @@
 "use client";
 
 import { useId, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Settings2 } from "lucide-react";
 import { toast } from "sonner";
+import { effectiveGapRange, HARD_MAX_PER_SENDER_PER_DAY, MAX_GAP_SEC, MIN_GAP_SEC } from "@smartreach/shared";
 import {
   Badge,
   Button,
   Checkbox,
+  DataList,
   Field,
   Input,
   Separator,
@@ -43,10 +46,13 @@ interface CampaignData {
   trackOpens?: boolean | null;
   minDelaySec: number | null;
   maxDelaySec: number | null;
-  senders: { id: string; email: string; senderName?: string }[];
+  maxEmailsPerSenderPerDay?: number | null;
+  retryFailed?: boolean | null;
+  retryCount?: number | null;
+  senders: { id: string; email: string; senderName?: string; isSystemPool?: boolean }[];
 }
 
-type Errors = Partial<Record<"name" | "dailyLimit" | "delay" | "senders", string>>;
+type Errors = Partial<Record<"name" | "dailyLimit" | "perSender" | "retryCount" | "delay" | "senders", string>>;
 
 function timezones(): string[] {
   try {
@@ -62,10 +68,15 @@ export function EditCampaignDialog({
   campaign,
   availableSenders,
   onGoToSequence,
+  managedByAutopilot = false,
+  autopilotRunId = null,
 }: {
   campaign: CampaignData;
   availableSenders: SenderOption[];
   onGoToSequence?: () => void;
+  /** Autopilot writes the sequence and sets the daily volume for this campaign. */
+  managedByAutopilot?: boolean;
+  autopilotRunId?: string | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -80,15 +91,25 @@ export function EditCampaignDialog({
   const [businessDaysOnly, setBusinessDaysOnly] = useState(campaign.businessDaysOnly ?? true);
   const [stopOnReply, setStopOnReply] = useState(campaign.stopOnReply ?? true);
   const [trackOpens, setTrackOpens] = useState(campaign.trackOpens ?? true);
-  const [minDelaySec, setMinDelaySec] = useState(String(campaign.minDelaySec ?? 120));
-  const [maxDelaySec, setMaxDelaySec] = useState(String(campaign.maxDelaySec ?? 300));
+  // Show the gap the engine actually uses (stored values are clamped to 45-3600 s).
+  const initialGap = effectiveGapRange(campaign.minDelaySec ?? 120, campaign.maxDelaySec ?? 300);
+  const [minDelaySec, setMinDelaySec] = useState(String(initialGap.min));
+  const [maxDelaySec, setMaxDelaySec] = useState(String(initialGap.max));
+  const [perSender, setPerSender] = useState(
+    String(Math.min(HARD_MAX_PER_SENDER_PER_DAY, campaign.maxEmailsPerSenderPerDay ?? HARD_MAX_PER_SENDER_PER_DAY)),
+  );
+  const [retryFailed, setRetryFailed] = useState(campaign.retryFailed ?? true);
+  const [retryCount, setRetryCount] = useState(String(campaign.retryCount ?? 2));
   const [selectedSenderIds, setSelectedSenderIds] = useState<string[]>(campaign.senders.map((s) => s.id));
+  // Pool campaigns send from the shared AutoGTM pool; its mailboxes can't be picked here (#67).
+  const usesPool = campaign.senders.some((s) => s.isSystemPool);
 
   const tzOptions = useMemo(timezones, []);
   const tzListId = useId();
   const weekdaysId = useId();
   const stopId = useId();
   const opensId = useId();
+  const retryId = useId();
   const mailboxHeadingId = useId();
 
   const toggleSender = (senderId: string) => {
@@ -101,14 +122,21 @@ export function EditCampaignDialog({
   const validate = (): Errors => {
     const next: Errors = {};
     if (!name.trim()) next.name = "Give the campaign a name.";
+    // Autopilot sets the schedule, pace and stop-on-reply: only name and opens are saved.
+    if (managedByAutopilot) return next;
     const limit = parseInt(dailyLimit, 10);
-    if (dailyLimit.trim() && (!Number.isFinite(limit) || limit < 1)) next.dailyLimit = "Enter at least 1.";
+    if (!dailyLimit.trim()) next.dailyLimit = "Enter a daily limit.";
+    else if (!Number.isFinite(limit) || limit < 1) next.dailyLimit = "Enter at least 1.";
+    if (!isWholeIn(perSender, 1, HARD_MAX_PER_SENDER_PER_DAY)) next.perSender = "Enter 1 to 30.";
+    if (retryFailed && !isWholeIn(retryCount, 0, 10)) next.retryCount = "Use a number from 0 to 10.";
     const min = parseInt(minDelaySec, 10);
     const max = parseInt(maxDelaySec, 10);
-    if (Number.isFinite(min) && Number.isFinite(max) && max < min) {
+    if (!isWholeIn(minDelaySec, MIN_GAP_SEC, MAX_GAP_SEC) || !isWholeIn(maxDelaySec, MIN_GAP_SEC, MAX_GAP_SEC)) {
+      next.delay = "Use 45 to 3,600 seconds for each gap.";
+    } else if (max < min) {
       next.delay = "The longest gap must be at least the shortest gap.";
     }
-    if (selectedSenderIds.length === 0) next.senders = "Select at least one mailbox to send from.";
+    if (!usesPool && selectedSenderIds.length === 0) next.senders = "Select at least one mailbox to send from.";
     return next;
   };
 
@@ -124,9 +152,9 @@ export function EditCampaignDialog({
     }
 
     startTransition(async () => {
-      const res = await updateCampaignSettings(campaign.id, {
+      const settings = {
         name: name.trim(),
-        dailyLimit: parseInt(dailyLimit, 10) || 500,
+        dailyLimit: parseInt(dailyLimit, 10),
         sendingWindowStart,
         sendingWindowEnd,
         sendingTimezone: sendingTimezone.trim() || "UTC",
@@ -135,8 +163,18 @@ export function EditCampaignDialog({
         trackOpens,
         minDelaySec: parseInt(minDelaySec, 10) || 120,
         maxDelaySec: parseInt(maxDelaySec, 10) || 300,
-        senderIds: selectedSenderIds,
-      });
+        maxEmailsPerSenderPerDay: parseInt(perSender, 10),
+        retryFailed,
+        // The attempts field is hidden while retry is off; keep the stored count then.
+        ...(retryFailed ? { retryCount: parseInt(retryCount, 10) } : {}),
+        // Pool mailboxes are managed by AutoGTM: leave them as they are.
+        ...(usesPool ? {} : { senderIds: selectedSenderIds }),
+      };
+      // Autopilot sets the schedule, pace and stop-on-reply: send only what can change here.
+      const res = await updateCampaignSettings(
+        campaign.id,
+        managedByAutopilot ? { name: settings.name, trackOpens } : settings,
+      );
 
       if (res.ok) {
         toast.success(res.message ?? "Campaign settings saved");
@@ -176,7 +214,7 @@ export function EditCampaignDialog({
               />
             </Field>
 
-            {onGoToSequence ? (
+            {onGoToSequence && !managedByAutopilot ? (
               <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-4 py-3">
                 <p className="text-[13px] text-muted-foreground">Subject lines, email copy and follow-up timing live in the sequence.</p>
                 <Button
@@ -195,6 +233,15 @@ export function EditCampaignDialog({
 
             <Separator />
 
+            {managedByAutopilot ? (
+              <AutopilotSettingsSummary
+                campaign={campaign}
+                gap={initialGap}
+                autopilotRunId={autopilotRunId}
+                headingId={`${tzListId}-autopilot`}
+              />
+            ) : (
+              <>
             <section className="flex flex-col gap-5" aria-labelledby={`${tzListId}-schedule`}>
               <div>
                 <h3 id={`${tzListId}-schedule`} className="text-[15px] font-semibold">
@@ -256,18 +303,37 @@ export function EditCampaignDialog({
 
               <Field
                 label="Daily limit"
-                hint="Most emails this campaign sends per day, across all its mailboxes."
+                hint="Most emails this campaign sends per day. Its mailboxes may allow fewer: see Can send on the Schedule card."
                 error={errors.dailyLimit}
               >
                 <Input
                   type="number"
                   inputMode="numeric"
                   min={1}
-                  max={50000}
+                  max={100000}
                   value={dailyLimit}
                   onChange={(e) => {
                     setDailyLimit(e.target.value);
                     setErrors((er) => ({ ...er, dailyLimit: undefined }));
+                  }}
+                  className="sm:max-w-40"
+                />
+              </Field>
+
+              <Field
+                label="Per mailbox daily limit"
+                hint="At most 30. Each mailbox sends at most 30 a day in total, shared by every campaign that uses it."
+                error={errors.perSender}
+              >
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={HARD_MAX_PER_SENDER_PER_DAY}
+                  value={perSender}
+                  onChange={(e) => {
+                    setPerSender(e.target.value);
+                    setErrors((er) => ({ ...er, perSender: undefined }));
                   }}
                   className="sm:max-w-40"
                 />
@@ -279,8 +345,8 @@ export function EditCampaignDialog({
                     <Input
                       type="number"
                       inputMode="numeric"
-                      min={10}
-                      max={1200}
+                      min={MIN_GAP_SEC}
+                      max={MAX_GAP_SEC}
                       value={minDelaySec}
                       onChange={(e) => {
                         setMinDelaySec(e.target.value);
@@ -292,8 +358,8 @@ export function EditCampaignDialog({
                     <Input
                       type="number"
                       inputMode="numeric"
-                      min={20}
-                      max={3600}
+                      min={MIN_GAP_SEC}
+                      max={MAX_GAP_SEC}
                       value={maxDelaySec}
                       onChange={(e) => {
                         setMaxDelaySec(e.target.value);
@@ -307,22 +373,58 @@ export function EditCampaignDialog({
                     {errors.delay}
                   </p>
                 ) : (
-                  <p className="text-xs text-muted-foreground">A random wait in this range is used between two emails.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Each mailbox waits a random time in this range between two emails. At least 45 seconds.
+                  </p>
                 )}
               </div>
             </section>
+              </>
+            )}
 
             <Separator />
 
             <section className="flex flex-col gap-4">
-              <h3 className="text-[15px] font-semibold">Replies and tracking</h3>
+              <h3 className="text-[15px] font-semibold">
+                {managedByAutopilot ? "Tracking" : "Replies, retries and tracking"}
+              </h3>
+              {managedByAutopilot ? null : (
+                <>
               <ToggleRow
                 id={stopId}
                 label="Stop on reply"
-                hint="When a lead replies, they get no more follow-ups."
+                hint="When a lead replies to any of your campaigns, this campaign sends them nothing more. Opt-outs always stop every campaign."
                 checked={stopOnReply}
                 onChange={setStopOnReply}
               />
+              <ToggleRow
+                id={retryId}
+                label="Retry failed emails"
+                hint="Try again when a send fails for a temporary reason."
+                checked={retryFailed}
+                onChange={(v) => {
+                  setRetryFailed(v);
+                  setErrors((er) => ({ ...er, retryCount: undefined }));
+                }}
+              >
+                {retryFailed ? (
+                  <Field label="Attempts" error={errors.retryCount} className="mt-3 max-w-40">
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      max={10}
+                      value={retryCount}
+                      onChange={(e) => {
+                        setRetryCount(e.target.value);
+                        setErrors((er) => ({ ...er, retryCount: undefined }));
+                      }}
+                    />
+                  </Field>
+                ) : null}
+              </ToggleRow>
+                </>
+              )}
               <ToggleRow
                 id={opensId}
                 label="Track opens"
@@ -340,16 +442,35 @@ export function EditCampaignDialog({
                   <h3 id={mailboxHeadingId} className="text-[15px] font-semibold">
                     Mailboxes
                   </h3>
-                  <p className="mt-1 text-[13px] text-muted-foreground">Emails rotate across the mailboxes you select.</p>
+                  {usesPool || managedByAutopilot ? null : (
+                    <p className="mt-1 text-[13px] text-muted-foreground">Emails rotate across the mailboxes you select.</p>
+                  )}
                 </div>
-                <span className="tabular shrink-0 text-xs text-subtle-foreground">
-                  {selectedSenderIds.length} selected
-                </span>
+                {usesPool || managedByAutopilot ? null : (
+                  <span className="tabular shrink-0 text-xs text-subtle-foreground">
+                    {selectedSenderIds.length} selected
+                  </span>
+                )}
               </div>
 
-              {availableSenders.length === 0 ? (
+              {usesPool ? (
+                <p className="rounded-lg border border-border bg-muted/50 px-4 py-3 text-[13px] text-muted-foreground">
+                  Shared AutoGTM mailbox pool. AutoGTM manages these mailboxes and spreads your emails across them,
+                  one mailbox per lead. They can&apos;t be changed here.
+                </p>
+              ) : managedByAutopilot ? (
+                <p className="rounded-lg border border-border bg-muted/50 px-4 py-3 text-[13px] text-muted-foreground">
+                  {campaign.senders.map((s) => s.email).join(", ") || "No mailboxes."} Set by Autopilot.
+                </p>
+              ) : availableSenders.length === 0 ? (
                 <p className="rounded-lg border border-dashed border-border-strong px-4 py-6 text-center text-[13px] text-muted-foreground">
-                  No mailboxes connected yet. Connect one under Senders first.
+                  No mailboxes are assigned to your account. The AutoGTM team sets them up on request.{" "}
+                  <Link
+                    href="/support"
+                    className="font-medium text-foreground underline decoration-border-strong underline-offset-4 hover:decoration-foreground"
+                  >
+                    Contact support
+                  </Link>
                 </p>
               ) : (
                 <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border" aria-describedby={errors.senders ? `${mailboxHeadingId}-error` : undefined}>
@@ -400,18 +521,80 @@ export function EditCampaignDialog({
   );
 }
 
+/** Read-only schedule, pace and stop-on-reply of an Autopilot campaign (they're set on its Autopilot page). */
+function AutopilotSettingsSummary({
+  campaign,
+  gap,
+  autopilotRunId,
+  headingId,
+}: {
+  campaign: CampaignData;
+  gap: { min: number; max: number };
+  autopilotRunId: string | null;
+  headingId: string;
+}) {
+  const tz = (campaign.sendingTimezone || "UTC").replace(/_/g, " ");
+  return (
+    <section className="flex flex-col gap-3" aria-labelledby={headingId}>
+      <div>
+        <h3 id={headingId} className="text-[15px] font-semibold">
+          Schedule and pace
+        </h3>
+        <p className="mt-1 text-[13px] text-muted-foreground">
+          Set by Autopilot.{" "}
+          {autopilotRunId ? (
+            <Link
+              href={`/chad-gtm/${autopilotRunId}`}
+              className="font-medium text-foreground underline decoration-border-strong underline-offset-4 hover:decoration-foreground"
+            >
+              Change the daily volume on the Autopilot page
+            </Link>
+          ) : null}
+        </p>
+      </div>
+      <DataList
+        items={[
+          {
+            label: "Daily limit",
+            value: campaign.dailyLimit ? `${campaign.dailyLimit.toLocaleString()} emails a day` : "Not set",
+          },
+          {
+            label: "Sending hours",
+            value: `${campaign.sendingWindowStart || "09:00"}–${campaign.sendingWindowEnd || "17:00"} (${tz})`,
+          },
+          { label: "Days", value: campaign.businessDaysOnly ? "Monday–Friday" : "Every day" },
+          { label: "Gap between emails", value: `${gap.min}–${gap.max} seconds per mailbox` },
+          {
+            label: "Stop on reply",
+            value: campaign.stopOnReply
+              ? "On: a lead who replies gets no more emails"
+              : "Off: follow-ups continue after a reply",
+          },
+        ]}
+      />
+    </section>
+  );
+}
+
+function isWholeIn(value: string, min: number, max: number): boolean {
+  const n = Number(value.trim());
+  return value.trim() !== "" && Number.isInteger(n) && n >= min && n <= max;
+}
+
 function ToggleRow({
   id,
   label,
   hint,
   checked,
   onChange,
+  children,
 }: {
   id: string;
   label: string;
   hint: string;
   checked: boolean;
   onChange: (value: boolean) => void;
+  children?: React.ReactNode;
 }) {
   return (
     <div className="flex items-start justify-between gap-4">
@@ -422,6 +605,7 @@ function ToggleRow({
         <p id={`${id}-hint`} className="mt-1 text-xs leading-relaxed text-muted-foreground">
           {hint}
         </p>
+        {children}
       </div>
       <Switch id={id} checked={checked} onCheckedChange={onChange} aria-describedby={`${id}-hint`} />
     </div>

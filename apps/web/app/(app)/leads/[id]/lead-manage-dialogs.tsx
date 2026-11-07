@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { leadListRenameSchema } from "@smartreach/validation";
 import {
   Alert,
@@ -18,6 +19,7 @@ import {
 } from "@smartreach/ui";
 import { bulkDeleteLeads, deleteLead, deleteLeadList, renameLeadList } from "@/lib/actions";
 import { isNextRedirect, isPermissionError } from "@/lib/lead-form";
+import type { ActiveListCampaign } from "@/lib/lead-list-guard";
 
 type LeadRef = { id: string; email: string };
 
@@ -222,6 +224,8 @@ export function DeleteListDialog({
   listId,
   name,
   leadCount,
+  activeCampaigns = [],
+  deleteBlockedReason = null,
   onOpenChange,
   onDeleted,
 }: {
@@ -230,9 +234,14 @@ export function DeleteListDialog({
   name: string;
   /** When known, the dialog says how many leads go with the list. */
   leadCount?: number;
+  /** Campaigns still sending to this list; while any exist the list can't be deleted (#33, #41). */
+  activeCampaigns?: ActiveListCampaign[];
+  /** listDeleteError(activeCampaigns), computed on the server. */
+  deleteBlockedReason?: string | null;
   onOpenChange: (open: boolean) => void;
   onDeleted: () => void;
 }) {
+  const blockedBy = deleteBlockedReason;
   const [pending, start] = useTransition();
   const [formError, setFormError] = useState<string | null>(null);
   const [denied, setDenied] = useState(false);
@@ -279,8 +288,24 @@ export function DeleteListDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Delete &ldquo;{name}&rdquo;?</DialogTitle>
-          <DialogDescription>{consequence}</DialogDescription>
+          <DialogDescription>{blockedBy ?? consequence}</DialogDescription>
         </DialogHeader>
+        {blockedBy && !denied ? (
+          <ul className="flex flex-col gap-1 text-sm">
+            {activeCampaigns.map((c) => (
+              <li key={c.id}>
+                <Link href={`/campaigns/${c.id}`} className="font-medium text-foreground underline-offset-4 hover:underline">
+                  {c.name}
+                </Link>
+                <span className="text-muted-foreground">
+                  {" "}
+                  · {c.isAutopilot ? "Autopilot, " : ""}
+                  {c.status}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         {denied ? (
           <PermissionDenied className="py-10" />
         ) : (
@@ -290,7 +315,13 @@ export function DeleteListDialog({
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
                 Cancel
               </Button>
-              <Button type="button" variant="destructive" onClick={confirm} loading={pending}>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={confirm}
+                loading={pending}
+                disabled={Boolean(blockedBy)}
+              >
                 Delete list
               </Button>
             </DialogFooter>

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ExternalLink, UserCheck, UserX, UsersRound } from "lucide-react";
-import { formatDateTime, timeAgo } from "@smartreach/shared";
+import { formatDate, formatDateTime, timeAgo } from "@smartreach/shared";
 import {
   Badge,
   Button,
@@ -70,7 +70,7 @@ export function AdminApprovalsView({
         return;
       }
       setPending((prev) => prev.filter((r) => r.userId !== row.userId));
-      setApproved((prev) => [{ ...row, approvedAt: new Date().toISOString() }, ...prev]);
+      setApproved((prev) => [{ ...row, approvedAt: new Date().toISOString(), revokedAt: null }, ...prev]);
       if (res.warning) toast.warning(`${row.email}: ${res.warning}`);
       else toast.success(`Approved ${row.email}${res.emailed ? " and emailed them." : "."}`);
     } catch {
@@ -87,7 +87,7 @@ export function AdminApprovalsView({
       }
       setApproved((prev) => prev.filter((r) => r.userId !== row.userId));
       setPending((prev) =>
-        [{ ...row, approvedAt: null }, ...prev].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+        [{ ...row, approvedAt: null, revokedAt: new Date().toISOString() }, ...prev].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       );
       toast.success(`Revoked ${row.email}.`);
     } catch {
@@ -226,6 +226,11 @@ function AccountTable({
                   <div className="flex items-center gap-2">
                     <span className="truncate font-medium">{row.name || row.email}</span>
                     {!row.emailVerified && <Badge variant="outline">Email not verified</Badge>}
+                    {!row.approvedAt && row.revokedAt ? (
+                      <Badge variant="neutral" title={formatDateTime(row.revokedAt)} suppressHydrationWarning>
+                        Revoked {formatDate(row.revokedAt)}
+                      </Badge>
+                    ) : null}
                   </div>
                   {row.name ? <div className="truncate text-xs text-muted-foreground">{row.email}</div> : null}
                 </TableCell>

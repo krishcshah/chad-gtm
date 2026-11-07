@@ -5,7 +5,6 @@ export const ADMIN_TABS = [
   "mailboxes",
   "directory",
   "support",
-  "bugs",
   "requests",
 ] as const;
 
@@ -16,7 +15,8 @@ const ALIASES: Record<string, AdminTab> = {
   analytics: "users",
   compliance: "requests",
   "data-removal": "requests",
-  "bug-reports": "bugs",
+  bugs: "support",
+  "bug-reports": "support",
   pool: "mailboxes",
 };
 
@@ -26,4 +26,11 @@ export function parseAdminTab(value: string | null | undefined): AdminTab {
   const v = value.toLowerCase();
   if ((ADMIN_TABS as readonly string[]).includes(v)) return v as AdminTab;
   return ALIASES[v] ?? "approvals";
+}
+
+/** Old Bug reports links (`?tab=bugs`) open Support filtered to bug tickets. */
+export function adminTabSupportCategory(value: string | null | undefined): "bug_report" | null {
+  if (!value) return null;
+  const v = value.toLowerCase();
+  return v === "bugs" || v === "bug-reports" || v === "bug_report" ? "bug_report" : null;
 }

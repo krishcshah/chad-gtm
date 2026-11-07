@@ -3,17 +3,24 @@ import { ArrowRight, MapPinOff } from "lucide-react";
 import { POSTAL_SETTINGS_HREF, type PostalHoldState } from "@/lib/postal-hold-policy";
 
 export function postalHoldHeadline(hold: Pick<PostalHoldState, "campaigns">, scope: "account" | "campaign"): string {
-  if (scope === "campaign") return "This campaign is paused: add your business postal address.";
+  if (scope === "campaign") return "This campaign is held: add your business postal address.";
   const n = hold.campaigns;
-  if (n === 1) return "Your campaign is paused: add your business postal address.";
-  if (n > 1) return `Your ${n} campaigns are paused: add your business postal address.`;
-  return "Your sends are paused: add your business postal address.";
+  if (n === 1) return "Your campaign is held: add your business postal address.";
+  if (n > 1) return `Your ${n} campaigns are held: add your business postal address.`;
+  return "Your sends are held: add your business postal address.";
 }
+
+export const INCOMPLETE_POSTAL_ADDRESS_COPY =
+  "Your postal address looks incomplete. Running campaigns keep sending for now, but campaigns can't start or resume until it has a street or P.O. box, city, postcode and country.";
+
+const settingsLinkClass =
+  "inline-flex h-8 shrink-0 items-center gap-1.5 self-start rounded-md border border-border-strong bg-card px-3 font-medium text-foreground shadow-xs transition-colors hover:bg-muted sm:self-auto";
 
 /**
  * Shown on the dashboard, campaign pages and mission control when the engine
  * is holding this account's sends because workspace_settings.postal_address
- * is blank. Campaigns still say "running" there, so this is the only signal.
+ * is blank (status badges say "Held: needs postal address" too). With a saved
+ * but incomplete address it shows a softer "fix your address" notice.
  */
 export function PostalHoldNotice({
   hold,
@@ -24,6 +31,23 @@ export function PostalHoldNotice({
   scope?: "account" | "campaign";
   className?: string;
 }) {
+  if (!hold.held && hold.incomplete) {
+    return (
+      <div
+        role="status"
+        data-testid="postal-incomplete-notice"
+        className={`flex flex-col gap-3 rounded-lg border border-warning/25 bg-warning-soft px-4 py-3 text-[13px] leading-relaxed text-foreground sm:flex-row sm:items-center ${className}`}
+      >
+        <div className="flex min-w-0 flex-1 items-start gap-2">
+          <MapPinOff className="mt-0.5 size-4 shrink-0 text-warning-text" aria-hidden />
+          <p>{INCOMPLETE_POSTAL_ADDRESS_COPY}</p>
+        </div>
+        <Link href={POSTAL_SETTINGS_HREF} className={settingsLinkClass}>
+          Settings → Compliance <ArrowRight className="size-3.5" />
+        </Link>
+      </div>
+    );
+  }
   if (!hold.held) return null;
   return (
     <div
@@ -45,10 +69,7 @@ export function PostalHoldNotice({
           Sending resumes on its own within the hour after you save it.</span>
         </p>
       </div>
-      <Link
-        href={POSTAL_SETTINGS_HREF}
-        className="inline-flex h-8 shrink-0 items-center gap-1.5 self-start rounded-md border border-border-strong bg-card px-3 font-medium text-foreground shadow-xs transition-colors hover:bg-muted sm:self-auto"
-      >
+      <Link href={POSTAL_SETTINGS_HREF} className={settingsLinkClass}>
         Settings → Compliance <ArrowRight className="size-3.5" />
       </Link>
     </div>

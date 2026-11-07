@@ -16,7 +16,7 @@ export function RequestHistory({ items }: { items: AgentRequestView[] }) {
     <Card>
       <CardHeader>
         <CardTitle>Recently closed</CardTitle>
-        <CardDescription>Requests you answered or dismissed.</CardDescription>
+        <CardDescription>Requests you answered, or dismissed to take the conversation over.</CardDescription>
       </CardHeader>
       <ul className="mt-3 divide-y divide-border border-t border-border">
         {shown.map((item) => {
@@ -33,7 +33,7 @@ export function RequestHistory({ items }: { items: AgentRequestView[] }) {
                 ) : null}
               </div>
               <Badge variant={resolved ? "success" : "outline"} className="mt-0.5 shrink-0">
-                {resolved ? "Answered" : "Dismissed"}
+                {resolved ? "Answered" : "Taken over"}
               </Badge>
             </li>
           );

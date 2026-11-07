@@ -13,6 +13,8 @@ export interface StoredImportJob {
   imported: number;
   skipped: number;
   invalid: number;
+  /** On the blocklist or opted out, so not imported (older stored jobs have none). */
+  blocked?: number;
   status: "running" | "completed" | "failed";
   error?: string | null;
   mapping: Record<string, string | null>;

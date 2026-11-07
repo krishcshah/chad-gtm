@@ -34,7 +34,7 @@ import {
   toast,
 } from "@smartreach/ui";
 import type { DataRemovalRequestDTO, DataRemovalStatus } from "@/lib/data-removal";
-import { updateDataRemovalStatusAction } from "@/lib/data-removal-actions";
+import { eraseDataRemovalAction, updateDataRemovalStatusAction } from "@/lib/data-removal-actions";
 import { NoMatches, RowActionsButton, SearchField, Toolbar, countBy, downloadCsv, todayStamp, withCount } from "./admin-ui";
 
 const STATUSES: {
@@ -57,7 +57,7 @@ function statusMeta(status: string) {
 const CONFIRM_COPY: Partial<Record<DataRemovalStatus, { title: string; description: string; label: string }>> = {
   completed: {
     title: "Mark this request as completed?",
-    description: "Only do this after their data has been deleted. It records that the request has been fulfilled.",
+    description: "Only possible after their data is deleted. It records that the request has been fulfilled.",
     label: "Mark as completed",
   },
   rejected: {
@@ -83,6 +83,8 @@ export function AdminDataRemovalView({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [confirm, setConfirm] = useState<{ request: DataRemovalRequestDTO; status: DataRemovalStatus } | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [eraseTarget, setEraseTarget] = useState<DataRemovalRequestDTO | null>(null);
+  const [eraseOpen, setEraseOpen] = useState(false);
 
   const statusCounts = useMemo(() => countBy(requests, (r) => r.status), [requests]);
   const pendingCount = statusCounts.pending ?? 0;
@@ -124,6 +126,39 @@ export function AdminDataRemovalView({
     } finally {
       setUpdatingId(null);
     }
+  };
+
+  const eraseData = async (request: DataRemovalRequestDTO) => {
+    setUpdatingId(request.id);
+    try {
+      const res = await eraseDataRemovalAction(request.id);
+      if (res.ok && "directoryDeleted" in res) {
+        setRequests((prev) =>
+          prev.map((r) =>
+            r.id === request.id && r.status === "pending"
+              ? { ...r, status: "in_progress", updatedAt: new Date().toISOString() }
+              : r,
+          ),
+        );
+        const n = res.directoryDeleted ?? 0;
+        const m = res.leadsDeleted ?? 0;
+        toast.success(
+          `Deleted ${n} directory ${n === 1 ? "record" : "records"} and ${m} ${m === 1 ? "lead" : "leads"}`,
+        );
+      } else {
+        toast.error(res.error || "Could not delete their data.");
+      }
+    } catch (err) {
+      console.error("Failed to delete removal request data:", err);
+      toast.error("Could not delete their data. Try again.");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const requestErase = (request: DataRemovalRequestDTO) => {
+    setEraseTarget(request);
+    setEraseOpen(true);
   };
 
   const requestStatus = (request: DataRemovalRequestDTO, status: DataRemovalStatus) => {
@@ -243,6 +278,7 @@ export function AdminDataRemovalView({
                         request={r}
                         disabled={updatingId === r.id}
                         onView={() => openRequest(r.id)}
+                        onErase={() => requestErase(r)}
                         onStatus={(s) => requestStatus(r, s)}
                       />
                     </TableCell>
@@ -300,6 +336,7 @@ export function AdminDataRemovalView({
                   <StatusMenu
                     request={selected}
                     disabled={updatingId === selected.id}
+                    onErase={() => requestErase(selected)}
                     onStatus={(s) => requestStatus(selected, s)}
                     trigger="button"
                   />
@@ -327,6 +364,22 @@ export function AdminDataRemovalView({
           if (confirm) await applyStatus(confirm.request, confirm.status);
         }}
       />
+
+      <ConfirmDialog
+        open={eraseOpen}
+        onOpenChange={setEraseOpen}
+        title="Delete their data?"
+        description={
+          eraseTarget
+            ? `Delete ${eraseTarget.contactEmail} from the lead directory and every customer's lead lists? The address stays on the suppression list, so nobody can email it again.`
+            : undefined
+        }
+        confirmLabel="Delete their data"
+        destructive
+        onConfirm={async () => {
+          if (eraseTarget) await eraseData(eraseTarget);
+        }}
+      />
     </div>
   );
 }
@@ -336,12 +389,14 @@ function StatusMenu({
   disabled,
   onStatus,
   onView,
+  onErase,
   trigger = "icon",
 }: {
   request: DataRemovalRequestDTO;
   disabled: boolean;
   onStatus: (status: DataRemovalStatus) => void;
   onView?: () => void;
+  onErase?: () => void;
   trigger?: "icon" | "button";
 }) {
   return (
@@ -359,6 +414,14 @@ function StatusMenu({
             <DropdownMenuItem onSelect={onView}>View request</DropdownMenuItem>
             <DropdownMenuItem asChild>
               <a href={`mailto:${request.contactEmail}`}>Email {request.contactEmail}</a>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
+        {onErase ? (
+          <>
+            <DropdownMenuItem destructive disabled={request.status === "completed"} onSelect={onErase}>
+              Delete their data
             </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>

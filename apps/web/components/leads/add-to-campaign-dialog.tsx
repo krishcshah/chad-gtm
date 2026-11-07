@@ -101,9 +101,15 @@ export function AddToCampaignDialog({
       if (res.ok) {
         const listId = res.data?.leadListId;
         const added = res.data?.count;
+        const skipped = res.data?.skipped ?? 0;
         toast.success(
           typeof added === "number" ? `Added ${added.toLocaleString()} ${added === 1 ? "person" : "people"} to the list` : "Added to the list",
-          listId ? { action: { label: "Open list", onClick: () => router.push(`/leads/${listId}`) } } : undefined,
+          {
+            ...(skipped > 0
+              ? { description: `${skipped.toLocaleString()} were already on the list, on a blocklist or opted out.` }
+              : {}),
+            ...(listId ? { action: { label: "Open list", onClick: () => router.push(`/leads/${listId}`) } } : {}),
+          },
         );
         onOpenChange(false);
         setNewListName("");

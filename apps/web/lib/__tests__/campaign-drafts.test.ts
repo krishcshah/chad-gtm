@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 import {
+  ensureCampaignLeadSnapshot,
   getCampaignWizardStateForUser,
   publishCampaignForUser,
   saveCampaignDraftForUser,
@@ -35,7 +37,7 @@ type Store = {
   campaigns: CampaignRow[];
   campaignSenders: { campaignId: string; senderId: string }[];
   campaignLeads: { id: string; campaignId: string; leadId: string; status: string }[];
-  leads: { id: string; listId: string; status: string; deletedAt: string | null }[];
+  leads: { id: string; listId: string; status: string; deletedAt: string | null; email?: string }[];
   senderAccounts: { id: string; userId: string; isSystemPool: boolean; deletedAt: string | null }[];
 };
 
@@ -69,6 +71,12 @@ function extractFilters(cond: unknown): Record<string, unknown> {
     if (!node || typeof node !== "object") return;
     const n = node as { queryChunks?: unknown[] };
     if (Array.isArray(n.queryChunks)) {
+      // A correlated subquery (NOT EXISTS ...) is about other rows: the fake
+      // can't evaluate it, and its params must not filter the outer table.
+      const text = n.queryChunks
+        .map((c) => (Array.isArray((c as { value?: unknown })?.value) ? (c as { value: string[] }).value.join("") : ""))
+        .join("");
+      if (/\bexists\s*\(/i.test(text)) return;
       const chunks = n.queryChunks as { name?: string; value?: unknown; constructor?: { name?: string } }[];
       for (let i = 0; i < chunks.length; i++) {
         const col = chunks[i];
@@ -92,6 +100,9 @@ function applyFilters(rows: Record<string, unknown>[], filters: Record<string, u
   return rows.filter((row) => {
     for (const [k, v] of Object.entries(filters)) {
       const key = k in row ? k : camelFromSnake(k);
+      // A column the row doesn't have comes from a correlated subquery
+      // (e.g. NOT EXISTS over campaign_leads); the fake can't evaluate it.
+      if (!(key in row)) continue;
       if (row[key] !== v) return false;
     }
     // Soft-deleted rows: if filter didn't mention deletedAt, still require null
@@ -574,5 +585,169 @@ describe("importLeads listId (F08a contract)", () => {
       listId: "resolved-list",
     };
     expect(data.listId).toBe("resolved-list");
+  });
+});
+
+describe("ensureCampaignLeadSnapshot onlyMissing (#40)", () => {
+  function seedSnapshot() {
+    seedDraft({ status: "running", leadListId: "list-1" });
+    store.leads.push(
+      { id: "lead-1", listId: "list-1", status: "contacted", deletedAt: null, email: "a@x.com" },
+      { id: "lead-2", listId: "list-1", status: "new", deletedAt: null, email: "b@x.com" },
+    );
+    store.campaignLeads.push(
+      { id: "cl-a", campaignId: "camp-1", leadId: "lead-1", status: "sent" },
+      { id: "cl-b", campaignId: "camp-1", leadId: "lead-2", status: "queued" },
+    );
+  }
+
+  it("inserts only the list leads not in the campaign yet and returns that count", async () => {
+    seedSnapshot();
+    store.leads.push(
+      { id: "lead-3", listId: "list-1", status: "new", deletedAt: null, email: "c@x.com" },
+      { id: "lead-4", listId: "list-1", status: "new", deletedAt: null, email: "d@x.com" },
+      // Never added: already emailed, deleted, or on another list.
+      { id: "lead-5", listId: "list-1", status: "replied", deletedAt: null, email: "e@x.com" },
+      { id: "lead-6", listId: "list-1", status: "new", deletedAt: "2026-01-01", email: "f@x.com" },
+      { id: "lead-7", listId: "list-2", status: "new", deletedAt: null, email: "g@x.com" },
+    );
+    const n = await ensureCampaignLeadSnapshot(createStoreDb() as never, "camp-1", "list-1", { onlyMissing: true });
+    expect(n).toBe(2);
+    const ids = store.campaignLeads.filter((r) => r.campaignId === "camp-1").map((r) => r.leadId);
+    expect(ids.sort()).toEqual(["lead-1", "lead-2", "lead-3", "lead-4"]);
+    expect(store.campaignLeads.find((r) => r.leadId === "lead-1")?.status).toBe("sent");
+  });
+
+  it("returns 0 and inserts nothing when every list lead is already in the campaign", async () => {
+    seedSnapshot();
+    const n = await ensureCampaignLeadSnapshot(createStoreDb() as never, "camp-1", "list-1", { onlyMissing: true });
+    expect(n).toBe(0);
+    expect(store.campaignLeads).toHaveLength(2);
+  });
+
+  it("skips a second new lead row with the same address", async () => {
+    seedSnapshot();
+    store.leads.push(
+      { id: "lead-3", listId: "list-1", status: "new", deletedAt: null, email: "C@x.com" },
+      { id: "lead-4", listId: "list-1", status: "new", deletedAt: null, email: "c@x.com" },
+    );
+    const n = await ensureCampaignLeadSnapshot(createStoreDb() as never, "camp-1", "list-1", { onlyMissing: true });
+    expect(n).toBe(1);
+  });
+
+  it("excludes addresses already in this campaign in SQL (not only by lead id)", async () => {
+    seedSnapshot();
+    let where: unknown;
+    const db = createStoreDb();
+    const realSelect = db.select.bind(db);
+    db.select = ((shape?: Record<string, unknown>) => {
+      const chain = realSelect(shape);
+      const realWhere = chain.where.bind(chain);
+      chain.where = (cond: unknown) => {
+        if (shape && "email" in shape) where = cond;
+        return realWhere(cond);
+      };
+      return chain;
+    }) as typeof db.select;
+    await ensureCampaignLeadSnapshot(db as never, "camp-1", "list-1", { onlyMissing: true });
+    const q = new PgDialect().sqlToQuery(where as never);
+    expect(q.sql).toContain("not exists");
+    expect(q.sql).toContain('inner join "leads" as snapshot_other_lead on snapshot_other_lead.id = "campaign_leads"."lead_id"');
+    expect(q.sql).toContain('lower(snapshot_other_lead.email) = lower("leads"."email")');
+    expect(q.params).toEqual(expect.arrayContaining(["list-1", "new", "camp-1"]));
+  });
+
+  it("without onlyMissing an existing snapshot is left untouched", async () => {
+    seedSnapshot();
+    store.leads.push({ id: "lead-3", listId: "list-1", status: "new", deletedAt: null, email: "c@x.com" });
+    const n = await ensureCampaignLeadSnapshot(createStoreDb() as never, "camp-1", "list-1");
+    expect(n).toBe(2);
+    expect(store.campaignLeads).toHaveLength(2);
+  });
+});
+
+describe("snapshot rules (#31)", () => {
+  /** A store db that records the SQL of every select on `leads` that reads lead ids. */
+  function capturingDb() {
+    const wheres: unknown[] = [];
+    const db = createStoreDb();
+    const realSelect = db.select.bind(db);
+    db.select = ((shape?: Record<string, unknown>) => {
+      const chain = realSelect(shape);
+      const realWhere = chain.where.bind(chain);
+      chain.where = (cond: unknown) => {
+        if (shape && "id" in shape && Object.keys(shape).length <= 2) wheres.push(cond);
+        return realWhere(cond);
+      };
+      return chain;
+    }) as typeof db.select;
+    return { db, wheres };
+  }
+  const render = (w: unknown) => new PgDialect().sqlToQuery(w as never);
+  const leadSnapshotQuery = (wheres: unknown[]) =>
+    wheres.map(render).find((q) => q.sql.includes('"leads"."list_id"'))!;
+
+  const full = {
+    name: "Go",
+    leadListId: "list-1",
+    senderIds: ["s1"],
+    templateId: "t1",
+    startMode: "now" as const,
+    sendingTimezone: "UTC",
+  };
+
+  it("publish without re-engage takes only 'new' leads and applies the 90-day rule", async () => {
+    store.leads.push({ id: "lead-1", listId: "list-1", status: "new", deletedAt: null });
+    const { db, wheres } = capturingDb();
+    const result = await publishCampaignForUser(db as never, "user-1", full, null);
+    expect(result.ok).toBe(true);
+    const q = leadSnapshotQuery(wheres);
+    expect(q.params).toContain("new");
+    expect(q.params).not.toContain("contacted");
+    expect(q.sql).toContain('"sendability_other_campaign_lead"."created_at" >=');
+    expect(q.params).toContain("user-1");
+  });
+
+  it("publish passes reengageContacted to the snapshot", async () => {
+    store.leads.push({ id: "lead-1", listId: "list-1", status: "contacted", deletedAt: null });
+    const { db, wheres } = capturingDb();
+    const result = await publishCampaignForUser(db as never, "user-1", { ...full, reengageContacted: true }, null);
+    expect(result.ok).toBe(true);
+    const q = leadSnapshotQuery(wheres);
+    expect(q.params).toEqual(expect.arrayContaining(["new", "contacted"]));
+    expect(q.sql).not.toContain('"sendability_other_campaign_lead"."created_at" >=');
+  });
+
+  it("publishing an existing draft also applies the rules", async () => {
+    seedDraft({ name: "Drafty" });
+    store.leads.push({ id: "lead-1", listId: "list-1", status: "new", deletedAt: null });
+    const { db, wheres } = capturingDb();
+    const result = await publishCampaignForUser(db as never, "user-1", { ...full, id: "camp-1", reengageContacted: true }, null);
+    expect(result.ok).toBe(true);
+    const q = leadSnapshotQuery(wheres);
+    expect(q.params).toContain("contacted");
+    expect(q.params).toContain("camp-1");
+  });
+
+  it("onlyMissing inserts only leads not already in the campaign, with the same rules", async () => {
+    seedDraft({ status: "running", leadListId: "list-1" });
+    store.leads.push(
+      { id: "lead-1", listId: "list-1", status: "new", deletedAt: null, email: "a@x.com" },
+      { id: "lead-2", listId: "list-1", status: "new", deletedAt: null, email: "b@x.com" },
+    );
+    store.campaignLeads.push({ id: "cl-a", campaignId: "camp-1", leadId: "lead-1", status: "sent" });
+    const { db, wheres } = capturingDb();
+    const n = await ensureCampaignLeadSnapshot(db as never, "camp-1", "list-1", { onlyMissing: true });
+    expect(n).toBe(1);
+    expect(store.campaignLeads.map((r) => r.leadId).sort()).toEqual(["lead-1", "lead-2"]);
+    const q = wheres.map(render).find((x) => x.sql.includes("sendability_other_campaign"));
+    expect(q?.sql).toContain("not exists");
+  });
+
+  it("takes nobody when the campaign's owner can't be found (fails closed)", async () => {
+    store.leads.push({ id: "lead-1", listId: "list-1", status: "new", deletedAt: null });
+    const n = await ensureCampaignLeadSnapshot(createStoreDb() as never, "missing-campaign", "list-1");
+    expect(n).toBe(0);
+    expect(store.campaignLeads).toHaveLength(0);
   });
 });

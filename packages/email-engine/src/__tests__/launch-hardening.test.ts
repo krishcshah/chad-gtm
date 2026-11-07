@@ -279,20 +279,34 @@ describe("resolveStickySender", () => {
   });
   it("waits (does not switch) when the step-1 mailbox is only at capacity", () => {
     const d = resolveStickySender({ stepPosition: 3, stickySenderId: "a", senders: [a, b], hasCapacity: () => false });
-    expect(d.kind).toBe("defer");
+    expect(d).toEqual({ kind: "defer", reason: "capacity" });
   });
-  it("switches only when the step-1 mailbox is gone or disabled", () => {
+  it("switches only when the step-1 mailbox is gone (retired or detached)", () => {
     expect(resolveStickySender({ stepPosition: 2, stickySenderId: "zz", senders: [a, b], hasCapacity: yes }).kind).toBe(
       "rotate",
     );
+    const retired = sender({ id: "a", deletedAt: "2026-11-01T00:00:00Z" } as Partial<SenderRow>);
+    expect(resolveStickySender({ stepPosition: 2, stickySenderId: "a", senders: [retired, b], hasCapacity: yes }).kind).toBe(
+      "rotate",
+    );
+  });
+  it("waits for a paused or failed step-1 mailbox instead of switching persona", () => {
     const paused = sender({ id: "a", status: "paused" });
     const failed = sender({ id: "a", status: "failed" });
-    expect(resolveStickySender({ stepPosition: 2, stickySenderId: "a", senders: [paused, b], hasCapacity: yes }).kind).toBe(
-      "rotate",
-    );
-    expect(resolveStickySender({ stepPosition: 2, stickySenderId: "a", senders: [failed, b], hasCapacity: yes }).kind).toBe(
-      "rotate",
-    );
+    expect(resolveStickySender({ stepPosition: 2, stickySenderId: "a", senders: [paused, b], hasCapacity: yes })).toEqual({
+      kind: "defer",
+      reason: "unavailable",
+    });
+    expect(resolveStickySender({ stepPosition: 2, stickySenderId: "a", senders: [failed, b], hasCapacity: yes })).toEqual({
+      kind: "defer",
+      reason: "unavailable",
+    });
+  });
+  it("waits for a step-1 mailbox whose replies can't be read (inbox login failing)", () => {
+    const unreadable = sender({ id: "a", imapHost: "imap.pool.example", imapStatus: "failed" });
+    expect(
+      resolveStickySender({ stepPosition: 2, stickySenderId: "a", senders: [unreadable, b], hasCapacity: yes }),
+    ).toEqual({ kind: "defer", reason: "unavailable" });
   });
 });
 

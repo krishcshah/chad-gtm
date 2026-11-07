@@ -1,4 +1,14 @@
-import { DEFAULTS, MAX_SEQUENCE_STEPS, TIMEZONES } from "@smartreach/shared";
+import {
+  companyNameProblem,
+  DEFAULTS,
+  HARD_MAX_PER_SENDER_PER_DAY,
+  MAX_SEQUENCE_STEPS,
+  POSTAL_ADDRESS_PROBLEM,
+  COMPANY_NAME_PROBLEM,
+  effectiveGapRange,
+  postalAddressProblem,
+  TIMEZONES,
+} from "@smartreach/shared";
 import { z } from "zod";
 
 /* ─── Auth ─────────────────────────────────────────────────────────────── */
@@ -90,7 +100,18 @@ export const leadListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
   search: z.string().trim().max(200).optional(),
   status: z
-    .enum(["new", "contacted", "replied", "bounced", "unsubscribed", "blocked"])
+    .enum([
+      "new",
+      "contacted",
+      "replied",
+      "interested",
+      "meeting_booked",
+      "won",
+      "lost",
+      "bounced",
+      "unsubscribed",
+      "blocked",
+    ])
     .optional(),
   listId: z.string().optional(),
   tagId: z.string().optional(),
@@ -112,21 +133,42 @@ export const uniboxReplyTagSchema = z.enum(UNIBOX_REPLY_TAG_VALUES);
 export const setUniboxReplyTagSchema = z.object({
   replyId: z.string().min(1),
   tag: uniboxReplyTagSchema.nullable(),
+  /** With tag 'not_interested': also stop every campaign and the agent, and blocklist them. */
+  stopContacting: z.boolean().optional(),
 });
 export type SetUniboxReplyTagInput = z.infer<typeof setUniboxReplyTagSchema>;
 
+/** Every stored lead status (list filter). */
 export const LEAD_STATUS_VALUES = [
   "new",
   "contacted",
   "replied",
+  "interested",
+  "meeting_booked",
+  "won",
+  "lost",
   "bounced",
   "unsubscribed",
   "blocked",
 ] as const;
 export const leadStatusSchema = z.enum(LEAD_STATUS_VALUES);
+/**
+ * Statuses a person may set by hand. Bounced, unsubscribed and blocked come
+ * from the Blocklist (suppressions) and the engine, never from the picker.
+ */
+export const LEAD_PICKABLE_STATUS_VALUES = [
+  "new",
+  "contacted",
+  "replied",
+  "interested",
+  "meeting_booked",
+  "won",
+  "lost",
+] as const;
+export const leadPickableStatusSchema = z.enum(LEAD_PICKABLE_STATUS_VALUES);
 export const updateLeadStatusSchema = z.object({
   leadId: z.string().min(1),
-  status: leadStatusSchema,
+  status: leadPickableStatusSchema,
 });
 export type UpdateLeadStatusInput = z.infer<typeof updateLeadStatusSchema>;
 
@@ -217,6 +259,10 @@ const hhmm = z
   .transform((s) => s.trim().slice(0, 5))
   .pipe(z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM"));
 
+/** Gap between two emails from one mailbox: accepted as before, then clamped to what the engine uses (45-3600 s). */
+const clampGapSec = (n: number) => effectiveGapRange(n, n).min;
+const gapSec = z.coerce.number().int().min(5).max(86_400);
+
 export const campaignCreateSchema = z
   .object({
     name: z.string().trim().min(1, "Give the campaign a name").max(140),
@@ -233,13 +279,16 @@ export const campaignCreateSchema = z
     sendingWindowStart: hhmm.default(DEFAULTS.sendingWindowStart),
     sendingWindowEnd: hhmm.default(DEFAULTS.sendingWindowEnd),
     dailyLimit: z.coerce.number().int().min(1).max(100_000).default(DEFAULTS.dailyCampaignLimit),
-    minDelaySec: z.coerce.number().int().min(5).max(86_400).default(DEFAULTS.minDelaySec),
-    maxDelaySec: z.coerce.number().int().min(5).max(86_400).default(DEFAULTS.maxDelaySec),
+    minDelaySec: gapSec.default(DEFAULTS.minDelaySec).transform(clampGapSec),
+    maxDelaySec: gapSec.default(DEFAULTS.maxDelaySec).transform(clampGapSec),
+    // Clamped, not rejected: no mailbox sends more than 30 a day, and old
+    // drafts that stored 50 must still save.
     maxEmailsPerSenderPerDay: z.coerce
       .number()
       .int()
       .min(1)
       .max(5000)
+      .transform((n) => Math.min(n, HARD_MAX_PER_SENDER_PER_DAY))
       .default(DEFAULTS.maxEmailsPerSenderPerDay),
     stopOnReply: z.boolean().default(true),
     retryFailed: z.boolean().default(true),
@@ -280,9 +329,15 @@ export const campaignDraftSchema = z
     sendingWindowStart: hhmm.optional(),
     sendingWindowEnd: hhmm.optional(),
     dailyLimit: z.coerce.number().int().min(1).max(100_000).optional(),
-    minDelaySec: z.coerce.number().int().min(5).max(86_400).optional(),
-    maxDelaySec: z.coerce.number().int().min(5).max(86_400).optional(),
-    maxEmailsPerSenderPerDay: z.coerce.number().int().min(1).max(5000).optional(),
+    minDelaySec: gapSec.transform(clampGapSec).optional(),
+    maxDelaySec: gapSec.transform(clampGapSec).optional(),
+    maxEmailsPerSenderPerDay: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(5000)
+      .transform((n) => Math.min(n, HARD_MAX_PER_SENDER_PER_DAY))
+      .optional(),
     stopOnReply: z.boolean().optional(),
     retryFailed: z.boolean().optional(),
     retryCount: z.coerce.number().int().min(0).max(10).optional(),
@@ -306,7 +361,11 @@ export type CampaignDraftInput = z.infer<typeof campaignDraftSchema>;
 
 /** Full create (+ optional id to publish an existing draft). */
 export const campaignPublishSchema = campaignCreateSchema.and(
-  z.object({ id: z.string().min(1).optional() }),
+  z.object({
+    id: z.string().min(1).optional(),
+    /** Also email leads your other campaigns already emailed (off by default). */
+    reengageContacted: z.boolean().optional(),
+  }),
 );
 export type CampaignPublishInput = z.infer<typeof campaignPublishSchema>;
 
@@ -399,9 +458,20 @@ export function expandSuppressionImportLines(
 }
 
 export const workspaceSettingsSchema = z.object({
-  companyName: z.string().trim().max(200).default(""),
-  /** Optional storage only — not required to start/send campaigns. */
-  postalAddress: z.string().trim().max(1000).default(""),
+  /** Required to start campaigns; blank is allowed to save. */
+  companyName: z
+    .string()
+    .trim()
+    .max(200)
+    .refine((v) => v === "" || !companyNameProblem(v), { message: COMPANY_NAME_PROBLEM })
+    .default(""),
+  /** Required to start campaigns; blank is allowed to save. */
+  postalAddress: z
+    .string()
+    .trim()
+    .max(1000)
+    .refine((v) => v === "" || !postalAddressProblem(v), { message: POSTAL_ADDRESS_PROBLEM })
+    .default(""),
   unsubscribeBaseUrl: z
     .string()
     .trim()

@@ -241,21 +241,22 @@ describe("pool campaign = autopilot-linked campaign, not just attached pool mail
   const RUN_LINK = [{ id: "run-1" }];
 
   it("updateCampaignSettings refuses detaching pool senders from an autopilot campaign", async () => {
-    state.selects = [CAMPAIGN, POOL_ATTACHED, RUN_LINK];
+    // Select order: campaign, run link (isAutopilotCampaign), attached mailboxes.
+    state.selects = [CAMPAIGN, RUN_LINK, POOL_ATTACHED];
     const r = await updateCampaignSettings("camp-auto", { senderIds: [] });
     expect(r).toMatchObject({ ok: false, error: POOL_CAMPAIGN_SENDERS_LOCKED_ERROR });
     expect(state.writes).toEqual([]);
   });
 
   it("updateCampaignSettings refuses adding own senders to an autopilot campaign that has none left", async () => {
-    state.selects = [CAMPAIGN, [], RUN_LINK];
+    state.selects = [CAMPAIGN, RUN_LINK, []];
     const r = await updateCampaignSettings("camp-auto", { senderIds: ["own-1"] });
     expect(r).toMatchObject({ ok: false, error: POOL_CAMPAIGN_SENDERS_LOCKED_ERROR });
     expect(state.writes).toEqual([]);
   });
 
   it("updateCampaignSettings on an autopilot campaign with the same senders saves other settings, leaves senders alone", async () => {
-    state.selects = [CAMPAIGN, POOL_ATTACHED, RUN_LINK];
+    state.selects = [CAMPAIGN, RUN_LINK, POOL_ATTACHED];
     const r = await updateCampaignSettings("camp-auto", { name: "Renamed", senderIds: ["pool-1"] });
     expect(r.ok).toBe(true);
     expect(state.writes).not.toContain("delete");
@@ -264,8 +265,8 @@ describe("pool campaign = autopilot-linked campaign, not just attached pool mail
   it("updateCampaignSettings still lets a client swap mailboxes on a manual campaign", async () => {
     state.selects = [
       CAMPAIGN,
-      [{ id: "own-1", userId: "u1", isSystemPool: false, deletedAt: null }],
       [],
+      [{ id: "own-1", userId: "u1", isSystemPool: false, deletedAt: null }],
       [{ id: "own-2", userId: "u1", isSystemPool: false, deletedAt: null }],
     ];
     const r = await updateCampaignSettings("camp-auto", { senderIds: ["own-2"] });

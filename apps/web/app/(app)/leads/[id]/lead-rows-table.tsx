@@ -1,6 +1,6 @@
 "use client";
 
-import { MoreHorizontal, Pencil, SearchX, Trash2 } from "lucide-react";
+import { Ban, MoreHorizontal, Pencil, SearchX, Trash2 } from "lucide-react";
 import { timeAgo } from "@smartreach/shared";
 import {
   Button,
@@ -21,7 +21,7 @@ import {
   cn,
 } from "@smartreach/ui";
 import type { LeadRow } from "./lead-table";
-import { LeadStatusSelect } from "./lead-status";
+import { LeadBlockBadge, LeadStatusSelect } from "./lead-status";
 import { LeadTagChips, type TagOpt } from "./lead-tags";
 
 function fullName(row: LeadRow) {
@@ -41,10 +41,12 @@ export function LeadRowsTable({
   loading,
   statusDisabled,
   filtered,
+  readOnly = false,
   onToggleAll,
   onToggleOne,
   onEdit,
   onDelete,
+  onBlock,
   onStatusChange,
   onClearFilters,
 }: {
@@ -54,10 +56,13 @@ export function LeadRowsTable({
   loading: boolean;
   statusDisabled: boolean;
   filtered: boolean;
+  /** Autopilot list for a non-admin: lead details can't be edited (#41). */
+  readOnly?: boolean;
   onToggleAll: (checked: boolean) => void;
   onToggleOne: (id: string, checked: boolean) => void;
   onEdit: (row: LeadRow) => void;
   onDelete: (row: LeadRow) => void;
+  onBlock: (row: LeadRow) => void;
   onStatusChange: (leadId: string, status: string) => void;
   onClearFilters: () => void;
 }) {
@@ -131,14 +136,20 @@ export function LeadRowsTable({
                     />
                   </TableCell>
                   <TableCell className="max-w-[18rem] py-2">
-                    <button
-                      type="button"
-                      onClick={() => onEdit(r)}
-                      className="block max-w-full truncate rounded-sm text-left font-medium text-foreground outline-none hover:underline hover:decoration-border-strong hover:underline-offset-4 focus-visible:ring-[3px] focus-visible:ring-ring"
-                      title={r.email}
-                    >
-                      {r.email}
-                    </button>
+                    {readOnly ? (
+                      <span className="block max-w-full truncate font-medium text-foreground" title={r.email}>
+                        {r.email}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onEdit(r)}
+                        className="block max-w-full truncate rounded-sm text-left font-medium text-foreground outline-none hover:underline hover:decoration-border-strong hover:underline-offset-4 focus-visible:ring-[3px] focus-visible:ring-ring"
+                        title={r.email}
+                      >
+                        {r.email}
+                      </button>
+                    )}
                   </TableCell>
                   <TableCell className="max-w-[14rem] py-2">
                     {name || r.jobTitle ? (
@@ -160,12 +171,15 @@ export function LeadRowsTable({
                     )}
                   </TableCell>
                   <TableCell className="py-1.5">
-                    <LeadStatusSelect
-                      status={r.status}
-                      email={r.email}
-                      disabled={statusDisabled}
-                      onChange={(next) => onStatusChange(r.id, next)}
-                    />
+                    <div className="flex items-center gap-1.5">
+                      <LeadStatusSelect
+                        status={r.status}
+                        email={r.email}
+                        disabled={statusDisabled}
+                        onChange={(next) => onStatusChange(r.id, next)}
+                      />
+                      {r.blockSource ? <LeadBlockBadge source={r.blockSource} /> : null}
+                    </div>
                   </TableCell>
                   <TableCell className="py-2">
                     <LeadTagChips tagIds={r.tags} tagById={tagById} />
@@ -188,11 +202,19 @@ export function LeadRowsTable({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onSelect={() => onEdit(r)}>
-                          <Pencil />
-                          Edit lead
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
+                        {readOnly ? null : (
+                          <DropdownMenuItem onSelect={() => onEdit(r)}>
+                            <Pencil />
+                            Edit lead
+                          </DropdownMenuItem>
+                        )}
+                        {r.blockSource ? null : (
+                          <DropdownMenuItem onSelect={() => onBlock(r)}>
+                            <Ban />
+                            Block this address
+                          </DropdownMenuItem>
+                        )}
+                        {readOnly && r.blockSource ? null : <DropdownMenuSeparator />}
                         <DropdownMenuItem destructive onSelect={() => onDelete(r)}>
                           <Trash2 />
                           Delete lead

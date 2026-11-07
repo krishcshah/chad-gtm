@@ -1,8 +1,15 @@
-import { and, count, desc, eq, gte, isNull, sql, inArray } from "drizzle-orm";
-import { schema } from "@smartreach/database";
+import { and, count, desc, eq, getTableColumns, gte, isNull, ne, sql, inArray } from "drizzle-orm";
+import { GLOBAL_SUPPRESSION_SOURCES, loadWorkspaceProfile, schema } from "@smartreach/database";
 import { getDb } from "./db";
 import { summarizeUniboxThreads } from "./unibox-conversations";
 import { isUsablePostalAddress } from "./campaign-start-guard";
+import { leadsEmailedSql, repliedLeadsSql } from "./analytics";
+import {
+  contactCooldownSince,
+  listSendabilityCounts,
+  missingListLeadsCountSql,
+  missingListLeadsWhere,
+} from "./lead-sendability";
 
 const {
   campaigns,
@@ -27,6 +34,20 @@ export function wsCondition(column: any, workspaceId?: string, isDefault = false
     return sql`(${column} = ${workspaceId} OR ${column} IS NULL)`;
   }
   return eq(column, workspaceId);
+}
+
+/**
+ * Which replies belong to a workspace: the Inbox rule (unibox/page.tsx). A
+ * reply counts when its campaign or the mailbox it reached is in the
+ * workspace; the default workspace also gets replies with neither. Needs the
+ * query to leftJoin campaigns (on replies.campaign_id) and sender_accounts
+ * (on replies.sender_id).
+ */
+export function replyWorkspaceCondition(workspaceId: string, isDefault = false) {
+  if (workspaceId === "primary-default" || isDefault) {
+    return sql`(${campaigns.workspaceId} = ${workspaceId} OR ${senderAccounts.workspaceId} = ${workspaceId} OR (${campaigns.workspaceId} IS NULL AND ${senderAccounts.workspaceId} IS NULL))`;
+  }
+  return sql`(${campaigns.workspaceId} = ${workspaceId} OR ${senderAccounts.workspaceId} = ${workspaceId})`;
 }
 
 export async function getDashboardStats(userId: string, workspaceId?: string, isDefault = false) {
@@ -60,17 +81,8 @@ export async function getDashboardStats(userId: string, workspaceId?: string, is
   if (cWs) jobConds.push(cWs);
 
   const replyConds = [eq(replies.userId, userId)];
-  if (workspaceId) {
-    if (workspaceId === "primary-default" || isDefault) {
-      replyConds.push(
-        sql`(${campaigns.workspaceId} = ${workspaceId} OR ${campaigns.workspaceId} IS NULL OR ${senderAccounts.workspaceId} = ${workspaceId} OR ${senderAccounts.workspaceId} IS NULL)`
-      );
-    } else {
-      replyConds.push(
-        sql`(${campaigns.workspaceId} = ${workspaceId} OR ${senderAccounts.workspaceId} = ${workspaceId})`
-      );
-    }
-  }
+  // Same rule as the Inbox, so Overview's reply count matches it.
+  if (workspaceId) replyConds.push(replyWorkspaceCondition(workspaceId, isDefault));
 
   const contactedConds = [
     eq(campaigns.userId, userId),
@@ -82,8 +94,13 @@ export async function getDashboardStats(userId: string, workspaceId?: string, is
   const bounceConds = [
     eq(campaigns.userId, userId),
     eq(emailJobs.status, "bounced"),
+    eq(emailJobs.dryRun, false),
   ];
   if (cWs) bounceConds.push(cWs);
+
+  // Opens are counted per lead (lib/analytics.ts), only for this workspace's campaigns.
+  const openConds = [eq(campaigns.userId, userId), eq(schema.emailTrackingEvents.type, "open")];
+  if (cWs) openConds.push(cWs);
 
   // Fire aggregates in parallel
   const [
@@ -95,6 +112,7 @@ export async function getDashboardStats(userId: string, workspaceId?: string, is
     [replyRows],
     [contactedRows],
     [bounceRows],
+    [openRows],
   ] = await Promise.all([
     db
       .select({
@@ -105,7 +123,9 @@ export async function getDashboardStats(userId: string, workspaceId?: string, is
       .where(and(...campaignConds)),
     db
       .select({
-        sentToday: sql<number>`coalesce(sum(case when ${usageCounters.entityType} = 'campaign' then ${usageCounters.count} else 0 end), 0)`,
+        // Mailbox counters (owner's userId) stay on the UTC day; campaign
+        // counters use each campaign's local day, so they cannot be summed here.
+        sentToday: sql<number>`coalesce(sum(case when ${usageCounters.entityType} = 'sender' then ${usageCounters.count} else 0 end), 0)`,
       })
       .from(usageCounters)
       .where(and(eq(usageCounters.userId, userId), eq(usageCounters.date, t))),
@@ -152,6 +172,14 @@ export async function getDashboardStats(userId: string, workspaceId?: string, is
       .from(emailJobs)
       .innerJoin(campaigns, eq(emailJobs.campaignId, campaigns.id))
       .where(and(...bounceConds)),
+    db
+      .select({
+        total: sql<number>`count(distinct coalesce(${schema.emailTrackingEvents.leadId}, ${schema.emailTrackingEvents.jobId}))`,
+      })
+      .from(schema.emailTrackingEvents)
+      .innerJoin(campaigns, eq(schema.emailTrackingEvents.campaignId, campaigns.id))
+      .where(and(...openConds))
+      .catch(() => [{ total: 0 }]),
   ]);
 
   // usageRows.sentToday cross-checks job-row sent count
@@ -161,8 +189,12 @@ export async function getDashboardStats(userId: string, workspaceId?: string, is
   const totalSent = Number(contactedRows?.totalSent ?? 0);
   const replyCount = Number(replyRows?.total ?? 0);
   const bounceCount = Number(bounceRows?.total ?? 0);
-  const replyRate = leadsContacted > 0 ? ((replyCount / leadsContacted) * 100).toFixed(1) : "0.0";
-  const bounceRate = totalSent > 0 ? ((bounceCount / totalSent) * 100).toFixed(1) : "0.0";
+  const openedLeads = Number(openRows?.total ?? 0);
+  // Every rate is per lead emailed, capped at 100 (lib/analytics.ts).
+  const perLead = (n: number) => (leadsContacted > 0 ? Math.min(100, (n / leadsContacted) * 100) : 0);
+  const replyRate = perLead(replyCount).toFixed(1);
+  const bounceRate = perLead(bounceCount).toFixed(1);
+  const openRate = Math.round(perLead(openedLeads));
 
   return {
     activeCampaigns: Number(campaignRows?.active ?? 0),
@@ -178,19 +210,44 @@ export async function getDashboardStats(userId: string, workspaceId?: string, is
     totalLeads: Number(leadRows?.total ?? 0),
     replyCount,
     replyRate,
+    openedLeads,
+    openRate,
     senderTotal: Number(senderRows?.total ?? 0),
     senderActive: Number(senderRows?.active ?? 0),
   };
 }
 
-export async function getRecentActivity(userId: string, limit = 20) {
+/**
+ * Where getRecentActivity keeps a row for a workspace: account events (no
+ * campaign, or a campaign since deleted) show everywhere; campaign events only
+ * in the campaign's workspace (the default one also gets campaigns without one).
+ */
+export function activityWorkspaceCondition(workspaceId: string, isDefault = false) {
+  return sql`(${activityLogs.campaignId} IS NULL OR ${campaigns.id} IS NULL OR ${wsCondition(campaigns.workspaceId, workspaceId, isDefault)})`;
+}
+
+export async function getRecentActivity(
+  userId: string,
+  limit = 20,
+  opts?: { workspaceId: string; isDefault?: boolean },
+) {
   const db = getDb();
-  return db
-    .select()
+  if (!opts?.workspaceId) {
+    return db
+      .select()
+      .from(activityLogs)
+      .where(eq(activityLogs.userId, userId))
+      .orderBy(desc(activityLogs.createdAt))
+      .limit(limit);
+  }
+  const rows = await db
+    .select({ log: activityLogs })
     .from(activityLogs)
-    .where(eq(activityLogs.userId, userId))
+    .leftJoin(campaigns, eq(activityLogs.campaignId, campaigns.id))
+    .where(and(eq(activityLogs.userId, userId), activityWorkspaceCondition(opts.workspaceId, opts.isDefault ?? false)))
     .orderBy(desc(activityLogs.createdAt))
     .limit(limit);
+  return rows.map((r) => r.log);
 }
 
 
@@ -211,14 +268,29 @@ export async function getActiveCampaigns(userId: string, workspaceId?: string, i
         id: campaigns.id,
         name: campaigns.name,
         status: campaigns.status,
+        // "Why isn't this sending?" (lib/send-block.ts)
+        sendBlockReason: campaigns.sendBlockReason,
+        sendingWindowStart: campaigns.sendingWindowStart,
+        sendingWindowEnd: campaigns.sendingWindowEnd,
+        sendingTimezone: campaigns.sendingTimezone,
+        businessDaysOnly: campaigns.businessDaysOnly,
         total: count(campaignLeads.id),
-        sent: count(sql`case when ${campaignLeads.status} in ('sent','replied') then 1 end`),
-        replied: count(sql`case when ${campaignLeads.status} = 'replied' then 1 end`),
+        // Leads emailed and leads who replied (lib/analytics.ts).
+        sent: leadsEmailedSql(campaigns.id),
+        replied: repliedLeadsSql(campaigns.id),
       })
       .from(campaigns)
       .leftJoin(campaignLeads, eq(campaignLeads.campaignId, campaigns.id))
       .where(and(...conds))
-      .groupBy(campaigns.id)
+      // campaigns.id is the primary key, so its other columns are allowed too.
+      .groupBy(
+        campaigns.id,
+        campaigns.sendBlockReason,
+        campaigns.sendingWindowStart,
+        campaigns.sendingWindowEnd,
+        campaigns.sendingTimezone,
+        campaigns.businessDaysOnly,
+      )
       .orderBy(desc(campaigns.createdAt))
       .limit(20)
   ).map((r) => ({
@@ -229,7 +301,12 @@ export async function getActiveCampaigns(userId: string, workspaceId?: string, i
   }));
 }
 
-export async function listLeadLists(userId: string, workspaceId?: string, isDefault = false) {
+export async function listLeadLists(
+  userId: string,
+  workspaceId?: string,
+  isDefault = false,
+  opts: { withSendability?: boolean } = {},
+) {
   const db = getDb();
   const conds = [eq(leadLists.userId, userId), isNull(leadLists.deletedAt)];
   const lWs = wsCondition(leadLists.workspaceId, workspaceId, isDefault);
@@ -241,6 +318,19 @@ export async function listLeadLists(userId: string, workspaceId?: string, isDefa
       name: leadLists.name,
       createdAt: leadLists.createdAt,
       leadCount: count(leads.id),
+      // Used by an Autopilot (pool) campaign: same rule as pool-campaign-guard.
+      isAutopilot: sql<boolean>`exists (
+        select 1 from ${campaigns}
+        where ${campaigns.leadListId} = ${leadLists.id} and ${campaigns.deletedAt} is null
+          and (
+            exists (select 1 from ${schema.chadGtmRuns} where ${schema.chadGtmRuns.campaignId} = ${campaigns.id})
+            or exists (
+              select 1 from ${campaignSenders}
+              inner join ${senderAccounts} on ${senderAccounts.id} = ${campaignSenders.senderId}
+              where ${campaignSenders.campaignId} = ${campaigns.id} and ${senderAccounts.isSystemPool} = true
+            )
+          )
+      )`,
     })
     .from(leadLists)
     .leftJoin(leads, and(eq(leads.listId, leadLists.id), isNull(leads.deletedAt)))
@@ -248,7 +338,17 @@ export async function listLeadLists(userId: string, workspaceId?: string, isDefa
     .groupBy(leadLists.id)
     .orderBy(desc(leadLists.createdAt));
 
-  return rows.map((r) => ({ ...r, leadCount: Number(r.leadCount ?? 0) }));
+  // How many leads a new campaign would email (#31); only the wizard asks.
+  const sendability = opts.withSendability
+    ? await listSendabilityCounts(db, userId, rows.map((r) => r.id))
+    : null;
+  return rows.map((r) => ({
+    ...r,
+    leadCount: Number(r.leadCount ?? 0),
+    isAutopilot: Boolean(r.isAutopilot),
+    sendableCount: sendability?.get(r.id)?.sendable ?? null,
+    contactedCount: sendability?.get(r.id)?.contacted ?? null,
+  }));
 }
 
 export interface LeadsPageParams {
@@ -260,6 +360,26 @@ export interface LeadsPageParams {
   status?: string;
   cursor?: string; // id of last row from previous page
   pageSize?: number;
+}
+
+/**
+ * The strongest Blocklist entry that applies to a lead row's email (#32):
+ * the owner's own rows (any source) or anyone's global opt-outs, matched by
+ * address or "@domain". Global sources come first. NULL when none applies.
+ */
+export function leadBlockSourceSql() {
+  const globals = sql.join(
+    GLOBAL_SUPPRESSION_SOURCES.map((s) => sql`${s}`),
+    sql`, `,
+  );
+  return sql<string | null>`(
+    select ${suppressions.source} from ${suppressions}
+    where (${suppressions.userId} = ${leads.userId} or ${suppressions.source} in (${globals}))
+      and (lower(${suppressions.value}) = lower(${leads.email})
+        or lower(${suppressions.value}) = '@' || split_part(lower(${leads.email}), '@', 2))
+    order by case when ${suppressions.source} in (${globals}) then 0 else 1 end
+    limit 1
+  )`;
 }
 
 /**
@@ -287,7 +407,7 @@ export async function listLeads(userId: string, params: LeadsPageParams) {
     );
   }
   const rows = await db
-    .select()
+    .select({ ...getTableColumns(leads), blockSource: leadBlockSourceSql() })
     .from(leads)
     .where(and(...conds))
     .orderBy(desc(leads.createdAt), desc(leads.id))
@@ -335,6 +455,8 @@ export async function listSenders(userId: string, workspaceId?: string, isDefaul
       imapHost: senderAccounts.imapHost,
       imapPort: senderAccounts.imapPort,
       imapUsername: senderAccounts.imapUsername,
+      createdAt: senderAccounts.createdAt,
+      isSystemPool: senderAccounts.isSystemPool,
       usedToday: sql<number>`coalesce(${usage.count}, 0)`,
     })
     .from(senderAccounts)
@@ -348,7 +470,14 @@ export async function listTemplates(userId: string) {
   return db
     .select()
     .from(schema.emailTemplates)
-    .where(and(eq(schema.emailTemplates.userId, userId), isNull(schema.emailTemplates.deletedAt)))
+    .where(
+      and(
+        eq(schema.emailTemplates.userId, userId),
+        isNull(schema.emailTemplates.deletedAt),
+        // Templates Autopilot made for its runs are not offered in the wizard (#105).
+        ne(schema.emailTemplates.source, "autopilot"),
+      ),
+    )
     .orderBy(desc(schema.emailTemplates.updatedAt));
 }
 
@@ -397,10 +526,14 @@ export interface CampaignRow {
   createdAt: string | null;
   scheduledAt: string | null;
   total: number;
+  /** Leads emailed (each lead once, non-dry-run sends), not emails. */
   sent: number;
+  /** Leads who replied, not reply messages. */
   replied: number;
   failed: number;
   bounced: number;
+  /** The Autopilot run that manages this campaign, or null for a manual campaign. */
+  autopilotRunId: string | null;
 }
 
 export async function listCampaigns(userId: string, workspaceId?: string, isDefault = false): Promise<CampaignRow[]> {
@@ -417,14 +550,15 @@ export async function listCampaigns(userId: string, workspaceId?: string, isDefa
       createdAt: campaigns.createdAt,
       scheduledAt: campaigns.scheduledAt,
       total: count(campaignLeads.id),
-      sent: count(sql`case when ${campaignLeads.status} in ('sent','replied') then 1 end`),
-      replied: count(sql`case when ${campaignLeads.status} = 'replied' then 1 end`),
+      sent: leadsEmailedSql(campaigns.id),
+      replied: repliedLeadsSql(campaigns.id),
       failed: count(sql`case when ${campaignLeads.status} = 'failed' then 1 end`),
       // Bounces live on email_jobs (permanent SMTP); campaign_leads stay "failed".
       bounced: sql<number>`coalesce((
         select count(*)::int from email_jobs ej
         where ej.campaign_id = ${campaigns.id} and ej.status = 'bounced'
       ), 0)`,
+      autopilotRunId: sql<string | null>`(select r.id from chad_gtm_runs r where r.campaign_id = ${campaigns.id} limit 1)`,
     })
     .from(campaigns)
     .leftJoin(campaignLeads, eq(campaignLeads.campaignId, campaigns.id))
@@ -438,6 +572,7 @@ export async function listCampaigns(userId: string, workspaceId?: string, isDefa
     replied: Number(r.replied ?? 0),
     failed: Number(r.failed ?? 0),
     bounced: Number(r.bounced ?? 0),
+    autopilotRunId: r.autopilotRunId ?? null,
   })) as CampaignRow[];
 }
 
@@ -454,18 +589,22 @@ export async function getCampaign(userId: string, id: string, workspaceId?: stri
     .limit(1);
   if (!c) return null;
   // Parallel: reads are independent of one another.
-  const [[stats], senders, [leadListRow]] = await Promise.all([
+  const [[stats], senders, [leadListRow], [runRow]] = await Promise.all([
     db
       .select({
         total: count(campaignLeads.id),
         pending: count(sql`case when ${campaignLeads.status} = 'pending' then 1 end`),
-        sent: count(sql`case when ${campaignLeads.status} in ('sent','replied') then 1 end`),
-        replied: count(sql`case when ${campaignLeads.status} = 'replied' then 1 end`),
+        // Leads emailed and leads who replied (lib/analytics.ts).
+        sent: leadsEmailedSql(id),
+        replied: repliedLeadsSql(id),
         failed: count(sql`case when ${campaignLeads.status} = 'failed' then 1 end`),
         bounced: sql<number>`coalesce((
           select count(*)::int from email_jobs ej
           where ej.campaign_id = ${id} and ej.status = 'bounced'
         ), 0)`,
+        // When the campaign took its copy of the list (#40): publish, even
+        // for a scheduled campaign that hasn't started yet.
+        copiedAt: sql<string | null>`min(${campaignLeads.createdAt})`,
       })
       .from(campaignLeads)
       .where(eq(campaignLeads.campaignId, id)),
@@ -476,21 +615,49 @@ export async function getCampaign(userId: string, id: string, workspaceId?: stri
         email: senderAccounts.email,
         status: senderAccounts.status,
         health: senderAccounts.health,
+        dailyLimit: senderAccounts.dailyLimit,
+        createdAt: senderAccounts.createdAt,
+        isSystemPool: senderAccounts.isSystemPool,
       })
       .from(campaignSenders)
       .innerJoin(senderAccounts, eq(senderAccounts.id, campaignSenders.senderId))
       .where(eq(campaignSenders.campaignId, id)),
     c.leadListId
       ? db
-          .select({ name: leadLists.name })
+          .select({
+            name: leadLists.name,
+            deletedAt: leadLists.deletedAt,
+            // Leads added to the list after the campaign took its copy (#40):
+            // the same rules and dedupe "Add N new leads" uses, so it adds N.
+            newListLeads: missingListLeadsCountSql(
+              missingListLeadsWhere({
+                ownerId: c.userId,
+                campaignId: id,
+                leadListId: c.leadListId,
+                since: contactCooldownSince(),
+              }),
+            ),
+          })
           .from(leadLists)
           .where(and(eq(leadLists.id, c.leadListId), eq(leadLists.userId, userId)))
           .limit(1)
       : Promise.resolve([]),
+    // The Autopilot run that manages this campaign, if any.
+    db
+      .select({ id: schema.chadGtmRuns.id })
+      .from(schema.chadGtmRuns)
+      .where(eq(schema.chadGtmRuns.campaignId, id))
+      .limit(1),
   ]);
   return {
     ...c,
     leadListName: leadListRow?.name ?? null,
+    leadListDeleted: Boolean(leadListRow?.deletedAt),
+    newListLeads: leadListRow && !leadListRow.deletedAt ? Number(leadListRow.newListLeads ?? 0) : 0,
+    // Start date, or for a scheduled campaign the date it took its copy.
+    leadListCopiedAt: (c.startedAt ?? (stats?.copiedAt as string | null | undefined) ?? null) as string | null,
+    autopilotRunId: (runRow?.id as string | undefined) ?? null,
+    isAutopilot: Boolean(runRow),
     stats: stats
       ? {
           total: Number(stats.total ?? 0),
@@ -505,23 +672,21 @@ export async function getCampaign(userId: string, id: string, workspaceId?: stri
   };
 }
 
-/** The account's compliance postal address ("" when none is saved). */
-export async function getWorkspacePostalAddress(userId: string): Promise<string> {
-  const db = getDb();
-  const [row] = await db
-    .select({ postalAddress: schema.workspaceSettings.postalAddress })
-    .from(schema.workspaceSettings)
-    .where(eq(schema.workspaceSettings.userId, userId))
-    .limit(1);
-  return row?.postalAddress ?? "";
+/**
+ * The workspace's compliance postal address ("" when none is saved, or the
+ * workspace is not the user's). null = the user's default workspace.
+ */
+export async function getWorkspacePostalAddress(userId: string, workspaceId: string | null): Promise<string> {
+  const profile = await loadWorkspaceProfile(getDb(), { userId, workspaceId });
+  return profile.postalAddress;
 }
 
 /**
- * True when the account has a usable physical postal address (CAN-SPAM).
+ * True when the workspace has a usable physical postal address (CAN-SPAM).
  * Campaigns that send are refused without one (see campaign-start-guard.ts).
  */
-export async function hasWorkspacePostalAddress(userId: string): Promise<boolean> {
-  return isUsablePostalAddress(await getWorkspacePostalAddress(userId));
+export async function hasWorkspacePostalAddress(userId: string, workspaceId: string | null): Promise<boolean> {
+  return isUsablePostalAddress(await getWorkspacePostalAddress(userId, workspaceId));
 }
 
 const MAX_REPLY_SCAN = 1000;
@@ -581,13 +746,14 @@ export interface SuppressionsPageParams {
 /**
  * Cursor-paginated suppressions for the session user.
  * Optional search ILIKE on value; optional kind filter.
+ * The blocklist is account-wide (enforced across every workspace), so every
+ * entry is listed whatever the active workspace; workspaceId/isDefault are
+ * ignored and each row says which workspace it was added in.
  */
 export async function listSuppressions(userId: string, params: SuppressionsPageParams) {
   const db = getDb();
   const size = Math.min(params.limit ?? 50, 200);
   const conds = [eq(suppressions.userId, userId)];
-  const sWs = wsCondition(suppressions.workspaceId, params.workspaceId, params.isDefault);
-  if (sWs) conds.push(sWs);
   if (params.kind) conds.push(eq(suppressions.kind, params.kind));
   if (params.search) {
     const q = `%${params.search}%`;
@@ -606,8 +772,10 @@ export async function listSuppressions(userId: string, params: SuppressionsPageP
       reason: suppressions.reason,
       source: suppressions.source,
       createdAt: suppressions.createdAt,
+      workspaceName: schema.workspaces.name,
     })
     .from(suppressions)
+    .leftJoin(schema.workspaces, eq(schema.workspaces.id, suppressions.workspaceId))
     .where(and(...conds))
     .orderBy(desc(suppressions.createdAt), desc(suppressions.id))
     .limit(size + 1);

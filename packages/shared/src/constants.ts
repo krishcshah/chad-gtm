@@ -1,15 +1,35 @@
 export const APP_NAME = "AutoGTM";
 export const APP_TAGLINE = "Autonomous Go-To-Market & Cold Outreach Engine";
 
+/** Every stored lead status (used for list filters). */
 export const LEAD_STATUSES = [
   "new",
   "contacted",
   "replied",
+  "interested",
+  "meeting_booked",
+  "won",
+  "lost",
   "bounced",
   "unsubscribed",
   "blocked",
 ] as const;
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
+
+/**
+ * Statuses a person can pick by hand. Bounced, unsubscribed and blocked are
+ * not here: the Blocklist (suppressions) is the one source of "do not contact".
+ */
+export const LEAD_FUNNEL_STATUSES = [
+  "new",
+  "contacted",
+  "replied",
+  "interested",
+  "meeting_booked",
+  "won",
+  "lost",
+] as const satisfies readonly LeadStatus[];
+export type LeadFunnelStatus = (typeof LEAD_FUNNEL_STATUSES)[number];
 
 /** Unibox inbound reply disposition tags (F03 / tip 0008). */
 export const UNIBOX_REPLY_TAGS = [
@@ -68,7 +88,7 @@ export const DEFAULTS = {
   minDelaySec: 90,
   maxDelaySec: 240,
   dailyCampaignLimit: 100,
-  maxEmailsPerSenderPerDay: 50,
+  maxEmailsPerSenderPerDay: 30,
   sendingWindowStart: "09:00",
   sendingWindowEnd: "17:00",
   sendingTimezone: "UTC",

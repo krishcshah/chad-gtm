@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function BugReportRedirectPage() {
-  redirect("/support");
+  redirect("/support?new=bug_report");
 }

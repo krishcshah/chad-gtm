@@ -8,7 +8,7 @@
  */
 import { schema } from "@smartreach/database";
 import { parseSenderAddress } from "@smartreach/shared";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { EngineDb, SenderRow } from "./db-port";
 import { makeImapClient } from "./mailer";
 import {
@@ -18,9 +18,26 @@ import {
   parseHeaderBlock,
   type DsnResult,
   type HeaderMap,
+  type OptOutKind,
 } from "./inbound-classify";
 import { flagSenderPolicyBlock, recordCampaignStop, recordHardBounce } from "./bounces";
 import { addSuppression } from "./suppression";
+import { attachReplyToOpenRequest, decideInboundAgentStatus, type InboundAgentDecision } from "./lead-conversations";
+import { setLeadStatusForEmail, stopCandidatesAfterUnassignedReply, stopLeadAfterReply } from "./lead-outcomes";
+import { isPoolSender } from "./pool-allocation";
+import {
+  DOMAIN_ROUTING_WINDOW_DAYS,
+  domainOf,
+  insertUnmatchedInbound,
+  isOwnMailboxAddress,
+  isTriageCandidate,
+  loadAddressOwners,
+  loadDomainOwners,
+  pickUnambiguousOwner,
+  routeUnmatched,
+  type InboundOwner,
+} from "./inbound-routing";
+import { RETIRED_SYNC_GRACE_DAYS, shouldSyncMailbox } from "./mailbox-health";
 
 export interface SyncResult {
   checked: number;
@@ -41,6 +58,8 @@ const INBOUND_HEADERS = [
   "x-failed-recipients",
   "x-auto-response-suppress",
   "return-path",
+  "list-id",
+  "list-unsubscribe",
 ];
 
 /** Decode quoted-printable octets as UTF-8 (not latin1 / fromCharCode). */
@@ -516,14 +535,22 @@ export function prepareReplyBodies(rawText: string, rawHtml: string): PreparedBo
   return { bodyText, bodyHtml, snippet };
 }
 
-/** Sync one sender's inbox. Returns count of new replies recorded. */
+/**
+ * Sync one sender's inbox. Returns count of new replies recorded; on a shared
+ * pool mailbox those belong to many customers, so `foundByOwner` splits the
+ * count by the customer each reply was filed under (#70).
+ */
 export async function syncSenderReplies(
   db: EngineDb,
   sender: SenderRow,
-): Promise<{ found: number; bounces?: number; error?: string }> {
-  if (!sender.imapHost || !sender.imapPasswordEnc) return { found: 0 };
+): Promise<{ found: number; foundByOwner: Record<string, number>; bounces?: number; error?: string }> {
+  const foundByOwner: Record<string, number> = {};
+  if (!sender.imapHost || !sender.imapPasswordEnc) return { found: 0, foundByOwner };
   let found = 0;
   let bounces = 0;
+  const countOwner = (ownerId: string) => {
+    foundByOwner[ownerId] = (foundByOwner[ownerId] ?? 0) + 1;
+  };
   let client: any = null;
   let closed = false;
   try {
@@ -531,9 +558,11 @@ export async function syncSenderReplies(
     await client.connect();
     await client.mailboxOpen("INBOX");
 
-    // Look back ~7 days or since last sync (whichever is newer)
+    // Look back since last sync (minus an hour), up to 30 days, so replies
+    // that arrived during a longer outage are still read (dedup is by
+    // sender + Message-ID).
     const since = sender.lastSyncAt
-      ? new Date(Math.max(Date.parse(sender.lastSyncAt) - 3_600_000, Date.now() - 7 * 86_400_000))
+      ? new Date(Math.max(Date.parse(sender.lastSyncAt) - 3_600_000, Date.now() - 30 * 86_400_000))
       : new Date(Date.now() - 7 * 86_400_000);
 
     const uids = await client.search({ since }, { uid: true });
@@ -552,7 +581,7 @@ export async function syncSenderReplies(
         { uid: true },
       )) {
         try {
-          const outcome = await processInboundMessage(db, sender, msg);
+          const outcome = await processInboundMessage(db, sender, msg, countOwner);
           if (outcome === "reply") found++;
           else if (outcome === "bounce") bounces++;
         } catch (err) {
@@ -562,19 +591,25 @@ export async function syncSenderReplies(
     }
     await client.logout();
     closed = true;
+    const syncedAt = new Date().toISOString();
     await db
       .update(schema.senderAccounts)
-      .set({ lastSyncAt: new Date().toISOString(), imapStatus: "ok" })
+      .set({ lastSyncAt: syncedAt, imapStatus: "ok", imapFailCount: 0, imapAttemptedAt: syncedAt })
       .where(eq(schema.senderAccounts.id, sender.id));
-    return { found, bounces };
+    return { found, foundByOwner, bounces };
   } catch (err: any) {
     const message = String(err?.responseText || err?.message || "IMAP sync failed");
     const isAuthFailure = /auth|login|credential|AUTHENTICATIONFAILED/i.test(message);
+    // A failed login is retried with backoff (shouldSyncMailbox), never dropped for good.
     await db
       .update(schema.senderAccounts)
-      .set({ imapStatus: isAuthFailure ? "failed" : "error" })
+      .set({
+        imapStatus: isAuthFailure ? "failed" : "error",
+        imapFailCount: (Number(sender.imapFailCount) || 0) + 1,
+        imapAttemptedAt: new Date().toISOString(),
+      })
       .where(eq(schema.senderAccounts.id, sender.id));
-    return { found, bounces, error: message };
+    return { found, foundByOwner, bounces, error: message };
   } finally {
     if (!closed && client) {
       try {
@@ -650,6 +685,24 @@ export function classifyReplyTag(subject: string, bodyText: string): InboundSent
   return null;
 }
 
+/**
+ * Tag and opt-out for one inbound message. Autoresponders (detected from
+ * headers) are always out_of_office and never an opt-out, so boilerplate
+ * can't unsubscribe anyone. For a message a person wrote, opt-out wording
+ * wins over "on leave"/"on vacation": "I'm on leave, please remove me" is an
+ * opt-out, not an out-of-office.
+ */
+export function resolveInboundClassification(input: {
+  auto: boolean;
+  subject: string;
+  body: string;
+}): { tag: InboundSentimentTag; optOut: OptOutKind } {
+  if (input.auto) return { tag: "out_of_office", optOut: null };
+  const optOut = classifyOptOut(input.subject ?? "", input.body ?? "");
+  if (optOut) return { tag: "not_interested", optOut };
+  return { tag: classifyReplyTag(input.subject ?? "", input.body ?? ""), optOut: null };
+}
+
 /** Raw BODY[TEXT] (whole body, all MIME parts) for report parsing. */
 function rawBodyText(msg: any): string {
   return getRawPart(msg, "text", "1", "2");
@@ -662,14 +715,19 @@ export type InboundOutcome = "reply" | "bounce" | "ignored";
  * reply, never sent to the agent, never held against the mailbox); everything
  * else goes through reply recording.
  */
-async function processInboundMessage(db: EngineDb, sender: SenderRow, msg: any): Promise<InboundOutcome> {
+async function processInboundMessage(
+  db: EngineDb,
+  sender: SenderRow,
+  msg: any,
+  onRecorded?: (ownerId: string) => void,
+): Promise<InboundOutcome> {
   const env = msg.envelope ?? {};
   const fromEmail = String(env.from?.[0]?.address ?? "").toLowerCase();
   if (!fromEmail || fromEmail === sender.email.toLowerCase()) return "ignored"; // skip self
   const headers = parseHeaderBlock(msg.headers);
   const dsn = parseDsn({ fromEmail, subject: env.subject ?? "", headers, body: rawBodyText(msg) });
   if (dsn) return (await handleDsn(db, sender, env, dsn)) ? "bounce" : "ignored";
-  return (await recordReplyIfNew(db, sender, msg, headers)) ? "reply" : "ignored";
+  return (await recordReplyIfNew(db, sender, msg, headers, onRecorded)) ? "reply" : "ignored";
 }
 
 /**
@@ -754,7 +812,30 @@ export async function handleDsn(db: EngineDb, sender: SenderRow, env: any, dsn: 
   return recorded;
 }
 
-async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any, headers: HeaderMap = {}): Promise<boolean> {
+/**
+ * The workspace an inbound reply is filed under: the lead's, else (for a
+ * dedicated mailbox only) the mailbox's. A shared pool mailbox's workspace is
+ * never the customer's, so it is never used.
+ */
+export function replyOwnerWorkspaceId(
+  lead: { workspaceId?: string | null } | null | undefined,
+  sender: object,
+): string | null {
+  const s = sender as { isSystemPool?: boolean | null; workspaceId?: string | null };
+  return lead?.workspaceId || (s.isSystemPool ? null : s.workspaceId) || null;
+}
+
+/**
+ * `onRecorded` is told which customer a recorded reply was filed under, so a
+ * shared pool mailbox's sync can report each customer only their own (#70).
+ */
+export async function recordReplyIfNew(
+  db: EngineDb,
+  sender: SenderRow,
+  msg: any,
+  headers: HeaderMap = {},
+  onRecorded?: (ownerId: string) => void,
+): Promise<boolean> {
   const env = msg.envelope ?? {};
   const fromRaw: string = env.from?.[0]?.address ?? "";
   const from = parseSenderAddress(fromRaw ? `${env.from?.[0]?.name ?? ""} <${fromRaw}>` : "");
@@ -793,74 +874,267 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any, heade
       lead = rows[0];
     }
   }
-  if (!lead) {
-    const jobs: any[] = await db
-      .select()
-      .from(schema.emailJobs)
-      .where(and(eq(schema.emailJobs.senderId, sender.id), eq(schema.emailJobs.toEmail, fromEmail), eq(schema.emailJobs.status, "sent")))
-      .orderBy(desc(schema.emailJobs.sentAt))
-      .limit(1);
-    if (jobs[0]) {
-      campaignId = jobs[0].campaignId;
-      const rows = await db.select().from(schema.leads).where(eq(schema.leads.id, jobs[0].leadId)).limit(1);
-      lead = rows[0];
-    }
-  }
-  if (!lead) return false; // not a campaign recipient — ignore
 
   const { text, html } = extractTextAndHtml(msg);
-  const { bodyText, bodyHtml, snippet } = prepareReplyBodies(text, html);
+  const bodies = prepareReplyBodies(text, html);
   const receivedAt = (env.date ? new Date(env.date) : new Date()).toISOString();
-  const nowS = new Date().toISOString();
-  const replyId = crypto.randomUUID();
-  // Autoresponders (RFC 3834 headers, OOO subjects) are tagged out_of_office
-  // and never answered by the agent.
-  const autoReply = detectAutoReply(headers, env.subject ?? "");
-  const classifiedTag: InboundSentimentTag = autoReply.auto
-    ? "out_of_office"
-    : classifyReplyTag(env.subject ?? "", bodyText);
+  const subject: string = env.subject ?? "";
+  const fromName: string = from.name || env.from?.[0]?.name || "";
+  const isPool = isPoolSender(sender);
+  const unmatched = {
+    senderId: sender.id,
+    messageId,
+    fromEmail,
+    fromName,
+    subject,
+    snippet: bodies.snippet,
+    bodyText: bodies.bodyText,
+    bodyHtml: bodies.bodyHtml,
+    receivedAt,
+  };
+
+  if (!lead) {
+    // From fallback: a customer who sent this exact address mail from this
+    // mailbox. Pool mailboxes send for every customer, so it is used only
+    // when exactly one customer did (#69); otherwise an admin decides.
+    const owners = await loadAddressOwners(db, sender.id, fromEmail);
+    const owner = pickUnambiguousOwner(owners);
+    if (owner) {
+      campaignId = owner.campaignId;
+      const rows = owner.leadId
+        ? await db.select().from(schema.leads).where(eq(schema.leads.id, owner.leadId)).limit(1)
+        : [];
+      lead = rows[0];
+    } else if (owners.length > 1) {
+      // Never guess between customers, but the opt-out and stop guards
+      // still apply now, before an admin picks one (fail closed).
+      let guardError: unknown = null;
+      try {
+        await guardUnassignedReply(db, { owners, fromEmail, headers, subject, bodyText: bodies.bodyText });
+      } catch (err) {
+        guardError = err;
+      }
+      if (isPool) {
+        await insertUnmatchedInbound(db, {
+          ...unmatched,
+          candidateUserIds: owners.map((o) => o.userId),
+          reason: "ambiguous_owner",
+        });
+      }
+      if (guardError) throw guardError;
+      return false;
+    }
+  }
+  if (!lead) {
+    if (!isPool) return false; // not a campaign recipient — ignore
+    // A new contact on a pool mailbox (#68): route to the one customer who
+    // emailed that company from this mailbox recently, else queue for triage.
+    const autoReply = detectAutoReply(headers, subject);
+    const candidate = isTriageCandidate({
+      headers,
+      subject,
+      bodyText: bodies.bodyText,
+      fromEmail,
+      autoReply: autoReply.auto,
+      isOwnMailbox: await isOwnMailboxAddress(db, fromEmail),
+    });
+    if (!candidate) return false;
+    const domain = domainOf(fromEmail);
+    const since = new Date(Date.now() - DOMAIN_ROUTING_WINDOW_DAYS * 86_400_000).toISOString();
+    const route = routeUnmatched({ domain, owners: await loadDomainOwners(db, sender.id, domain, since) });
+    if (route.kind === "triage") {
+      await insertUnmatchedInbound(db, { ...unmatched, candidateUserIds: route.candidateUserIds, reason: "no_match" });
+      return false;
+    }
+    const routed = await recordRoutedReply(db, {
+      sender,
+      ownerId: route.owner.userId,
+      workspaceId: route.owner.workspaceId ?? null,
+      campaignId: route.owner.campaignId ?? null,
+      lead: null,
+      from: { name: fromName, email: fromEmail },
+      subject,
+      bodies,
+      messageId,
+      receivedAt,
+      headers,
+      routed: "domain",
+    });
+    if (routed !== null) onRecorded?.(route.owner.userId);
+    return routed !== null;
+  }
 
   // Shared-pool mailboxes are owned by the platform admin, but the reply
   // belongs to whoever owns the lead/campaign. Attribute everything to the
   // lead owner so the client sees it in their UniBox (not the admin).
   const ownerId: string = (lead as any)?.userId || sender.userId;
-  const ownerWorkspaceId: string | null =
-    (lead as any)?.workspaceId || (sender as any).workspaceId || null;
+  const recorded = await recordRoutedReply(db, {
+    sender,
+    ownerId,
+    workspaceId: replyOwnerWorkspaceId(lead, sender),
+    campaignId,
+    lead,
+    from: { name: fromName, email: fromEmail },
+    subject,
+    bodies,
+    messageId,
+    receivedAt,
+    headers,
+  });
+  if (recorded !== null) onRecorded?.(ownerId);
+  return recorded !== null;
+}
 
-  // Autopilot campaigns hand every inbound reply to the reply agent, except
-  // automatic replies, which are recorded as skipped.
-  let agentStatus: "pending" | "skipped" | null = null;
-  if (campaignId) {
-    try {
-      const runs: any[] = await db
-        .select({ mode: schema.chadGtmRuns.replyAgentMode })
-        .from(schema.chadGtmRuns)
-        .where(eq(schema.chadGtmRuns.campaignId, campaignId))
-        .limit(1);
-      if (runs[0] && runs[0].mode !== "off") agentStatus = autoReply.auto ? "skipped" : "pending";
-    } catch {
-      agentStatus = null;
+/**
+ * A reply from an address several customers emailed from this mailbox goes to
+ * admin triage unrecorded (#69). Until then: "remove me" and spam complaints
+ * are suppressed globally right away (one row per candidate, like any reply
+ * opt-out), and every candidate's open sends to the person stop per Stop on
+ * reply (all of them for an opt-out). Automatic replies and out-of-office
+ * stop nothing, as for a recorded reply. Every step is attempted; the first
+ * error is rethrown.
+ */
+export async function guardUnassignedReply(
+  db: EngineDb,
+  input: { owners: InboundOwner[]; fromEmail: string; headers: HeaderMap; subject: string; bodyText: string },
+): Promise<void> {
+  const autoReply = detectAutoReply(input.headers ?? {}, input.subject ?? "");
+  const { tag, optOut } = resolveInboundClassification({
+    auto: autoReply.auto,
+    subject: input.subject ?? "",
+    body: input.bodyText ?? "",
+  });
+  if (tag === "out_of_office") return;
+  let failure: unknown = null;
+  if (optOut === "unsubscribe" || optOut === "complaint") {
+    const seen = new Set<string>();
+    for (const owner of input.owners) {
+      if (!owner.userId || seen.has(owner.userId)) continue;
+      seen.add(owner.userId);
+      try {
+        await addSuppression(db, {
+          userId: owner.userId,
+          workspaceId: owner.workspaceId ?? null,
+          email: input.fromEmail,
+          source: optOut,
+          reason: optOut === "unsubscribe" ? "Asked to be removed (reply)" : "Spam complaint (reply)",
+        });
+      } catch (err) {
+        failure ??= err;
+      }
     }
   }
-  const agentSkip =
-    agentStatus === "skipped"
-      ? {
-          agentIntent: "out_of_office",
-          agentSummary: `Automatic reply (${autoReply.reason}); the agent does not answer auto-replies.`,
-          agentHandledAt: nowS,
-        }
-      : {};
+  try {
+    await stopCandidatesAfterUnassignedReply(db, {
+      ownerIds: input.owners.map((o) => o.userId),
+      email: input.fromEmail,
+      optOut: optOut !== null,
+      nowIso: new Date().toISOString(),
+    });
+  } catch (err) {
+    failure ??= err;
+  }
+  if (failure) throw failure;
+}
+
+/** Shown on a reply from someone who wrote in fresh (not a lead's reply). */
+export const NEW_CONTACT_AGENT_SUMMARY =
+  "Wrote in without replying to an email we sent. The agent does not answer these; reply from the Inbox.";
+
+export interface RoutedReplyInput {
+  sender: SenderRow;
+  /** The customer the message belongs to. */
+  ownerId: string;
+  workspaceId: string | null;
+  campaignId: string | null;
+  /** The lead it threads to; null for a new contact (routed only). */
+  lead: { id: string; email?: string | null; userId?: string; workspaceId?: string | null } | null;
+  from: { name: string; email: string };
+  subject: string;
+  bodies: PreparedBodies;
+  messageId: string | null;
+  receivedAt: string;
+  headers?: HeaderMap;
+  /**
+   * Set when the message did not thread to one of our emails: routed by
+   * domain (one customer emailed that company) or assigned by an admin. The
+   * agent never answers these.
+   */
+  routed?: "domain" | "admin";
+}
+
+/**
+ * Record an inbound message for its customer: the reply row, the Inbox copy,
+ * opt-out suppression and (when it belongs to a lead) stopping that person's
+ * campaigns. Returns null when it was already recorded.
+ */
+export async function recordRoutedReply(db: EngineDb, input: RoutedReplyInput): Promise<{ replyId: string } | null> {
+  const { sender, ownerId, campaignId, messageId, receivedAt, routed } = input;
+  const headers = input.headers ?? {};
+  const fromEmail = String(input.from.email ?? "").trim().toLowerCase();
+  const fromName = input.from.name ?? "";
+  const subject = input.subject ?? "";
+  const { bodyText, bodyHtml, snippet } = input.bodies;
+  let lead = input.lead;
+  if (!lead && routed) {
+    // A known person writing in fresh: the owner may already have them as a lead.
+    const rows: any[] = await db
+      .select()
+      .from(schema.leads)
+      .where(
+        and(
+          eq(schema.leads.userId, ownerId),
+          sql`lower(${schema.leads.email}) = ${fromEmail}`,
+          isNull(schema.leads.deletedAt),
+        ),
+      )
+      .orderBy(desc(schema.leads.createdAt))
+      .limit(1);
+    lead = rows[0] ?? null;
+  }
+  if (!lead && !routed) return null;
+  const ownerWorkspaceId: string | null = (routed && lead?.workspaceId) || input.workspaceId || null;
+  const nowS = new Date().toISOString();
+  const replyId = crypto.randomUUID();
+  // Autoresponders (RFC 3834 headers, OOO subjects) are tagged out_of_office
+  // and never answered by the agent.
+  const autoReply = detectAutoReply(headers, subject);
+  // bodyText is already quote-stripped, so our own quoted email can't opt anyone out.
+  const { tag: classifiedTag, optOut } = resolveInboundClassification({
+    auto: autoReply.auto,
+    subject,
+    body: bodyText,
+  });
+
+  // Campaigns whose conversations the agent handles ("Lead conversations")
+  // hand the message to the agent; automatic replies are recorded as skipped
+  // and a message in a conversation waiting on you joins its open card.
+  // Routed messages (no reply to our email) are never answered by the agent.
+  const agentDecision: InboundAgentDecision =
+    routed || !lead
+      ? { agentStatus: "skipped", agentIntent: "new_contact", agentSummary: NEW_CONTACT_AGENT_SUMMARY }
+      : await decideInboundAgentStatus(db, {
+          campaignId,
+          leadId: lead.id,
+          autoReplyAuto: autoReply.auto,
+          autoReason: autoReply.reason,
+          classifiedTag,
+        });
+  const agentStatus = agentDecision.agentStatus;
+  const agentSkip = agentDecision.agentSummary
+    ? { agentIntent: agentDecision.agentIntent, agentSummary: agentDecision.agentSummary, agentHandledAt: nowS }
+    : {};
 
   try {
     await db.insert(schema.replies).values({
       id: replyId,
       userId: ownerId,
       senderId: sender.id,
-      leadId: lead.id,
+      leadId: lead?.id ?? null,
       campaignId,
-      fromName: from.name || env.from?.[0]?.name || "",
+      fromName,
       fromEmail,
-      subject: env.subject ?? "",
+      subject,
       snippet,
       bodyText,
       bodyHtml,
@@ -871,7 +1145,14 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any, heade
       ...agentSkip,
     });
   } catch {
-    return false; // unique constraint — already recorded concurrently
+    return null; // unique constraint — already recorded concurrently
+  }
+  if (agentDecision.attachToRequestId) {
+    try {
+      await attachReplyToOpenRequest(db, agentDecision.attachToRequestId, replyId, nowS);
+    } catch {
+      // non-fatal: the reply is escalated, so it still shows as waiting on you
+    }
   }
 
   // Dual-write to unibox_messages for inbound record
@@ -881,14 +1162,14 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any, heade
       userId: ownerId,
       workspaceId: ownerWorkspaceId,
       replyId,
-      leadId: lead.id,
+      leadId: lead?.id ?? null,
       campaignId,
       senderId: sender.id,
       direction: "inbound",
       fromRole: "lead",
-      fromName: from.name || env.from?.[0]?.name || "",
+      fromName,
       fromEmail,
-      subject: env.subject ?? "",
+      subject,
       bodyText,
       bodyHtml,
       sentAt: receivedAt,
@@ -906,20 +1187,21 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any, heade
       message: `${fromEmail} sent out-of-office auto-reply (sequence kept active)`,
       campaignId,
     });
-    return true;
+    return { replyId };
   }
 
   // Opt-outs: "remove me" is an unsubscribe and a spam complaint is a
   // complaint — both global, so no client mails this person again. A plain
-  // "not interested" only stops this client.
-  const optOut = classifyOptOut(env.subject ?? "", bodyText);
+  // "not interested" only stops this client, and is labelled as such on the
+  // Blocklist ('not_interested', not 'manual'). (optOut comes from
+  // resolveInboundClassification above.)
   if (optOut) {
     try {
       await addSuppression(db, {
         userId: ownerId,
         workspaceId: ownerWorkspaceId,
         email: fromEmail,
-        source: optOut === "not_interested" ? "manual" : optOut,
+        source: optOut,
         reason:
           optOut === "unsubscribe"
             ? "Asked to be removed (reply)"
@@ -932,19 +1214,34 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any, heade
     }
   }
 
-  // Stop future sends & mark statuses
-  await db
-    .update(schema.campaignLeads)
-    .set({ status: "replied", updatedAt: nowS })
-    .where(eq(schema.campaignLeads.leadId, lead.id));
-  await db
-    .update(schema.emailJobs)
-    .set({ status: "cancelled", lastError: "lead-replied", updatedAt: nowS })
-    .where(and(eq(schema.emailJobs.leadId, lead.id), inArray(schema.emailJobs.status, ["pending", "retry", "processing"])));
-  await db
-    .update(schema.leads)
-    .set({ status: "replied", updatedAt: nowS })
-    .where(eq(schema.leads.id, lead.id));
+  // Stop future sends & mark statuses for the person (every lead row of
+  // theirs for this owner), per each campaign's "Stop on reply" (#30, #36).
+  // A new contact has no lead and nothing to stop.
+  if (lead) {
+    await stopLeadAfterReply(db, {
+      ownerId,
+      email: lead.email || fromEmail,
+      leadId: lead.id,
+      campaignId,
+      optOut: optOut !== null,
+      nowIso: nowS,
+    });
+  }
+  // "Remove me" and spam complaints: every lead row of this person for this
+  // owner reads Unsubscribed, not Replied. The suppression row above is what
+  // stops sends; this only tidies the status, so a failure is logged.
+  if (optOut === "unsubscribe" || optOut === "complaint") {
+    try {
+      await setLeadStatusForEmail(db, {
+        ownerId,
+        email: lead?.email || fromEmail,
+        status: "unsubscribed",
+        nowIso: nowS,
+      });
+    } catch (err) {
+      console.error("[sync-replies] marking the lead unsubscribed failed", fromEmail, err);
+    }
+  }
   await db
     .update(schema.senderAccounts)
     .set({ repliedCount: sql`${schema.senderAccounts.repliedCount} + 1` })
@@ -953,21 +1250,29 @@ async function recordReplyIfNew(db: EngineDb, sender: SenderRow, msg: any, heade
     id: crypto.randomUUID(),
     userId: ownerId,
     type: "reply_received",
-    message: `${fromEmail} replied via ${sender.email}`,
+    message: lead
+      ? `${fromEmail} replied via ${sender.email}`
+      : `${fromEmail} wrote in to ${sender.email} (new contact)`,
     campaignId,
   });
-  return true;
+  return { replyId };
 }
 
-/** Sync all senders that have IMAP configured and are not failed. */
-export async function syncTick(db: EngineDb): Promise<SyncResult> {
+/**
+ * Read every mailbox with an inbox: paused ones too (their replies must still
+ * stop sequences), retired ones for RETIRED_SYNC_GRACE_DAYS, and ones whose
+ * login failed once the retry backoff has passed (shouldSyncMailbox).
+ */
+export async function syncTick(db: EngineDb, now: Date = new Date()): Promise<SyncResult> {
   const result: SyncResult = { checked: 0, repliesFound: 0, bounces: 0, errors: [] };
-  const senders: SenderRow[] = await db
+  const retiredCutoff = new Date(now.getTime() - RETIRED_SYNC_GRACE_DAYS * 86_400_000).toISOString();
+  const candidates: SenderRow[] = await db
     .select()
     .from(schema.senderAccounts)
     .where(
-      sql`${schema.senderAccounts.deletedAt} is null and ${schema.senderAccounts.imapHost} != '' and ${schema.senderAccounts.status} != 'paused' and (${schema.senderAccounts.imapStatus} is null or ${schema.senderAccounts.imapStatus} != 'failed')`
+      sql`${schema.senderAccounts.imapHost} != '' and (${schema.senderAccounts.deletedAt} is null or ${schema.senderAccounts.deletedAt} > ${retiredCutoff})`
     );
+  const senders = candidates.filter((s) => shouldSyncMailbox(s as SenderRow & { deletedAt?: string | null }, now));
 
   const syncWithTimeout = async (s: SenderRow) => {
     return Promise.race([

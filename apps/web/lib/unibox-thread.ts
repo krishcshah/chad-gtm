@@ -27,6 +27,8 @@ export interface UniboxThreadMessage {
   sentAt: string; // ISO-8601
   /** Present on inbound messages; null/undefined elsewhere. */
   tag?: UniboxReplyTag | null;
+  /** An agent draft you approved unchanged ("Agent, approved by you"). */
+  approvedByUser?: boolean;
 }
 
 export type UniboxThreadKey =
@@ -236,6 +238,7 @@ export async function loadUniboxThreadMessages(
         campaignId: schema.uniboxMessages.campaignId,
         replyId: schema.uniboxMessages.replyId,
         fromRole: schema.uniboxMessages.fromRole,
+        approvedByUser: schema.uniboxMessages.approvedByUser,
       })
       .from(schema.uniboxMessages)
       .where(and(...opConds));
@@ -259,6 +262,7 @@ export async function loadUniboxThreadMessages(
         bodyHtml: m.bodyHtml || "",
         bodyText: m.bodyText || "",
         sentAt: m.sentAt,
+        ...(m.fromRole === "agent" && m.approvedByUser ? { approvedByUser: true } : {}),
       });
     }
   }

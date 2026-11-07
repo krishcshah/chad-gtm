@@ -818,18 +818,26 @@ export function searchLeadsDirectoryForAccess(
 /** Max rows the autopilot lead matcher preview returns per call. */
 export const LEAD_MATCHER_MAX_PAGE_SIZE = 10;
 
+/** Launch targeting the lead matcher can narrow by (same filters launch uses). */
+export interface LeadMatcherFilters {
+  jobTitles?: string[];
+  teamSizes?: string[];
+}
+
 /**
  * Search params for the autopilot lead matcher preview: the launch audience
- * (work addresses in the given countries), page size capped.
+ * (work addresses in the given countries), page size capped. Job titles and
+ * team sizes are added only when given, so the preview matches launch.
  */
 export function leadMatcherSearchParams(
   industries: string[],
   countries: string[],
   page = 1,
-  pageSize = LEAD_MATCHER_MAX_PAGE_SIZE
+  pageSize = LEAD_MATCHER_MAX_PAGE_SIZE,
+  filters: LeadMatcherFilters = {}
 ): DirectorySearchParams {
   const size = Math.min(LEAD_MATCHER_MAX_PAGE_SIZE, Math.max(1, Math.floor(Number(pageSize)) || LEAD_MATCHER_MAX_PAGE_SIZE));
-  return {
+  const params: DirectorySearchParams = {
     industries: industries.length > 0 ? industries : undefined,
     countries,
     hasEmail: true,
@@ -837,6 +845,9 @@ export function leadMatcherSearchParams(
     page: Math.max(1, Math.floor(Number(page)) || 1),
     pageSize: size,
   };
+  if (filters.jobTitles && filters.jobTitles.length > 0) params.jobTitles = filters.jobTitles;
+  if (filters.teamSizes && filters.teamSizes.length > 0) params.teamSizes = filters.teamSizes;
+  return params;
 }
 
 /**
@@ -848,9 +859,10 @@ export function searchLeadMatcherPreview(
   industries: string[],
   countries: string[],
   page = 1,
-  pageSize = LEAD_MATCHER_MAX_PAGE_SIZE
+  pageSize = LEAD_MATCHER_MAX_PAGE_SIZE,
+  filters: LeadMatcherFilters = {}
 ): DirectorySearchResult {
-  return searchLeadsDirectoryForAccess(leadMatcherSearchParams(industries, countries, page, pageSize), "none");
+  return searchLeadsDirectoryForAccess(leadMatcherSearchParams(industries, countries, page, pageSize, filters), "none");
 }
 
 /** Max rows per CSV export for this level; 0 means exports are blocked. */
@@ -872,6 +884,44 @@ export function directorySaveLimit(level: DirectoryAccessLevel): number {
  * `offset` lets callers rotate through the directory instead of re-picking the
  * same first N rows on every campaign launch.
  */
+/** One directory row (snake_case SQLite columns) as a DirectoryLead. */
+export function mapDirectoryRow(r: any): DirectoryLead {
+  let rawAttrs: Record<string, string> = {};
+  try {
+    if (r.raw_data) {
+      rawAttrs = JSON.parse(r.raw_data);
+    }
+  } catch {}
+
+  return {
+    id: r.id,
+    leadId: r.lead_id || `lead_${r.id}`,
+    firstName: r.first_name || "",
+    lastName: r.last_name || "",
+    fullName: r.full_name || `${r.first_name || ""} ${r.last_name || ""}`.trim(),
+    jobTitle: r.job_title || "",
+    companyName: r.company_name || "",
+    companyWebsite: r.company_website || "",
+    linkedinUrl: r.linkedin_url || "",
+    location: r.location || "",
+    city: r.city || "",
+    state: r.state || "",
+    country: r.country || "",
+    industry: r.industry || "",
+    teamSize: r.team_size || "",
+    revenueRange: r.revenue_range || "",
+    email: r.email || "",
+    emailStatus: r.email_status || (r.email ? "verified" : "unknown"),
+    phone: r.phone || "",
+    emailCount: r.email_count || (r.email ? 1 : 0),
+    phoneCount: r.phone_count || (r.phone ? 1 : 0),
+    sourceFile: r.source_file || "",
+    rawAttributes: rawAttrs,
+    workEmail: r.work_email || "",
+    personalEmail: r.personal_email || "",
+  };
+}
+
 export function getMatchingDirectoryLeadsForExport(
   params: DirectorySearchParams,
   maxRows = 25000,
@@ -887,42 +937,7 @@ export function getMatchingDirectoryLeadsForExport(
       Math.max(0, Math.floor(offset))
     ) as any[];
 
-    return rawRows.map((r) => {
-      let rawAttrs: Record<string, string> = {};
-      try {
-        if (r.raw_data) {
-          rawAttrs = JSON.parse(r.raw_data);
-        }
-      } catch {}
-
-      return {
-        id: r.id,
-        leadId: r.lead_id || `lead_${r.id}`,
-        firstName: r.first_name || "",
-        lastName: r.last_name || "",
-        fullName: r.full_name || `${r.first_name || ""} ${r.last_name || ""}`.trim(),
-        jobTitle: r.job_title || "",
-        companyName: r.company_name || "",
-        companyWebsite: r.company_website || "",
-        linkedinUrl: r.linkedin_url || "",
-        location: r.location || "",
-        city: r.city || "",
-        state: r.state || "",
-        country: r.country || "",
-        industry: r.industry || "",
-        teamSize: r.team_size || "",
-        revenueRange: r.revenue_range || "",
-        email: r.email || "",
-        emailStatus: r.email_status || (r.email ? "verified" : "unknown"),
-        phone: r.phone || "",
-        emailCount: r.email_count || (r.email ? 1 : 0),
-        phoneCount: r.phone_count || (r.phone ? 1 : 0),
-        sourceFile: r.source_file || "",
-        rawAttributes: rawAttrs,
-        workEmail: r.work_email || "",
-        personalEmail: r.personal_email || "",
-      };
-    });
+    return rawRows.map(mapDirectoryRow);
   } catch (err) {
     console.error("[leads-directory] Export error:", err);
     return [];
@@ -1062,7 +1077,7 @@ export async function ingestCsvContent(
       }
     }
 
-    const email = emailIdx >= 0 ? cols[emailIdx] || "" : "";
+    const email = emailIdx >= 0 ? (cols[emailIdx] || "").trim().toLowerCase() : "";
     const phone = phoneIdx >= 0 ? cols[phoneIdx] || "" : "";
 
     insertStmt.run(
@@ -1133,6 +1148,31 @@ export function invalidateDirectoryFacetsCache(): void {
   cachedStatsAt = 0;
   countCache.clear();
   cachedFtsReady = null;
+}
+
+const DIRECTORY_EMAIL_MATCH = "lower(email) = ? OR lower(work_email) = ? OR lower(personal_email) = ?";
+
+/** Directory rows whose email, work email or personal email is this address (any case). */
+export function directoryCountByEmail(email: string, db: DatabaseSync = getDirectoryDb()): number {
+  const e = email.trim().toLowerCase();
+  if (!e) return 0;
+  const row = db.prepare(`SELECT COUNT(*) as cnt FROM leads WHERE ${DIRECTORY_EMAIL_MATCH}`).get(e, e, e) as
+    | { cnt: number }
+    | undefined;
+  return row?.cnt || 0;
+}
+
+/**
+ * Erasure: delete every directory row for this address. The FTS delete
+ * trigger (created with the index) keeps leads_fts in sync.
+ */
+export function deleteDirectoryLeadsByEmail(email: string, db: DatabaseSync = getDirectoryDb()): number {
+  const e = email.trim().toLowerCase();
+  if (!e) return 0;
+  const result = db.prepare(`DELETE FROM leads WHERE ${DIRECTORY_EMAIL_MATCH}`).run(e, e, e);
+  const deleted = Number(result.changes ?? 0);
+  if (deleted > 0) invalidateDirectoryFacetsCache();
+  return deleted;
 }
 
 export interface IngestionResult {

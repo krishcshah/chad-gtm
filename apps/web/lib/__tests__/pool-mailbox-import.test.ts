@@ -76,6 +76,42 @@ describe("planPoolMailboxImport", () => {
     expect(tester).toHaveBeenCalledTimes(3);
   });
 
+  it("skips the per-domain cap for dedicated mailboxes (enforceDomainCap: false) but still tests them", async () => {
+    const tester = vi.fn(async () => ({ smtp: ok, imap: ok }));
+    const candidates = [cand(1, "a@x.com"), cand(2, "b@x.com"), cand(3, "c@x.com"), cand(4, "d@x.com")];
+    const dedicated = await planPoolMailboxImport({
+      candidates,
+      existingEmails: new Set(),
+      existingDomainCounts: new Map(),
+      tester,
+      enforceDomainCap: false,
+    });
+    expect(dedicated.rejected).toEqual([]);
+    expect(dedicated.toInsert.map((i) => i.candidate.email)).toEqual(["a@x.com", "b@x.com", "c@x.com", "d@x.com"]);
+    expect(tester).toHaveBeenCalledTimes(4);
+
+    const pooled = await planPoolMailboxImport({
+      candidates,
+      existingEmails: new Set(),
+      existingDomainCounts: new Map(),
+      tester: vi.fn(async () => ({ smtp: ok, imap: ok })),
+    });
+    expect(pooled.toInsert).toHaveLength(3);
+    expect(pooled.rejected.map((r) => r.row)).toEqual([4]);
+  });
+
+  it("dedicated imports still reject duplicates", async () => {
+    const plan = await planPoolMailboxImport({
+      candidates: [cand(1, "Old@x.com")],
+      existingEmails: new Set(["old@x.com"]),
+      existingDomainCounts: new Map(),
+      tester: vi.fn(async () => ({ smtp: ok, imap: ok })),
+      enforceDomainCap: false,
+    });
+    expect(plan.toInsert).toEqual([]);
+    expect(plan.rejected.map((r) => r.row)).toEqual([1]);
+  });
+
   it("rejects duplicates (existing and within the file) without testing them", async () => {
     const tester = vi.fn(async () => ({ smtp: ok, imap: ok }));
     const plan = await planPoolMailboxImport({

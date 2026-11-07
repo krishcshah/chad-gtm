@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { cn } from "@smartreach/ui";
 
-export type SettingsSection = { id: string; label: string };
+/** `group`: a heading shown above the first section of each group ("Account", "This workspace: …"). */
+export type SettingsSection = { id: string; label: string; group?: string };
 
 /** Sticky in-page navigation for the settings sections (desktop only). Highlights the section in view. */
 export function SettingsNav({ sections }: { sections: SettingsSection[] }) {
@@ -52,10 +53,22 @@ export function SettingsNav({ sections }: { sections: SettingsSection[] }) {
   return (
     <nav aria-label="Settings sections" className="hidden lg:block">
       <ul className="sticky top-10 flex flex-col gap-0.5">
-        {sections.map((s) => {
+        {sections.map((s, i) => {
           const current = s.id === active;
+          const heading = s.group && s.group !== sections[i - 1]?.group ? s.group : null;
           return (
             <li key={s.id}>
+              {heading ? (
+                <p
+                  className={cn(
+                    "truncate px-2.5 pb-1 text-xs font-medium text-subtle-foreground",
+                    i > 0 ? "pt-4" : "pt-0",
+                  )}
+                  title={heading}
+                >
+                  {heading}
+                </p>
+              ) : null}
               <a
                 href={`#${s.id}`}
                 aria-current={current ? "location" : undefined}

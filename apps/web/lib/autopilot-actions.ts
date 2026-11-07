@@ -7,40 +7,64 @@
  *  completeAutopilotSetupAction  booking link + CAN-SPAM identity, then launch
  *  retryAutopilotLaunchAction / retryAutopilotResearchAction  recover failed runs
  *  setBookingUrlAction       change the booking link (launches if that was the blocker)
- *  setReplyAgentModeAction   autopilot | approve | off
+ *  setReplyAgentModeAction   autopilot | approve | off (the run's "Lead conversations" value)
  *  agent requests            what the agent needs from the client
  *  knowledge base            resources/answers the agent may use
  */
 import { revalidatePath } from "next/cache";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { nowIso } from "@smartreach/shared";
 import { getDb, ensureChadGtmTables } from "./db";
 import { requireUser } from "./session";
-import { getActiveWorkspace } from "./workspaces";
+import { ensureDefaultWorkspace, getActiveWorkspace } from "./workspaces";
+import { wsCondition } from "./queries";
 import { analyzeWebsiteAction } from "./chad-gtm-actions";
 import {
   COMPLIANCE_REQUIRED_ERROR,
   LaunchError,
+  LaunchInProgressError,
   launchRunCampaign,
   loadComplianceIdentity,
 } from "./gtm-launch";
-import { APPROVAL_REQUIRED_ERROR, assertCanSend } from "./approval";
+import { APPROVAL_REQUIRED_ERROR, assertCanSend, isSendAccessError } from "./approval";
 import {
   LAUNCH_FAILURE_MESSAGES,
+  clampAutopilotDaily,
   complianceProblems,
+  launchClaimActive,
   type LaunchFailure,
   type RunPhase,
 } from "./autopilot-policy";
 import { loadLaunchContext, runBlockers, runLaunchState, type LaunchContext, type RunLaunchState } from "./autopilot-state";
 import { normalizeClientBookingUrl } from "./booking-links";
+import { loadOwnedWorkspace, saveWorkspaceBookingUrl } from "./workspace-booking";
+import { writeWorkspaceIdentity } from "./workspace-profile";
 import { getWorkspaceAiOptions } from "./ai";
+import {
+  agentOffConversations,
+  conversationActivitySince,
+  conversationAgentOff,
+  conversationKey,
+  recordHumanSend,
+  releaseBookingLinkRequests,
+} from "./lead-conversations-server";
+import {
+  HUMAN_CLEARABLE_AGENT_STATUSES,
+  HUMAN_REPLIED_SUMMARY,
+  setConversationHandler,
+  suppressedEmails,
+} from "@smartreach/email-engine/lead-conversations";
+import { setCampaignConversationModeAction, setRunConversationModeAction } from "./lead-conversation-actions";
+import { REQUEST_ALREADY_HANDLED, modeFromRun } from "./lead-conversations";
+import { createLeadForUser } from "./leads";
+
+/** Needs you cards that still wait on the client ('sending' = a send is in flight). */
+const OPEN_STATUSES = ["open", "sending"] as const;
 
 type RunRow = typeof schema.chadGtmRuns.$inferSelect;
 
 type Result<T = undefined> = { ok: true; data?: T; message?: string } | { ok: false; error: string };
-
-const DEFAULT_DAILY = 60;
 
 async function loadOwnedRun(runId: string, userId: string) {
   const db = getDb();
@@ -48,7 +72,14 @@ async function loadOwnedRun(runId: string, userId: string) {
   const [run] = await db
     .select()
     .from(schema.chadGtmRuns)
-    .where(and(eq(schema.chadGtmRuns.id, runId), eq(schema.chadGtmRuns.userId, userId)))
+    .where(
+      and(
+        eq(schema.chadGtmRuns.id, runId),
+        eq(schema.chadGtmRuns.userId, userId),
+        // A deleted draft can't be brought back by any action (#55).
+        isNull(schema.chadGtmRuns.dismissedAt),
+      ),
+    )
     .limit(1);
   return run ?? null;
 }
@@ -67,8 +98,10 @@ export interface AutopilotOutcome {
   leadCount?: number;
   /** Fields the client still has to provide (phase "needs_details"). */
   missing?: Array<"bookingUrl" | "companyName" | "postalAddress">;
-  /** Prefill for the details form. */
-  identity?: { companyName: string; postalAddress: string };
+  /** The run's workspace sender identity (what the footer will carry) and that workspace's name. */
+  identity?: { companyName: string; postalAddress: string; workspaceName?: string };
+  /** The researched company name, offered as a prefill only while the workspace has none. */
+  suggestedCompanyName?: string;
   bookingUrl?: string | null;
   /** Client-facing explanation for every non-live phase. */
   reason?: string;
@@ -113,7 +146,10 @@ export async function completeAutopilotSetupAction(
   }
 
   if (input.companyName !== undefined || input.postalAddress !== undefined) {
-    const current = await loadComplianceIdentity(db, user.id);
+    // Only the run's own workspace (null = the default one): never the active
+    // workspace cookie, never the account-wide row, never another workspace (#73).
+    const workspaceId = run.workspaceId ?? null;
+    const current = await loadComplianceIdentity(db, user.id, workspaceId);
     const identity = {
       companyName: input.companyName !== undefined ? input.companyName.trim() : current.companyName,
       postalAddress: input.postalAddress !== undefined ? input.postalAddress.trim() : current.postalAddress,
@@ -121,7 +157,9 @@ export async function completeAutopilotSetupAction(
     const problems = complianceProblems(identity);
     const firstProblem = problems.companyName || problems.postalAddress;
     if (firstProblem) return { ok: false, error: firstProblem };
-    await saveComplianceIdentity(user.id, identity);
+    const saved = await writeWorkspaceIdentity(db, user.id, workspaceId, identity);
+    if (!saved) return { ok: false, error: "We couldn't save your sender details. Try again." };
+    revalidatePath("/settings");
   }
 
   return advanceAutopilotRun(run.id, user.id);
@@ -153,19 +191,6 @@ export async function retryAutopilotResearchAction(
   return advanceAutopilotRun(run.id, user.id);
 }
 
-async function saveComplianceIdentity(userId: string, identity: { companyName: string; postalAddress: string }) {
-  const db = getDb();
-  const workspace = await getActiveWorkspace(userId);
-  await db
-    .insert(schema.workspaceSettings)
-    .values({ userId, workspaceId: workspace.id, companyName: identity.companyName, postalAddress: identity.postalAddress })
-    .onConflictDoUpdate({
-      target: schema.workspaceSettings.userId,
-      set: { companyName: identity.companyName, postalAddress: identity.postalAddress, updatedAt: nowIso() },
-    });
-  revalidatePath("/settings");
-}
-
 function outcomeFor(run: RunRow, state: RunLaunchState, ctx: LaunchContext): AutopilotOutcome {
   const details = state.blockers.find((b) => b.kind === "details");
   const reason =
@@ -180,10 +205,13 @@ function outcomeFor(run: RunRow, state: RunLaunchState, ctx: LaunchContext): Aut
     companyName: run.companyName,
     campaignId: run.campaignId ?? undefined,
     missing: details && details.kind === "details" ? details.missing : undefined,
+    // Exactly what the footer will carry: never the researched name as if it were the sender's.
     identity: {
-      companyName: ctx.identity.companyName || run.companyName || "",
+      companyName: ctx.identity.companyName,
       postalAddress: ctx.identity.postalAddress,
+      workspaceName: ctx.workspaceName ?? "",
     },
+    suggestedCompanyName: !ctx.identity.companyName.trim() && run.companyName ? run.companyName : undefined,
     bookingUrl: run.bookingUrl,
     reason,
   };
@@ -195,6 +223,11 @@ const PHASE_MESSAGES: Partial<Record<RunPhase, string>> = {
   awaiting_approval: "Your plan is ready. Launch unlocks as soon as your account is approved.",
   launch_failed: "Nothing was sent. Your plan is saved, so you can retry.",
 };
+
+const STILL_LAUNCHING_MESSAGE = "Still launching. This page updates when it's live.";
+
+const LINKED_NOT_STARTED_MESSAGE =
+  "Your campaign is set up but hasn't started. Press Resume outreach to start sending.";
 
 /**
  * Move an autopilot run as far as it can go: record what blocks it, or launch.
@@ -209,9 +242,13 @@ async function advanceAutopilotRun(runId: string, userId: string): Promise<Resul
     run = { ...run, autopilot: true };
   }
 
-  const ctx = await loadLaunchContext(db, userId);
+  const ctx = await loadLaunchContext(db, userId, { workspaceId: run.workspaceId });
   if (run.campaignId) {
     return { ok: true, data: outcomeFor(run, runLaunchState(run, ctx), ctx) };
+  }
+  // Another request is launching this run right now: report it, don't start a second launch.
+  if (launchClaimActive(run.launchStartedAt)) {
+    return { ok: true, data: outcomeFor(run, runLaunchState(run, ctx), ctx), message: STILL_LAUNCHING_MESSAGE };
   }
 
   const blockers = runBlockers(run, ctx);
@@ -235,10 +272,15 @@ async function advanceAutopilotRun(runId: string, userId: string): Promise<Resul
       message: `Outreach is live: ${launched.leadCount} prospects queued for the next sending window.`,
     };
   } catch (err) {
+    if (err instanceof LaunchInProgressError) {
+      // Lost the launch claim to a concurrent request. Not a failure: show its progress.
+      const fresh = (await loadOwnedRun(run.id, userId)) ?? run;
+      return { ok: true, data: outcomeFor(fresh, runLaunchState(fresh, ctx), ctx), message: STILL_LAUNCHING_MESSAGE };
+    }
     const message = err instanceof Error ? err.message : "";
-    if (message === APPROVAL_REQUIRED_ERROR || message === COMPLIANCE_REQUIRED_ERROR) {
+    if (isSendAccessError(message) || message === COMPLIANCE_REQUIRED_ERROR) {
       // Approval or identity changed between the check and the launch: re-evaluate.
-      const ctxNow = await loadLaunchContext(db, userId);
+      const ctxNow = await loadLaunchContext(db, userId, { workspaceId: run.workspaceId });
       const status = runBlockers(run, ctxNow)[0]?.kind === "approval" ? "ready" : "needs_input";
       run = { ...run, status };
       await db.update(schema.chadGtmRuns).set({ status, updatedAt: nowIso() }).where(eq(schema.chadGtmRuns.id, run.id));
@@ -247,6 +289,24 @@ async function advanceAutopilotRun(runId: string, userId: string): Promise<Resul
       return { ok: true, data: outcome, message: PHASE_MESSAGES[outcome.phase] };
     }
     console.error("[autopilot] launch failed", { runId: run.id, error: err });
+    // The run was linked to its draft campaign before the error (the final
+    // switch to running failed). The plan is set up and nothing sends: show it
+    // as Paused, never as a failed launch.
+    const linked = await loadOwnedRun(run.id, userId).catch(() => null);
+    if (linked?.campaignId) {
+      const [campaign] = await db
+        .select({ status: schema.campaigns.status, deletedAt: schema.campaigns.deletedAt })
+        .from(schema.campaigns)
+        .where(eq(schema.campaigns.id, linked.campaignId))
+        .limit(1)
+        .catch(() => []);
+      revalidateRun(run.id);
+      return {
+        ok: true,
+        data: outcomeFor(linked, runLaunchState(linked, ctx, campaign ?? { status: "draft", deletedAt: null }), ctx),
+        message: LINKED_NOT_STARTED_MESSAGE,
+      };
+    }
     const failure: LaunchFailure = {
       code: err instanceof LaunchError ? err.code : "error",
       message: err instanceof LaunchError ? err.message : LAUNCH_FAILURE_MESSAGES.error,
@@ -257,7 +317,8 @@ async function advanceAutopilotRun(runId: string, userId: string): Promise<Resul
     await db
       .update(schema.chadGtmRuns)
       .set({ status: "needs_input", calibrationProfile, updatedAt: nowIso() })
-      .where(eq(schema.chadGtmRuns.id, run.id));
+      // Never mark a run that is linked to a campaign as failed.
+      .where(and(eq(schema.chadGtmRuns.id, run.id), isNull(schema.chadGtmRuns.campaignId)));
     revalidateRun(run.id);
     return { ok: true, data: outcomeFor(run, runLaunchState(run, ctx), ctx), message: PHASE_MESSAGES.launch_failed };
   }
@@ -273,12 +334,14 @@ async function launchAutopilotRun(run: RunRow, userId: string) {
   const db = getDb();
   // Server-side gate, independent of any UI state.
   await assertCanSend(userId);
-  const workspace = await getActiveWorkspace(userId);
   return launchRunCampaign(db, {
     run,
     userId,
-    workspaceId: run.workspaceId ?? workspace.id,
-    dailyLimit: run.dailyEmailLimit && run.dailyEmailLimit > 30 ? run.dailyEmailLimit : DEFAULT_DAILY,
+    // The workspace the run is listed under (none = the default one), never
+    // the active one: its campaign and footer identity come from there (#73).
+    workspaceId: run.workspaceId ?? (await ensureDefaultWorkspace(userId)).id,
+    // The run's chosen volume (a chosen 30 stays 30); the default only when unset.
+    dailyLimit: clampAutopilotDaily(run.dailyEmailLimit),
     approvedSamples: [],
     selectedOfferIndex: 0,
   });
@@ -287,6 +350,8 @@ async function launchAutopilotRun(run: RunRow, userId: string) {
 export async function setBookingUrlAction(
   runId: string,
   rawUrl: string,
+  /** workspaceDefault: also make it the workspace's booking link (only when true; never implied). */
+  opts: { workspaceDefault?: boolean } = {},
 ): Promise<Result<{ launched: boolean; campaignId?: string; phase?: RunPhase; outcome?: AutopilotOutcome }>> {
   const user = await requireUser();
   const bookingUrl = normalizeClientBookingUrl(rawUrl || "");
@@ -300,27 +365,35 @@ export async function setBookingUrlAction(
     .set({ bookingUrl, updatedAt: nowIso() })
     .where(eq(schema.chadGtmRuns.id, run.id));
 
-  // Requests that were only waiting on a booking link can be retried by the agent.
-  const waiting = await db
-    .select({ id: schema.agentRequests.id, replyId: schema.agentRequests.replyId })
-    .from(schema.agentRequests)
-    .where(
-      and(
-        eq(schema.agentRequests.userId, user.id),
-        eq(schema.agentRequests.runId, run.id),
-        eq(schema.agentRequests.kind, "booking_url"),
-        eq(schema.agentRequests.status, "open"),
-      ),
-    );
-  for (const w of waiting) {
-    await db
-      .update(schema.agentRequests)
-      .set({ status: "resolved", resolution: `Booking link set: ${bookingUrl}`, resolvedAt: nowIso(), updatedAt: nowIso() })
-      .where(eq(schema.agentRequests.id, w.id));
-    if (w.replyId) {
-      await db.update(schema.replies).set({ agentStatus: "pending" }).where(eq(schema.replies.id, w.replyId));
+  // Cards waiting only on a booking link: the agent answers those nobody
+  // answered since; the rest close as handled in the Inbox.
+  let { answered } = await releaseBookingLinkRequests(db, {
+    userId: user.id,
+    runId: run.id,
+    campaignIds: run.campaignId ? [run.campaignId] : [],
+    bookingUrl,
+    nowIso: nowIso(),
+  });
+
+  // The workspace default changes only on an explicit "Also make this the default":
+  // a new default also releases other campaigns' booking-link cards, so it is never implied.
+  let defaultFor: string | null = null;
+  const workspace =
+    opts.workspaceDefault === true ? await loadOwnedWorkspace(db, user.id, run.workspaceId ?? null).catch(() => null) : null;
+  if (workspace && workspace.bookingUrl !== bookingUrl) {
+    const res = await saveWorkspaceBookingUrl(db, { userId: user.id, workspace, bookingUrl, nowIso: nowIso() });
+    if (res.saved) {
+      defaultFor = workspace.name || "this workspace";
+      answered += res.answered;
+      revalidatePath("/settings");
     }
   }
+  const savedMessage = [
+    defaultFor ? `Booking link saved. Also set as the default for ${defaultFor}.` : "Booking link saved.",
+    answered > 0 ? `The agent will answer ${answered} waiting ${answered === 1 ? "lead" : "leads"}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   let outcome: AutopilotOutcome | undefined;
   if (run.autopilot && !run.campaignId) {
@@ -335,35 +408,81 @@ export async function setBookingUrlAction(
     ok: true,
     data: { launched, campaignId: outcome?.campaignId ?? run.campaignId ?? undefined, phase: outcome?.phase, outcome },
     message: launched
-      ? "Booking link saved. Outreach is live."
+      ? `${savedMessage} Outreach is live.`
       : outcome
-        ? `Booking link saved. ${PHASE_MESSAGES[outcome.phase] ?? ""}`.trim()
-        : "Booking link saved.",
+        ? `${savedMessage} ${PHASE_MESSAGES[outcome.phase] ?? ""}`.trim()
+        : savedMessage,
   };
 }
 
-export async function setReplyAgentModeAction(
-  runId: string,
-  mode: "autopilot" | "approve" | "off",
-): Promise<Result> {
+/**
+ * Remove a launched run's booking link: the agent then asks the client in
+ * Needs you whenever a lead wants to talk (it already escalates booking
+ * requests without a link). An unlaunched autopilot run needs the link to
+ * launch, so it is refused there. Held requests are left alone.
+ */
+export async function clearBookingUrlAction(runId: string): Promise<Result> {
   const user = await requireUser();
-  if (!["autopilot", "approve", "off"].includes(mode)) return { ok: false, error: "Unknown mode." };
   const run = await loadOwnedRun(runId, user.id);
   if (!run) return { ok: false, error: "Run not found." };
-  await getDb()
+  if (run.autopilot && !run.campaignId) {
+    return { ok: false, error: "Add a booking link to launch. You can remove it after launch." };
+  }
+  const db = getDb();
+  await db
     .update(schema.chadGtmRuns)
-    .set({ replyAgentMode: mode, updatedAt: nowIso() })
-    .where(eq(schema.chadGtmRuns.id, run.id));
+    .set({ bookingUrl: null, updatedAt: nowIso() })
+    .where(and(eq(schema.chadGtmRuns.id, run.id), eq(schema.chadGtmRuns.userId, user.id)));
+  // The agent falls back to the workspace's default link: say so instead of promising it asks.
+  const workspace = await loadOwnedWorkspace(db, user.id, run.workspaceId ?? null).catch(() => null);
   revalidatePath(`/chad-gtm/${run.id}`);
   return {
     ok: true,
-    message:
-      mode === "autopilot"
-        ? "The agent now replies on its own."
-        : mode === "approve"
-          ? "The agent will draft replies for your approval."
-          : "Reply agent paused — reply from the UniBox.",
+    message: workspace?.bookingUrl
+      ? `Booking link removed. This run now uses the ${workspace.name || "workspace"} booking link; remove that in Settings to have the agent ask you instead.`
+      : "Booking link removed. The agent will ask you in Needs you when a lead wants to talk.",
   };
+}
+
+/** "Use workspace default": drop the run's own link so it uses the workspace's. */
+export async function useWorkspaceBookingUrlAction(runId: string): Promise<Result<{ bookingUrl: string }>> {
+  const user = await requireUser();
+  const run = await loadOwnedRun(runId, user.id);
+  if (!run) return { ok: false, error: "Run not found." };
+  const db = getDb();
+  const workspace = await loadOwnedWorkspace(db, user.id, run.workspaceId ?? null);
+  if (!workspace?.bookingUrl) {
+    return { ok: false, error: "This workspace has no booking link yet. Add one in Settings › Lead conversations." };
+  }
+  await db
+    .update(schema.chadGtmRuns)
+    .set({ bookingUrl: null, updatedAt: nowIso() })
+    .where(and(eq(schema.chadGtmRuns.id, run.id), eq(schema.chadGtmRuns.userId, user.id)));
+  revalidatePath(`/chad-gtm/${run.id}`);
+  return {
+    ok: true,
+    data: { bookingUrl: workspace.bookingUrl },
+    message: `This run now uses the ${workspace.name || "workspace"} booking link.`,
+  };
+}
+
+/**
+ * Older entry point for the run page: the same "Lead conversations" value,
+ * stored on the campaign once launched and on the run before that.
+ */
+export async function setReplyAgentModeAction(
+  runId: string,
+  mode: "autopilot" | "approve" | "off",
+  options: { applyToWaiting?: boolean } = {},
+): Promise<Result> {
+  if (!["autopilot", "approve", "off"].includes(mode)) return { ok: false, error: "Unknown mode." };
+  const res = await setRunConversationModeAction({
+    runId,
+    mode: modeFromRun(mode),
+    applyToWaiting: options.applyToWaiting,
+  });
+  if (!res.ok) return res;
+  return { ok: true, message: res.message };
 }
 
 /* ─── Agent requests (human-in-the-loop) ─────────────────────────────── */
@@ -371,6 +490,9 @@ export async function setReplyAgentModeAction(
 export interface AgentRequestView {
   id: string;
   runId: string | null;
+  replyId: string | null;
+  leadId: string | null;
+  campaignId: string | null;
   kind: string;
   status: string;
   title: string;
@@ -379,6 +501,12 @@ export interface AgentRequestView {
   leadName: string;
   leadCompany: string;
   draftReply: string;
+  /** Who wrote draftReply: the agent, or the client's own answer. */
+  draftSource: "agent" | "you";
+  /** Referral cards: the address the lead pointed to, when their message had one. */
+  referralEmail: string | null;
+  /** The agent is off for this conversation (Manual, paused or taken over): answer it yourself. */
+  agentOff: boolean;
   resolution: string | null;
   resourceUrl: string | null;
   createdAt: string;
@@ -395,7 +523,11 @@ export async function listAgentRequests(
   const user = await requireUser();
   const db = getDb();
   const conds = [eq(schema.agentRequests.userId, user.id)];
-  if (status !== "all") conds.push(eq(schema.agentRequests.status, status));
+  // Same workspace scope as the Inbox and the nav badge (legacy rows count as the default workspace's).
+  const scope = await requestScope(user.id);
+  if (scope) conds.push(scope);
+  if (status === "open") conds.push(inArray(schema.agentRequests.status, [...OPEN_STATUSES]));
+  else if (status !== "all") conds.push(eq(schema.agentRequests.status, status));
   const rows = await db
     .select({
       r: schema.agentRequests,
@@ -410,9 +542,18 @@ export async function listAgentRequests(
     .where(and(...conds))
     .orderBy(desc(schema.agentRequests.createdAt))
     .limit(200);
+  const openRows = rows.filter(({ r }: any) => (OPEN_STATUSES as readonly string[]).includes(r.status));
+  const agentOff = await agentOffConversations(
+    db,
+    user.id,
+    openRows.map(({ r }: any) => ({ leadId: r.leadId ?? null, campaignId: r.campaignId ?? null })),
+  );
   return rows.map(({ r, replySubject, replyBody, replyReceivedAt, companyName }: any) => ({
     id: r.id,
     runId: r.runId,
+    replyId: r.replyId ?? null,
+    leadId: r.leadId ?? null,
+    campaignId: r.campaignId ?? null,
     kind: r.kind,
     status: r.status,
     title: r.title,
@@ -421,6 +562,11 @@ export async function listAgentRequests(
     leadName: r.leadName,
     leadCompany: r.leadCompany,
     draftReply: r.draftReply,
+    draftSource: r.draftSource === "you" ? "you" : "agent",
+    referralEmail: r.referralEmail ?? null,
+    agentOff:
+      (OPEN_STATUSES as readonly string[]).includes(r.status) &&
+      agentOff.has(conversationKey(r.leadId ?? null, r.campaignId ?? null)),
     resolution: r.resolution,
     resourceUrl: r.resourceUrl,
     createdAt: r.createdAt,
@@ -435,14 +581,27 @@ export async function listAgentRequests(
 export async function countOpenAgentRequests(): Promise<number> {
   try {
     const user = await requireUser();
+    const scope = await requestScope(user.id);
     const [row] = await getDb()
       .select({ n: sql<number>`count(*)` })
       .from(schema.agentRequests)
-      .where(and(eq(schema.agentRequests.userId, user.id), eq(schema.agentRequests.status, "open")));
+      .where(
+        and(
+          eq(schema.agentRequests.userId, user.id),
+          inArray(schema.agentRequests.status, [...OPEN_STATUSES]),
+          ...(scope ? [scope] : []),
+        ),
+      );
     return Number(row?.n || 0);
   } catch {
     return 0;
   }
+}
+
+/** Needs you cards of the active workspace (NULL-workspace cards count as the default workspace's). */
+async function requestScope(userId: string) {
+  const ws = await getActiveWorkspace(userId);
+  return wsCondition(schema.agentRequests.workspaceId, ws.id, ws.isDefault);
 }
 
 async function loadOwnedRequest(requestId: string, userId: string) {
@@ -453,6 +612,42 @@ async function loadOwnedRequest(requestId: string, userId: string) {
     .where(and(eq(schema.agentRequests.id, requestId), eq(schema.agentRequests.userId, userId)))
     .limit(1);
   return req ?? null;
+}
+
+/** A 'sending' card older than this was left by a send that died: it may be claimed again. */
+const SENDING_STALE_MS = 10 * 60_000;
+
+/**
+ * Claim a Needs you card before acting on it, in one step: open → sending
+ * (or a stale 'sending' left by a send that died). Returns false when it was
+ * already answered, dismissed or is being sent: the caller must stop.
+ */
+async function claimRequest(db: any, requestId: string, userId: string): Promise<boolean> {
+  const now = nowIso();
+  const staleBefore = new Date(Date.now() - SENDING_STALE_MS).toISOString();
+  const rows: any[] = await db
+    .update(schema.agentRequests)
+    .set({ status: "sending", updatedAt: now })
+    .where(
+      and(
+        eq(schema.agentRequests.id, requestId),
+        eq(schema.agentRequests.userId, userId),
+        or(
+          eq(schema.agentRequests.status, "open"),
+          and(eq(schema.agentRequests.status, "sending"), lt(schema.agentRequests.updatedAt, staleBefore)),
+        ),
+      ),
+    )
+    .returning({ id: schema.agentRequests.id });
+  return rows.length > 0;
+}
+
+/** Put a claimed card back to open (the action failed before anything happened). */
+async function releaseRequest(db: any, requestId: string): Promise<void> {
+  await db
+    .update(schema.agentRequests)
+    .set({ status: "open", updatedAt: nowIso() })
+    .where(and(eq(schema.agentRequests.id, requestId), eq(schema.agentRequests.status, "sending")));
 }
 
 const URL_IN_TEXT = /https?:\/\/[^\s<>()"']+/gi;
@@ -475,16 +670,20 @@ function keywordsFrom(text: string): string[] {
 /**
  * Turn the client's answer into a reply to the lead. Uses the workspace model
  * when configured (polish only — it may not add links or facts), otherwise a
- * plain template. The client always sees and can edit the draft before sending.
+ * plain template. The draft is saved to the request and shown in the Inbox
+ * reply box, where the client checks and sends it.
  */
 export async function draftRequestReplyAction(input: {
   requestId: string;
   answer: string;
   resourceUrl?: string;
-}): Promise<Result<{ draft: string }>> {
+  /** Save the answer to the knowledge base once the reply is sent. */
+  save?: boolean;
+}): Promise<Result<{ draft: string; replyId: string | null }>> {
   const user = await requireUser();
   const req = await loadOwnedRequest(input.requestId, user.id);
   if (!req) return { ok: false, error: "Request not found." };
+  if (req.status !== "open") return { ok: false, error: REQUEST_ALREADY_HANDLED };
   const answer = String(input.answer || "").trim();
   const resourceUrl = input.resourceUrl?.trim() ? normalizeClientBookingUrl(input.resourceUrl) : null;
   if (!answer && !resourceUrl) return { ok: false, error: "Add an answer or a link for the agent to use." };
@@ -543,21 +742,58 @@ Return JSON: {"draft": "..."}`,
   } catch {
     // Template is fine.
   }
-  return { ok: true, data: { draft } };
+
+  // The draft waits in the Inbox reply box; the answer is saved to the
+  // knowledge base only once the reply is actually sent.
+  const saved = await db
+    .update(schema.agentRequests)
+    .set({
+      draftReply: draft,
+      draftSource: "you",
+      pendingKnowledge: { answer, resourceUrl, save: input.save !== false },
+      updatedAt: nowIso(),
+    })
+    .where(and(eq(schema.agentRequests.id, req.id), eq(schema.agentRequests.status, "open")))
+    .returning({ id: schema.agentRequests.id });
+  if (saved.length === 0) return { ok: false, error: REQUEST_ALREADY_HANDLED };
+  revalidatePath("/requests");
+  revalidatePath("/unibox");
+  return { ok: true, data: { draft, replyId: req.replyId ?? null } };
 }
 
+/** "Discard" in the Inbox: clear the draft so it isn't prefilled again. The request stays open. */
+export async function discardRequestDraftAction(requestId: string): Promise<Result> {
+  const user = await requireUser();
+  const req = await loadOwnedRequest(requestId, user.id);
+  if (!req) return { ok: false, error: "Request not found." };
+  if (req.status !== "open") return { ok: false, error: REQUEST_ALREADY_HANDLED };
+  const cleared: any[] = await getDb()
+    .update(schema.agentRequests)
+    .set({ draftReply: "", updatedAt: nowIso() })
+    .where(and(eq(schema.agentRequests.id, req.id), eq(schema.agentRequests.status, "open")))
+    .returning({ id: schema.agentRequests.id });
+  if (cleared.length === 0) return { ok: false, error: REQUEST_ALREADY_HANDLED };
+  revalidatePath("/unibox");
+  return { ok: true, message: "Draft discarded. The conversation still waits on you." };
+}
+
+/**
+ * Send the reply for a Needs you card (from the Inbox reply box). Refuses
+ * when anyone wrote in the conversation after what the person saw, claims the
+ * card so it is sent once, then closes every open card for the conversation.
+ */
 export async function resolveAgentRequestAction(input: {
   requestId: string;
   body: string;
-  answer?: string;
-  resourceUrl?: string;
-  saveToKnowledge?: boolean;
+  /** Time of the newest message the person had on screen. */
+  seenLatestAt?: string;
   knowledgeTitle?: string;
-}): Promise<Result> {
+}): Promise<Result<{ agentOff: boolean }>> {
   const user = await requireUser();
   const req = await loadOwnedRequest(input.requestId, user.id);
   if (!req) return { ok: false, error: "Request not found." };
-  if (req.status !== "open") return { ok: false, error: "This request is already closed." };
+  // A 'sending' card is claimable only once it is stale (claimRequest decides).
+  if (req.status !== "open" && req.status !== "sending") return { ok: false, error: REQUEST_ALREADY_HANDLED };
   const body = String(input.body || "").trim();
   if (body.length < 5) return { ok: false, error: "Write the reply before sending." };
 
@@ -565,7 +801,7 @@ export async function resolveAgentRequestAction(input: {
   const [reply] = req.replyId
     ? await db.select().from(schema.replies).where(eq(schema.replies.id, req.replyId)).limit(1)
     : [];
-  if (!reply) return { ok: false, error: "The original lead reply is gone; reply from the UniBox instead." };
+  if (!reply) return { ok: false, error: "The original lead reply is gone; reply from the Inbox instead." };
   const [sender] = await db
     .select()
     .from(schema.senderAccounts)
@@ -586,13 +822,39 @@ export async function resolveAgentRequestAction(input: {
     }
   }
 
-  // Do not message someone who opted out since the request was created.
-  const [suppressed] = await db
-    .select({ id: schema.suppressions.id })
-    .from(schema.suppressions)
-    .where(and(eq(schema.suppressions.userId, user.id), eq(schema.suppressions.value, reply.fromEmail.toLowerCase())))
-    .limit(1);
-  if (suppressed) return { ok: false, error: `${reply.fromEmail} has opted out — the reply was not sent.` };
+  // Do not message someone who opted out since the request was created: the
+  // shared check covers your blocklist and anyone's unsubscribe, bounce or
+  // complaint. A failed lookup throws, so nothing is sent.
+  const { loadRecipientVerdict, recipientBlockMessage } = await import("@smartreach/email-engine/suppression");
+  const verdict = await loadRecipientVerdict(db, user.id, reply.fromEmail);
+  if (verdict) return { ok: false, error: `${recipientBlockMessage(reply.fromEmail, verdict)} The reply was not sent.` };
+
+  // Someone wrote after this was drafted: read it before sending.
+  const since = input.seenLatestAt || reply.receivedAt;
+  if (
+    await conversationActivitySince(db, user.id, {
+      leadId: reply.leadId,
+      campaignId: reply.campaignId,
+      replyId: reply.id,
+      since,
+    })
+  ) {
+    const name = (req.leadName || reply.fromName || reply.fromEmail).trim().split(/\s+/)[0] || reply.fromEmail;
+    return {
+      ok: false,
+      error: `${name} or someone on your team wrote after this was drafted. Check the conversation, then send.`,
+    };
+  }
+
+  // With the agent off for this conversation (Manual, paused, taken over), the answer is yours.
+  const agentOff = await conversationAgentOff(db, user.id, { leadId: reply.leadId, campaignId: reply.campaignId });
+
+  // Claim the card so a second click, tab or teammate cannot send it again.
+  if (!(await claimRequest(db, req.id, user.id))) return { ok: false, error: REQUEST_ALREADY_HANDLED };
+
+  // An agent draft sent unchanged is "Agent, approved by you"; anything you wrote or edited is yours.
+  const storedDraft = String(req.draftReply || "").trim();
+  const approvedAgentDraft = !agentOff && req.draftSource !== "you" && storedDraft.length > 0 && body === storedDraft;
 
   const { sendAgentReply } = await import("@smartreach/email-engine/reply-agent");
   const now = nowIso();
@@ -604,15 +866,24 @@ export async function resolveAgentRequestAction(input: {
       workspaceId: req.workspaceId,
       body,
       nowIso: now,
-      fromRole: "agent",
+      fromRole: approvedAgentDraft ? "agent" : "operator",
+      approvedByUser: approvedAgentDraft,
     });
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? `Send failed: ${err.message}` : "Send failed." };
+    const delivered = Boolean(err && typeof err === "object" && (err as { delivered?: unknown }).delivered === true);
+    if (!delivered) {
+      await releaseRequest(db, req.id);
+      return { ok: false, error: err instanceof Error ? `Send failed: ${err.message}` : "Send failed." };
+    }
+    // The email went out but recording it failed: still close the card below.
   }
 
-  const resourceUrl = input.resourceUrl?.trim() ? normalizeClientBookingUrl(input.resourceUrl) : null;
-  const answer = String(input.answer || "").trim();
-  if (input.saveToKnowledge && (answer || resourceUrl) && req.kind !== "approval") {
+  const pending = req.pendingKnowledge ?? null;
+  const answer = String(pending?.answer || "").trim();
+  const resourceUrl = pending?.resourceUrl?.trim() ? normalizeClientBookingUrl(pending.resourceUrl) : null;
+  // Only answers to a question or a resource request are worth reusing; a
+  // hand-off, approval, referral or booking card would file a junk entry.
+  if (pending?.save && (answer || resourceUrl) && (req.kind === "question" || req.kind === "resource")) {
     // Questions are filed under the question itself so future matching works
     // on the lead's own words; resources under what was asked for.
     const baseTitle =
@@ -622,10 +893,12 @@ export async function resolveAgentRequestAction(input: {
         : req.question || req.title.replace(/^(Question|Objection): /i, "").replace(/[“”]/g, ""));
     const title = (baseTitle || "Resource").replace(/\s+/g, " ").trim().slice(0, 120);
     const keywords = keywordsFrom(`${title} ${req.question} ${answer}`);
+    // Knowledge is per workspace: a card with no workspace files it under the default one.
+    const knowledgeWorkspaceId = req.workspaceId ?? (await knowledgeDefaultWorkspaceId(user.id));
     await db.insert(schema.agentKnowledge).values({
       id: crypto.randomUUID(),
       userId: user.id,
-      workspaceId: req.workspaceId,
+      workspaceId: knowledgeWorkspaceId,
       kind: resourceUrl ? "resource" : "faq",
       title: title.charAt(0).toUpperCase() + title.slice(1),
       content: answer,
@@ -643,16 +916,19 @@ export async function resolveAgentRequestAction(input: {
       resolvedAt: now,
       updatedAt: now,
     })
-    .where(eq(schema.agentRequests.id, req.id));
-  await db
-    .update(schema.replies)
-    .set({
-      agentStatus: "replied",
-      agentHandledAt: now,
-      readAt: now,
-      agentSummary: req.kind === "approval" ? "You approved the agent's draft." : "You answered — reply sent.",
-    })
-    .where(eq(schema.replies.id, reply.id));
+    .where(and(eq(schema.agentRequests.id, req.id), eq(schema.agentRequests.status, "sending")));
+  // Every other open card for this conversation closes, and no reply in it stays waiting.
+  await recordHumanSend(db, {
+    userId: user.id,
+    workspaceId: req.workspaceId,
+    leadId: reply.leadId,
+    campaignId: reply.campaignId,
+    replyId: reply.id,
+    takeOver: false,
+    nowIso: now,
+    agentStatus: approvedAgentDraft ? "replied" : "human_replied",
+    summary: approvedAgentDraft ? APPROVED_BY_YOU_SUMMARY : HUMAN_REPLIED_SUMMARY,
+  });
   await db.insert(schema.activityLogs).values({
     id: crypto.randomUUID(),
     userId: user.id,
@@ -664,24 +940,214 @@ export async function resolveAgentRequestAction(input: {
 
   revalidatePath("/requests");
   revalidatePath("/unibox");
-  return { ok: true, message: `Reply sent to ${reply.fromEmail}.` };
+  // agentOff: Manual, paused or taken over, so the agent does not pick the conversation back up.
+  return { ok: true, data: { agentOff }, message: `Reply sent to ${reply.fromEmail}.` };
 }
 
+/** Reply summary for an agent draft you approved unchanged. */
+const APPROVED_BY_YOU_SUMMARY = "Agent, approved by you";
+const DISMISSED_SUMMARY = "You dismissed the agent's request and took over.";
+const DISMISSED_RESOLUTION = "Dismissed: you took over this conversation.";
+
+/**
+ * Dismiss means take over: nothing is sent, every open card in the
+ * conversation closes, and the conversation becomes "Handled by: You" so the
+ * agent stays silent until it is handed back from the Inbox.
+ */
 export async function dismissAgentRequestAction(requestId: string): Promise<Result> {
   const user = await requireUser();
   const req = await loadOwnedRequest(requestId, user.id);
   if (!req) return { ok: false, error: "Request not found." };
+  if (req.status !== "open") return { ok: false, error: REQUEST_ALREADY_HANDLED };
   const now = nowIso();
   const db = getDb();
-  await db
+
+  // Claim the card in one step: if it was answered or dismissed meanwhile, stop.
+  const claimed = await db
     .update(schema.agentRequests)
-    .set({ status: "dismissed", resolvedAt: now, updatedAt: now })
-    .where(eq(schema.agentRequests.id, req.id));
-  if (req.replyId) {
-    await db.update(schema.replies).set({ agentStatus: "skipped", agentHandledAt: now }).where(eq(schema.replies.id, req.replyId));
+    .set({ status: "dismissed", resolution: DISMISSED_RESOLUTION, resolvedAt: now, updatedAt: now })
+    .where(and(eq(schema.agentRequests.id, req.id), eq(schema.agentRequests.status, "open")))
+    .returning({ id: schema.agentRequests.id });
+  if (claimed.length === 0) return { ok: false, error: REQUEST_ALREADY_HANDLED };
+
+  const conversation = req.leadId && req.campaignId ? { leadId: req.leadId, campaignId: req.campaignId } : null;
+  const replyIds = new Set<string>(req.replyId ? [req.replyId] : []);
+  if (conversation) {
+    // One conversation, one decision: every other open card in it closes too.
+    // A card whose send is in flight is left alone (that send records it as
+    // resolved); only a stale 'sending' left by a send that died is closed.
+    const staleBefore = new Date(Date.now() - SENDING_STALE_MS).toISOString();
+    const others: any[] = await db
+      .update(schema.agentRequests)
+      .set({ status: "dismissed", resolution: DISMISSED_RESOLUTION, resolvedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(schema.agentRequests.userId, user.id),
+          eq(schema.agentRequests.leadId, conversation.leadId),
+          eq(schema.agentRequests.campaignId, conversation.campaignId),
+          or(
+            eq(schema.agentRequests.status, "open"),
+            and(eq(schema.agentRequests.status, "sending"), lt(schema.agentRequests.updatedAt, staleBefore)),
+          ),
+        ),
+      )
+      .returning({ id: schema.agentRequests.id, replyId: schema.agentRequests.replyId });
+    for (const o of others) if (o.replyId) replyIds.add(o.replyId);
+  }
+
+  // The lead's messages the agent still had open are now yours to answer.
+  const replyConds = [
+    replyIds.size > 0 ? inArray(schema.replies.id, [...replyIds]) : null,
+    conversation
+      ? and(
+          eq(schema.replies.leadId, conversation.leadId),
+          eq(schema.replies.campaignId, conversation.campaignId),
+          inArray(schema.replies.agentStatus, ["pending", "escalated", "held"]),
+        )
+      : null,
+  ].filter((c): c is NonNullable<typeof c> => c != null);
+  if (replyConds.length > 0) {
+    await db
+      .update(schema.replies)
+      .set({ agentStatus: "skipped", agentIntent: "manual", agentSummary: DISMISSED_SUMMARY, agentHandledAt: now })
+      .where(
+        and(
+          eq(schema.replies.userId, user.id),
+          // Never undo a reply that was already answered.
+          inArray(schema.replies.agentStatus, [...HUMAN_CLEARABLE_AGENT_STATUSES]),
+          replyConds.length === 1 ? replyConds[0]! : or(...replyConds)!,
+        ),
+      );
+  }
+
+  if (conversation) {
+    await setConversationHandler(db, {
+      userId: user.id,
+      workspaceId: req.workspaceId ?? null,
+      leadId: conversation.leadId,
+      campaignId: conversation.campaignId,
+      handler: "you",
+      reason: "dismiss",
+      nowIso: now,
+    });
   }
   revalidatePath("/requests");
-  return { ok: true, message: "Dismissed — no reply will be sent." };
+  revalidatePath("/unibox");
+  return {
+    ok: true,
+    message: conversation ? "Dismissed. You've taken over this conversation." : "Dismissed. Nothing was sent.",
+  };
+}
+
+const SIMPLE_EMAIL = /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[a-z]{2,}$/i;
+
+/**
+ * Referral card: add the person the lead pointed to as a lead in the same
+ * campaign. They are queued like any other lead, so the campaign's normal
+ * sending (with every send guard) reaches out; nothing is sent here.
+ */
+export async function addReferralLeadAction(input: { requestId: string; email: string }): Promise<Result<{ leadId: string }>> {
+  const user = await requireUser();
+  const req = await loadOwnedRequest(String(input?.requestId ?? ""), user.id);
+  if (!req) return { ok: false, error: "Request not found." };
+  if (req.status !== "open") return { ok: false, error: REQUEST_ALREADY_HANDLED };
+  if (req.kind !== "referral") return { ok: false, error: "Only referral cards can add a lead." };
+  const email = String(input?.email ?? "").trim().toLowerCase();
+  if (!SIMPLE_EMAIL.test(email)) return { ok: false, error: "Enter the new contact's email address, e.g. jane@acme.com" };
+  if (email === String(req.leadEmail || "").trim().toLowerCase()) {
+    return { ok: false, error: "That's the lead's own address. Enter the person they pointed you to." };
+  }
+  if (!req.campaignId) return { ok: false, error: "This card isn't linked to a campaign, so the contact can't be added." };
+
+  const db = getDb();
+  const [campaign]: any[] = await db
+    .select({
+      id: schema.campaigns.id,
+      workspaceId: schema.campaigns.workspaceId,
+      leadListId: schema.campaigns.leadListId,
+    })
+    .from(schema.campaigns)
+    .where(
+      and(
+        eq(schema.campaigns.id, req.campaignId),
+        eq(schema.campaigns.userId, user.id),
+        isNull(schema.campaigns.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!campaign) return { ok: false, error: "This campaign no longer exists, so the contact can't be added." };
+  if (!campaign.leadListId) return { ok: false, error: "This campaign has no lead list, so the contact can't be added." };
+
+  // Opted out, bounced, blocked or erased (own list or a global opt-out): never add.
+  if ((await suppressedEmails(db, user.id, [email])).has(email)) {
+    return { ok: false, error: `${email} is on your blocklist or has opted out, so they can't be added.` };
+  }
+  const inCampaign: any[] = await db
+    .select({ id: schema.campaignLeads.id })
+    .from(schema.campaignLeads)
+    .innerJoin(schema.leads, eq(schema.leads.id, schema.campaignLeads.leadId))
+    .where(and(eq(schema.campaignLeads.campaignId, campaign.id), sql`lower(${schema.leads.email}) = ${email}`))
+    .limit(1);
+  if (inCampaign.length > 0) return { ok: false, error: `${email} is already in this campaign.` };
+  const [inList]: any[] = await db
+    .select({ id: schema.leads.id, status: schema.leads.status })
+    .from(schema.leads)
+    .where(
+      and(
+        eq(schema.leads.listId, campaign.leadListId),
+        sql`lower(${schema.leads.email}) = ${email}`,
+        isNull(schema.leads.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (inList && inList.status !== "new" && inList.status !== "contacted") {
+    return { ok: false, error: `${email} is already in this campaign's lead list and can't be emailed.` };
+  }
+
+  if (!(await claimRequest(db, req.id, user.id))) return { ok: false, error: REQUEST_ALREADY_HANDLED };
+
+  let leadId: string;
+  if (inList) {
+    leadId = inList.id;
+  } else {
+    const created = await createLeadForUser(
+      db,
+      user.id,
+      { listId: campaign.leadListId, email, company: req.leadCompany || null },
+      campaign.workspaceId ?? null,
+    );
+    if (!created.ok || !created.data) {
+      await releaseRequest(db, req.id);
+      return { ok: false, error: created.ok ? "The contact couldn't be added. Try again." : created.error };
+    }
+    leadId = created.data.id;
+  }
+  await db
+    .insert(schema.campaignLeads)
+    .values({ campaignId: campaign.id, leadId, status: "queued" })
+    .onConflictDoNothing();
+
+  const now = nowIso();
+  await db
+    .update(schema.agentRequests)
+    .set({ status: "resolved", resolution: `Added ${email} as a lead`, resolvedAt: now, updatedAt: now })
+    .where(and(eq(schema.agentRequests.id, req.id), eq(schema.agentRequests.status, "sending")));
+  await db.insert(schema.activityLogs).values({
+    id: crypto.randomUUID(),
+    userId: user.id,
+    type: "agent.resolved",
+    message: `You added ${email} as a lead (referred by ${req.leadEmail})`,
+    campaignId: campaign.id,
+    meta: { requestId: req.id, leadId },
+  });
+  revalidatePath("/requests");
+  revalidatePath(`/campaigns/${campaign.id}`);
+  if (req.runId) revalidatePath(`/chad-gtm/${req.runId}`);
+  return {
+    ok: true,
+    data: { leadId },
+    message: `Added ${email} to this campaign. They get the campaign's emails like any other lead.`,
+  };
 }
 
 /* ─── Knowledge base ─────────────────────────────────────────────────── */
@@ -697,12 +1163,32 @@ export interface KnowledgeView {
   updatedAt: string;
 }
 
+/**
+ * Knowledge is per workspace: the list shows exactly what the agent may use
+ * in the active workspace (items with no workspace count as the default
+ * workspace's, the same rule the reply agent applies).
+ */
+async function knowledgeScope(userId: string) {
+  const ws = await getActiveWorkspace(userId);
+  return and(eq(schema.agentKnowledge.userId, userId), wsCondition(schema.agentKnowledge.workspaceId, ws.id, ws.isDefault));
+}
+
+/** Where knowledge from a card with no workspace is filed: the default workspace (null if it can't be read). */
+async function knowledgeDefaultWorkspaceId(userId: string): Promise<string | null> {
+  try {
+    const ws = await ensureDefaultWorkspace(userId);
+    return ws.id === "primary-default" ? null : ws.id;
+  } catch {
+    return null;
+  }
+}
+
 export async function listKnowledge(): Promise<KnowledgeView[]> {
   const user = await requireUser();
   const rows = await getDb()
     .select()
     .from(schema.agentKnowledge)
-    .where(eq(schema.agentKnowledge.userId, user.id))
+    .where(await knowledgeScope(user.id))
     .orderBy(desc(schema.agentKnowledge.updatedAt))
     .limit(200);
   return rows.map((r: any) => ({
@@ -715,6 +1201,20 @@ export async function listKnowledge(): Promise<KnowledgeView[]> {
     usageCount: r.usageCount,
     updatedAt: r.updatedAt,
   }));
+}
+
+/** Items the agent may use in the active workspace (Settings › Lead conversations). */
+export async function countKnowledgeAction(): Promise<number> {
+  try {
+    const user = await requireUser();
+    const [row] = await getDb()
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.agentKnowledge)
+      .where(await knowledgeScope(user.id));
+    return Number(row?.n || 0);
+  } catch {
+    return 0;
+  }
 }
 
 export async function saveKnowledgeAction(input: {
@@ -747,7 +1247,8 @@ export async function saveKnowledgeAction(input: {
     const updated = await db
       .update(schema.agentKnowledge)
       .set({ kind, title, content, url, keywords, updatedAt: now })
-      .where(and(eq(schema.agentKnowledge.id, input.id), eq(schema.agentKnowledge.userId, user.id)))
+      // Only items of the active workspace (what the panel shows) can be edited.
+      .where(and(eq(schema.agentKnowledge.id, input.id), await knowledgeScope(user.id)))
       .returning({ id: schema.agentKnowledge.id });
     if (updated.length === 0) return { ok: false, error: "Item not found." };
     revalidatePath("/requests");

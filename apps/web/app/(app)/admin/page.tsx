@@ -4,14 +4,13 @@ import { requireUser } from "@/lib/session";
 import { isAdmin } from "@/lib/admin";
 import { listAllTicketsForAdmin } from "@/lib/support";
 import { listAllDataRemovalRequestsForAdmin } from "@/lib/data-removal";
-import { listAllBugReportsForAdmin } from "@/lib/bug-reports";
 import { getAdminUserAnalytics } from "@/lib/admin-analytics";
 import { getSystemMailboxPoolStats } from "@/lib/admin-gtm-actions";
 import { getDirectoryStats } from "@/lib/leads-directory";
 import { listAccountApprovalsAction } from "@/lib/admin-actions";
 import { Page } from "@/components/layout/page";
 import { AdminConsoleView } from "./admin-console-view";
-import { parseAdminTab } from "./admin-tabs";
+import { adminTabSupportCategory, parseAdminTab } from "./admin-tabs";
 
 export const dynamic = "force-dynamic";
 
@@ -41,8 +40,9 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   }
 
   const { tab } = await searchParams;
+  const rawTab = Array.isArray(tab) ? tab[0] : tab;
 
-  const [analytics, supportTickets, removalRequests, poolStats, approvals, bugReports] = await Promise.all([
+  const [analytics, supportTickets, removalRequests, poolStats, approvals] = await Promise.all([
     getAdminUserAnalytics(user),
     listAllTicketsForAdmin(user),
     listAllDataRemovalRequestsForAdmin(user),
@@ -50,10 +50,6 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     listAccountApprovalsAction().catch((err) => {
       console.error("[AdminPage] Failed to load account approvals:", err);
       return { pending: [], recentlyApproved: [], emailOnApprove: false };
-    }),
-    listAllBugReportsForAdmin(user).catch((err) => {
-      console.error("[AdminPage] Failed to load bug reports:", err);
-      return null;
     }),
   ]);
 
@@ -68,11 +64,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       />
 
       <AdminConsoleView
-        initialTab={parseAdminTab(Array.isArray(tab) ? tab[0] : tab)}
+        initialTab={parseAdminTab(rawTab)}
+        initialSupportCategory={adminTabSupportCategory(rawTab)}
         initialApprovals={approvals}
         initialAnalytics={analytics}
         initialSupportTickets={supportTickets}
-        initialBugReports={bugReports}
         initialDataRemovals={removalRequests}
         initialPoolStats={poolStats}
         initialDirectoryStats={directoryStats}
