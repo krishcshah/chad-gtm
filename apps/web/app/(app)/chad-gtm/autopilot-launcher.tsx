@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, ChevronDown, ListChecks } from "lucide-react";
 import {
@@ -24,6 +24,7 @@ import { Page } from "@/components/layout/page";
 import { GUIDED_SETUP_HREF, LaunchDetailsForm } from "./launch-setup";
 import { RunList } from "./run-list";
 import { WorkingPanel, hostOf } from "@/components/chad-gtm/working-panel";
+import { takePendingWebsite } from "@/lib/pending-website";
 
 export interface RunSummary {
   id: string;
@@ -51,6 +52,11 @@ const LAUNCH_STEPS = [
 export function AutopilotLauncher({ runs }: { runs: RunSummary[] }) {
   const router = useRouter();
   const [url, setUrl] = useState("");
+  // Pre-fill the website the visitor pasted on the landing page before signing up.
+  useEffect(() => {
+    const pending = takePendingWebsite();
+    if (pending) setUrl((current) => current || pending);
+  }, []);
   const [booking, setBooking] = useState("");
   const [notes, setNotes] = useState("");
   const [showMore, setShowMore] = useState(false);

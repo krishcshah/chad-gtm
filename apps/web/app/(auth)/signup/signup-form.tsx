@@ -2,13 +2,14 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { MailCheck } from "lucide-react";
 import { signUpSchema, type SignUpInput } from "@smartreach/validation";
 import { Alert, AlertDescription, Button, Input } from "@smartreach/ui";
 import { authClient } from "@/lib/auth-client";
 import { PASSWORD_MIN_LENGTH } from "@/lib/password-rules";
+import { savePendingWebsite } from "@/lib/pending-website";
 import { AuthCard, authLinkClass } from "../auth-card";
 import { AuthField } from "../auth-field";
 import { PasswordInput } from "../password-input";
@@ -26,6 +27,10 @@ function markJustSignedUp() {
 
 export function SignupForm() {
   const router = useRouter();
+  // A website pasted on the landing page arrives as ?url=; keep it for Autopilot.
+  useEffect(() => {
+    savePendingWebsite(new URLSearchParams(window.location.search).get("url"));
+  }, []);
   const [error, setError] = useState("");
   const [pendingEmail, setPendingEmail] = useState("");
   const { register, handleSubmit, formState } = useForm<SignUpInput>({
