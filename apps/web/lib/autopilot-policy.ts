@@ -9,6 +9,7 @@
  *  - rate limits on website analysis
  *  - the sending window autopilot campaigns use
  */
+import { complianceIdentityProblems } from "@smartreach/shared";
 
 /* ─── Audience ───────────────────────────────────────────────────────── */
 
@@ -240,18 +241,9 @@ export interface ComplianceProblems {
 }
 
 /** Field errors for the sender identity every commercial email must carry. */
+/** Same rule as Settings and the campaign start gate (@smartreach/shared). */
 export function complianceProblems(identity: ComplianceIdentity): ComplianceProblems {
-  const out: ComplianceProblems = {};
-  const name = String(identity.companyName || "").trim();
-  const address = String(identity.postalAddress || "").trim();
-  if (name.length < 2) out.companyName = "Enter your company's legal or trading name.";
-  if (name.length > 200) out.companyName = "Company name is too long (200 characters max).";
-  if (address.length < 10 || !/\d/.test(address) || !/[a-z]/i.test(address)) {
-    out.postalAddress =
-      "Enter a full physical postal address (street or P.O. box, city, postcode, country). The law requires it in every email.";
-  }
-  if (address.length > 1000) out.postalAddress = "Postal address is too long.";
-  return out;
+  return complianceIdentityProblems(identity);
 }
 
 export function hasCompliantIdentity(identity: ComplianceIdentity): boolean {
@@ -323,14 +315,64 @@ export const LAUNCH_FAILURE_MESSAGES: Record<LaunchFailureCode, string> = {
   no_leads:
     "We couldn't find enough verified business contacts for this audience in the countries we send to. Retry the research with a note about who you sell to, or broaden the audience in guided setup.",
   all_contacted:
-    "Everyone matching this audience was contacted by another campaign in the last 90 days. Retry the research with a broader description of who you sell to.",
+    "Everyone matching this audience was contacted in the last 90 days, opted out, or is already in one of your live campaigns. Retry the research with a broader description of who you sell to.",
   error: "The launch didn't complete and nothing was sent. Your plan is saved, so you can retry.",
 };
+
+/* ─── Audience preview copy ──────────────────────────────────────────── */
+
+/** The exclusions every launch applies, in the words the audience previews use. */
+export const LAUNCH_AUDIENCE_NOTE =
+  "People anyone contacted in the last 90 days and opted-out addresses are skipped.";
+
+/** Manual targeting: the client picks directory industries and titles themselves. */
+export const GUIDED_SETUP_HREF = "/chad-gtm?mode=guided";
+
+/**
+ * Guided setup, continuing this run when one is given (no second run, no extra
+ * research). Lives here, not in a client module, so server pages can call it.
+ */
+export function guidedSetupHref(runId?: string | null): string {
+  return runId ? `${GUIDED_SETUP_HREF}&run=${encodeURIComponent(runId)}` : GUIDED_SETUP_HREF;
+}
+
+/* ─── Launch claim (one launch per run at a time) ────────────────────── */
+
+/**
+ * How long a launch claim (chad_gtm_runs.launch_started_at) blocks another
+ * launch. A launch that crashed without clearing its claim stops blocking
+ * after this, so the client can retry.
+ */
+export const LAUNCH_CLAIM_TTL_MS = 10 * 60_000;
+
+/** True while another launch of this run is (or may still be) in progress. */
+export function launchClaimActive(startedAt: string | null | undefined, now: Date = new Date()): boolean {
+  if (!startedAt) return false;
+  const at = Date.parse(startedAt);
+  if (!Number.isFinite(at)) return false;
+  return now.getTime() - at < LAUNCH_CLAIM_TTL_MS;
+}
+
+/* ─── Daily volume ────────────────────────────────────────────────────── */
+
+/** Autopilot's daily volume range and launch default (emails a day per run). */
+export const AUTOPILOT_DAILY_MIN = 30;
+export const AUTOPILOT_DAILY_MAX = 500;
+export const AUTOPILOT_DAILY_DEFAULT = 60;
+
+/** A whole number of emails a day within the Autopilot range; anything unreadable gives the default. */
+export function clampAutopilotDaily(n: unknown): number {
+  const v = typeof n === "number" ? n : typeof n === "string" && n.trim() !== "" ? Number(n) : NaN;
+  if (!Number.isFinite(v)) return AUTOPILOT_DAILY_DEFAULT;
+  return Math.min(AUTOPILOT_DAILY_MAX, Math.max(AUTOPILOT_DAILY_MIN, Math.round(v)));
+}
 
 /* ─── Run phase (what mission control / the launcher show) ───────────── */
 
 export type RunPhase =
   | "live"
+  /** Active, but the engine holds every send: no postal address. */
+  | "held"
   | "paused"
   | "completed"
   | "needs_research"
@@ -347,6 +389,16 @@ export interface RunPhaseInput {
   autopilot: boolean;
   launchFailure?: LaunchFailure | null;
   blockers: LaunchBlocker[];
+  /** The engine is holding sends because the postal address is missing. */
+  postalHeld?: boolean;
+  /** Another request holds the launch claim (launch_started_at within the TTL). */
+  launchInProgress?: boolean;
+  /**
+   * The linked campaign's status. When given (with a campaignId) it decides
+   * the phase: the campaign is the one owner of on/off and completion.
+   */
+  campaignStatus?: string | null;
+  campaignDeleted?: boolean;
 }
 
 /**
@@ -355,10 +407,19 @@ export interface RunPhaseInput {
  * failed phases (never an orphan "Live").
  */
 export function deriveRunPhase(input: RunPhaseInput): RunPhase {
+  if (input.campaignId && input.campaignStatus) {
+    const s = input.campaignStatus;
+    if (input.campaignDeleted || s === "completed" || s === "archived") return "completed";
+    if (s === "running" || s === "scheduled") return input.postalHeld ? "held" : "live";
+    return "paused";
+  }
   if (input.campaignId) {
     if (input.status === "completed") return "completed";
-    return input.status === "active" ? "live" : "paused";
+    if (input.status === "active") return input.postalHeld ? "held" : "live";
+    return "paused";
   }
+  // A launch is running right now: show it, whatever else the run says.
+  if (input.launchInProgress) return "launching";
   if (!input.autopilot && input.status !== "needs_input") {
     return input.status === "analyzing" ? "launching" : "draft";
   }
@@ -420,4 +481,84 @@ export function fillMergeTokens(text: string, values: Record<string, string>): s
     const v = values[key.toLowerCase()];
     return v != null && v !== "" ? v : m;
   });
+}
+
+/* ─── Chosen offer ───────────────────────────────────────────────────── */
+
+/**
+ * The chosen offer moved to the front, the rest kept in order. Every reader
+ * (reply agent, Pitch card, Overview, plan preview) uses offers[0], so this
+ * is how the choice is saved. Index 0 or out of range: unchanged.
+ */
+export function withChosenOfferFirst<T>(offers: T[], index: number): T[] {
+  if (!Array.isArray(offers)) return offers;
+  if (!Number.isInteger(index) || index <= 0 || index >= offers.length) return offers;
+  return [offers[index] as T, ...offers.slice(0, index), ...offers.slice(index + 1)];
+}
+
+/* ─── Resuming a guided draft ────────────────────────────────────────── */
+
+/**
+ * The guided-setup step a saved draft reopens at: 1 (research) without
+ * offers, 4 (launch) once the sample emails were reviewed, else 2 (strategy).
+ */
+export function guidedResumeStep(run: {
+  offers?: unknown;
+  approvedEmailSamples?: unknown;
+  calibrationProfile?: unknown;
+}): 1 | 2 | 4 {
+  if (!Array.isArray(run.offers) || run.offers.length === 0) return 1;
+  const exemplars = (run.calibrationProfile as { styleExemplars?: unknown } | null | undefined)?.styleExemplars;
+  const reviewed =
+    Array.isArray(exemplars) &&
+    exemplars.length > 0 &&
+    Array.isArray(run.approvedEmailSamples) &&
+    run.approvedEmailSamples.length > 0;
+  return reviewed ? 4 : 2;
+}
+
+/* ─── Company size ───────────────────────────────────────────────────── */
+
+type SizeRange = { min: number; max: number };
+
+/** '11-50', '1,001–5,000', '10000+' or '25' as a range; null when it does not parse. */
+function parseSizeRange(raw: string): SizeRange | null {
+  const s = String(raw ?? "")
+    .replace(/,/g, "")
+    .replace(/employees?/i, "")
+    .trim();
+  let m = s.match(/^(\d+)\s*[-–—]\s*(\d+)$/);
+  if (m) {
+    const min = Number(m[1]);
+    const max = Number(m[2]);
+    return min <= max ? { min, max } : null;
+  }
+  m = s.match(/^(\d+)\s*\+$/);
+  if (m) return { min: Number(m[1]), max: Number.POSITIVE_INFINITY };
+  m = s.match(/^(\d+)$/);
+  if (m) return { min: Number(m[1]), max: Number(m[1]) };
+  return null;
+}
+
+/**
+ * The directory's team-size facet values that fall inside the research
+ * brackets ('11-50', '51-200', ...). A value matches when it equals a bracket
+ * or its number/range lies inside one. Unknown sizes ('0', '') never match.
+ * [] means no size filter (nothing parsed).
+ */
+export function teamSizeValuesForBrackets(brackets: string[], available: string[]): string[] {
+  const ranges = (brackets ?? []).map(parseSizeRange).filter((r): r is SizeRange => r !== null);
+  if (ranges.length === 0) return [];
+  const exact = new Set((brackets ?? []).map((b) => String(b).trim()));
+  const out: string[] = [];
+  for (const raw of available ?? []) {
+    const v = String(raw ?? "").trim();
+    if (!v || v === "0") continue;
+    const r = parseSizeRange(v);
+    if (r && r.max <= 0) continue;
+    if (exact.has(v) || (r && r.min > 0 && ranges.some((b) => r.min >= b.min && r.max <= b.max))) {
+      if (!out.includes(v)) out.push(v);
+    }
+  }
+  return out;
 }

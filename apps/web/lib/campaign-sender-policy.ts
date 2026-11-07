@@ -24,10 +24,10 @@ export interface SenderPartition {
 }
 
 export const POOL_SENDER_NOT_ALLOWED_ERROR =
-  "Shared AutoGTM mailboxes can only send autopilot campaigns. Pick one of your own connected mailboxes.";
+  "Shared AutoGTM mailboxes only send Autopilot campaigns. Manual campaigns need a mailbox assigned to your account. Contact support to get one.";
 
 export const SENDER_NOT_OWNED_ERROR =
-  "One or more selected mailboxes aren't connected to your account. Refresh the page and pick your mailboxes again.";
+  "One or more selected mailboxes aren't assigned to your account. Refresh the page and pick your mailboxes again.";
 
 /**
  * Split requested sender ids into the ones this actor may attach and the ones it may not.

@@ -7,7 +7,18 @@ vi.mock("../approval", () => ({
   assertCanSend: vi.fn(async () => undefined),
   isApprovedToSend: vi.fn(async () => true),
 }));
-vi.mock("../leads-directory", () => ({ getMatchingDirectoryLeadsForExport: vi.fn(() => dir.leads) }));
+vi.mock("../leads-directory", () => ({
+  getDirectoryDb: () => ({
+    // Keyset pages over the fixture rows (the audience reads the directory this way).
+    prepare: () => ({
+      all: (...args: any[]) => (dir.leads).filter((l: any) => Number(l.id) > Number(args[args.length - 2])).slice(0, Number(args[args.length - 1])),
+      get: () => ({ c: (dir.leads).length }),
+    }),
+  }),
+  buildDirectoryWhereClause: () => ({ whereSql: "", bindings: [] }),
+  mapDirectoryRow: (r: any) => r,
+  getMatchingDirectoryLeadsForExport: vi.fn(() => dir.leads),
+}));
 vi.mock("../campaign-drafts", () => ({ ensureCampaignLeadSnapshot: vi.fn(async () => 1) }));
 
 import { GLOBAL_SUPPRESSION_SOURCES, schema } from "@smartreach/database";
@@ -35,6 +46,8 @@ function fakeDb(selectResults: any[][]) {
       },
       where: () => c,
       innerJoin: () => c,
+      // The identity read resolves the default workspace (ORDER BY is_default).
+      orderBy: () => c,
       limit: () => Promise.resolve(result),
       then: (resolve: any, reject: any) => Promise.resolve(result).then(resolve, reject),
     };
@@ -52,16 +65,21 @@ function fakeDb(selectResults: any[][]) {
       return c;
     },
     update: () => {
-      const c: any = { set: () => c, where: () => Promise.resolve() };
+      const done: any = {
+        returning: () => Promise.resolve([{ id: "r1" }]),
+        then: (resolve: any, reject: any) => Promise.resolve().then(resolve, reject),
+      };
+      const c: any = { set: () => c, where: () => done };
       return c;
     },
+    delete: () => ({ where: () => Promise.resolve() }),
   };
   return { db, inserts, fromTables };
 }
 
 describe("suppressedEmailsFor", () => {
   it("applies the owner's own rows (any source) and everyone's global opt-outs", async () => {
-    expect([...GLOBAL_SUPPRESSION_SOURCES].sort()).toEqual(["bounce", "complaint", "unsubscribe"]);
+    expect([...GLOBAL_SUPPRESSION_SOURCES].sort()).toEqual(["bounce", "complaint", "erasure", "unsubscribe"]);
     const rows = [
       { value: "own-manual@acme.com", userId: "owner", source: "manual" },
       { value: "other-unsub@acme.com", userId: "someone-else", source: "unsubscribe" },

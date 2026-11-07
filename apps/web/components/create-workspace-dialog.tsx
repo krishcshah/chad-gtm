@@ -83,8 +83,10 @@ export function CreateWorkspaceDialog({ open, onOpenChange, onCreated }: CreateW
           <DialogHeader>
             <DialogTitle>New workspace</DialogTitle>
             <DialogDescription>
-              A workspace has its own mailboxes, leads, campaigns and blocklist. Use one per client or brand.
-              You switch to it as soon as it is created.
+              Each workspace has its own leads, campaigns, Autopilot runs, knowledge base and sender details (company
+              name, postal address, booking link). Your blocklist applies to all of them. Use one per client or brand.
+              Add its company name and postal address in Settings before you start campaigns. You switch to it as
+              soon as it is created.
             </DialogDescription>
           </DialogHeader>
 

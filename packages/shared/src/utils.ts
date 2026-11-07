@@ -63,6 +63,72 @@ export function isBusinessDay(date: Date, timeZone: string): boolean {
   return wd >= 1 && wd <= 5;
 }
 
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * The calendar date (YYYY-MM-DD) of `date` in `timeZone`. Falls back to the
+ * UTC date when the timezone is not valid.
+ */
+export function localDateKey(date: Date, timeZone: string): string {
+  try {
+    const p = zonedParts(date, timeZone);
+    if (![p.year, p.month, p.day].every(Number.isFinite)) throw new Error("bad parts");
+    return `${p.year}-${pad2(p.month)}-${pad2(p.day)}`;
+  } catch {
+    return date.toISOString().slice(0, 10);
+  }
+}
+
+/** Offset (ms) of `timeZone` from UTC at instant `ms`. */
+function zoneOffsetMs(ms: number, timeZone: string): number {
+  const p = zonedParts(new Date(ms), timeZone);
+  const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute);
+  return asUtc - Math.floor(ms / 60_000) * 60_000;
+}
+
+/**
+ * A wall time ("YYYY-MM-DDTHH:mm", as a datetime-local input gives it) in
+ * `timeZone` → UTC ISO string. Null for unreadable input or an unknown
+ * timezone. A time skipped by a DST jump lands just after the jump.
+ */
+export function zonedWallTimeToUtcIso(local: string, timeZone: string): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec((local ?? "").trim());
+  if (!m) return null;
+  const [y, mo, d, h, mi] = m.slice(1).map(Number) as [number, number, number, number, number];
+  const target = Date.UTC(y, mo - 1, d, h, mi);
+  const check = new Date(target);
+  if (
+    Number.isNaN(target) ||
+    check.getUTCFullYear() !== y ||
+    check.getUTCMonth() !== mo - 1 ||
+    check.getUTCDate() !== d ||
+    check.getUTCHours() !== h ||
+    check.getUTCMinutes() !== mi
+  ) {
+    return null;
+  }
+  try {
+    // Guess, then correct by the zone's offset at the guess (twice, for DST).
+    let guess = target - zoneOffsetMs(target, timeZone);
+    guess = target - zoneOffsetMs(guess, timeZone);
+    return Number.isFinite(guess) ? new Date(guess).toISOString() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** UTC ISO string → wall time "YYYY-MM-DDTHH:mm" in `timeZone` ("" when unreadable; UTC on an unknown timezone). */
+export function utcIsoToZonedWallTime(iso: string, timeZone: string): string {
+  const date = new Date(iso);
+  if (!iso || Number.isNaN(date.getTime())) return "";
+  try {
+    const p = zonedParts(date, timeZone);
+    return `${p.year}-${pad2(p.month)}-${pad2(p.day)}T${pad2(p.hour)}:${pad2(p.minute)}`;
+  } catch {
+    return date.toISOString().slice(0, 16);
+  }
+}
+
 /** Start (inclusive) of "today" in UTC wall-clock terms. Combined with
  *  minutesSinceMidnight this is an approximate-but-stable day bucket that is
  *  good enough for daily counters, and it is driver-portable. */

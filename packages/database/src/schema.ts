@@ -15,6 +15,7 @@ import {
   jsonb,
   pgTable,
   primaryKey,
+  smallint,
   text,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
@@ -42,6 +43,28 @@ export const workspaces = pgTable(
     name: text("name").notNull(),
     description: text("description"),
     isDefault: boolean("is_default").notNull().default(false),
+    /** Sender identity for this workspace's mail (CAN-SPAM footer). */
+    companyName: text("company_name").notNull().default(""),
+    postalAddress: text("postal_address").notNull().default(""),
+    /** Default booking link; runs and campaigns may override it. */
+    bookingUrl: text("booking_url"),
+    /** Who gets "Needs you" notices. Empty = the account's login email. */
+    notifyEmail: text("notify_email").notNull().default(""),
+    notifyEscalations: boolean("notify_escalations").notNull().default(true),
+    notifyReminders: boolean("notify_reminders").notNull().default(true),
+    /**
+     * "Lead conversations" workspace default, used by campaigns set to
+     * 'default': agent = Agent, approve = Agent drafts, you approve,
+     * manual = Manual.
+     */
+    leadConversationMode: text("lead_conversation_mode", { enum: ["agent", "approve", "manual"] })
+      .notNull()
+      .default("manual"),
+    /** "Pause the agent everywhere": no agent replies in this workspace. */
+    agentPaused: boolean("agent_paused").notNull().default(false),
+    /** Business profile the agent grounds its replies in. */
+    companySummary: text("company_summary").notNull().default(""),
+    mainOffer: text("main_offer").notNull().default(""),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -149,7 +172,18 @@ export const leads = pgTable(
     /** JSON array of tag ids. */
     tags: jsonb("tags").$type<string[]>().notNull().default([]),
     status: text("status", {
-      enum: ["new", "contacted", "replied", "bounced", "unsubscribed", "blocked"],
+      enum: [
+        "new",
+        "contacted",
+        "replied",
+        "interested",
+        "meeting_booked",
+        "won",
+        "lost",
+        "bounced",
+        "unsubscribed",
+        "blocked",
+      ],
     })
       .notNull()
       .default("new"),
@@ -223,6 +257,13 @@ export const senderAccounts = pgTable(
       .notNull()
       .default("untested"),
     lastSyncAt: text("last_sync_at"),
+    /** Consecutive failed IMAP syncs, and when one was last attempted. */
+    imapFailCount: integer("imap_fail_count").notNull().default(0),
+    imapAttemptedAt: text("imap_attempted_at"),
+    /** Consecutive send failures, the last failure reason, and last re-test. */
+    failureCount: integer("failure_count").notNull().default(0),
+    failedReason: text("failed_reason"),
+    lastRetestAt: text("last_retest_at"),
     repliedCount: integer("replied_count").notNull().default(0),
     isSystemPool: boolean("is_system_pool").notNull().default(false),
     deletedAt: text("deleted_at"),
@@ -252,6 +293,8 @@ export const emailTemplates = pgTable(
     bodyText: text("body_text").notNull().default(""),
     bodyHtml: text("body_html").notNull().default(""),
     format: text("format", { enum: ["text", "html"] }).notNull().default("text"),
+    /** 'autopilot' = created by an Autopilot run, not by the user. */
+    source: text("source", { enum: ["user", "autopilot"] }).notNull().default("user"),
     deletedAt: text("deleted_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -288,7 +331,7 @@ export const campaigns = pgTable(
     dailyLimit: integer("daily_limit").notNull().default(100),
     minDelaySec: integer("min_delay_sec").notNull().default(90),
     maxDelaySec: integer("max_delay_sec").notNull().default(240),
-    maxEmailsPerSenderPerDay: integer("max_emails_per_sender_per_day").notNull().default(50),
+    maxEmailsPerSenderPerDay: integer("max_emails_per_sender_per_day").notNull().default(30),
     stopOnReply: boolean("stop_on_reply").notNull().default(true),
     retryFailed: boolean("retry_failed").notNull().default(true),
     retryCount: integer("retry_count").notNull().default(3),
@@ -297,8 +340,25 @@ export const campaigns = pgTable(
     lastSenderIdx: integer("last_sender_idx").notNull().default(0),
     /** temporary pause for cross-campaign per-sender daily cap */
     senderCapUntil: text("sender_cap_until"),
+    /** Why the engine is holding this campaign (shown to the user), and since when. */
+    sendBlockReason: text("send_block_reason"),
+    sendBlockSince: text("send_block_since"),
+    /**
+     * "Lead conversations" for this campaign. 'default' = use the workspace
+     * default (workspaces.lead_conversation_mode). Shared by the campaign page
+     * and its Autopilot run.
+     */
+    leadConversationMode: text("lead_conversation_mode", {
+      enum: ["default", "agent", "approve", "manual"],
+    })
+      .notNull()
+      .default("default"),
+    /** Optional "What this campaign offers" grounding for the agent. */
+    agentOffer: text("agent_offer").notNull().default(""),
     startedAt: text("started_at"),
     completedAt: text("completed_at"),
+    /** True while an Autopilot campaign still has contacts to load (never auto-completes). */
+    audienceOpen: boolean("audience_open").notNull().default(false),
     deletedAt: text("deleted_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -346,6 +406,8 @@ export const campaignLeads = pgTable(
     attempts: integer("attempts").notNull().default(0),
     /** Next sequence step to send (1-based). Default 1 for single-template campaigns. */
     stepPosition: integer("step_position").notNull().default(1),
+    /** Autopilot sending tier: 1 target titles, 2 other decision-makers, 3 everyone else (null sorts last). */
+    priority: smallint("priority"),
     scheduledFor: text("scheduled_for"),
     sentAt: text("sent_at"),
     lastError: text("last_error"),
@@ -356,6 +418,7 @@ export const campaignLeads = pgTable(
     uniqueIndex("campaign_leads_campaign_lead_unique").on(t.campaignId, t.leadId),
     index("campaign_leads_sched_idx").on(t.campaignId, t.status, t.scheduledFor),
     index("campaign_leads_lead_idx").on(t.leadId),
+    index("campaign_leads_queue_order_idx").on(t.campaignId, t.status, t.stepPosition, t.priority),
   ],
 );
 
@@ -472,7 +535,7 @@ export const usageCounters = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    entityType: text("entity_type", { enum: ["sender", "campaign"] }).notNull(),
+    entityType: text("entity_type", { enum: ["sender", "campaign", "sender_reply"] }).notNull(),
     entityId: text("entity_id").notNull(),
     date: text("date").notNull(), // YYYY-MM-DD (UTC)
     count: integer("count").notNull().default(0),
@@ -517,12 +580,24 @@ export const replies = pgTable(
         "lost",
       ],
     }),
+    /** Who set `tag`. NULL with a tag = automatic (legacy rows). */
+    tagSource: text("tag_source", { enum: ["human", "auto"] }),
     /**
      * Reply-agent lifecycle. NULL = not an agent-managed campaign.
-     * pending → (replied | escalated | skipped | failed).
+     * pending → (replied | escalated | held | human_replied | skipped | failed).
+     * held = account not approved; human_replied = a person answered first.
      */
     agentStatus: text("agent_status", {
-      enum: ["pending", "processing", "replied", "escalated", "skipped", "failed"],
+      enum: [
+        "pending",
+        "processing",
+        "replied",
+        "escalated",
+        "held",
+        "human_replied",
+        "skipped",
+        "failed",
+      ],
     }),
     /** Classified intent (interested, question, resource_request, ...). */
     agentIntent: text("agent_intent"),
@@ -569,17 +644,24 @@ export const suppressions = pgTable(
   "suppressions",
   {
     id: id(),
-    userId: text("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+    /** NULL = platform-level opt-out (owner deleted, or an erasure request). */
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
     workspaceId: text("workspace_id")
-      .references(() => workspaces.id, { onDelete: "cascade" }),
+      .references(() => workspaces.id, { onDelete: "set null" }),
     /** Lowercased email OR leading-@ domain like "@example.com". */
     value: text("value").notNull(),
     kind: text("kind", { enum: ["email", "domain"] }).notNull().default("email"),
     reason: text("reason").notNull().default(""),
     source: text("source", {
-      enum: ["manual", "unsubscribe", "bounce", "complaint", "import"],
+      enum: [
+        "manual",
+        "unsubscribe",
+        "bounce",
+        "complaint",
+        "import",
+        "not_interested",
+        "erasure",
+      ],
     })
       .notNull()
       .default("manual"),
@@ -593,6 +675,22 @@ export const suppressions = pgTable(
   ],
 );
 
+/**
+ * Permanent ledger of when an address was contacted. No foreign keys, so it
+ * survives workspace and account deletion (90-day re-contact check).
+ */
+export const contactHistory = pgTable(
+  "contact_history",
+  {
+    id: id(),
+    /** Lowercased email address. */
+    email: text("email").notNull(),
+    contactedAt: text("contacted_at").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("contact_history_email_idx").on(t.email, t.contactedAt)],
+);
+
 /* ─── Workspace settings (F16/F17 compliance) ──────────────────────────── */
 
 export const workspaceSettings = pgTable("workspace_settings", {
@@ -600,7 +698,7 @@ export const workspaceSettings = pgTable("workspace_settings", {
     .primaryKey()
     .references(() => users.id, { onDelete: "cascade" }),
   workspaceId: text("workspace_id")
-    .references(() => workspaces.id, { onDelete: "cascade" }),
+    .references(() => workspaces.id, { onDelete: "set null" }),
   companyName: text("company_name").notNull().default(""),
   /** Physical postal address required by CAN-SPAM on commercial mail. */
   postalAddress: text("postal_address").notNull().default(""),
@@ -639,6 +737,8 @@ export const uniboxMessages = pgTable(
     subject: text("subject"),
     bodyText: text("body_text").notNull().default(""),
     bodyHtml: text("body_html").notNull().default(""),
+    /** Agent-written message a person approved ("Agent, approved by you"). */
+    approvedByUser: boolean("approved_by_user").notNull().default(false),
     sentAt: text("sent_at").notNull(),
     createdAt: createdAt(),
   },
@@ -688,7 +788,7 @@ export const supportTickets = pgTable(
     userName: text("user_name"),
     workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
     category: text("category", {
-      enum: ["bug_report", "feature_request", "suggestion", "contact", "miscellaneous"],
+      enum: ["bug_report", "feature_request", "suggestion", "contact", "miscellaneous", "legal"],
     })
       .notNull()
       .default("bug_report"),
@@ -859,6 +959,12 @@ export const chadGtmRuns = pgTable(
     replyAgentMode: text("reply_agent_mode", { enum: ["autopilot", "approve", "off"] })
       .notNull()
       .default("autopilot"),
+    /** Launch lock: set while a launch is in progress, so a second Launch stops. */
+    launchStartedAt: text("launch_started_at"),
+    /** Set when the user removes an unlaunched run from the Autopilot list. */
+    dismissedAt: text("dismissed_at"),
+    /** Autopilot audience: tier totals and cursors (apps/web/lib/autopilot-audience.ts). */
+    audience: jsonb("audience").$type<Record<string, any>>().notNull().default({}),
     approvedEmailSamples: jsonb("approved_email_samples")
       .$type<Array<{
         leadId?: string;
@@ -1048,11 +1154,11 @@ export const agentRequests = pgTable(
     replyId: text("reply_id").references(() => replies.id, { onDelete: "cascade" }),
     leadId: text("lead_id").references(() => leads.id, { onDelete: "set null" }),
     kind: text("kind", {
-      enum: ["resource", "question", "approval", "referral", "booking_url", "other"],
+      enum: ["resource", "question", "approval", "referral", "booking_url", "handoff", "other"],
     })
       .notNull()
       .default("question"),
-    status: text("status", { enum: ["open", "resolved", "dismissed"] })
+    status: text("status", { enum: ["open", "sending", "resolved", "dismissed"] })
       .notNull()
       .default("open"),
     title: text("title").notNull(),
@@ -1063,6 +1169,16 @@ export const agentRequests = pgTable(
     leadCompany: text("lead_company").notNull().default(""),
     /** Agent's proposed reply (approve mode) or holding draft. */
     draftReply: text("draft_reply").notNull().default(""),
+    /** Who wrote draftReply: the agent, or the user editing it. */
+    draftSource: text("draft_source", { enum: ["agent", "you"] }).notNull().default("agent"),
+    /** Knowledge to save once the reply is sent (held until then). */
+    pendingKnowledge: jsonb("pending_knowledge").$type<{
+      answer: string;
+      resourceUrl: string | null;
+      save: boolean;
+    }>(),
+    /** Address the lead referred us to (kind = referral). */
+    referralEmail: text("referral_email"),
     /** What the client provided to resolve the request. */
     resolution: text("resolution"),
     resourceUrl: text("resource_url"),
@@ -1075,6 +1191,82 @@ export const agentRequests = pgTable(
     index("agent_requests_user_status_idx").on(t.userId, t.status, t.createdAt),
     index("agent_requests_workspace_idx").on(t.workspaceId),
     index("agent_requests_reply_idx").on(t.replyId),
+    index("agent_requests_conversation_idx").on(t.leadId, t.campaignId, t.status),
+  ],
+);
+
+/**
+ * Who handles one lead's conversation in one campaign. No row = follow the
+ * campaign's "Lead conversations" mode. handler 'you' = the agent stays silent
+ * ("Handled by: You"); 'campaign' = follow the campaign again.
+ */
+export const leadConversations = pgTable(
+  "lead_conversations",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }),
+    leadId: text("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    campaignId: text("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    handler: text("handler", { enum: ["campaign", "you"] })
+      .notNull()
+      .default("campaign"),
+    /** What last changed the handler. */
+    handlerReason: text("handler_reason", {
+      enum: ["send", "take_over", "dismiss", "hand_back"],
+    }),
+    handlerChangedAt: text("handler_changed_at"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("lead_conversations_lead_campaign_unique").on(t.leadId, t.campaignId),
+    index("lead_conversations_user_idx").on(t.userId),
+  ],
+);
+
+/**
+ * Inbound mail on a pool mailbox that matched no lead ('no_match') or leads
+ * of several accounts ('ambiguous_owner'). An admin assigns or dismisses it.
+ */
+export const unmatchedInbound = pgTable(
+  "unmatched_inbound",
+  {
+    id: id(),
+    senderId: text("sender_id")
+      .notNull()
+      .references(() => senderAccounts.id, { onDelete: "cascade" }),
+    messageId: text("message_id"),
+    fromEmail: text("from_email").notNull(),
+    fromName: text("from_name").notNull().default(""),
+    subject: text("subject").notNull().default(""),
+    snippet: text("snippet").notNull().default(""),
+    bodyText: text("body_text").notNull().default(""),
+    bodyHtml: text("body_html").notNull().default(""),
+    receivedAt: text("received_at").notNull(),
+    candidateUserIds: jsonb("candidate_user_ids").$type<string[]>().notNull().default([]),
+    reason: text("reason", { enum: ["no_match", "ambiguous_owner"] })
+      .notNull()
+      .default("no_match"),
+    status: text("status", { enum: ["open", "assigned", "dismissed"] })
+      .notNull()
+      .default("open"),
+    assignedUserId: text("assigned_user_id").references(() => users.id, { onDelete: "set null" }),
+    replyId: text("reply_id").references(() => replies.id, { onDelete: "set null" }),
+    resolvedAt: text("resolved_at"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("unmatched_inbound_sender_message_unique").on(t.senderId, t.messageId),
+    index("unmatched_inbound_status_received_idx").on(t.status, t.receivedAt),
   ],
 );
 

@@ -3,6 +3,7 @@ import {
   ANALYSIS_LIMITS,
   AWAITING_APPROVAL_MESSAGE,
   DEFAULT_AUTOPILOT_TIMEZONE,
+  LAUNCH_CLAIM_TTL_MS,
   RESEARCH_REFRESH_MESSAGE,
   analysisRateLimitError,
   assessTargeting,
@@ -14,12 +15,16 @@ import {
   isFreemailDomain,
   isWorkEmail,
   launchBlockers,
+  launchClaimActive,
   matchIndustriesInText,
   parseAutopilotCountries,
   pickWorkAddress,
   readLaunchFailure,
   resolveAutopilotTimezone,
   resolveSpintax,
+  guidedResumeStep,
+  teamSizeValuesForBrackets,
+  withChosenOfferFirst,
   type ReadinessInput,
 } from "../autopilot-policy";
 
@@ -259,6 +264,34 @@ describe("deriveRunPhase", () => {
     expect(deriveRunPhase({ ...base, autopilot: false, status: "reviewing", campaignId: null })).toBe("draft");
     expect(deriveRunPhase({ ...base, autopilot: false, status: "calibrating", campaignId: null })).toBe("draft");
   });
+
+  it("shows a launch in progress as launching, ahead of blockers and failures (#50)", () => {
+    const failure = { code: "error" as const, message: "x", at: "2026-11-06T00:00:00.000Z" };
+    expect(deriveRunPhase({ ...base, status: "needs_input", campaignId: null, launchFailure: failure, launchInProgress: true })).toBe(
+      "launching",
+    );
+    expect(
+      deriveRunPhase({ ...base, status: "ready", campaignId: null, blockers: [{ kind: "approval", message: "x" }], launchInProgress: true }),
+    ).toBe("launching");
+    expect(deriveRunPhase({ ...base, autopilot: false, status: "reviewing", campaignId: null, launchInProgress: true })).toBe("launching");
+    // Once a campaign is linked the claim no longer matters.
+    expect(deriveRunPhase({ ...base, status: "active", campaignId: "c1", launchInProgress: true })).toBe("live");
+  });
+});
+
+describe("launchClaimActive (#50)", () => {
+  const now = new Date("2026-11-07T12:00:00.000Z");
+  it("is true within the TTL", () => {
+    expect(launchClaimActive("2026-11-07T11:59:00.000Z", now)).toBe(true);
+    expect(launchClaimActive(new Date(now.getTime() - LAUNCH_CLAIM_TTL_MS + 1000).toISOString(), now)).toBe(true);
+  });
+  it("is false after the TTL, when empty, or unparseable", () => {
+    expect(launchClaimActive(new Date(now.getTime() - LAUNCH_CLAIM_TTL_MS).toISOString(), now)).toBe(false);
+    expect(launchClaimActive("2026-11-07T10:00:00.000Z", now)).toBe(false);
+    expect(launchClaimActive(null, now)).toBe(false);
+    expect(launchClaimActive(undefined, now)).toBe(false);
+    expect(launchClaimActive("not a date", now)).toBe(false);
+  });
 });
 
 describe("readLaunchFailure", () => {
@@ -295,5 +328,124 @@ describe("sample email rendering", () => {
     expect(fillMergeTokens("Hi {{first_name}} at {{ company }} — {{sender_name}}", { first_name: "Ana", company: "Acme" })).toBe(
       "Hi Ana at Acme — {{sender_name}}",
     );
+  });
+});
+
+describe("deriveRunPhase with a postal hold (#19)", () => {
+  const base = { campaignId: "c1", autopilot: true, blockers: [] };
+  it("an active run whose sends are held is 'held'", () => {
+    expect(deriveRunPhase({ ...base, status: "active", postalHeld: true })).toBe("held");
+  });
+  it("is live without a hold", () => {
+    expect(deriveRunPhase({ ...base, status: "active", postalHeld: false })).toBe("live");
+    expect(deriveRunPhase({ ...base, status: "active" })).toBe("live");
+  });
+  it("paused and completed are unaffected", () => {
+    expect(deriveRunPhase({ ...base, status: "paused", postalHeld: true })).toBe("paused");
+    expect(deriveRunPhase({ ...base, status: "completed", postalHeld: true })).toBe("completed");
+  });
+});
+
+describe("withChosenOfferFirst (#51)", () => {
+  const offers = ["a", "b", "c", "d"];
+  it("moves the chosen offer to the front and keeps the rest in order", () => {
+    expect(withChosenOfferFirst(offers, 2)).toEqual(["c", "a", "b", "d"]);
+    expect(offers).toEqual(["a", "b", "c", "d"]);
+  });
+  it("keeps the order for index 0 or an out-of-range index", () => {
+    expect(withChosenOfferFirst(offers, 0)).toEqual(offers);
+    expect(withChosenOfferFirst(offers, 9)).toEqual(offers);
+    expect(withChosenOfferFirst(offers, -1)).toEqual(offers);
+  });
+});
+
+describe("guidedResumeStep (#55)", () => {
+  it("is 1 without offers", () => {
+    expect(guidedResumeStep({ offers: [], approvedEmailSamples: [], calibrationProfile: {} })).toBe(1);
+    expect(guidedResumeStep({ offers: null })).toBe(1);
+  });
+  it("is 2 with offers only", () => {
+    expect(guidedResumeStep({ offers: [{ title: "Audit" }], approvedEmailSamples: [], calibrationProfile: {} })).toBe(2);
+    expect(
+      guidedResumeStep({ offers: [{ title: "Audit" }], approvedEmailSamples: [{ subject: "Hi" }], calibrationProfile: null }),
+    ).toBe(2);
+  });
+  it("is 4 once the sample emails were reviewed", () => {
+    expect(
+      guidedResumeStep({
+        offers: [{ title: "Audit" }],
+        approvedEmailSamples: [{ subject: "Hi" }],
+        calibrationProfile: { styleExemplars: [{ subject: "Hi" }] },
+      }),
+    ).toBe(4);
+  });
+});
+
+describe("teamSizeValuesForBrackets (#57)", () => {
+  it("keeps facet values that equal or fall inside a bracket", () => {
+    expect(
+      teamSizeValuesForBrackets(["11-50", "51-200"], ["0", "11", "11-50", "51", "51-200", "201", "1001-5000"]),
+    ).toEqual(["11", "11-50", "51", "51-200"]);
+  });
+  it("handles open-ended brackets and never keeps unknown sizes", () => {
+    expect(teamSizeValuesForBrackets(["1000+"], ["", "0", "999", "1001-5000", "10001+"])).toEqual([
+      "1001-5000",
+      "10001+",
+    ]);
+  });
+  it("gives [] (no size filter) when no bracket parses", () => {
+    expect(teamSizeValuesForBrackets(["small", "enterprise"], ["11", "11-50"])).toEqual([]);
+    expect(teamSizeValuesForBrackets([], ["11"])).toEqual([]);
+  });
+});
+
+import {
+  AUTOPILOT_DAILY_DEFAULT,
+  AUTOPILOT_DAILY_MAX,
+  AUTOPILOT_DAILY_MIN,
+  clampAutopilotDaily,
+  deriveRunPhase as deriveRunPhaseForCampaign,
+} from "../autopilot-policy";
+
+describe("clampAutopilotDaily (#48: one range and one default)", () => {
+  it("keeps a chosen 30, clamps to 30-500 and rounds", () => {
+    expect([AUTOPILOT_DAILY_MIN, AUTOPILOT_DAILY_MAX, AUTOPILOT_DAILY_DEFAULT]).toEqual([30, 500, 60]);
+    expect(clampAutopilotDaily(30)).toBe(30);
+    expect(clampAutopilotDaily(5)).toBe(30);
+    expect(clampAutopilotDaily(0)).toBe(30);
+    expect(clampAutopilotDaily(2000)).toBe(500);
+    expect(clampAutopilotDaily(120.6)).toBe(121);
+    expect(clampAutopilotDaily("90")).toBe(90);
+  });
+  it("gives the default for anything unreadable", () => {
+    expect(clampAutopilotDaily(NaN)).toBe(60);
+    expect(clampAutopilotDaily(undefined)).toBe(60);
+    expect(clampAutopilotDaily(null)).toBe(60);
+    expect(clampAutopilotDaily("")).toBe(60);
+    expect(clampAutopilotDaily("abc")).toBe(60);
+  });
+});
+
+describe("deriveRunPhase follows the linked campaign (#53)", () => {
+  const base = { campaignId: "c1", autopilot: true, blockers: [] };
+  it("a completed campaign shows completed even when the run still says active", () => {
+    expect(deriveRunPhaseForCampaign({ ...base, status: "active", campaignStatus: "completed" })).toBe("completed");
+  });
+  it("archived or deleted campaigns are completed too", () => {
+    expect(deriveRunPhaseForCampaign({ ...base, status: "active", campaignStatus: "archived" })).toBe("completed");
+    expect(
+      deriveRunPhaseForCampaign({ ...base, status: "active", campaignStatus: "running", campaignDeleted: true }),
+    ).toBe("completed");
+  });
+  it("running is live (held without a postal address); paused is paused whatever the run says", () => {
+    expect(deriveRunPhaseForCampaign({ ...base, status: "paused", campaignStatus: "running" })).toBe("live");
+    expect(deriveRunPhaseForCampaign({ ...base, status: "paused", campaignStatus: "running", postalHeld: true })).toBe(
+      "held",
+    );
+    expect(deriveRunPhaseForCampaign({ ...base, status: "active", campaignStatus: "paused" })).toBe("paused");
+  });
+  it("without a campaign status the run status still decides", () => {
+    expect(deriveRunPhaseForCampaign({ ...base, status: "active" })).toBe("live");
+    expect(deriveRunPhaseForCampaign({ ...base, status: "completed" })).toBe("completed");
   });
 });

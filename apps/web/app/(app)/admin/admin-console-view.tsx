@@ -1,11 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Badge, ErrorState, Tabs, TabsContent, TabsList, TabsTrigger } from "@smartreach/ui";
+import { Badge, Tabs, TabsContent, TabsList, TabsTrigger } from "@smartreach/ui";
 import { AdminMailboxPoolView } from "@/components/chad-gtm/admin-pool-view";
 import type { SupportTicketDTO } from "@/lib/support-types";
 import type { DataRemovalRequestDTO } from "@/lib/data-removal";
-import type { BugReportDTO } from "@/lib/bug-reports";
 import type { AdminAnalyticsPayload } from "@/lib/admin-analytics";
 import type { SystemMailboxPoolStats } from "@/lib/admin-gtm-actions";
 import type { AccountApprovalsPayload } from "@/lib/account-approvals";
@@ -13,7 +12,6 @@ import { AdminApprovalsView } from "./admin-approvals-view";
 import { AdminAnalyticsView } from "./admin-analytics-view";
 import { AdminDirectoryView, type DirectoryStatsDTO } from "./admin-directory-view";
 import { AdminSupportView } from "./admin-support-view";
-import { AdminBugReportsView } from "./admin-bug-reports-view";
 import { AdminDataRemovalView } from "./admin-data-removal-view";
 import { parseAdminTab, type AdminTab } from "./admin-tabs";
 
@@ -27,7 +25,7 @@ export function AdminConsoleView({
   initialApprovals,
   initialAnalytics,
   initialSupportTickets,
-  initialBugReports,
+  initialSupportCategory,
   initialDataRemovals,
   initialPoolStats,
   initialDirectoryStats,
@@ -36,8 +34,8 @@ export function AdminConsoleView({
   initialApprovals: AccountApprovalsPayload;
   initialAnalytics: AdminAnalyticsPayload;
   initialSupportTickets: SupportTicketDTO[];
-  /** null when the bug reports could not be loaded. */
-  initialBugReports: BugReportDTO[] | null;
+  /** Category the Support tab opens filtered to (old `?tab=bugs` links pass "bug_report"). */
+  initialSupportCategory?: string | null;
   initialDataRemovals: DataRemovalRequestDTO[];
   initialPoolStats: SystemMailboxPoolStats;
   initialDirectoryStats: DirectoryStatsDTO;
@@ -46,18 +44,16 @@ export function AdminConsoleView({
   const [counts, setCounts] = useState({
     approvals: initialApprovals.pending.length,
     support: initialSupportTickets.filter((t) => t.status === "open").length,
-    bugs: (initialBugReports ?? []).filter((r) => r.status === "open").length,
     requests: initialDataRemovals.filter((r) => r.status === "pending").length,
   });
 
   // Stable callbacks so child effects that report their counts do not re-run on every render.
-  const { onApprovals, onSupport, onBugs, onRequests } = useMemo(() => {
+  const { onApprovals, onSupport, onRequests } = useMemo(() => {
     const update = (key: keyof typeof counts) => (n: number) =>
       setCounts((prev) => (prev[key] === n ? prev : { ...prev, [key]: n }));
     return {
       onApprovals: update("approvals"),
       onSupport: update("support"),
-      onBugs: update("bugs"),
       onRequests: update("requests"),
     };
   }, []);
@@ -80,7 +76,6 @@ export function AdminConsoleView({
     { value: "mailboxes", label: "Mailbox pool" },
     { value: "directory", label: "Lead directory" },
     { value: "support", label: "Support", count: counts.support, countLabel: "open" },
-    { value: "bugs", label: "Bug reports", count: counts.bugs, countLabel: "open" },
     { value: "requests", label: "Data requests", count: counts.requests, countLabel: "pending" },
   ];
 
@@ -113,18 +108,11 @@ export function AdminConsoleView({
         <AdminDirectoryView initialStats={initialDirectoryStats} />
       </Panel>
       <Panel value="support">
-        <AdminSupportView initialTickets={initialSupportTickets} onOpenCountChange={onSupport} />
-      </Panel>
-      <Panel value="bugs">
-        {initialBugReports ? (
-          <AdminBugReportsView initialReports={initialBugReports} onOpenCountChange={onBugs} />
-        ) : (
-          <ErrorState
-            title="Bug reports did not load"
-            description="The rest of the admin console works. Reload the page to try again."
-            onRetry={() => window.location.reload()}
-          />
-        )}
+        <AdminSupportView
+          initialTickets={initialSupportTickets}
+          initialCategory={initialSupportCategory}
+          onOpenCountChange={onSupport}
+        />
       </Panel>
       <Panel value="requests">
         <AdminDataRemovalView initialRequests={initialDataRemovals} onPendingCountChange={onRequests} />

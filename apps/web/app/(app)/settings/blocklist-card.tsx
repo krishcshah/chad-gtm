@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, Ban, Plus, Trash2, Upload } from "lucide-react";
+import { ArrowUpRight, Ban, Lock, Plus, Trash2, Upload } from "lucide-react";
 import { formatDate } from "@smartreach/shared";
 import {
   Badge,
@@ -19,6 +19,8 @@ import {
   AddToBlocklistDialog,
   ImportBlocklistDialog,
   RemoveFromBlocklistDialog,
+  isProtectedOptOut,
+  PROTECTED_OPT_OUT_LABEL,
   sourceLabel,
   type BlocklistItem,
 } from "../blocklist/blocklist-dialogs";
@@ -65,8 +67,8 @@ export function SettingsBlocklistCard({
         <CardTitle>Blocklist</CardTitle>
         <CardDescription>
           {total > 0
-            ? `${plural(emailCount, "email", "emails")} and ${plural(domainCount, "domain", "domains")} that campaigns never send to.`
-            : "Emails and domains that campaigns never send to. People who unsubscribe are added automatically."}
+            ? `${plural(emailCount, "email", "emails")} and ${plural(domainCount, "domain", "domains")} that none of your campaigns send to, in any workspace.`
+            : "Emails and domains that none of your campaigns send to, in any workspace. People who unsubscribe are added automatically."}
         </CardDescription>
       </CardHeader>
 
@@ -96,16 +98,27 @@ export function SettingsBlocklistCard({
                     {item.reason?.trim() ? ` · ${item.reason}` : ""}
                   </p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Unblock ${item.value}`}
-                  title="Unblock"
-                  onClick={() => setRemoveTarget(item)}
-                  className="hover:text-destructive-text"
-                >
-                  <Trash2 />
-                </Button>
+                {isProtectedOptOut(item.source) ? (
+                  <span
+                    role="img"
+                    aria-label={PROTECTED_OPT_OUT_LABEL}
+                    title={PROTECTED_OPT_OUT_LABEL}
+                    className="inline-flex size-8 shrink-0 items-center justify-center text-subtle-foreground"
+                  >
+                    <Lock className="size-4" aria-hidden />
+                  </span>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Unblock ${item.value}`}
+                    title="Unblock"
+                    onClick={() => setRemoveTarget(item)}
+                    className="hover:text-destructive-text"
+                  >
+                    <Trash2 />
+                  </Button>
+                )}
               </li>
             ))}
           </ul>

@@ -21,11 +21,23 @@ import {
   Input,
 } from "@smartreach/ui";
 import { deleteAccountAction } from "@/lib/account-actions";
+import { POOL_OWNER_DELETE_BLOCKED } from "@/lib/pool-ownership-messages";
 
 const CONFIRM_WORD = "DELETE";
 
 /** Permanent account deletion. Asks the user to type DELETE before it runs. */
-export function DangerZoneCard({ userEmail }: { userEmail: string }) {
+export function DangerZoneCard({
+  userEmail,
+  poolMailboxCount = 0,
+  dedicatedMailboxCount = 0,
+}: {
+  userEmail: string;
+  /** Shared pool mailboxes this account owns; deleting is blocked while > 0. */
+  poolMailboxCount?: number;
+  /** Non-pool mailboxes assigned to this account (#67); the dialog mentions them only when > 0. */
+  dedicatedMailboxCount?: number;
+}) {
+  const ownsPool = poolMailboxCount > 0;
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [confirmation, setConfirmation] = useState("");
@@ -64,14 +76,23 @@ export function DangerZoneCard({ userEmail }: { userEmail: string }) {
         <CardTitle>Delete account</CardTitle>
         <CardDescription>Permanently delete your account and everything in it. This cannot be undone.</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-[13px] leading-relaxed text-muted-foreground">
-          Removes all workspaces, mailboxes, campaigns, leads and email history for{" "}
-          <span className="font-medium text-foreground">{userEmail}</span>.
-        </p>
-        <Button variant="destructive-outline" onClick={() => setOpen(true)} className="shrink-0 self-start sm:self-auto">
-          Delete account
-        </Button>
+      <CardContent className="flex flex-col gap-4">
+        {ownsPool ? <Alert variant="warning">{POOL_OWNER_DELETE_BLOCKED(poolMailboxCount)}</Alert> : null}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-[13px] leading-relaxed text-muted-foreground">
+            Removes all workspaces, campaigns, leads and email history for{" "}
+            <span className="font-medium text-foreground">{userEmail}</span>. Opt-outs (unsubscribes, bounces and spam
+            complaints) are kept, so those people are never emailed again.
+          </p>
+          <Button
+            variant="destructive-outline"
+            onClick={() => setOpen(true)}
+            disabled={ownsPool}
+            className="shrink-0 self-start sm:self-auto"
+          >
+            Delete account
+          </Button>
+        </div>
       </CardContent>
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -88,7 +109,7 @@ export function DangerZoneCard({ userEmail }: { userEmail: string }) {
             <div className="flex flex-col gap-2 text-[13px] text-muted-foreground">
               <p>Deleted right away:</p>
               <ul className="list-disc space-y-1 pl-5">
-                <li>Connected mailboxes and their stored credentials</li>
+                {dedicatedMailboxCount > 0 ? <li>Mailboxes assigned to your account and their stored credentials</li> : null}
                 <li>Campaigns, sequences and queued emails</li>
                 <li>Lead lists, contacts and tags</li>
                 <li>Inbox threads, replies and tracking history</li>

@@ -2,43 +2,118 @@
 
 import { forwardRef, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowLeft, Inbox } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Inbox, MailOpen } from "lucide-react";
 import { UNIBOX_REPLY_TAGS, type UniboxReplyTag } from "@smartreach/shared";
 import {
   Alert,
+  Badge,
   Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   Kbd,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   Skeleton,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
 } from "@smartreach/ui";
 import type { UniboxThreadMessage } from "@/lib/unibox-thread";
-import { displayName, tagLabel, type ReplyRow } from "./inbox-utils";
+import {
+  HAND_BACK_LABEL,
+  TAKE_OVER_LABEL,
+  handledByLabel,
+  handlerHint,
+  type ConversationModeReason,
+  type HandledBy,
+} from "@/lib/lead-conversations";
+import { displayName, tagEffect, tagLabel, type OpenRequestRow, type ReplyRow } from "./inbox-utils";
 import { ThreadTranscript } from "./thread-message";
+
+/**
+ * What the conversation waits on: an open Needs you card, or the account
+ * being on hold (its own state: no card, nothing can be sent yet).
+ */
+export type WaitingState =
+  | { kind: "needs_you"; requestId: string; summary: string | null }
+  | { kind: "held"; summary: string | null }
+  | null;
 
 /** Right pane: who the conversation is with, its tag, the transcript and (as `composer`) the reply box. */
 export const ConversationView = forwardRef<
   HTMLDivElement,
   {
     reply: ReplyRow;
-    /** Set when any reply in this conversation is waiting on you (agent escalated it). */
-    escalation: { summary: string | null } | null;
+    /** Needs you (an open card) or held (account on hold); null when nothing waits on you. */
+    waiting: WaitingState;
+    /** The open Needs you card for this conversation, shown inline. */
+    request: OpenRequestRow | null;
+    /** The lead wrote after the open card's draft was made. */
+    leadWroteAgain: boolean;
+    /** The agent is about to answer the newest message. */
+    agentDrafting: boolean;
+    /** Who handles the conversation (null: not part of a campaign). */
+    handler: { handledBy: HandledBy; reason: ConversationModeReason; canHandBack: boolean } | null;
+    handlerPending: boolean;
+    onTakeOver: () => void;
+    onHandBack: () => void;
     tag: string | null;
+    /** An automatic tag on a reply newer than the tag you set (#86). */
+    detectedTag?: string | null;
     messages: UniboxThreadMessage[];
     loading: boolean;
     tagPending: boolean;
     onTag: (tag: UniboxReplyTag | null) => void;
     onBack: () => void;
+    /** Mark the conversation unread again. */
+    onMarkUnread: () => void;
+    /** Done with this one: go to the next conversation. */
+    onDone: () => void;
     composer: ReactNode;
   }
->(function ConversationView({ reply, escalation, tag, messages, loading, tagPending, onTag, onBack, composer }, scrollerRef) {
+>(function ConversationView(
+  {
+    reply,
+    waiting,
+    request,
+    leadWroteAgain,
+    agentDrafting,
+    handler,
+    handlerPending,
+    onTakeOver,
+    onHandBack,
+    tag,
+    detectedTag,
+    messages,
+    loading,
+    tagPending,
+    onTag,
+    onBack,
+    onMarkUnread,
+    onDone,
+    composer,
+  },
+  scrollerRef,
+) {
   const name = displayName(reply);
-  const escalated = escalation !== null;
-  const agentReplied = !escalated && reply.agentStatus === "replied";
-  const agentNote = escalated ? escalation.summary : reply.agentSummary;
+  const firstName = name.split(/\s+/)[0] || name;
+  const needsYouId = waiting?.kind === "needs_you" ? waiting.requestId : (request?.id ?? null);
+  const held = waiting?.kind === "held";
+  const isWaiting = needsYouId !== null || held;
+  // Who answered the newest message. A person's send never shows the agent's
+  // old summary (e.g. a stale escalation reason).
+  const answeredBy = isWaiting
+    ? null
+    : reply.agentStatus === "replied"
+      ? "agent"
+      : reply.agentStatus === "human_replied"
+        ? "you"
+        : null;
+  // Escalated with no open card (e.g. held for a paused campaign): say why the agent didn't answer.
+  const unanswered = !isWaiting && !answeredBy && reply.agentStatus === "escalated";
+  const agentNote = answeredBy === "agent" || unanswered ? reply.agentSummary : null;
+  const showHandler = handler !== null && handler.reason !== "no_campaign";
 
   return (
     <section aria-label={`Conversation with ${name}`} className="flex min-h-0 min-w-0 flex-1 flex-col bg-card">
@@ -72,39 +147,132 @@ export const ConversationView = forwardRef<
             </p>
           ) : null}
         </div>
-        <Select
-          value={tag ?? "none"}
-          onValueChange={(value) => onTag(value === "none" ? null : (value as UniboxReplyTag))}
-          disabled={tagPending}
-        >
-          <SelectTrigger className="h-8 w-[8.5rem] shrink-0 text-[13px] sm:w-40" aria-label="Tag this conversation">
-            <SelectValue placeholder="No tag" />
-          </SelectTrigger>
-          <SelectContent align="end">
-            <SelectItem value="none">No tag</SelectItem>
-            {UNIBOX_REPLY_TAGS.map((t) => (
-              <SelectItem key={t} value={t}>
-                {tagLabel(t)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <div className="flex items-center gap-1.5">
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon-sm" onClick={onMarkUnread} aria-label="Mark as unread">
+                    <MailOpen aria-hidden />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Mark as unread</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <Button variant="outline" size="sm" onClick={onDone} aria-label="Done, go to next conversation">
+              <Check aria-hidden />
+              <span className="hidden sm:inline">Done</span>
+            </Button>
+            {/* A menu, not a Select: each tag shows what it does under its name. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild disabled={tagPending}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-[8.5rem] shrink-0 justify-between text-[13px] sm:w-40"
+                  aria-label="Tag this conversation"
+                >
+                  <span className="truncate">{tag ? tagLabel(tag) : "No tag"}</span>
+                  <ChevronDown aria-hidden />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuItem onSelect={() => onTag(null)}>
+                  <span className="flex-1">No tag</span>
+                  {tag == null ? <Check aria-hidden /> : null}
+                </DropdownMenuItem>
+                {UNIBOX_REPLY_TAGS.map((t) => (
+                  <DropdownMenuItem key={t} onSelect={() => onTag(t)} className="items-start">
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span>{tagLabel(t)}</span>
+                      <span className="text-xs text-muted-foreground">{tagEffect(t)}</span>
+                    </span>
+                    {tag === t ? <Check aria-hidden /> : null}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          {detectedTag && detectedTag !== tag ? (
+            <div className="flex flex-wrap items-center justify-end gap-1 text-xs text-muted-foreground">
+              <span>Detected in the latest reply: {tagLabel(detectedTag)}</span>
+              <Button
+                variant="ghost"
+                size="xs"
+                disabled={tagPending}
+                onClick={() => onTag(detectedTag as UniboxReplyTag)}
+              >
+                Use this
+              </Button>
+            </div>
+          ) : null}
+          {showHandler ? (
+            <div className="flex flex-wrap items-center justify-end gap-1">
+              <Badge
+                variant={handler.handledBy === "you" ? "neutral" : handler.handledBy === "agent" ? "brand" : "info"}
+                title={handlerHint(handler.handledBy, handler.reason)}
+              >
+                {handledByLabel(handler.handledBy)}
+              </Badge>
+              {handler.handledBy === "you" && handler.reason === "paused" ? (
+                <span className="text-xs text-muted-foreground">Agent paused</span>
+              ) : null}
+              {handler.handledBy !== "you" ? (
+                <Button variant="ghost" size="xs" onClick={onTakeOver} loading={handlerPending}>
+                  {TAKE_OVER_LABEL}
+                </Button>
+              ) : handler.canHandBack ? (
+                <Button variant="ghost" size="xs" onClick={onHandBack} loading={handlerPending}>
+                  {HAND_BACK_LABEL}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </header>
 
       <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto bg-background px-4 py-5 sm:px-6">
-        {escalated || (agentReplied && reply.agentSummary) ? (
-          <Alert
-            variant={escalated ? "warning" : "default"}
-            className="mb-5"
-            action={
-              escalated ? (
-                <Button asChild size="xs" variant="outline">
-                  <Link href="/requests">Open Needs you</Link>
-                </Button>
-              ) : undefined
-            }
-          >
-            <p className="font-medium">{escalated ? "The agent is waiting for you" : "The agent replied"}</p>
+        {agentDrafting && !isWaiting ? (
+          <Alert variant="info" className="mb-5">
+            <p className="font-medium">The agent is drafting a reply.</p>
+            <p className="mt-0.5 text-[13px] text-muted-foreground">
+              {handler?.handledBy === "approve"
+                ? "The draft appears in the reply box for you to approve."
+                : "It goes out in a minute or two unless you take over."}
+            </p>
+          </Alert>
+        ) : null}
+        {needsYouId ? (
+          <Alert variant="warning" className="mb-5">
+            <p className="font-medium">The agent is waiting for you</p>
+            {request ? (
+              <p className="mt-0.5 text-[13px] text-muted-foreground">
+                <span className="font-medium text-foreground">{request.title}.</span>
+                {request.question ? <> What the agent needs: {request.question}</> : null}
+              </p>
+            ) : waiting?.summary ? (
+              <p className="mt-0.5 text-[13px] text-muted-foreground">{waiting.summary}</p>
+            ) : null}
+            {leadWroteAgain ? (
+              <p className="mt-1 text-[13px] font-medium text-foreground">{firstName} wrote again after this was drafted.</p>
+            ) : null}
+            <p className="mt-1 text-[13px] text-muted-foreground">
+              Answer in the reply box below. Sending your reply closes this request.
+            </p>
+          </Alert>
+        ) : held ? (
+          <Alert variant="warning" className="mb-5">
+            <p className="font-medium">Your account is on hold</p>
+            <p className="mt-0.5 text-[13px] text-muted-foreground">
+              The agent won&apos;t answer and replies can&apos;t be sent until an admin approves your account. Then this
+              conversation moves to Needs you.
+            </p>
+          </Alert>
+        ) : answeredBy || unanswered ? (
+          <Alert variant="default" className="mb-5">
+            <p className="font-medium">
+              {answeredBy === "you" ? "You replied" : answeredBy === "agent" ? "The agent replied" : "The agent didn't answer"}
+            </p>
             {agentNote ? <p className="mt-0.5 text-[13px] text-muted-foreground">{agentNote}</p> : null}
           </Alert>
         ) : null}
@@ -148,7 +316,7 @@ export function NoConversation() {
       <p className="hidden items-center gap-1.5 text-xs text-subtle-foreground lg:flex">
         <Kbd>J</Kbd>
         <Kbd>K</Kbd>
-        to move, <Kbd>/</Kbd> to search, <Kbd>R</Kbd> to reply
+        to move, <Kbd>/</Kbd> to search, <Kbd>R</Kbd> to reply, <Kbd>E</Kbd> done
       </p>
     </div>
   );

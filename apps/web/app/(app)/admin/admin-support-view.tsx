@@ -52,14 +52,17 @@ function categoryLabel(id: string) {
 /** All support tickets across users, with status changes and a link to each thread. */
 export function AdminSupportView({
   initialTickets,
+  initialCategory,
   onOpenCountChange,
 }: {
   initialTickets: SupportTicketDTO[];
+  /** Category filter to start with, e.g. "bug_report" for old Bug reports links. */
+  initialCategory?: string | null;
   onOpenCountChange?: (count: number) => void;
 }) {
   const [tickets, setTickets] = useState<SupportTicketDTO[]>(initialTickets);
   const [statusFilter, setStatusFilter] = useState<"all" | TicketStatus>("all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>(initialCategory ?? "all");
   const [search, setSearch] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 

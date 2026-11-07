@@ -119,8 +119,8 @@ function UserDetail({ data }: { data: UserDetailActivity }) {
             label: "Mailboxes",
             value:
               data.mailboxes.length === 0
-                ? "None connected"
-                : `${data.mailboxes.length} connected, ${active} active${failing ? `, ${failing} failing` : ""}`,
+                ? "None assigned"
+                : `${data.mailboxes.length} assigned, ${active} active${failing ? `, ${failing} failing` : ""}`,
           },
           {
             label: "Recent page views",
@@ -140,8 +140,8 @@ function UserDetail({ data }: { data: UserDetailActivity }) {
             <EmptyState
               compact
               icon={Mail}
-              title="No mailboxes connected"
-              description="This user has not added a sending mailbox yet."
+              title="No mailboxes assigned"
+              description="Assign one from Mailbox pool › Import mailboxes › One customer."
             />
           ) : (
             <ul className="divide-y divide-border rounded-xl border border-border">

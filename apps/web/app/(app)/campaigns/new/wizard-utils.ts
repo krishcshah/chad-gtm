@@ -1,3 +1,4 @@
+import { utcIsoToZonedWallTime, zonedWallTimeToUtcIso } from "@smartreach/shared";
 import type { DraftStep } from "@/lib/sequence-draft";
 import type { ReusableSequence } from "@/lib/sequence-templates";
 import { LAST_STEP } from "./wizard-types";
@@ -17,12 +18,16 @@ export function clampStep(step: number | null | undefined) {
   return Math.min(LAST_STEP, step);
 }
 
-export function isoToDatetimeLocal(iso: string | null): string {
+/** Stored UTC ISO → datetime-local value, as a wall time in the campaign's sending timezone. */
+export function isoToDatetimeLocal(iso: string | null | undefined, timeZone = "UTC"): string {
   if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return utcIsoToZonedWallTime(iso, timeZone);
+}
+
+/** datetime-local value, read as a wall time in the sending timezone → UTC ISO (null when empty/invalid). */
+export function datetimeLocalToIso(value: string, timeZone: string): string | null {
+  if (!value) return null;
+  return zonedWallTimeToUtcIso(value, timeZone || "UTC");
 }
 
 /** datetime-local value → readable local date and time, or "" when empty/invalid. */

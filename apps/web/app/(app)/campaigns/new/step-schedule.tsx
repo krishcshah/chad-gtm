@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarClock, Play } from "lucide-react";
-import { TIMEZONES } from "@smartreach/shared";
+import { capacityLabel, effectiveDailyCapacity, MAILBOX_LIMIT_NOTE, TIMEZONES } from "@smartreach/shared";
 import { Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, cn } from "@smartreach/ui";
 import { normalizeHhMm } from "@/lib/hhmm";
 import type { ScheduleSettings } from "./wizard-types";
@@ -20,12 +20,24 @@ export function StepSchedule({
   settings,
   fieldError,
   onChange,
+  mailboxCaps = [],
 }: {
   settings: ScheduleSettings;
   fieldError: (key: string) => string | undefined;
   onChange: Patch;
+  /** Today's cap of each chosen mailbox (SenderOpt.dailyCap). */
+  mailboxCaps?: number[];
 }) {
   const s = settings;
+  const capacity =
+    mailboxCaps.length > 0 && Number.isFinite(s.dailyLimit) && s.dailyLimit > 0
+      ? effectiveDailyCapacity({
+          campaignDailyLimit: s.dailyLimit,
+          perMailboxLimit: Number.isFinite(s.perSender) ? s.perSender : undefined,
+          // The caps already include each mailbox's age ramp.
+          mailboxes: mailboxCaps.map((cap) => ({ status: "active", dailyLimit: cap })),
+        })
+      : null;
   return (
     <div className="flex max-w-3xl flex-col divide-y divide-border">
       <Section title="When to send" description="Emails only go out inside the sending window, in the timezone you pick.">
@@ -51,9 +63,15 @@ export function StepSchedule({
         </div>
 
         {s.startMode === "later" && (
-          <WizardField id="c-when" label="Start date and time" error={fieldError("scheduledAt")} className="max-w-xs">
+          <WizardField
+            id="c-when"
+            label={`Start date and time (${s.sendingTimezone.replace(/_/g, " ")})`}
+            hint="In the sending timezone below."
+            error={fieldError("scheduledAt")}
+            className="max-w-xs"
+          >
             <Input
-              {...fieldAria("c-when", fieldError("scheduledAt"))}
+              {...fieldAria("c-when", fieldError("scheduledAt"), true)}
               type="datetime-local"
               value={s.scheduledAt}
               onChange={(e) => onChange({ scheduledAt: e.target.value }, ["scheduledAt"])}
@@ -131,7 +149,7 @@ export function StepSchedule({
           <NumberField
             id="c-daily"
             label="Campaign daily limit"
-            hint="Most emails this campaign sends in a day."
+            hint="Most emails this campaign sends in a day. Counted per day in the campaign's timezone."
             suffix="emails"
             min={1}
             max={100000}
@@ -142,37 +160,42 @@ export function StepSchedule({
           <NumberField
             id="c-per-sender"
             label="Per mailbox daily limit"
-            hint="Most emails one mailbox sends in a day, across all campaigns."
+            hint={`At most 30. ${MAILBOX_LIMIT_NOTE} Mailbox limits reset at midnight UTC.`}
             suffix="emails"
             min={1}
-            max={5000}
+            max={30}
             value={s.perSender}
             error={fieldError("maxEmailsPerSenderPerDay")}
             onChange={(v) => onChange({ perSender: v }, ["maxEmailsPerSenderPerDay"])}
           />
           <NumberField
             id="c-min-delay"
-            label="Shortest gap between emails"
-            hint="At least 5 seconds."
+            label="Shortest gap between emails from one mailbox"
+            hint="At least 45 seconds, to protect the shared mailboxes."
             suffix="seconds"
-            min={5}
-            max={86400}
+            min={45}
+            max={3600}
             value={s.minDelay}
             error={fieldError("minDelaySec")}
             onChange={(v) => onChange({ minDelay: v }, ["minDelaySec", "maxDelaySec"])}
           />
           <NumberField
             id="c-max-delay"
-            label="Longest gap between emails"
-            hint="Each gap is a random time between the two."
+            label="Longest gap"
+            hint="Each mailbox waits a random time between the two before its next email."
             suffix="seconds"
-            min={5}
-            max={86400}
+            min={45}
+            max={3600}
             value={s.maxDelay}
             error={fieldError("maxDelaySec")}
             onChange={(v) => onChange({ maxDelay: v }, ["maxDelaySec"])}
           />
         </div>
+        {capacity ? (
+          <p className="text-[13px] text-muted-foreground" aria-live="polite">
+            {capacityLabel(capacity)}.
+          </p>
+        ) : null}
       </Section>
 
       <Section title="Behaviour">
@@ -180,7 +203,7 @@ export function StepSchedule({
           <SwitchRow
             id="c-stop-reply"
             label="Stop on reply"
-            description="When a lead replies, they get no more emails from this campaign."
+            description="When a lead replies to any of your campaigns, this campaign sends them nothing more. Opt-outs always stop every campaign."
             checked={s.stopOnReply}
             onCheckedChange={(v) => onChange({ stopOnReply: v })}
           />

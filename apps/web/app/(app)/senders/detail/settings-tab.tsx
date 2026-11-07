@@ -154,7 +154,7 @@ export function SettingsTab({ sender }: { sender: SenderRow }) {
               ))}
             </NativeSelect>
           </Field>
-          <Field label="Signature" optional error={errors.signature} hint="Added wherever a template uses {{signature}}.">
+          <Field label="Signature" optional error={errors.signature} hint="Added under every email this mailbox sends.">
             <Textarea rows={4} value={v.signature} onChange={(e) => set("signature", e.target.value)} />
           </Field>
         </section>

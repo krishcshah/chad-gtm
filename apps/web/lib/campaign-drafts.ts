@@ -2,7 +2,7 @@
  * Campaign draft / publish persistence (F09a).
  * Pure of Next.js session/revalidate so unit tests can inject a db.
  */
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import {
   campaignDraftSchema,
@@ -12,6 +12,7 @@ import {
 } from "@smartreach/validation";
 import { nowIso } from "@smartreach/shared";
 import { formatZodActionError } from "./zod-action-error";
+import { contactCooldownSince, missingListLeadsWhere, snapshotLeadWhere } from "./lead-sendability";
 import {
   partitionCampaignSenders,
   senderPartitionError,
@@ -70,12 +71,64 @@ function rawKeySet(input: unknown): Set<string> {
   return new Set(Object.keys(input as Record<string, unknown>));
 }
 
-/** Snapshot sendable list leads into campaign_leads if none exist yet. */
+export interface CampaignLeadSnapshotOptions {
+  /**
+   * Add the list's leads that aren't in the campaign yet (#40), even when the
+   * campaign already has a snapshot. Takes only leads still marked 'new' whose
+   * address isn't already in this campaign, and returns how many were added.
+   */
+  onlyMissing?: boolean;
+  /**
+   * "Email them again" (#31): also take leads your other campaigns already
+   * emailed. Off by default, so a snapshot takes only 'new' leads nobody of
+   * yours emailed in the last 90 days.
+   */
+  reengageContacted?: boolean;
+}
+
+/** The campaign's owner (whose other campaigns count for the snapshot rules). */
+async function campaignOwnerId(db: Db, campaignId: string): Promise<string | null> {
+  const [row]: Array<{ userId: string | null }> = await db
+    .select({ userId: campaigns.userId })
+    .from(campaigns)
+    .where(eq(campaigns.id, campaignId))
+    .limit(1);
+  return row?.userId ?? null;
+}
+
+/**
+ * Snapshot sendable list leads into campaign_leads if none exist yet (#31:
+ * no leads already in another live campaign of the owner, and unless
+ * re-engaging, only 'new' leads the owner's other campaigns haven't taken in
+ * during the last 90 days).
+ */
 export async function ensureCampaignLeadSnapshot(
   db: Db,
   campaignId: string,
   leadListId: string,
+  opts: CampaignLeadSnapshotOptions = {},
 ): Promise<number> {
+  const ownerId = await campaignOwnerId(db, campaignId);
+  // Fail closed: without an owner the rules can't be applied, so take nobody.
+  if (!ownerId) return 0;
+  const since = contactCooldownSince();
+  const rules = snapshotLeadWhere({
+    ownerId,
+    campaignId,
+    reengageContacted: opts.reengageContacted === true,
+    since,
+  });
+  if (opts.onlyMissing) {
+    // Same condition the campaign page counts for the "Add N new leads" button.
+    const missing = missingListLeadsWhere({
+      ownerId,
+      campaignId,
+      leadListId,
+      reengageContacted: opts.reengageContacted === true,
+      since,
+    });
+    return addMissingListLeads(db, campaignId, leadListId, missing);
+  }
   const [{ n }] = await db
     .select({ n: sql<number>`count(*)` })
     .from(campaignLeads)
@@ -85,13 +138,7 @@ export async function ensureCampaignLeadSnapshot(
   const listLeads = await db
     .select({ id: leads.id })
     .from(leads)
-    .where(
-      and(
-        eq(leads.listId, leadListId),
-        sql`${leads.deletedAt} is null`,
-        inArray(leads.status, ["new", "contacted"]),
-      ),
-    );
+    .where(and(eq(leads.listId, leadListId), rules));
   if (!listLeads.length) return 0;
   const CHUNK = 500;
   for (let i = 0; i < listLeads.length; i += CHUNK) {
@@ -107,6 +154,59 @@ export async function ensureCampaignLeadSnapshot(
       .onConflictDoNothing();
   }
   return listLeads.length;
+}
+
+/**
+ * Insert-missing step behind "Add N new leads" (#40). Never re-adds a lead
+ * already in the campaign, a lead someone emailed already (status other than
+ * 'new'), a second lead row with an address the campaign already has, or a
+ * blocklisted address. Every send gate still applies at queue and send time.
+ */
+async function addMissingListLeads(
+  db: Db,
+  campaignId: string,
+  leadListId: string,
+  /** missingListLeadsWhere(...) for this campaign (#31 rules, #40). */
+  missing: SQL,
+): Promise<number> {
+  const existing: Array<{ leadId: string }> = await db
+    .select({ leadId: campaignLeads.leadId })
+    .from(campaignLeads)
+    .where(eq(campaignLeads.campaignId, campaignId));
+  const inCampaign = new Set(existing.map((r) => r.leadId));
+
+  const candidates: Array<{ id: string; email?: string | null }> = await db
+    .select({ id: leads.id, email: leads.email })
+    .from(leads)
+    .where(and(eq(leads.listId, leadListId), sql`${leads.deletedAt} is null`, missing));
+  const seenEmails = new Set<string>();
+  const fresh = candidates.filter((l) => {
+    if (inCampaign.has(l.id)) return false;
+    const email = String(l.email ?? "").trim().toLowerCase();
+    if (email) {
+      if (seenEmails.has(email)) return false;
+      seenEmails.add(email);
+    }
+    return true;
+  });
+  if (!fresh.length) return 0;
+  const CHUNK = 500;
+  let added = 0;
+  for (let i = 0; i < fresh.length; i += CHUNK) {
+    const inserted: unknown[] = await db
+      .insert(campaignLeads)
+      .values(
+        fresh.slice(i, i + CHUNK).map((l) => ({
+          campaignId,
+          leadId: l.id,
+          status: "queued" as const,
+        })),
+      )
+      .onConflictDoNothing()
+      .returning({ id: campaignLeads.id });
+    added += Array.isArray(inserted) ? inserted.length : 0;
+  }
+  return added;
 }
 
 async function loadSenderRefs(db: Db, ids: string[]): Promise<CampaignSenderRef[]> {
@@ -295,7 +395,7 @@ export async function publishCampaignForUser(
     return { ok: false, error, fieldErrors: { senderIds: [error] } };
   }
 
-  // Postal is optional — no start/publish gate.
+  // Identity (company + postal) is checked by publishCampaign before this runs.
   const status = d.startMode === "now" ? "running" : "scheduled";
   const scheduledAt = d.startMode === "later" ? d.scheduledAt : null;
   const startedAt = d.startMode === "now" ? nowIso() : null;
@@ -348,7 +448,9 @@ export async function publishCampaignForUser(
         })
         .where(eq(campaigns.id, d.id));
       await replaceCampaignSenders(db, d.id, senderIds);
-      const n = await ensureCampaignLeadSnapshot(db, d.id, d.leadListId);
+      const n = await ensureCampaignLeadSnapshot(db, d.id, d.leadListId, {
+        reengageContacted: d.reengageContacted === true,
+      });
       return {
         ok: true,
         data: { id: d.id },
@@ -369,32 +471,11 @@ export async function publishCampaignForUser(
       .insert(campaignSenders)
       .values(senderIds.map((senderId) => ({ campaignId: campaign.id, senderId })));
 
-    const listLeads = await db
-      .select({ id: leads.id })
-      .from(leads)
-      .where(
-        and(
-          eq(leads.listId, d.leadListId),
-          sql`${leads.deletedAt} is null`,
-          inArray(leads.status, ["new", "contacted"]),
-        ),
-      );
-
-    if (listLeads.length) {
-      const CHUNK = 500;
-      for (let i = 0; i < listLeads.length; i += CHUNK) {
-        await db
-          .insert(campaignLeads)
-          .values(
-            listLeads.slice(i, i + CHUNK).map((l: { id: string }) => ({
-              campaignId: campaign.id,
-              leadId: l.id,
-              status: "queued" as const,
-            })),
-          )
-          .onConflictDoNothing();
-      }
-    }
+    // Same rules as Start: leave out people your other campaigns emailed,
+    // unless the person chose "Email them again".
+    await ensureCampaignLeadSnapshot(db, campaign.id, d.leadListId, {
+      reengageContacted: d.reengageContacted === true,
+    });
 
     return {
       ok: true,

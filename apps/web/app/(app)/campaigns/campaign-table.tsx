@@ -17,10 +17,11 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  statusVariant,
 } from "@smartreach/ui";
+import { CampaignStatusBadge } from "../campaign-status-badge";
 import { CampaignActions } from "./campaign-actions";
 import { formatPercent } from "./format";
+import { LeadListsSection, type LeadListItem } from "./lead-lists-section";
 
 export interface CampaignListItem {
   id: string;
@@ -35,6 +36,10 @@ export interface CampaignListItem {
   sent: number;
   replied: number;
   failed: number;
+  /** Sends are held by the engine (no postal address): shown instead of the status. */
+  held: boolean;
+  /** Set when an Autopilot run manages this campaign. */
+  autopilotRunId?: string | null;
 }
 
 type Filter = "all" | "active" | "paused" | "draft" | "finished";
@@ -49,7 +54,7 @@ const FILTERS: Record<Filter, (status: string) => boolean> = {
 
 const FILTER_LABELS: Record<Filter, string> = {
   all: "All",
-  active: "Active",
+  active: "Live",
   paused: "Paused",
   draft: "Drafts",
   finished: "Finished",
@@ -57,8 +62,11 @@ const FILTER_LABELS: Record<Filter, string> = {
 
 export function CampaignTable({
   campaigns,
+  leadLists,
 }: {
   campaigns: CampaignListItem[];
+  /** Every lead list in the workspace; the same search box filters them. */
+  leadLists: LeadListItem[];
 }) {
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -84,27 +92,30 @@ export function CampaignTable({
 
   if (campaigns.length === 0) {
     return (
-      <EmptyState
-        icon={Rocket}
-        title="No campaigns yet"
-        description="Autopilot reads your website, finds buyers and writes the emails for you. Or build a campaign yourself from one of your lead lists."
-        action={
-          <>
-            <Button asChild>
-              <Link href="/chad-gtm">
-                <Bot />
-                Run autopilot
-              </Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/campaigns/new">
-                <Plus />
-                New campaign
-              </Link>
-            </Button>
-          </>
-        }
-      />
+      <div className="flex flex-col gap-6">
+        <EmptyState
+          icon={Rocket}
+          title="No campaigns yet"
+          description="Autopilot reads your website, finds buyers and writes the emails for you. Or build a campaign yourself from one of your lead lists."
+          action={
+            <>
+              <Button asChild>
+                <Link href="/chad-gtm">
+                  <Bot />
+                  Run autopilot
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/campaigns/new">
+                  <Plus />
+                  New campaign
+                </Link>
+              </Button>
+            </>
+          }
+        />
+        <LeadListsSection lists={leadLists} query="" />
+      </div>
     );
   }
 
@@ -123,7 +134,7 @@ export function CampaignTable({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search campaigns or lead lists"
-            aria-label="Search campaigns"
+            aria-label="Search campaigns and lead lists"
             className="pl-9"
           />
         </div>
@@ -179,12 +190,19 @@ export function CampaignTable({
                   <li key={c.id} className="flex flex-col gap-3 px-4 py-4">
                     <div className="flex items-start gap-3">
                       <div className="min-w-0 flex-1">
-                        <Link
-                          href={`/campaigns/${c.id}`}
-                          className="block truncate text-sm font-medium hover:underline"
-                        >
-                          {c.name}
-                        </Link>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <Link
+                            href={`/campaigns/${c.id}`}
+                            className="block truncate text-sm font-medium hover:underline"
+                          >
+                            {c.name}
+                          </Link>
+                          {c.autopilotRunId ? (
+                            <Badge variant="neutral" className="shrink-0">
+                              Autopilot
+                            </Badge>
+                          ) : null}
+                        </div>
                         <span className="block truncate text-xs text-subtle-foreground">
                           {c.leadListName ?? "No lead list"} · Created{" "}
                           {c.createdLabel}
@@ -194,16 +212,13 @@ export function CampaignTable({
                         id={c.id}
                         status={c.status}
                         name={c.name}
+                        isAutopilot={Boolean(c.autopilotRunId)}
+                        autopilotRunId={c.autopilotRunId ?? null}
+                        failed={c.failed}
                       />
                     </div>
                     <div className="flex items-center gap-3">
-                      <Badge
-                        variant={statusVariant(c.status)}
-                        dot
-                        className="shrink-0 capitalize"
-                      >
-                        {c.status}
-                      </Badge>
+                      <CampaignStatusBadge status={c.status} held={c.held} className="shrink-0" />
                       <Progress
                         value={pct}
                         className="flex-1"
@@ -215,7 +230,7 @@ export function CampaignTable({
                         <span className="font-medium text-foreground">
                           {c.sent.toLocaleString()}
                         </span>{" "}
-                        of {c.total.toLocaleString()} sent
+                        of {c.total.toLocaleString()} emailed
                       </span>
                       <span>
                         <span className="font-medium text-foreground">
@@ -238,7 +253,7 @@ export function CampaignTable({
                     <TableHead>Campaign</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-[22%]">Progress</TableHead>
-                    <TableHead className="text-right">Sent</TableHead>
+                    <TableHead className="text-right">Leads emailed</TableHead>
                     <TableHead className="text-right">Replies</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead className="w-12">
@@ -255,12 +270,19 @@ export function CampaignTable({
                     return (
                       <TableRow key={c.id}>
                         <TableCell className="max-w-[280px]">
-                          <Link
-                            href={`/campaigns/${c.id}`}
-                            className="block truncate font-medium text-foreground hover:underline"
-                          >
-                            {c.name}
-                          </Link>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <Link
+                              href={`/campaigns/${c.id}`}
+                              className="block truncate font-medium text-foreground hover:underline"
+                            >
+                              {c.name}
+                            </Link>
+                            {c.autopilotRunId ? (
+                              <Badge variant="neutral" className="shrink-0">
+                                Autopilot
+                              </Badge>
+                            ) : null}
+                          </div>
                           <span className="block truncate text-xs text-subtle-foreground">
                             {c.leadListName ?? "No lead list"} ·{" "}
                             {c.total.toLocaleString()}{" "}
@@ -268,13 +290,7 @@ export function CampaignTable({
                           </span>
                         </TableCell>
                         <TableCell>
-                          <Badge
-                            variant={statusVariant(c.status)}
-                            dot
-                            className="capitalize"
-                          >
-                            {c.status}
-                          </Badge>
+                          <CampaignStatusBadge status={c.status} held={c.held} />
                           {c.status === "scheduled" && c.scheduledLabel ? (
                             <span className="mt-1 block text-xs text-subtle-foreground">
                               For {c.scheduledLabel}
@@ -325,6 +341,9 @@ export function CampaignTable({
                             id={c.id}
                             status={c.status}
                             name={c.name}
+                            isAutopilot={Boolean(c.autopilotRunId)}
+                            autopilotRunId={c.autopilotRunId ?? null}
+                            failed={c.failed}
                           />
                         </TableCell>
                       </TableRow>
@@ -342,6 +361,10 @@ export function CampaignTable({
           Showing {visible.length} of {campaigns.length} campaigns
         </p>
       ) : null}
+
+      <div className="pt-4">
+        <LeadListsSection lists={leadLists} query={query} />
+      </div>
     </div>
   );
 }

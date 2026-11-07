@@ -74,7 +74,7 @@ export function DatabaseVisual() {
       <div className="mt-1 flex items-end justify-between rounded-xl border border-border bg-card px-4 py-3">
         <div>
           <p className="text-[11px] uppercase tracking-[0.08em] text-subtle-foreground">Matches</p>
-          <p className="tabular text-2xl font-semibold tracking-tight text-foreground">500</p>
+          <p className="tabular text-2xl font-semibold tracking-tight text-foreground">18,240</p>
         </div>
         <p className="tabular text-right text-[12px] text-muted-foreground">
           searched

@@ -7,8 +7,6 @@ import type { UniboxThreadMessage } from "@/lib/unibox-thread";
 import { initials, messageAuthor } from "./inbox-utils";
 import { EmailBody } from "./message-body";
 
-const ROLE_LABEL = { lead: null, you: "You", agent: "Agent", campaign: "Campaign" } as const;
-
 function clockTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
@@ -19,7 +17,7 @@ function clockTime(iso: string): string {
 export function ThreadMessage({ message }: { message: UniboxThreadMessage }) {
   const author = messageAuthor(message);
   const ours = author.role !== "lead";
-  const roleLabel = ROLE_LABEL[author.role];
+  const roleLabel = author.label;
   const time = clockTime(message.sentAt);
   const pending = message.id.startsWith("operator:pending:");
 

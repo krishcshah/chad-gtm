@@ -155,7 +155,9 @@ export function LeadImport({
           rows: csv.rows,
         });
         setCsv(null);
-        toast.success("Import started", { description: "It keeps running while you use the rest of AutoGTM." });
+        toast.success("Import started", {
+          description: "Keep this browser open until the import finishes. You can use other pages meanwhile.",
+        });
         return;
       }
 
@@ -165,6 +167,7 @@ export function LeadImport({
       let totalImported = 0;
       let totalSkipped = 0;
       let totalInvalid = 0;
+      let totalBlocked = 0;
 
       setInlineProgress({ processed: 0, total, percent: 0 });
 
@@ -198,6 +201,7 @@ export function LeadImport({
           totalImported += res.data.imported;
           totalSkipped += res.data.skipped;
           totalInvalid += res.data.invalid;
+          totalBlocked += res.data.blocked ?? 0;
 
           const processed = Math.min(i + chunk.length, total);
           setInlineProgress({ processed, total, percent: Math.round((processed / total) * 100) });
@@ -212,6 +216,7 @@ export function LeadImport({
           imported: totalImported,
           skipped: totalSkipped,
           invalid: totalInvalid,
+          blocked: totalBlocked,
           listId: currentListId,
           listName: resolvedListName,
         });
@@ -236,7 +241,12 @@ export function LeadImport({
         <ImportFinished
           listId={activeJob.listId}
           listName={activeJob.listName}
-          counts={{ imported: activeJob.imported, skipped: activeJob.skipped, invalid: activeJob.invalid }}
+          counts={{
+            imported: activeJob.imported,
+            skipped: activeJob.skipped,
+            invalid: activeJob.invalid,
+            blocked: activeJob.blocked,
+          }}
           onImportAnother={async () => {
             await dismissActiveJob();
             reset();

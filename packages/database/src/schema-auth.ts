@@ -28,6 +28,8 @@ export const users = pgTable(
      * NULL = pending approval (see apps/web/lib/approval.ts).
      */
     approvedAt: timestamp("approved_at", { withTimezone: true, mode: "date" }),
+    /** When an admin revoked approval. Set with approvedAt NULL = on hold, not new. */
+    approvalRevokedAt: timestamp("approval_revoked_at", { withTimezone: true, mode: "date" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },

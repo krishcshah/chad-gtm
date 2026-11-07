@@ -173,16 +173,30 @@ afterEach(() => {
 
 const NOW = new Date("2026-11-06T12:00:00.000Z");
 
+/** A running campaign whose lead conversations are handled by the agent. */
+const AGENT_CAMPAIGN = {
+  id: "c1",
+  userId: "u1",
+  workspaceId: null,
+  status: "running",
+  deletedAt: null,
+  leadConversationMode: "agent",
+  agentOffer: "",
+};
+
 /* ─── Finding 1: pool fallback ──────────────────────────────────────────── */
 
 describe("campaignSenders pool fallback", () => {
-  const activeRun = { runStatus: "active", runUserId: "u1", campaignUserId: "u1" };
+  // Keyed on the campaign's own status (#46), not run.status.
+  const activeRun = { campaignStatus: "running", runUserId: "u1", campaignUserId: "u1" };
 
-  it("is allowed only for an active autopilot run of the same owner", () => {
+  it("is allowed only for a running autopilot campaign of the same owner", () => {
     expect(poolFallbackAllowed(undefined)).toBe(false); // manual campaign
+    expect(poolFallbackAllowed(null)).toBe(false); // missing run
     expect(poolFallbackAllowed(activeRun)).toBe(true);
-    expect(poolFallbackAllowed({ ...activeRun, runStatus: "paused" })).toBe(false);
-    expect(poolFallbackAllowed({ ...activeRun, runStatus: "completed" })).toBe(false);
+    expect(poolFallbackAllowed({ ...activeRun, campaignStatus: "paused" })).toBe(false);
+    expect(poolFallbackAllowed({ ...activeRun, campaignStatus: "completed" })).toBe(false);
+    expect(poolFallbackAllowed({ ...activeRun, campaignStatus: "archived" })).toBe(false);
     expect(poolFallbackAllowed({ ...activeRun, campaignUserId: "someone-else" })).toBe(false);
   });
 
@@ -229,22 +243,94 @@ describe("campaignSenders pool fallback", () => {
     expect(await campaignSenders(db, "c1")).toEqual(pool);
   });
 
-  it("a paused run never falls back", async () => {
+  it("a paused campaign never falls back", async () => {
     const { db } = tableDb(
       new Map<unknown, Handler>([
         [schema.campaignSenders, [{ sender: sender({ id: "old", deletedAt: "2026-11-01" }) }]],
-        [schema.chadGtmRuns, [{ ...activeRun, runStatus: "paused" }]],
+        [schema.chadGtmRuns, [{ ...activeRun, campaignStatus: "paused" }]],
         [schema.senderAccounts, [sender({ id: "p1" })]],
       ]),
     );
     expect(await campaignSenders(db, "c1")).toEqual([]);
+  });
+
+  it("an active autopilot campaign also gets pool mailboxes imported after launch", async () => {
+    const p1 = sender({ id: "p1", createdAt: "2026-11-01T00:00:00.000Z" });
+    const p2 = sender({ id: "p2", createdAt: "2026-11-05T00:00:00.000Z" });
+    const { db } = tableDb(
+      new Map<unknown, Handler>([
+        [schema.campaignSenders, [{ sender: p1 }]],
+        [schema.chadGtmRuns, [activeRun]],
+        [schema.senderAccounts, [p1, p2]],
+      ]),
+    );
+    expect((await campaignSenders(db, "c1")).map((s) => s.id)).toEqual(["p1", "p2"]);
+  });
+
+  it("keeps sending from the live pool when every attached pool mailbox is paused", async () => {
+    const p1 = sender({ id: "p1", status: "paused", createdAt: "2026-11-01T00:00:00.000Z" });
+    const p2 = sender({ id: "p2", status: "active", createdAt: "2026-11-05T00:00:00.000Z" });
+    const p3 = sender({ id: "p3", status: "failed", createdAt: "2026-11-06T00:00:00.000Z" });
+    const { db } = tableDb(
+      new Map<unknown, Handler>([
+        [schema.campaignSenders, [{ sender: p1 }]],
+        [schema.chadGtmRuns, [activeRun]],
+        [schema.senderAccounts, [p1, p2, p3]],
+      ]),
+    );
+    const senders = await campaignSenders(db, "c1");
+    // Paused/failed rows stay listed so a sticky follow-up can find its step-1 mailbox and defer.
+    expect(senders.map((s) => s.id)).toEqual(["p1", "p2", "p3"]);
+    expect(senders.filter((s) => s.status === "active").map((s) => s.id)).toEqual(["p2"]);
+  });
+
+  it("does not list a retired mailbox, so its follow-ups rotate to the live pool", async () => {
+    const old = sender({ id: "old", deletedAt: "2026-11-02", createdAt: "2026-11-01T00:00:00.000Z" });
+    const p2 = sender({ id: "p2", createdAt: "2026-11-05T00:00:00.000Z" });
+    const { db } = tableDb(
+      new Map<unknown, Handler>([
+        [schema.campaignSenders, [{ sender: old }, { sender: p2 }]],
+        [schema.chadGtmRuns, [activeRun]],
+        [schema.senderAccounts, [p2]],
+      ]),
+    );
+    expect((await campaignSenders(db, "c1")).map((s) => s.id)).toEqual(["p2"]);
+  });
+
+  it("a manual campaign or a paused campaign with attached pool mailboxes gets only its attached rows", async () => {
+    const p1 = sender({ id: "p1" });
+    const p2 = sender({ id: "p2" });
+    for (const runRows of [[], [{ ...activeRun, campaignStatus: "paused" }], [{ ...activeRun, campaignUserId: "u2" }]]) {
+      const { db } = tableDb(
+        new Map<unknown, Handler>([
+          [schema.campaignSenders, [{ sender: p1 }]],
+          [schema.chadGtmRuns, runRows],
+          [schema.senderAccounts, [p1, p2]],
+        ]),
+      );
+      expect((await campaignSenders(db, "c1")).map((s) => s.id)).toEqual(["p1"]);
+    }
+  });
+
+  it("a campaign on its own (non-pool) mailboxes never reads the pool", async () => {
+    const own = sender({ id: "own", isSystemPool: false, userId: "u1" });
+    const { db, selects } = tableDb(
+      new Map<unknown, Handler>([
+        [schema.campaignSenders, [{ sender: own }]],
+        [schema.chadGtmRuns, [activeRun]],
+        [schema.senderAccounts, [sender({ id: "p1" })]],
+      ]),
+    );
+    expect((await campaignSenders(db, "c1")).map((s) => s.id)).toEqual(["own"]);
+    expect(selects).not.toContain(schema.senderAccounts);
+    expect(selects).not.toContain(schema.chadGtmRuns);
   });
 });
 
 /* ─── Finding 2: reply agent and owner approval ─────────────────────────── */
 
 describe("reply agent never sends for an owner who is not approved", () => {
-  it("holds the reply (escalated, no email) when the owner's approval was revoked", async () => {
+  it("holds the reply ('held', not Needs you, no email) when the owner's approval was revoked", async () => {
     delete env.SIGNUP_APPROVAL_REQUIRED;
     const sendMail = vi.fn();
     const reply = {
@@ -262,6 +348,8 @@ describe("reply agent never sends for an owner who is not approved", () => {
         [schema.agentRequests, []],
         [schema.replies, (n) => (n === 0 ? [{ id: "r1", agentAttempts: 0 }] : [reply])],
         [schema.chadGtmRuns, [{ id: "run1", userId: "u1", replyAgentMode: "autopilot", bookingUrl: "https://cal.example/x" }]],
+        [schema.campaigns, [AGENT_CAMPAIGN]],
+        [schema.leadConversations, []],
         [schema.senderAccounts, [sender()]],
         [schema.uniboxMessages, []],
         [schema.users, [{ id: "u1", role: "user", approvedAt: null }]],
@@ -270,9 +358,13 @@ describe("reply agent never sends for an owner who is not approved", () => {
     );
     const r = await replyAgentTick(db, { now: () => NOW, notifyClient: false, sendMail });
     expect(sendMail).not.toHaveBeenCalled();
-    expect(r.escalated).toBe(1);
-    const fin = writes.find((w) => w.table === schema.replies && w.set?.agentStatus === "escalated");
+    expect(r.held).toBe(1);
+    expect(r.escalated).toBe(0);
+    const fin = writes.find((w) => w.table === schema.replies && w.set?.agentStatus === "held");
     expect(fin?.set.agentSummary).toBe(AGENT_OWNER_NOT_APPROVED_SUMMARY);
+    // Account on hold: no Needs you card (it opens once the account is approved).
+    expect(writes.some((w) => w.op === "insert" && w.table === schema.agentRequests)).toBe(false);
+    expect(r.released).toBe(0);
   });
 });
 
@@ -535,14 +627,29 @@ describe("reply agent: a failure after the send never re-sends", () => {
       bodyText: "Sounds interesting, can we set up a call next week?",
       receivedAt: "2026-11-06T11:00:00.000Z",
       messageId: "<in-1@acme-example.com>",
+      // Claimed by this tick, so the pre-send ownership check passes.
+      agentStatus: "processing",
+      agentClaimedAt: NOW.toISOString(),
     };
     return tableDb(
       new Map<unknown, Handler>([
         [schema.replies, (n) => (n === 0 ? [{ id: "r1", agentAttempts: 0 }] : [reply])],
         [
           schema.chadGtmRuns,
-          [{ id: "run1", userId: "u1", replyAgentMode: "autopilot", bookingUrl: "https://cal.example/dana", companyName: "Acme" }],
+          [
+            {
+              id: "run1",
+              userId: "u1",
+              replyAgentMode: "autopilot",
+              bookingUrl: "https://cal.example/dana",
+              companyName: "Acme",
+              businessOverview: { summary: "Acme automates reporting for finance teams." },
+              offers: [{ title: "Reporting audit", valueProp: "Find a week of reporting work to cut" }],
+            },
+          ],
         ],
+        [schema.campaigns, [AGENT_CAMPAIGN]],
+        [schema.leadConversations, []],
         [schema.senderAccounts, [sender()]],
         [schema.uniboxMessages, []],
         [schema.users, [{ id: "u1", role: "user", approvedAt: "2026-01-01" }]],
@@ -626,7 +733,7 @@ describe("reminder digests", () => {
     expect(d.text).toContain("https://autogtm.tech/requests");
   });
 
-  function reminderDb(opts: { since: string; requests: any[]; recentDigest?: boolean }) {
+  function reminderDb(opts: { since: string; requests: any[]; recentDigest?: boolean; workspaces?: Handler }) {
     delete env.SIGNUP_APPROVAL_REQUIRED;
     return tableDb(
       new Map<unknown, Handler>([
@@ -635,6 +742,7 @@ describe("reminder digests", () => {
         [schema.agentRequests, opts.requests],
         [schema.users, (n) => (n === 0 ? [{ id: "u1", role: "user", approvedAt: "2026-01-01" }] : [{ email: "client@acme.com", name: "Dana" }])],
         [schema.activityLogs, opts.recentDigest ? [{ id: "digest" }] : []],
+        [schema.workspaces, opts.workspaces ?? []],
       ]),
     );
   }
@@ -686,6 +794,30 @@ describe("reminder digests", () => {
     expect(r.renotified).toBe(0);
     expect(systemSend).not.toHaveBeenCalled();
   });
+
+  it("sends no digest when the workspace turned the daily reminder off, and claims nothing", async () => {
+    const { db, writes } = reminderDb({
+      since: "2026-11-01T00:00:00.000Z",
+      requests: [{ ...req("q4", "2026-11-04T10:00:00.000Z"), workspaceId: "w1" }],
+      workspaces: [{ id: "w1", notifyEmail: "", notifyEscalations: true, notifyReminders: false }],
+    });
+    const r = await replyAgentTick(db, { now: () => NOW });
+    expect(r.renotified).toBe(0);
+    expect(systemSend).not.toHaveBeenCalled();
+    expect(writes.some((w) => w.op === "update" && w.table === schema.agentRequests)).toBe(false);
+  });
+
+  it("sends the digest to the workspace's notify address", async () => {
+    const { db } = reminderDb({
+      since: "2026-11-01T00:00:00.000Z",
+      requests: [{ ...req("q5", "2026-11-04T10:00:00.000Z"), workspaceId: "w1" }],
+      workspaces: [{ id: "w1", notifyEmail: "sales@acme.com", notifyEscalations: true, notifyReminders: true }],
+    });
+    const r = await replyAgentTick(db, { now: () => NOW });
+    expect(r.renotified).toBe(1);
+    expect(systemSend).toHaveBeenCalledTimes(1);
+    expect(systemSend.mock.calls[0][0].to).toBe("sales@acme.com");
+  });
 });
 
 /* ─── Finding 13: processor never re-sends after a post-send DB error ───── */
@@ -716,7 +848,21 @@ function processorDb(failWrites?: (table: unknown, n: number) => boolean) {
   return tableDb(
     new Map<unknown, Handler>([
       [schema.senderAccounts, [sender()]],
-      [schema.campaigns, [{ id: "c1", userId: "u1", status: "running", dailyLimit: 50, maxEmailsPerSenderPerDay: 30, retryFailed: true, trackOpens: false }]],
+      [schema.campaigns, [
+        {
+          id: "c1",
+          userId: "u1",
+          status: "running",
+          dailyLimit: 50,
+          maxEmailsPerSenderPerDay: 30,
+          retryFailed: true,
+          trackOpens: false,
+          sendingTimezone: "UTC",
+          sendingWindowStart: "00:00",
+          sendingWindowEnd: "23:59",
+          businessDaysOnly: false,
+        },
+      ]],
       [schema.users, [{ id: "u1", role: "user", approvedAt: "2026-01-01" }]],
       [schema.leads, [{ id: "l1", userId: "u1", status: "new", email: "lee@acme-example.com" }]],
       [schema.suppressions, []],

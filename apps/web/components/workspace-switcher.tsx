@@ -23,6 +23,12 @@ interface WorkspaceSwitcherProps {
   compact?: boolean;
 }
 
+/** "{n} mailboxes · " for dedicated mailboxes; nothing when the workspace sends from the shared pool. */
+function mailboxPrefix(senderCount: number) {
+  if (senderCount <= 0) return null;
+  return `${senderCount} ${senderCount === 1 ? "mailbox" : "mailboxes"} · `;
+}
+
 function WorkspaceAvatar({ name, className }: { name: string; className?: string }) {
   return (
     <span
@@ -73,7 +79,8 @@ export function WorkspaceSwitcher({ workspaces, activeWorkspace, className, comp
                   <span className="block truncate text-[13px] font-medium leading-tight">{activeWorkspace.name}</span>
                   {activeWorkspace.stats && (
                     <span className="block truncate text-xs leading-tight text-subtle-foreground">
-                      {activeWorkspace.stats.senderCount} mailboxes · {activeWorkspace.stats.leadCount.toLocaleString()} leads
+                      {mailboxPrefix(activeWorkspace.stats.senderCount)}
+                      {activeWorkspace.stats.leadCount.toLocaleString()} leads
                     </span>
                   )}
                 </span>
@@ -97,7 +104,8 @@ export function WorkspaceSwitcher({ workspaces, activeWorkspace, className, comp
                   <span className="block truncate">{w.name}</span>
                   {w.stats && (
                     <span className="block truncate text-xs text-subtle-foreground">
-                      {w.stats.senderCount} mailboxes · {w.stats.campaignCount} campaigns
+                      {mailboxPrefix(w.stats.senderCount)}
+                      {w.stats.campaignCount} campaigns
                     </span>
                   )}
                 </span>

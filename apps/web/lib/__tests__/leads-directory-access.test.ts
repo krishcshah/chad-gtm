@@ -125,4 +125,16 @@ describe("lead matcher preview params", () => {
     expect(leadMatcherSearchParams([], ["US"], 0, 0).industries).toBeUndefined();
     expect(leadMatcherSearchParams([], ["US"], 0, 0).page).toBe(1);
   });
+
+  it("adds job titles and team sizes only when given", async () => {
+    const { leadMatcherSearchParams } = await import("../leads-directory");
+    const base = leadMatcherSearchParams(["Software"], ["United States"], 1, 1);
+    expect(base).not.toHaveProperty("jobTitles");
+    expect(base).not.toHaveProperty("teamSizes");
+    expect(leadMatcherSearchParams(["Software"], ["United States"], 1, 1, {})).toEqual(base);
+    expect(leadMatcherSearchParams(["Software"], ["United States"], 1, 1, { jobTitles: [], teamSizes: [] })).toEqual(base);
+    expect(
+      leadMatcherSearchParams(["Software"], ["United States"], 1, 1, { jobTitles: ["Owner"], teamSizes: ["11-50"] })
+    ).toEqual({ ...base, jobTitles: ["Owner"], teamSizes: ["11-50"] });
+  });
 });

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { FileText } from "lucide-react";
+import Link from "next/link";
+import { FileText, Scale } from "lucide-react";
 import {
   Button,
   Card,
@@ -18,8 +19,7 @@ import {
   DialogTitle,
 } from "@smartreach/ui";
 import { GermanFlag } from "@/components/german-flag";
-
-const DPA_CONTACT = "hence-body-eskimo@duck.com";
+import { SUPPORT_EMAIL } from "@/lib/system-emails";
 
 /** Data processing addendum (GDPR Art. 28): key terms inline, full text in a dialog. */
 export function DpaCard() {
@@ -54,17 +54,24 @@ export function DpaCard() {
       </CardContent>
       <CardFooter className="flex-wrap justify-between gap-y-3">
         <span className="min-w-0 break-words text-xs text-muted-foreground">
-          Questions:{" "}
+          Or email{" "}
           <a
-            href={`mailto:${DPA_CONTACT}`}
+            href={`mailto:${SUPPORT_EMAIL}`}
             className="text-foreground underline decoration-border-strong underline-offset-4 hover:decoration-foreground"
           >
-            {DPA_CONTACT}
+            {SUPPORT_EMAIL}
           </a>
         </span>
-        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-          <FileText /> Read the full DPA
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/support?new=legal">
+              <Scale /> Ask a DPA question
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+            <FileText /> Read the full DPA
+          </Button>
+        </div>
       </CardFooter>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -137,12 +144,13 @@ export function DpaCard() {
             </DpaSection>
             <DpaSection title="6. Contact">
               <p>
-                For a signed copy or data protection questions, email{" "}
+                For a signed copy or data protection questions, open a Support request in the &quot;Legal / DPA&quot;
+                category so you can follow its status, or email{" "}
                 <a
-                  href={`mailto:${DPA_CONTACT}`}
+                  href={`mailto:${SUPPORT_EMAIL}`}
                   className="text-foreground underline decoration-border-strong underline-offset-4 hover:decoration-foreground"
                 >
-                  {DPA_CONTACT}
+                  {SUPPORT_EMAIL}
                 </a>
                 .
               </p>

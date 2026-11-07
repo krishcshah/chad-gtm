@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getSession, requireUser } from "./session";
 import {
+  eraseDataForRemovalRequestForAdmin,
   submitDataRemovalRequest,
   updateDataRemovalStatusForAdmin,
   type DataRemovalStatus,
@@ -25,6 +26,23 @@ export async function submitDataRemovalAction(formData: FormData) {
     revalidatePath("/settings");
     revalidatePath("/admin");
     revalidatePath("/remove-my-info");
+  }
+
+  return result;
+}
+
+export async function eraseDataRemovalAction(requestId: string) {
+  const user = await requireUser();
+  let result: Awaited<ReturnType<typeof eraseDataForRemovalRequestForAdmin>>;
+  try {
+    result = await eraseDataForRemovalRequestForAdmin(user, requestId);
+  } catch (err) {
+    console.error("[data-removal] Erase failed:", err);
+    return { ok: false, error: "Could not delete their data. Nothing was marked completed. Try again." };
+  }
+
+  if (result.ok) {
+    revalidatePath("/admin");
   }
 
   return result;

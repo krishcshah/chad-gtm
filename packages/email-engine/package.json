@@ -13,7 +13,12 @@
     "./sync-replies": "./src/sync-replies.ts",
     "./worker": "./src/worker.ts",
     "./ai": "./src/ai.ts",
-    "./reply-agent": "./src/reply-agent.ts"
+    "./ai-options": "./src/ai-options.ts",
+    "./reply-agent": "./src/reply-agent.ts",
+    "./lead-conversations": "./src/lead-conversations.ts",
+    "./suppression": "./src/suppression.ts",
+    "./lead-outcomes": "./src/lead-outcomes.ts",
+    "./mailbox-health": "./src/mailbox-health.ts"
   },
   "scripts": {
     "start": "tsx src/run.ts",

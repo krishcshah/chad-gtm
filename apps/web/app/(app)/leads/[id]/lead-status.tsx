@@ -1,7 +1,8 @@
 "use client";
 
-import { LEAD_STATUSES } from "@smartreach/shared";
+import { LEAD_FUNNEL_STATUSES, LEAD_STATUSES } from "@smartreach/shared";
 import {
+  Badge,
   Select,
   SelectContent,
   SelectItem,
@@ -20,6 +21,7 @@ export function statusLabel(status: string) {
 }
 
 export function statusTone(status: string): DotTone {
+  if (status === "interested" || status === "meeting_booked" || status === "won") return "success";
   const variant = statusVariant(status);
   switch (variant) {
     case "success":
@@ -42,6 +44,24 @@ function StatusOption({ status }: { status: string }) {
   );
 }
 
+/** Statuses set by the engine or the Blocklist; the picker can't change them. */
+const LOCKED_STATUSES = new Set(["bounced", "unsubscribed", "blocked"]);
+
+/** Global opt-outs (from any account) versus this account's own blocks. */
+const OPT_OUT_SOURCES = new Set(["unsubscribe", "bounce", "complaint", "erasure"]);
+
+/** Shows why a lead's address is on the Blocklist. */
+export function LeadBlockBadge({ source }: { source: string }) {
+  if (OPT_OUT_SOURCES.has(source)) {
+    return (
+      <Badge variant="destructive" title="This address opted out, bounced or asked to be erased. No campaign emails it.">
+        Opted out
+      </Badge>
+    );
+  }
+  return <Badge title="This address is on your blocklist. No campaign emails it.">Blocked</Badge>;
+}
+
 /** Inline status picker for one lead row. */
 export function LeadStatusSelect({
   status,
@@ -54,7 +74,14 @@ export function LeadStatusSelect({
   disabled: boolean;
   onChange: (status: string) => void;
 }) {
-  const known = (LEAD_STATUSES as readonly string[]).includes(status);
+  if (LOCKED_STATUSES.has(status)) {
+    return (
+      <span className="flex h-7 items-center px-2 text-[13px]" aria-label={`Status for ${email}`}>
+        <StatusOption status={status} />
+      </span>
+    );
+  }
+  const known = (LEAD_FUNNEL_STATUSES as readonly string[]).includes(status);
   return (
     <Select value={status} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger
@@ -69,7 +96,7 @@ export function LeadStatusSelect({
             <StatusOption status={status} />
           </SelectItem>
         ) : null}
-        {LEAD_STATUSES.map((s) => (
+        {LEAD_FUNNEL_STATUSES.map((s) => (
           <SelectItem key={s} value={s}>
             <StatusOption status={s} />
           </SelectItem>

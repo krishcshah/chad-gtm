@@ -93,8 +93,56 @@ describe("campaignPublishSchema", () => {
     }
   });
 
+  it("accepts reengageContacted as a boolean only", () => {
+    const on = campaignPublishSchema.safeParse({ ...full, reengageContacted: true });
+    expect(on.success).toBe(true);
+    if (on.success) expect(on.data.reengageContacted).toBe(true);
+    const omitted = campaignPublishSchema.safeParse(full);
+    expect(omitted.success).toBe(true);
+    if (omitted.success) expect(omitted.data.reengageContacted).toBeUndefined();
+    expect(campaignPublishSchema.safeParse({ ...full, reengageContacted: "yes" }).success).toBe(false);
+  });
+
   it("keeps create schema required for publish/start", () => {
     expect(campaignCreateSchema.safeParse({ name: "only" }).success).toBe(false);
     expect(campaignPublishSchema.safeParse({ ...full, senderIds: [] }).success).toBe(false);
+  });
+});
+
+describe("per-mailbox daily limit (#20)", () => {
+  it("clamps a stored 50 to the 30/day mailbox ceiling instead of rejecting it", () => {
+    const create = campaignCreateSchema.safeParse(full);
+    expect(create.success).toBe(true);
+    if (create.success) expect(create.data.maxEmailsPerSenderPerDay).toBe(30);
+
+    const draft = campaignDraftSchema.safeParse({ maxEmailsPerSenderPerDay: 50 });
+    expect(draft.success).toBe(true);
+    if (draft.success) expect(draft.data.maxEmailsPerSenderPerDay).toBe(30);
+  });
+
+  it("keeps values at or under 30 and defaults to 30", () => {
+    const parsed = campaignCreateSchema.safeParse({ ...full, maxEmailsPerSenderPerDay: 12 });
+    expect(parsed.success && parsed.data.maxEmailsPerSenderPerDay).toBe(12);
+    const { maxEmailsPerSenderPerDay: _omit, ...rest } = full;
+    const defaulted = campaignCreateSchema.safeParse(rest);
+    expect(defaulted.success && defaulted.data.maxEmailsPerSenderPerDay).toBe(30);
+    expect(campaignDraftSchema.safeParse({ maxEmailsPerSenderPerDay: 0 }).success).toBe(false);
+  });
+});
+
+describe("gap between emails is clamped to what the engine uses", () => {
+  it("raises a 5 second gap to 45 instead of rejecting it", () => {
+    const draft = campaignDraftSchema.parse({ minDelaySec: 5, maxDelaySec: 10 });
+    expect(draft.minDelaySec).toBe(45);
+    expect(draft.maxDelaySec).toBe(45);
+    const created = campaignCreateSchema.parse({
+      name: "C",
+      leadListId: "l1",
+      senderIds: ["s1"],
+      minDelaySec: 5,
+      maxDelaySec: 86_400,
+    });
+    expect(created.minDelaySec).toBe(45);
+    expect(created.maxDelaySec).toBe(3600);
   });
 });

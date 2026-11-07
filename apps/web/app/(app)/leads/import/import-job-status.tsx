@@ -19,38 +19,49 @@ export interface ImportCountsValue {
   imported: number;
   skipped: number;
   invalid: number;
+  /** On your blocklist or opted out (unsubscribed, bounced, complaint, removal request). */
+  blocked?: number;
 }
 
 /** Imported / duplicate / invalid tallies, shown as one plain line of numbers. */
-export function ImportCounts({ imported, skipped, invalid }: ImportCountsValue) {
+export function ImportCounts({ imported, skipped, invalid, blocked = 0 }: ImportCountsValue) {
   return (
-    <ul className="grid grid-cols-3 divide-x divide-border rounded-lg border border-border text-[13px]">
-      <li className="flex flex-col gap-0.5 px-3 py-2.5 sm:px-4">
-        <span>
-          <span className="tabular text-base font-semibold text-foreground">{imported.toLocaleString()}</span> imported
-        </span>
-        <span className="text-xs text-subtle-foreground">New leads in the list</span>
-      </li>
-      <li className="flex flex-col gap-0.5 px-3 py-2.5 sm:px-4">
-        <span>
-          <span className="tabular text-base font-semibold text-foreground">{skipped.toLocaleString()}</span> duplicates
-          skipped
-        </span>
-        <span className="text-xs text-subtle-foreground">Already in the list</span>
-      </li>
-      <li className="flex flex-col gap-0.5 px-3 py-2.5 sm:px-4">
-        <span>
-          <span className="tabular text-base font-semibold text-foreground">{invalid.toLocaleString()}</span> invalid
-          emails
-        </span>
-        <span className="text-xs text-subtle-foreground">Not imported</span>
-      </li>
-    </ul>
+    <div className="flex flex-col gap-2">
+      <ul className="grid grid-cols-3 divide-x divide-border rounded-lg border border-border text-[13px]">
+        <li className="flex flex-col gap-0.5 px-3 py-2.5 sm:px-4">
+          <span>
+            <span className="tabular text-base font-semibold text-foreground">{imported.toLocaleString()}</span>{" "}
+            imported
+          </span>
+          <span className="text-xs text-subtle-foreground">New leads in the list</span>
+        </li>
+        <li className="flex flex-col gap-0.5 px-3 py-2.5 sm:px-4">
+          <span>
+            <span className="tabular text-base font-semibold text-foreground">{skipped.toLocaleString()}</span>{" "}
+            duplicates skipped
+          </span>
+          <span className="text-xs text-subtle-foreground">Already in the list</span>
+        </li>
+        <li className="flex flex-col gap-0.5 px-3 py-2.5 sm:px-4">
+          <span>
+            <span className="tabular text-base font-semibold text-foreground">{invalid.toLocaleString()}</span>{" "}
+            invalid emails
+          </span>
+          <span className="text-xs text-subtle-foreground">Not imported</span>
+        </li>
+      </ul>
+      {blocked > 0 ? (
+        <p className="text-[13px] text-muted-foreground">
+          <span className="tabular font-semibold text-foreground">{blocked.toLocaleString()}</span> on your blocklist
+          or opted out, so not imported.
+        </p>
+      ) : null}
+    </div>
   );
 }
 
 function listHref(listId: string) {
-  return listId && listId !== "__new__" ? `/leads/${listId}` : "/campaigns";
+  return listId && listId !== "__new__" ? `/leads/${listId}` : "/campaigns#lead-lists";
 }
 
 export function ImportRunning({ job, onCancel }: { job: StoredImportJob; onCancel: () => Promise<void> }) {
@@ -77,10 +88,10 @@ export function ImportRunning({ job, onCancel }: { job: StoredImportJob; onCance
           </div>
           <Progress value={percent} aria-label="Import progress" />
         </div>
-        <ImportCounts imported={job.imported} skipped={job.skipped} invalid={job.invalid} />
+        <ImportCounts imported={job.imported} skipped={job.skipped} invalid={job.invalid} blocked={job.blocked} />
         <p className="text-[13px] leading-relaxed text-muted-foreground">
-          You can leave this page. The import keeps going while AutoGTM is open in this browser. If you close the tab, it
-          picks up where it stopped the next time you open AutoGTM here.
+          Keep this browser open until the import finishes. You can use other pages meanwhile. If you close it, the
+          import picks up where it stopped the next time you open AutoGTM in this browser.
         </p>
       </CardContent>
       <CardFooter className="justify-between">
@@ -97,7 +108,7 @@ export function ImportRunning({ job, onCancel }: { job: StoredImportJob; onCance
           </Button>
         </ConfirmDialog>
         <Button variant="outline" size="sm" asChild>
-          <Link href="/campaigns">Back to campaigns</Link>
+          <Link href="/campaigns#lead-lists">Back to lead lists</Link>
         </Button>
       </CardFooter>
     </Card>
@@ -169,7 +180,7 @@ export function ImportStopped({ job, onStartOver }: { job: StoredImportJob; onSt
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <ImportCounts imported={job.imported} skipped={job.skipped} invalid={job.invalid} />
+        <ImportCounts imported={job.imported} skipped={job.skipped} invalid={job.invalid} blocked={job.blocked} />
       </CardContent>
       <CardFooter>
         {partial ? (

@@ -81,15 +81,44 @@ function extractFilters(cond: unknown): Record<string, unknown> {
   return out;
 }
 
+/** True when the SQL chunk right before index i is drizzle's " not in " text. */
+function isNotInAt(chunks: unknown[], i: number): boolean {
+  const prev = chunks[i - 1] as { value?: unknown } | undefined;
+  return Array.isArray(prev?.value) && (prev.value as unknown[]).join("").includes("not in");
+}
+
+/** notInArray(column, values) → { column_name: values }. */
+function extractNotInArray(cond: unknown): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  const walk = (node: unknown) => {
+    if (!node || typeof node !== "object") return;
+    const n = node as { queryChunks?: unknown[] };
+    if (Array.isArray(n.queryChunks)) {
+      const chunks = n.queryChunks;
+      chunks.forEach((c, i) => {
+        if (Array.isArray(c) && isNotInAt(chunks, i)) {
+          const col = chunks[i - 2] as { name?: string } | undefined;
+          if (col?.name) {
+            out[col.name] = c.map((p) => String((p as { value?: unknown })?.value));
+          }
+        }
+        walk(c);
+      });
+    }
+  };
+  walk(cond);
+  return out;
+}
+
 function extractInArrayIds(cond: unknown): string[] | null {
   const ids: string[] = [];
   const walk = (node: unknown) => {
     if (!node || typeof node !== "object") return;
     const n = node as { queryChunks?: unknown[] };
     if (Array.isArray(n.queryChunks)) {
-      for (const c of n.queryChunks) {
+      for (const [i, c] of n.queryChunks.entries()) {
         // drizzle inArray embeds an Array of Param({ value: string })
-        if (Array.isArray(c)) {
+        if (Array.isArray(c) && !isNotInAt(n.queryChunks, i)) {
           const vals = c
             .map((p) =>
               p && typeof p === "object" && "value" in p
@@ -238,12 +267,14 @@ function createStoreDb() {
         set: Record<string, unknown> | null;
         filters: Record<string, unknown>;
         inIds: string[] | null;
+        notIn: Record<string, string[]>;
         returning: boolean;
       } = {
         table: resolveTable(table),
         set: null,
         filters: {},
         inIds: null,
+        notIn: {},
         returning: false,
       };
       const chain = {
@@ -254,6 +285,7 @@ function createStoreDb() {
         where(cond: unknown) {
           Object.assign(ctx.filters, extractFilters(cond));
           ctx.inIds = extractInArrayIds(cond);
+          ctx.notIn = extractNotInArray(cond);
           return chain;
         },
         returning() {
@@ -269,6 +301,9 @@ function createStoreDb() {
             let rows = applyFilters(source, ctx.filters);
             if (ctx.inIds) {
               rows = rows.filter((r) => ctx.inIds!.includes(String(r.id)));
+            }
+            for (const [col, values] of Object.entries(ctx.notIn)) {
+              rows = rows.filter((r) => !values.includes(String(r[col])));
             }
             // unique-name check for lead_lists rename
             if (ctx.table === "lead_lists" && ctx.set && "name" in ctx.set) {
@@ -493,8 +528,52 @@ describe("updateLeadStatusForUser", () => {
     expect(bad.ok).toBe(false);
     const missing = await updateLeadStatusForUser(createStoreDb(), "user-1", {
       leadId: "nope",
-      status: "blocked",
+      status: "won",
     });
     expect(missing.ok).toBe(false);
+    if (!missing.ok) expect(missing.error).toBe("Lead not found");
+  });
+
+  it("refuses to pick a do-not-contact status by hand", async () => {
+    seedLead({ id: "lead-1", userId: "user-1", email: "a@x.com", status: "new" });
+    const result = await updateLeadStatusForUser(createStoreDb(), "user-1", {
+      leadId: "lead-1",
+      status: "blocked",
+    });
+    expect(result.ok).toBe(false);
+    expect(store.leads[0].status).toBe("new");
+  });
+
+  it("refuses to change a lead whose status is 'unsubscribed'", async () => {
+    seedLead({ id: "lead-1", userId: "user-1", email: "a@x.com", status: "unsubscribed" });
+    const result = await updateLeadStatusForUser(createStoreDb(), "user-1", {
+      leadId: "lead-1",
+      status: "new",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("This lead bounced, unsubscribed or is blocked, so its status can't be changed.");
+    }
+    expect(store.leads[0].status).toBe("unsubscribed");
+  });
+
+  it("refuses to move a blocked lead back to 'new'", async () => {
+    seedLead({ id: "lead-1", userId: "user-1", email: "a@x.com", status: "blocked" });
+    const result = await updateLeadStatusForUser(createStoreDb(), "user-1", {
+      leadId: "lead-1",
+      status: "new",
+    });
+    expect(result.ok).toBe(false);
+    expect(store.leads[0].status).toBe("blocked");
+  });
+
+  it("refuses to change a bounced lead", async () => {
+    seedLead({ id: "lead-1", userId: "user-1", email: "a@x.com", status: "bounced" });
+    const result = await updateLeadStatusForUser(createStoreDb(), "user-1", {
+      leadId: "lead-1",
+      status: "interested",
+    });
+    expect(result.ok).toBe(false);
+    expect(store.leads[0].status).toBe("bounced");
   });
 });

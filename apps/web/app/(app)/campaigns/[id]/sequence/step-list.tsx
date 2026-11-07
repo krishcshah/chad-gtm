@@ -3,6 +3,7 @@
 import { Clock, Plus } from "lucide-react";
 import { Button, cn } from "@smartreach/ui";
 import { MAX_SEQUENCE_STEP_COUNT, waitLabel, type DraftStep } from "@/lib/sequence-draft";
+import { AI_WRITTEN_LABEL, aiCopyState } from "@/lib/sequence-labels";
 
 /** Vertical list of steps with the wait before each one. */
 export function StepList({
@@ -23,8 +24,8 @@ export function StepList({
       <ol className="flex flex-col">
         {steps.map((step, index) => {
           const current = index === selected;
-          const ai = step.variants.some((v) => v.aiGenerateOnTheFly);
-          const subject = ai ? "Written by AI for each lead" : step.variants[0]?.subject?.trim() || "No subject yet";
+          const aiState = aiCopyState(step.variants);
+          const subject = aiState === "ai" ? AI_WRITTEN_LABEL : step.variants[0]?.subject?.trim() || "No subject yet";
           const showWait = index > 0 || step.delayDays > 0;
           return (
             <li key={step.key} className="flex flex-col">
@@ -60,6 +61,9 @@ export function StepList({
                     {index === 0 ? "First email" : `Follow-up ${index}`}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">{subject}</span>
+                  {aiState === "ai_no_prompt" ? (
+                    <span className="mt-0.5 block text-xs text-warning-text">AI on, no instructions</span>
+                  ) : null}
                   {step.variants.length > 1 ? (
                     <span className="mt-0.5 block text-xs text-subtle-foreground">
                       A/B test

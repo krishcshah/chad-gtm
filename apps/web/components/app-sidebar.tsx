@@ -50,6 +50,14 @@ type SidebarProps = {
   activeWorkspace?: WorkspaceItem;
   /** Open agent escalations waiting on the client. */
   openRequests?: number;
+  /** Inbox conversations awaiting your reply (nobody is answering them). */
+  awaitingReply?: number;
+};
+
+/** Screen-reader noun for a nav count, per item. */
+const COUNT_NOUN: Record<string, string> = {
+  "/requests": "waiting on you",
+  "/unibox": "awaiting your reply",
 };
 
 export function AppSidebar(props: SidebarProps) {
@@ -134,13 +142,14 @@ function SidebarBody({
   workspaces = [],
   activeWorkspace,
   openRequests = 0,
+  awaitingReply = 0,
   collapsed,
   mobile,
 }: SidebarProps & { collapsed: boolean; mobile?: boolean }) {
   const pathname = usePathname();
   const { toggleCollapsed } = useSidebar();
   const userIsAdmin = isAdmin(user);
-  const counts: Record<string, number> = { "/requests": openRequests };
+  const counts: Record<string, number> = { "/requests": openRequests, "/unibox": awaitingReply };
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -281,7 +290,7 @@ function NavLink({
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
-      aria-label={collapsed ? `${item.label}${showCount ? `, ${count} open` : ""}` : undefined}
+      aria-label={collapsed ? `${item.label}${showCount ? `, ${count} ${COUNT_NOUN[item.href] ?? "open"}` : ""}` : undefined}
       className={cn(
         "group relative flex items-center rounded-md text-[13.5px] font-medium transition-colors",
         collapsed ? "size-9 justify-center" : "h-8 gap-2.5 px-2",

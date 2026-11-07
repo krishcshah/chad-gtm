@@ -43,12 +43,12 @@ export const LANDING = {
   },
 
   specs: {
-    caption: "What one campaign is set up to do",
+    caption: "How one campaign works",
     items: [
       { value: DATABASE_SIZE, label: "B2B contacts to pick from" },
-      { value: "Up to 500", label: "matched buyers per campaign" },
-      { value: "3 emails", label: "per lead, over 7 days" },
-      { value: "11", label: "reply types it knows how to handle" },
+      { value: "3 tiers", label: "best-fit buyers are emailed first" },
+      { value: "3 emails", label: "per lead, over 5 days" },
+      { value: "5¢", label: "per email sent" },
     ],
   },
 
@@ -68,7 +68,7 @@ export const LANDING = {
     agent: [
       "Reads your website",
       "Writes your buyer profile and offers",
-      "Picks up to 500 buyers",
+      "Ranks every matching buyer",
       "Writes every email for one person",
       "Sends on a safe schedule",
       "Follows up twice",
@@ -92,10 +92,13 @@ export const LANDING = {
         title: "You confirm the basics",
         text: "Booking link (it checks your site first), company name and postal address. It never launches on a guess, and nothing sends until your account is approved.",
       },
-      { title: "It picks buyers", text: "Up to 500 people matched by industry and job title. US work emails only." },
+      {
+        title: "It ranks your buyers",
+        text: "Every matching contact, in three priorities: your target job titles first, then other decision-makers, then everyone else in your industries. US work emails only.",
+      },
       {
         title: "It writes and sends",
-        text: "Three emails on days 0, 3 and 7, each written for that person at send time. Weekdays, 9 to 5 Eastern.",
+        text: "Three emails per lead: the first, a follow-up two days later and a last one two days after that. Weekdays, 9 to 5 Eastern, at the daily volume you set.",
       },
       {
         title: "It answers, they book",
@@ -118,8 +121,8 @@ export const LANDING = {
         text: "You get an email: “Your agent needs you.” Answer once, tick save, and next time it answers that question itself.",
       },
       {
-        title: `${DATABASE_SIZE} contacts. Up to 500 that fit.`,
-        text: "Your website becomes a buyer profile. You never build, buy or upload a list.",
+        title: `${DATABASE_SIZE} contacts, ranked for you`,
+        text: "Your website becomes a buyer profile. Every match is queued, best fit first. You never build, buy or upload a list.",
       },
       { title: "Written at send time", text: "Short emails, each written for the person reading it. Follow-ups stay in the same thread." },
       {
@@ -132,7 +135,7 @@ export const LANDING = {
   control: {
     eyebrow: "Control",
     title: "Hands off. Never locked out.",
-    lead: "Autopilot is the default. Pause, change the volume or swap your booking link at any time, and pick how replies are handled.",
+    lead: "You set one number: emails per day. Follow-ups count toward it, and they always go out before new outreach so every lead gets all three emails on time. Pause any time, and pick how replies are handled.",
     modes: [
       { title: "Autopilot", text: "The agent replies on its own and asks you only when it's stuck." },
       { title: "Approve", text: "The agent drafts every reply and holds it until you say yes." },
@@ -172,27 +175,27 @@ export const LANDING = {
     ],
   },
 
-  /** OWNER: nothing is billed today. Confirm the price before launch. */
+  /** OWNER: price per email sent (follow-ups included). Mirrors lib/usage.ts. */
   pricing: {
     eyebrow: "Pricing",
-    title: "Free during early access.",
-    lead: "No seats, no contract, no card.",
-    planName: "Autopilot",
-    price: "$0",
-    priceUnit: "today",
-    priceNote: "Everything the agent does is included while we're in early access.",
+    title: "5¢ per email sent.",
+    lead: "No seats, no contract, no monthly fee. You choose how many emails go out each day.",
+    planName: "Pay as you go",
+    price: "5¢",
+    priceUnit: "per email sent",
+    priceNote: "Every lead gets three emails, so each lead contacted costs 15¢. Follow-ups count as emails.",
     /** Drives the cost estimator; null hides it. */
-    centsPerEmail: null as number | null,
+    centsPerEmail: 5 as number | null,
     cta: "Get started",
     included: [
       "Research and targeting from your website",
-      `Up to 500 buyers per campaign from ${DATABASE_SIZE} contacts`,
+      `Every matching contact in ${DATABASE_SIZE}, ranked by priority`,
       "Three emails per lead, each written for that person",
       "Sending from mailboxes we run",
       "The reply agent and Needs you",
       "One inbox for every reply",
     ],
-    footnote: "",
+    footnote: "6,000 emails a month reaches about 2,000 leads.",
   },
 
   faq: {
@@ -222,7 +225,11 @@ export const LANDING = {
       },
       {
         q: "Who will it email?",
-        a: "US contacts with work emails, matched to your buyers by industry and job title. Up to 500 per campaign, skipping anyone an AutoGTM customer emailed in the last 90 days.",
+        a: "Every US contact with a work email in your industries, ranked: your target job titles first, then other decision-makers, then everyone else. Anyone an AutoGTM customer emailed in the last 90 days is skipped.",
+      },
+      {
+        q: "How much will I spend?",
+        a: "You set emails per day, and each email costs 5¢, follow-ups included. Every lead gets three emails, so 100 emails a day on weekdays is about 2,200 emails a month: $110, reaching about 730 leads.",
       },
       {
         q: "How soon does it start?",

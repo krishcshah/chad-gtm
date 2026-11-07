@@ -96,6 +96,18 @@ export async function ensureChadGtmTables(db: Db) {
     await db.execute(
       sql`ALTER TABLE "chad_gtm_runs" ADD COLUMN IF NOT EXISTS "agent_run_id" text`
     );
+    // Launch claim: stops two concurrent launches of one run (#50).
+    await db.execute(
+      sql`ALTER TABLE "chad_gtm_runs" ADD COLUMN IF NOT EXISTS "launch_started_at" text`
+    );
+    // A deleted (dismissed) unlaunched run (#55).
+    await db.execute(
+      sql`ALTER TABLE "chad_gtm_runs" ADD COLUMN IF NOT EXISTS "dismissed_at" text`
+    );
+    // Templates Autopilot made are kept out of the wizard (#105; migration 0014 backfills).
+    await db.execute(
+      sql`ALTER TABLE "email_templates" ADD COLUMN IF NOT EXISTS "source" text DEFAULT 'user' NOT NULL`
+    );
     chadGtmMigrated = true;
   } catch (err) {
     console.error("[db] ensureChadGtmTables error:", err);

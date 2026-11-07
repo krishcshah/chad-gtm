@@ -223,10 +223,25 @@ function insertBeforeBodyEnd(html: string, block: string): string {
 
 /**
  * Opt-outs that follow the PERSON, not the client: the pool mailboxes are
- * shared, so an unsubscribe, hard bounce or complaint recorded under any user
- * blocks sends for every user. Manual and import suppressions stay per user.
+ * shared, so an unsubscribe, hard bounce, complaint or erasure request
+ * recorded under any user (or under no user: the owner was deleted, or the
+ * request came to the platform) blocks sends for every user. Manual, import
+ * and "not interested" suppressions stay per user.
  */
-export const GLOBAL_SUPPRESSION_SOURCES = ["unsubscribe", "bounce", "complaint"] as const;
+export const GLOBAL_SUPPRESSION_SOURCES = ["unsubscribe", "bounce", "complaint", "erasure"] as const;
+
+/** Every suppression source (mirrors the suppressions.source enum in schema.ts). */
+export const SUPPRESSION_SOURCES = [
+  "manual",
+  "import",
+  "unsubscribe",
+  "bounce",
+  "complaint",
+  "erasure",
+  "not_interested",
+] as const;
+
+export type SuppressionSource = (typeof SUPPRESSION_SOURCES)[number];
 
 export function isGlobalSuppressionSource(source: string | null | undefined): boolean {
   return (GLOBAL_SUPPRESSION_SOURCES as readonly string[]).includes(String(source ?? ""));
@@ -241,10 +256,29 @@ export function suppressionCandidates(email: string): string[] {
 
 /** Rows that apply to `userId`: their own rows, plus everyone's global opt-outs. */
 export function applicableSuppressionValues(
-  rows: { value: string; userId: string; source?: string | null }[],
+  // userId is null on rows whose owner was deleted: those apply only when global.
+  rows: { value: string; userId: string | null; source?: string | null }[],
   userId: string,
 ): string[] {
   return rows.filter((r) => r.userId === userId || isGlobalSuppressionSource(r.source)).map((r) => r.value);
+}
+
+export type SuppressionVerdict = { level: "global" | "own"; source: string };
+
+/**
+ * One answer for "may `userId` email this person?" from rows that already
+ * match the recipient. Only applicable rows count (the user's own, or anyone's
+ * global opt-out). A global opt-out wins over the user's own block.
+ */
+export function suppressionVerdict(
+  rows: { value: string; userId: string | null; source?: string | null }[],
+  userId: string,
+): SuppressionVerdict | null {
+  const global = rows.find((r) => isGlobalSuppressionSource(r.source));
+  if (global) return { level: "global", source: String(global.source) };
+  const own = rows.find((r) => r.userId === userId);
+  if (own) return { level: "own", source: String(own.source ?? "manual") };
+  return null;
 }
 
 function escapeHtml(s: string): string {

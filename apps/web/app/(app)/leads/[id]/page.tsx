@@ -1,6 +1,10 @@
 import { notFound } from "next/navigation";
 import { requireWorkspace } from "@/lib/session";
 import { getLeadList, listLeads, listTags } from "@/lib/queries";
+import { getDb } from "@/lib/db";
+import { isAdmin } from "@/lib/admin";
+import { listUsedByPoolCampaign } from "@/lib/pool-campaign-guard";
+import { activeCampaignsForList, listDeleteError } from "@/lib/lead-list-guard";
 import { Page } from "@/components/layout/page";
 import { LeadTable, type LeadRow } from "./lead-table";
 
@@ -21,7 +25,9 @@ export default async function LeadListPage({
   const list = await getLeadList(user.id, id);
   if (!list) notFound();
 
-  const [{ items, nextCursor }, tags] = await Promise.all([
+  const db = getDb();
+  const admin = isAdmin(user);
+  const [{ items, nextCursor }, tags, readOnly, activeCampaigns] = await Promise.all([
     listLeads(user.id, {
       listId: id,
       workspaceId: workspace.id,
@@ -31,7 +37,13 @@ export default async function LeadListPage({
       pageSize: 50,
     }),
     listTags(user.id),
+    // Autopilot lists are read-only for non-admins (#41). On a lookup error, stay read-only.
+    admin ? false : listUsedByPoolCampaign(db, id).catch(() => true),
+    activeCampaignsForList(db, user.id, id).catch(() => null),
   ]);
+  const deleteBlockedReason = activeCampaigns
+    ? listDeleteError(activeCampaigns)
+    : "Could not check which campaigns use this list. Reload the page and try again.";
 
   return (
     <Page width="wide">
@@ -45,6 +57,9 @@ export default async function LeadListPage({
         initialSearch={sp.search ?? ""}
         initialStatus={sp.status ?? ""}
         tags={tags.map((t) => ({ id: t.id, name: t.name, color: t.color }))}
+        readOnly={readOnly}
+        activeCampaigns={activeCampaigns ?? []}
+        deleteBlockedReason={deleteBlockedReason}
       />
     </Page>
   );

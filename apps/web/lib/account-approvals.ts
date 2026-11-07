@@ -11,6 +11,8 @@ export interface AccountApprovalRow {
   createdAt: string;
   /** ISO timestamp of approval, null while pending. */
   approvedAt: string | null;
+  /** ISO timestamp an admin revoked sending, null if never revoked (or re-approved). */
+  revokedAt: string | null;
   /** Website from the user's most recent autopilot run, if they started one. */
   website: string | null;
 }
@@ -51,6 +53,7 @@ export function toApprovalRows(
     emailVerified: boolean | null;
     createdAt: Date | string | null;
     approvedAt: Date | string | null;
+    approvalRevokedAt?: Date | string | null;
   }>,
   websites: Map<string, string>,
 ): AccountApprovalRow[] {
@@ -61,6 +64,7 @@ export function toApprovalRows(
     emailVerified: Boolean(u.emailVerified),
     createdAt: toIso(u.createdAt) ?? new Date(0).toISOString(),
     approvedAt: toIso(u.approvedAt),
+    revokedAt: toIso(u.approvalRevokedAt),
     website: websites.get(u.id) ?? null,
   }));
 }

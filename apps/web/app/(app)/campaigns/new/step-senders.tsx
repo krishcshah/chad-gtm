@@ -24,7 +24,7 @@ export function StepSenders({
       <EmptyState
         icon={Mail}
         title="No mailboxes available"
-        description="Sending mailboxes are set up by the AutoGTM team. Save a draft to keep your progress, then ask support to assign one."
+        description="Manual campaigns send from a mailbox assigned to your account. The AutoGTM team sets these up on request. Save a draft to keep your progress, then contact support."
         action={
           <Button size="sm" variant="outline" asChild>
             <Link href="/support">Contact support</Link>
@@ -39,7 +39,8 @@ export function StepSenders({
   const selectedCount = chosen.length;
   const allSelected = selectedCount === senders.length;
   const someSelected = selectedCount > 0 && !allSelected;
-  const dailyCapacity = chosen.reduce((sum, s) => sum + (Number(s.dailyLimit) || 0), 0);
+  // Real per-day caps (30/day ceiling and new-mailbox ramp), not the raw mailbox setting.
+  const dailyCapacity = chosen.reduce((sum, s) => sum + (Number(s.dailyCap) || 0), 0);
 
   return (
     <div className="flex max-w-2xl flex-col gap-4">
@@ -111,7 +112,7 @@ export function StepSenders({
         <p id="sender-group-summary" className="text-[13px] text-muted-foreground" aria-live="polite">
           {selectedCount === 0
             ? "Pick at least one mailbox."
-            : `Together these mailboxes can send up to ${plural(dailyCapacity, "email")} a day across all campaigns.`}
+            : `Together these mailboxes can send up to ${plural(dailyCapacity, "email")} a day. That is shared with any other campaign using them.`}
         </p>
       )}
     </div>

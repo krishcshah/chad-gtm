@@ -2,6 +2,10 @@ export interface LeadListOpt {
   id: string;
   name: string;
   leadCount: number;
+  /** Leads a new campaign would email with the default rules (null: unknown). */
+  sendableCount?: number | null;
+  /** Leads left out because your other campaigns already emailed them. */
+  contactedCount?: number | null;
 }
 
 export interface SenderOpt {
@@ -11,6 +15,8 @@ export interface SenderOpt {
   status: string;
   dailyLimit: number;
   usedToday: number;
+  /** What this mailbox can send today: its limit, the 30/day ceiling and the new-mailbox ramp. */
+  dailyCap: number;
 }
 
 export interface TemplateOpt {

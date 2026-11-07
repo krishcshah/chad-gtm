@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CAMPAIGN_POSTAL_REQUIRED_ERROR,
+  campaignIdentityStartError,
   campaignStartPostalError,
   isUsablePostalAddress,
 } from "../campaign-start-guard";
@@ -28,5 +29,25 @@ describe("campaignStartPostalError (CAN-SPAM)", () => {
 
   it("keeps the named error the wizard classifies", () => {
     expect(CAMPAIGN_POSTAL_REQUIRED_ERROR).toContain("postal");
+  });
+});
+
+describe("one identity rule (#18)", () => {
+  it("rejects addresses the Autopilot rule rejects", () => {
+    expect(campaignStartPostalError("1 Main St")).toBe(CAMPAIGN_POSTAL_REQUIRED_ERROR); // 9 characters
+    expect(campaignStartPostalError("Main Street, Berlin")).toBe(CAMPAIGN_POSTAL_REQUIRED_ERROR); // no digit
+    expect(isUsablePostalAddress("TBD")).toBe(false);
+  });
+
+  it("campaignIdentityStartError needs a company name too", () => {
+    expect(
+      campaignIdentityStartError({ companyName: "", postalAddress: "1 Main St, Springfield, IL 62701" }),
+    ).toBe(CAMPAIGN_POSTAL_REQUIRED_ERROR);
+    expect(
+      campaignIdentityStartError({ companyName: "Acme Inc.", postalAddress: "1 Main St" }),
+    ).toBe(CAMPAIGN_POSTAL_REQUIRED_ERROR);
+    expect(
+      campaignIdentityStartError({ companyName: "Acme Inc.", postalAddress: "1 Main St, Springfield, IL 62701" }),
+    ).toBeNull();
   });
 });

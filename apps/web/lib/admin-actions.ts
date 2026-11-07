@@ -1,6 +1,6 @@
 "use server";
 
-import { and, desc, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { schema } from "@smartreach/database";
 import { requireUser } from "./session";
@@ -53,6 +53,7 @@ export async function listAccountApprovalsAction(): Promise<AccountApprovalsPayl
     emailVerified: schema.users.emailVerified,
     createdAt: schema.users.createdAt,
     approvedAt: schema.users.approvedAt,
+    approvalRevokedAt: schema.users.approvalRevokedAt,
   };
 
   const [pendingUsers, approvedUsers] = await Promise.all([
@@ -95,15 +96,37 @@ export type ApprovalActionResult =
   | { ok: true; emailed: boolean; warning?: string }
   | { ok: false; error: string };
 
+/** Lead conversations held while the account was on hold (one per lead, or address, per campaign). */
+async function countHeldConversations(db: ReturnType<typeof getDb>, userId: string): Promise<number> {
+  try {
+    const [row] = await db
+      .select({
+        n: sql<number>`count(distinct coalesce(${schema.replies.leadId}, lower(${schema.replies.fromEmail})) || '|' || coalesce(${schema.replies.campaignId}, ''))`,
+      })
+      .from(schema.replies)
+      .where(and(eq(schema.replies.userId, userId), eq(schema.replies.agentStatus, "held")));
+    return Number(row?.n || 0);
+  } catch {
+    return 0;
+  }
+}
+
 /** Approve an account to send from the shared pool; emails the user when possible. */
 export async function approveUserAction(targetUserId: string): Promise<ApprovalActionResult> {
   try {
     await requireAdminUser();
     if (!isValidUserId(targetUserId)) return { ok: false, error: "Invalid user id." };
     const db = getDb();
+    // Read before the update clears it: a revoked account is being re-approved.
+    const [before] = await db
+      .select({ revokedAt: schema.users.approvalRevokedAt })
+      .from(schema.users)
+      .where(eq(schema.users.id, targetUserId))
+      .limit(1);
+    const reapproved = before?.revokedAt != null;
     const [row] = await db
       .update(schema.users)
-      .set({ approvedAt: new Date(), updatedAt: new Date() })
+      .set({ approvedAt: new Date(), approvalRevokedAt: null, updatedAt: new Date() })
       .where(and(eq(schema.users.id, targetUserId), isNull(schema.users.approvedAt)))
       .returning({ email: schema.users.email, name: schema.users.name });
     revalidatePath("/admin");
@@ -122,7 +145,15 @@ export async function approveUserAction(targetUserId: string): Promise<ApprovalA
         .orderBy(desc(schema.chadGtmRuns.createdAt))
         .limit(1)
         .catch(() => [] as Array<{ id: string }>);
-      const email = buildApprovalEmail({ name: row.name, appUrl: process.env.APP_URL, runId: latestRun?.id });
+      // Approval never sends to leads: the reply agent's next tick opens Needs you cards for these.
+      const waitingCount = await countHeldConversations(db, targetUserId);
+      const email = buildApprovalEmail({
+        name: row.name,
+        appUrl: process.env.APP_URL,
+        runId: latestRun?.id,
+        waitingCount,
+        reapproved,
+      });
       await sendSystemEmail({ to: row.email, ...email });
       return { ok: true, emailed: true };
     } catch (err) {
@@ -144,7 +175,7 @@ export async function revokeUserApprovalAction(targetUserId: string): Promise<Ap
     const db = getDb();
     const rows = await db
       .update(schema.users)
-      .set({ approvedAt: null, updatedAt: new Date() })
+      .set({ approvedAt: null, approvalRevokedAt: new Date(), updatedAt: new Date() })
       .where(and(eq(schema.users.id, targetUserId), ne(schema.users.role, "admin")))
       .returning({ id: schema.users.id });
     revalidatePath("/admin");

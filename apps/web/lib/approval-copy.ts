@@ -10,9 +10,6 @@
 const EMAIL_PROMISE_SENTENCE = /\s*You['’]ll get an email when you['’]re approved\.?/gi;
 const EMAIL_PROMISE_CLAUSE = /,?\s*and we['’]ll email you when we do\.?/gi;
 
-export const APPROVAL_CHECK_BACK =
-  "Check back here: you can launch from this screen as soon as you're approved.";
-
 /** Removes any approval-email promise from server-provided copy when no email will be sent. */
 export function approvalCopy(text: string, emailOnApprove: boolean): string {
   if (emailOnApprove) return text;
@@ -31,9 +28,19 @@ export function approvalBannerText(emailOnApprove: boolean): string {
     : "Set everything up now. Nothing sends until we approve your account. Check back here: the banner disappears once you're approved.";
 }
 
-/** Fallback body of the "Waiting for approval" launch panel. */
-export function awaitingApprovalText(emailOnApprove: boolean): string {
-  return emailOnApprove
-    ? "Your plan is ready. We review every new account before it can send from our mailboxes. You'll get an email when you're approved, and you can launch from this screen."
-    : `Your plan is ready. We review every new account before it can send from our mailboxes. ${APPROVAL_CHECK_BACK}`;
+/** Title of the banner shown when an admin revoked sending for an account that was approved before. */
+export const REVOKED_BANNER_TITLE = "Sending is paused by AutoGTM.";
+
+/** Body of the revoked-sending banner. Never says "pending approval": this account was approved before. */
+export function revokedBannerText(): string {
+  return "Your campaigns are on hold and the agent is holding replies. Contact support to find out why and turn sending back on.";
+}
+
+/**
+ * Body of the "Waiting for approval" launch panel. The global banner is the only
+ * place that explains approval (and whether we'll email); the card only says
+ * what it adds: the plan is ready and Launch is locked.
+ */
+export function awaitingApprovalText(): string {
+  return "Your plan is ready. Launch unlocks as soon as your account is approved.";
 }

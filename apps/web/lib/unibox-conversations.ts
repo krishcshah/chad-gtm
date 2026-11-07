@@ -22,6 +22,8 @@ export interface UniboxReplyListItem {
   receivedAt: string;
   readAt: string | null;
   tag?: string | null;
+  /** Who set `tag`: 'human' (you, in the Inbox) or 'auto'. NULL with a tag = automatic (legacy rows). */
+  tagSource?: string | null;
   messageId?: string | null;
   /** Not a column on `replies`. Honored only when the caller already has it. */
   inReplyTo?: string | null;
@@ -37,10 +39,20 @@ export interface UniboxConversation<T extends UniboxReplyListItem> {
   latest: T;
   memberIds: string[];
   unread: boolean;
-  /** Newest non-empty tag among the grouped replies. */
+  /**
+   * The conversation's tag. A tag you set (or cleared) always wins; without
+   * one, the newest automatic tag among the grouped replies.
+   */
   tag: string | null;
+  /** 'human' when you set or cleared `tag`, 'auto' for an automatic tag, null when untagged. */
+  tagSource: "human" | "auto" | null;
   /** Reply id that owns `tag`, or the latest reply when the thread is untagged. */
   tagReplyId: string;
+  /**
+   * An automatic tag detected on a reply newer than your tag, when it differs
+   * from yours. Shown as a hint; it never replaces your tag.
+   */
+  detectedTag: string | null;
 }
 
 const SUBJECT_PREFIX = /^(?:(?:re|fwd?|fw|aw)\s*(?:\[\d+\])?\s*:\s*)+/i;
@@ -146,6 +158,45 @@ function receivedAtMs(iso: string): number {
   return Number.isNaN(t) ? 0 : t;
 }
 
+/**
+ * The tag of one conversation, members sorted newest first. The newest row
+ * you tagged (or cleared) decides; automatic tags on newer replies only
+ * become `detectedTag`. Without a human tag: the newest automatic tag.
+ * A human row with no tag means you cleared it: the conversation stays untagged.
+ */
+export function conversationTagState(
+  sorted: readonly Pick<UniboxReplyListItem, "id" | "tag" | "tagSource">[],
+): {
+  tag: string | null;
+  tagSource: "human" | "auto" | null;
+  tagReplyId: string | null;
+  detectedTag: string | null;
+} {
+  const humanIndex = sorted.findIndex((m) => m.tagSource === "human");
+  if (humanIndex >= 0) {
+    const human = sorted[humanIndex]!;
+    const tag = human.tag || null;
+    const newerAuto = sorted.slice(0, humanIndex).find((m) => m.tag);
+    const detected = newerAuto?.tag || null;
+    return { tag, tagSource: "human", tagReplyId: human.id, detectedTag: detected && detected !== tag ? detected : null };
+  }
+  const tagged = sorted.find((m) => m.tag);
+  return {
+    tag: tagged?.tag ?? null,
+    tagSource: tagged ? "auto" : null,
+    tagReplyId: tagged?.id ?? null,
+    detectedTag: null,
+  };
+}
+
+/**
+ * One tag per conversation (null when untagged), for reporting: two tagged
+ * replies in one thread count once, and a tag you set beats automatic ones.
+ */
+export function effectiveConversationTags(rows: readonly UniboxReplyListItem[]): Array<string | null> {
+  return groupUniboxConversations([...rows]).map((c) => c.tag);
+}
+
 /** One conversation per threadKey. Latest row wins snippet/time. Does not write readAt. */
 export function groupUniboxConversations<T extends UniboxReplyListItem>(rows: T[]): UniboxConversation<T>[] {
   const keyById = threadKeysForReplies(rows);
@@ -166,15 +217,17 @@ export function groupUniboxConversations<T extends UniboxReplyListItem>(rows: T[
     });
     const latest = sorted[0];
     if (!latest) continue;
-    const tagged = sorted.find((m) => m.tag);
+    const tagState = conversationTagState(sorted);
     conversations.push({
       key,
       threadKey: key,
       latest,
       memberIds: sorted.map((m) => m.id),
       unread: sorted.some((m) => !m.readAt),
-      tag: tagged?.tag ?? null,
-      tagReplyId: tagged?.id ?? latest.id,
+      tag: tagState.tag,
+      tagSource: tagState.tagSource,
+      tagReplyId: tagState.tagReplyId ?? latest.id,
+      detectedTag: tagState.detectedTag,
     });
   }
 

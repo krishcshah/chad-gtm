@@ -15,9 +15,9 @@ export default async function NewLeadListPage() {
     <Page width="narrow">
       <PageHeader
         eyebrow={
-          <Link href="/campaigns" className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground">
+          <Link href="/campaigns#lead-lists" className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground">
             <ArrowLeft className="size-4" aria-hidden />
-            Campaigns & leads
+            Lead lists
           </Link>
         }
         title="New lead list"

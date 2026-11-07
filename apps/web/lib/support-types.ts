@@ -3,7 +3,8 @@ export type TicketCategory =
   | "feature_request"
   | "suggestion"
   | "contact"
-  | "miscellaneous";
+  | "miscellaneous"
+  | "legal";
 
 export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
 
@@ -64,6 +65,12 @@ export const TICKET_CATEGORIES: { id: TicketCategory; label: string; badge: stri
     label: "Miscellaneous",
     badge: "Misc",
     description: "General questions, feedback, or miscellaneous inquiries.",
+  },
+  {
+    id: "legal",
+    label: "Legal / DPA",
+    badge: "Legal",
+    description: "Data processing (DPA), privacy and other legal questions.",
   },
 ];
 

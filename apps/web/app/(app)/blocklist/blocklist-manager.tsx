@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Ban, Plus, Search, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, Ban, Lock, Plus, Search, Trash2, Upload } from "lucide-react";
 import { formatDate, formatDateTime } from "@smartreach/shared";
 import {
   Badge,
@@ -29,7 +29,9 @@ import {
   AddToBlocklistDialog,
   ImportBlocklistDialog,
   RemoveFromBlocklistDialog,
+  isProtectedOptOut,
   kindLabel,
+  PROTECTED_OPT_OUT_LABEL,
   sourceLabel,
   type BlocklistItem,
 } from "./blocklist-dialogs";
@@ -145,7 +147,7 @@ export function BlocklistManager({
           </Link>
         }
         title="Blocklist"
-        description="Emails and domains your campaigns never send to. They are checked when a campaign is queued and again just before each email goes out."
+        description="Emails and domains none of your campaigns send to, across all your workspaces. They are checked when a campaign is queued and again just before each email goes out."
         actions={
           <>
             <Button variant="outline" onClick={() => setImportOpen(true)}>
@@ -205,7 +207,7 @@ export function BlocklistManager({
               <ErrorState title="Could not load the blocklist" description={error} onRetry={() => void reload()} />
             )
           ) : loading && items.length === 0 ? (
-            <TableSkeleton rows={6} cols={4} />
+            <TableSkeleton rows={6} cols={5} />
           ) : items.length === 0 ? (
             filtered ? (
               <EmptyState
@@ -278,6 +280,18 @@ export function BlocklistManager({
 type RowProps = { items: BlocklistItem[]; onRemove: (item: BlocklistItem) => void };
 
 function RemoveButton({ item, onRemove }: { item: BlocklistItem; onRemove: (item: BlocklistItem) => void }) {
+  if (isProtectedOptOut(item.source)) {
+    return (
+      <span
+        role="img"
+        aria-label={PROTECTED_OPT_OUT_LABEL}
+        title={PROTECTED_OPT_OUT_LABEL}
+        className="inline-flex size-8 shrink-0 items-center justify-center text-subtle-foreground"
+      >
+        <Lock className="size-4" aria-hidden />
+      </span>
+    );
+  }
   return (
     <Button
       variant="ghost"
@@ -303,6 +317,7 @@ function AddressTable({ items, onRemove }: RowProps) {
             <TableHead scope="col">Address</TableHead>
             <TableHead scope="col">Source</TableHead>
             <TableHead scope="col">Reason</TableHead>
+            <TableHead scope="col">Added in</TableHead>
             <TableHead scope="col">Added</TableHead>
             <TableHead scope="col" className="w-12">
               <span className="sr-only">Actions</span>
@@ -322,6 +337,11 @@ function AddressTable({ items, onRemove }: RowProps) {
               <TableCell className="max-w-[14rem] text-muted-foreground">
                 <span className="block truncate" title={item.reason || undefined}>
                   {item.reason?.trim() || <span className="text-subtle-foreground">—</span>}
+                </span>
+              </TableCell>
+              <TableCell className="max-w-[10rem] text-muted-foreground">
+                <span className="block truncate" title={item.workspaceName || undefined}>
+                  {item.workspaceName || <span className="text-subtle-foreground">—</span>}
                 </span>
               </TableCell>
               <TableCell className="whitespace-nowrap text-muted-foreground">
@@ -349,7 +369,7 @@ function AddressList({ items, onRemove }: RowProps) {
           <div className="min-w-0 flex-1">
             <p className="truncate font-mono text-[13px]">{item.value}</p>
             <p className="mt-0.5 text-xs text-subtle-foreground">
-              {kindLabel(item.kind)} · {sourceLabel(item.source)} ·{" "}
+              {kindLabel(item.kind)} · {sourceLabel(item.source)} · Added in {item.workspaceName || "—"} ·{" "}
               <time dateTime={item.createdAt} suppressHydrationWarning>
                 {formatDate(item.createdAt)}
               </time>

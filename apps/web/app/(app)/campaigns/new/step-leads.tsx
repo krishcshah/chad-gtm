@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { Check, Search, Users } from "lucide-react";
-import { Alert, Button, EmptyState, Input, cn } from "@smartreach/ui";
+import { Alert, Button, Checkbox, EmptyState, Input, Label, cn } from "@smartreach/ui";
 import type { LeadListOpt } from "./wizard-types";
 import { plural } from "./wizard-utils";
 
@@ -14,12 +14,18 @@ export function StepLeads({
   leadListId,
   error,
   onSelect,
+  reengageContacted = false,
+  onReengageContactedChange,
 }: {
   leadLists: LeadListOpt[];
   leadListId: string;
   error?: string;
   onSelect: (id: string) => void;
+  /** "Email them again": include leads your other campaigns already emailed. */
+  reengageContacted?: boolean;
+  onReengageContactedChange?: (checked: boolean) => void;
 }) {
+  const reengageId = useId();
   const [query, setQuery] = useState("");
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -27,6 +33,15 @@ export function StepLeads({
     return leadLists.filter((l) => l.name.toLowerCase().includes(q));
   }, [leadLists, query]);
   const selected = leadLists.find((l) => l.id === leadListId);
+  // How many leads this campaign would email (null when the counts are unknown).
+  const sendable = selected?.sendableCount ?? null;
+  const contacted = selected?.contactedCount ?? 0;
+  const effectiveCount =
+    selected == null
+      ? null
+      : sendable == null
+        ? selected.leadCount
+        : sendable + (reengageContacted ? contacted : 0);
 
   if (leadLists.length === 0) {
     return (
@@ -110,7 +125,11 @@ export function StepLeads({
                         l.leadCount === 0 ? "text-warning-text" : "text-muted-foreground",
                       )}
                     >
-                      {l.leadCount === 0 ? "No leads yet" : plural(l.leadCount, "lead")}
+                      {l.leadCount === 0
+                        ? "No leads yet"
+                        : l.sendableCount != null && l.sendableCount !== l.leadCount
+                          ? `${l.sendableCount.toLocaleString()} sendable of ${plural(l.leadCount, "lead")}`
+                          : plural(l.leadCount, "lead")}
                     </span>
                   </button>
                 </li>
@@ -126,10 +145,42 @@ export function StepLeads({
         </p>
       ) : null}
 
+      {selected && sendable != null && selected.leadCount > 0 ? (
+        <div className="flex flex-col gap-2 text-[13px] text-muted-foreground">
+          <p>
+            <span className="tabular font-medium text-foreground">{(effectiveCount ?? 0).toLocaleString()}</span> of{" "}
+            <span className="tabular">{selected.leadCount.toLocaleString()}</span> leads will be emailed.
+          </p>
+          {contacted > 0 ? (
+            <>
+              <p>
+                {contacted.toLocaleString()} {contacted === 1 ? "was" : "were"} already emailed by your other campaigns
+                and {reengageContacted ? "will be emailed again." : "are left out."}
+              </p>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id={reengageId}
+                  checked={reengageContacted}
+                  onCheckedChange={(v) => onReengageContactedChange?.(v === true)}
+                />
+                <Label htmlFor={reengageId} className="font-normal text-foreground">
+                  Email them again
+                </Label>
+              </div>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
       {selected && selected.leadCount === 0 ? (
         <Alert variant="warning">
           “{selected.name}” has no leads yet. You can still continue, but the campaign has nobody to email until
           leads are added.
+        </Alert>
+      ) : selected && effectiveCount === 0 ? (
+        <Alert variant="warning">
+          Nobody in “{selected.name}” can be emailed right now: they were already emailed, are in another running
+          campaign, or are on your blocklist. Pick another list or add new leads.
         </Alert>
       ) : null}
 

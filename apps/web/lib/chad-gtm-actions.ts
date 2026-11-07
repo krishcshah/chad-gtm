@@ -1,12 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { ensureOutreachSpintax, schema } from "@smartreach/database";
-import { nowIso } from "@smartreach/shared";
+import { localDateKey, nowIso } from "@smartreach/shared";
 import { getDb, ensureChadGtmTables, ensureAgentTables } from "./db";
 import { requireUser } from "./session";
-import { getActiveWorkspace } from "./workspaces";
+import { ensureDefaultWorkspace, getActiveWorkspace } from "./workspaces";
 import {
   scrapeCompanyWebsite,
   synthesizeGtmStrategy,
@@ -23,22 +23,48 @@ import {
   type CampaignResearchContext,
   type LeadProfile,
 } from "./ai";
-import { extractSenderFirstName } from "@smartreach/email-engine";
+import { samplePersonaFor } from "./sample-sender";
 import { ensureCampaignLeadSnapshot } from "./campaign-drafts";
 import { DrizzleAgentStore } from "./agent/store";
 import { ToolRegistry } from "./agent/registry";
 import { GtmAnalysisPlanner } from "./agent/planner";
 import { AgentRuntime } from "./agent/runtime";
 import { PHASE_1_TOOLS } from "./agent/tools";
-import { assertCanSend } from "./approval";
+import { campaignAction } from "./actions";
+import {
+  countBookingLinkWaiting,
+  initialRunReplyMode,
+  loadRunConversationState,
+  loadWorkspaceLeadSettings,
+} from "./lead-conversations-server";
+import {
+  activityTypeForAgentStatus,
+  countReplyAuthors,
+  type RunActivityAgentType,
+} from "./lead-conversations";
 import { analysisRateLimit } from "./autopilot-state";
-import { autopilotCountries } from "./autopilot-policy";
+import { campaignRates, getCampaignTotals } from "./analytics";
+import {
+  bookingLinkNeedle,
+  groupInterestedLeads,
+  interestedLeadsToCsv,
+  isPositiveReply,
+  leadKey,
+} from "./interested-export";
+import { groupUniboxConversations } from "./unibox-conversations";
+import { AUTOPILOT_DAILY_DEFAULT, autopilotCountries, clampAutopilotDaily } from "./autopilot-policy";
+import { LAUNCH_CLAIM_TTL_MS, withChosenOfferFirst } from "./autopilot-policy";
 import {
   buildCampaignContext,
   compactCustomFields,
   fetchTargetedLeads,
   getTargetTitles,
+  LEADS_PER_CAMPAIGN,
+  LaunchInProgressError,
+  launchAudienceCounts,
   launchRunCampaign,
+  runStrictRoles,
+  runTeamSizes,
 } from "./gtm-launch";
 
 export interface CalibrationFeedbackItem {
@@ -166,7 +192,13 @@ export async function analyzeWebsiteAction(
       const [existing] = await db
         .select({ id: schema.chadGtmRuns.id, campaignId: schema.chadGtmRuns.campaignId })
         .from(schema.chadGtmRuns)
-        .where(and(eq(schema.chadGtmRuns.id, options.existingRunId), eq(schema.chadGtmRuns.userId, user.id)))
+        .where(
+          and(
+            eq(schema.chadGtmRuns.id, options.existingRunId),
+            eq(schema.chadGtmRuns.userId, user.id),
+            isNull(schema.chadGtmRuns.dismissedAt)
+          )
+        )
         .limit(1);
       if (!existing) return { ok: false, error: "Run not found." };
       if (existing.campaignId) return { ok: false, error: "This campaign is already live." };
@@ -248,6 +280,12 @@ export async function analyzeWebsiteAction(
     }
 
     const runId = crypto.randomUUID();
+    // With a workspace booking link, a new run uses it unless one was typed in (not one found on the site).
+    const workspaceBookingUrl = options.bookingUrl
+      ? null
+      : await loadWorkspaceLeadSettings(db, user.id, workspace.id === "primary-default" ? null : workspace.id)
+          .then((s) => s.bookingUrl)
+          .catch(() => null);
     await db.insert(schema.chadGtmRuns).values({
       id: runId,
       userId: user.id,
@@ -259,10 +297,12 @@ export async function analyzeWebsiteAction(
       icpProfile: strategy.icpProfile,
       offers: strategy.offers,
       selectedIndustries: strategy.icpProfile.industries || [],
-      dailyEmailLimit: 30,
+      dailyEmailLimit: AUTOPILOT_DAILY_DEFAULT,
       approvedEmailSamples: [],
-      bookingUrl: options.bookingUrl || scraped.bookingUrl || null,
+      bookingUrl: options.bookingUrl || (workspaceBookingUrl ? null : scraped.bookingUrl) || null,
       autopilot: Boolean(options.autopilot),
+      // "Lead conversations": the workspace default once it is set up.
+      replyAgentMode: await initialRunReplyMode(db, user.id, workspace.id),
     });
 
     return { ok: true, runId, strategy };
@@ -279,6 +319,8 @@ export async function updateGtmStrategyAction(
     icpProfile: any;
     offers: any[];
     selectedIndustries?: string[];
+    /** The offer picked in setup: saved as offers[0], which every reader uses (#51). */
+    selectedOfferIndex?: number;
   }
 ): Promise<{ ok: boolean; error?: string }> {
   try {
@@ -286,12 +328,16 @@ export async function updateGtmStrategyAction(
     const db = getDb();
     await ensureChadGtmTables(db);
 
+    const offers =
+      typeof strategy.selectedOfferIndex === "number"
+        ? withChosenOfferFirst(strategy.offers || [], strategy.selectedOfferIndex)
+        : strategy.offers;
     await db
       .update(schema.chadGtmRuns)
       .set({
         businessOverview: strategy.businessOverview,
         icpProfile: strategy.icpProfile,
-        offers: strategy.offers,
+        offers,
         selectedIndustries: strategy.selectedIndustries || strategy.icpProfile?.industries || [],
         updatedAt: nowIso(),
       })
@@ -309,24 +355,55 @@ export async function updateGtmStrategyAction(
 }
 
 export async function searchMatchingLeadsAction(
+  runId: string,
   industries: string[],
   page = 1,
-  pageSize = 10
+  pageSize = 10,
+  opts: { strictRoles?: boolean } = {}
 ) {
+  const empty = { total: 0, roleMatches: 0, otherRoles: 0, perRun: LEADS_PER_CAMPAIGN, bySize: false, sampleMatchesTitles: false, leads: [] as any[] };
   try {
-    await requireUser();
-    // Same audience rules as launch: work addresses in AUTOPILOT_COUNTRIES.
+    const user = await requireUser();
+    const db = getDb();
+    await ensureChadGtmTables(db);
+    const [run] = await db
+      .select()
+      .from(schema.chadGtmRuns)
+      .where(and(eq(schema.chadGtmRuns.id, runId), eq(schema.chadGtmRuns.userId, user.id)))
+      .limit(1);
+    if (!run) return { ok: false, ...empty, error: "AutoGTM run not found." };
+
+    // Same audience rules as launch: work addresses in AUTOPILOT_COUNTRIES,
+    // the run's job titles first, then others in the industries.
     // Masked preview (name/title/company/location only), capped page size.
-    const result = searchLeadMatcherPreview(
-      Array.isArray(industries) ? industries.filter((i) => typeof i === "string") : [],
-      autopilotCountries(),
-      page,
-      pageSize
-    );
-    return { ok: true, total: result.total, leads: result.leads };
+    const cleanIndustries = Array.isArray(industries) ? industries.filter((i) => typeof i === "string") : [];
+    const countries = autopilotCountries();
+    const titles = getTargetTitles(run);
+    // Company size narrows these the same way launch does (#57).
+    const teamSizes = runTeamSizes(run);
+    const strictRoles = opts.strictRoles ?? runStrictRoles(run);
+    const { roleMatches, otherRoles } = launchAudienceCounts({ industries: cleanIndustries, titles, teamSizes, countries });
+
+    let result = searchLeadMatcherPreview(cleanIndustries, countries, page, pageSize, { jobTitles: titles, teamSizes });
+    let sampleMatchesTitles = titles.length > 0;
+    if (result.leads.length === 0 && titles.length > 0 && !strictRoles) {
+      // Nobody has the titles: launch fills the run from the industries, so show those.
+      result = searchLeadMatcherPreview(cleanIndustries, countries, page, pageSize, { teamSizes });
+      sampleMatchesTitles = false;
+    }
+    return {
+      ok: true,
+      total: roleMatches + (strictRoles ? 0 : otherRoles),
+      roleMatches,
+      otherRoles,
+      perRun: LEADS_PER_CAMPAIGN,
+      bySize: teamSizes.length > 0,
+      sampleMatchesTitles,
+      leads: result.leads,
+    };
   } catch (err: any) {
     if (err?.digest?.startsWith?.("NEXT_REDIRECT")) throw err;
-    return { ok: false, total: 0, leads: [], error: err?.message };
+    return { ok: false, ...empty, error: err?.message };
   }
 }
 
@@ -375,7 +452,8 @@ export async function generateCalibrationEmailsAction(
       industries,
       getTargetTitles(run),
       count,
-      offset
+      offset,
+      { teamSizes: runTeamSizes(run), strictRoles: runStrictRoles(run) }
     );
 
     if (matchingLeads.length === 0) {
@@ -398,26 +476,31 @@ export async function generateCalibrationEmailsAction(
         .where(eq(schema.chadGtmRuns.id, runId));
     }
 
-    // Resolve sender first name from active sender account or system pool
-    const activeSender = (await db
-      .select()
+    // Real emails rotate across the shared pool, one persona per lead, so the
+    // samples rotate the same way. Only pool mailboxes: never another
+    // client's own mailbox name. Addresses are never selected.
+    const pool = await db
+      .select({
+        fromName: schema.senderAccounts.fromName,
+        senderName: schema.senderAccounts.senderName,
+        signature: schema.senderAccounts.signature,
+      })
       .from(schema.senderAccounts)
       .where(
         and(
+          eq(schema.senderAccounts.isSystemPool, true),
           eq(schema.senderAccounts.status, "active"),
           isNull(schema.senderAccounts.deletedAt)
         )
       )
-      .orderBy(desc(schema.senderAccounts.isSystemPool), asc(schema.senderAccounts.createdAt))
-      .limit(1)
-      .then((rows) => rows[0])) || null;
-
-    const resolvedSenderName = extractSenderFirstName(activeSender);
+      .orderBy(asc(schema.senderAccounts.createdAt));
 
     const emailSamples = await mapWithConcurrency(
       matchingLeads,
       3,
       async (dl, idx) => {
+        const persona = samplePersonaFor(pool, offset + idx);
+        const resolvedSenderName = persona.firstName;
         const leadProfile: LeadProfile = {
           id: dl.leadId,
           email: dl.email,
@@ -473,6 +556,7 @@ Write to ${dl.jobTitle || "the buyer"} at ${dl.companyName || "the target accoun
           outboundMaturity: dossier.outboundMaturity,
           dossier,
           approved: false,
+          sender: { name: persona.name, signature: persona.signature, poolSize: persona.poolSize },
         };
       }
     );
@@ -810,7 +894,6 @@ export async function launchChadGtmCampaignAction(
 ): Promise<{ ok: boolean; campaignId?: string; error?: string }> {
   try {
     const user = await requireUser();
-    const workspace = await getActiveWorkspace(user.id);
     const db = getDb();
     await ensureChadGtmTables(db);
 
@@ -825,7 +908,7 @@ export async function launchChadGtmCampaignAction(
       )
       .limit(1);
 
-    if (!run) throw new Error("AutoGTM run not found.");
+    if (!run || run.dismissedAt) throw new Error("AutoGTM run not found.");
     if (run.campaignId) {
       // Idempotent: a double-click must not create two campaigns.
       return { ok: true, campaignId: run.campaignId };
@@ -834,7 +917,8 @@ export async function launchChadGtmCampaignAction(
     const { campaignId } = await launchRunCampaign(db, {
       run,
       userId: user.id,
-      workspaceId: workspace.id,
+      // The run's own workspace (not whichever is active), so its sender details apply.
+      workspaceId: run.workspaceId ?? (await ensureDefaultWorkspace(user.id)).id,
       dailyLimit,
       approvedSamples,
       selectedOfferIndex,
@@ -844,6 +928,21 @@ export async function launchChadGtmCampaignAction(
     revalidatePath(`/chad-gtm/${runId}`);
     return { ok: true, campaignId };
   } catch (err: any) {
+    if (err instanceof LaunchInProgressError) {
+      // Another click or tab is launching this run: report its result, never start a second.
+      try {
+        const user = await requireUser();
+        const [fresh] = await getDb()
+          .select({ campaignId: schema.chadGtmRuns.campaignId })
+          .from(schema.chadGtmRuns)
+          .where(and(eq(schema.chadGtmRuns.id, runId), eq(schema.chadGtmRuns.userId, user.id)))
+          .limit(1);
+        if (fresh?.campaignId) return { ok: true, campaignId: fresh.campaignId };
+      } catch (readErr: any) {
+        if (readErr?.digest?.startsWith?.("NEXT_REDIRECT")) throw readErr;
+      }
+      return { ok: false, error: "This campaign is already launching. This page updates when it's live." };
+    }
     console.error("[chad-gtm-actions] launchChadGtmCampaign error:", err);
     return { ok: false, error: err?.message || "Failed to launch AutoGTM campaign." };
   }
@@ -866,25 +965,34 @@ export async function getChadGtmRunAction(runId: string) {
       )
       .limit(1);
 
-    if (!run) return null;
+    // A deleted (dismissed) draft is gone for the client: the page 404s.
+    if (!run || run.dismissedAt) return null;
 
     let campaign = null;
     let kpis = {
       queuedProspects: 0,
       sentToday: 0,
       sentLifetime: 0,
+      /** Each lead counted once. */
+      leadsEmailed: 0,
       openCount: 0,
       openRate: 0,
       repliesCount: 0,
       replyRate: 0,
       positiveSentimentCount: 0,
       agentReplies: 0,
+      approvedReplies: 0,
+      youReplies: 0,
       openRequests: 0,
+      /** Booking-link cards the agent answers once a link is saved. */
+      bookingWaiting: 0,
       meetingsBooked: 0,
+      /** Leads sent the run's booking link (by the agent or by you). */
+      bookingLinksSent: 0,
     };
     let recentActivity: Array<{
       id: string;
-      type: "send" | "reply" | "open" | "agent";
+      type: "send" | "reply" | "open" | RunActivityAgentType;
       recipient: string;
       timestamp: string;
       detail?: string;
@@ -905,8 +1013,8 @@ export async function getChadGtmRunAction(runId: string) {
         .where(eq(schema.campaignLeads.campaignId, run.campaignId));
       kpis.queuedProspects = Number(totalLeadsRow?.count || 0);
 
-      // Sent Today
-      const today = new Date().toISOString().slice(0, 10);
+      // Sent Today: the campaign counter is keyed by its local day.
+      const today = localDateKey(new Date(), campRow?.sendingTimezone || "UTC");
       const [sentTodayRow] = await db
         .select({ count: schema.usageCounters.count })
         .from(schema.usageCounters)
@@ -919,56 +1027,84 @@ export async function getChadGtmRunAction(runId: string) {
         );
       kpis.sentToday = Number(sentTodayRow?.count || 0);
 
-      // Sent Lifetime
-      // Count delivered jobs, not campaign_leads.status: a lead moves on to
-      // "active"/"replied" after its first send, which hid real volume.
-      const [sentLifetimeRow] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(schema.emailJobs)
-        .where(
-          and(
-            eq(schema.emailJobs.campaignId, run.campaignId),
-            eq(schema.emailJobs.status, "sent")
-          )
-        );
-      kpis.sentLifetime = Number(sentLifetimeRow?.count || 0);
+      // Emails sent, leads emailed, replies and opens: one definition (lib/analytics.ts).
+      const totals = await getCampaignTotals(run.campaignId);
+      const rates = campaignRates(totals);
+      kpis.sentLifetime = totals.emailsSent;
+      kpis.leadsEmailed = totals.leadsEmailed;
+      kpis.repliesCount = totals.repliedLeads;
+      kpis.replyRate = Math.round(rates.replyRate);
+      kpis.openCount = totals.openedLeads;
+      kpis.openRate = Math.round(rates.openRate ?? 0);
 
-      // Opens
-      const [opensRow] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(schema.emailTrackingEvents)
-        .where(
-          and(
-            eq(schema.emailTrackingEvents.campaignId, run.campaignId),
-            eq(schema.emailTrackingEvents.type, "open")
-          )
-        );
-      kpis.openCount = Number(opensRow?.count || 0);
-      kpis.openRate =
-        kpis.sentLifetime > 0 ? Math.round((kpis.openCount / kpis.sentLifetime) * 100) : 0;
-
-      // Replies
+      // Reply rows: activity, interested leads and meetings (each lead counted once).
       const replyRows = await db
         .select()
         .from(schema.replies)
         .where(eq(schema.replies.campaignId, run.campaignId));
-      kpis.repliesCount = replyRows.length;
-      // Rate = share of contacted leads who replied at all (follow-up replies
-      // in the same thread must not push this above 100%).
-      const repliedLeads = new Set(replyRows.map((r) => r.leadId || r.fromEmail)).size;
-      kpis.replyRate =
-        kpis.sentLifetime > 0 ? Math.min(100, Math.round((repliedLeads / kpis.sentLifetime) * 100)) : 0;
-
-      kpis.positiveSentimentCount = replyRows.filter(
-        (r) => r.tag === "interested" || r.tag === "meeting_booked"
-      ).length;
-      kpis.agentReplies = replyRows.filter((r) => r.agentStatus === "replied").length;
-      kpis.meetingsBooked = replyRows.filter((r) => r.tag === "meeting_booked").length;
+      // One tag per conversation (#86): a tag you set wins over automatic
+      // tags on later replies, so a regressed auto tag never counts twice.
+      const replyById = new Map(replyRows.map((r) => [r.id, r]));
+      const positiveLeads = new Set<string>();
+      const meetingLeads = new Set<string>();
+      for (const c of groupUniboxConversations(replyRows)) {
+        const positive =
+          c.tagSource === "human"
+            ? isPositiveReply({ tag: c.tag })
+            : c.memberIds.some((id) => {
+                const m = replyById.get(id);
+                return Boolean(m && isPositiveReply(m));
+              });
+        if (positive) positiveLeads.add(leadKey(c.latest));
+        if (c.tag === "meeting_booked") meetingLeads.add(leadKey(c.latest));
+      }
+      kpis.positiveSentimentCount = positiveLeads.size;
+      // Who actually wrote each answer: the agent on its own, an agent draft
+      // you approved, or you. agentStatus alone can't tell them apart.
+      const authorRows = await db
+        .select({
+          fromRole: schema.uniboxMessages.fromRole,
+          approvedByUser: schema.uniboxMessages.approvedByUser,
+          n: sql<number>`count(*)`,
+        })
+        .from(schema.uniboxMessages)
+        .where(and(eq(schema.uniboxMessages.campaignId, run.campaignId), eq(schema.uniboxMessages.direction, "operator")))
+        .groupBy(schema.uniboxMessages.fromRole, schema.uniboxMessages.approvedByUser);
+      const authors = countReplyAuthors(authorRows);
+      kpis.agentReplies = authors.agent;
+      kpis.approvedReplies = authors.approved;
+      kpis.youReplies = authors.you;
+      // Only hand-set tags record a meeting; the headline counts booking links the agent or you sent.
+      kpis.meetingsBooked = meetingLeads.size;
+      // The run's own link, else the workspace one it uses.
+      const needle = bookingLinkNeedle(
+        run.bookingUrl ||
+          (await loadWorkspaceLeadSettings(db, user.id, run.workspaceId ?? null)
+            .then((s) => s.bookingUrl)
+            .catch(() => null)),
+      );
+      if (needle) {
+        const [linkRow] = await db
+          .select({
+            n: sql<number>`count(distinct coalesce(${schema.uniboxMessages.leadId}, ${schema.uniboxMessages.replyId}))`,
+          })
+          .from(schema.uniboxMessages)
+          .where(
+            and(
+              eq(schema.uniboxMessages.campaignId, run.campaignId),
+              inArray(schema.uniboxMessages.fromRole, ["agent", "operator"]),
+              sql`position(${needle} in lower(${schema.uniboxMessages.bodyText})) > 0`,
+            ),
+          )
+          .catch(() => [{ n: 0 }]);
+        kpis.bookingLinksSent = Number(linkRow?.n || 0);
+      }
       const [openReqRow] = await db
         .select({ count: sql<number>`count(*)` })
         .from(schema.agentRequests)
-        .where(and(eq(schema.agentRequests.runId, run.id), eq(schema.agentRequests.status, "open")));
+        .where(and(eq(schema.agentRequests.runId, run.id), inArray(schema.agentRequests.status, ["open", "sending"])));
       kpis.openRequests = Number(openReqRow?.count || 0);
+      kpis.bookingWaiting = await countBookingLinkWaiting(db, { userId: user.id, runId: run.id }).catch(() => 0);
 
       // Recent Activity Stream
       const latestSends = await db
@@ -1007,13 +1143,15 @@ export async function getChadGtmRunAction(runId: string) {
           timestamp: r.receivedAt,
           detail: r.snippet || (r.tag ? r.tag.replace(/_/g, " ") : ""),
         });
-        if (r.agentStatus && r.agentHandledAt && r.agentStatus !== "pending" && r.agentStatus !== "processing") {
+        const agentType = activityTypeForAgentStatus(r.agentStatus);
+        if (agentType && r.agentHandledAt) {
           recentActivity.push({
             id: `${r.id}:agent`,
-            type: "agent",
+            type: agentType,
             recipient: r.fromEmail,
             timestamp: r.agentHandledAt,
-            detail: r.agentSummary || r.agentStatus,
+            // "You replied." would repeat the title.
+            detail: agentType === "you" ? undefined : r.agentSummary || undefined,
           });
         }
       }
@@ -1022,11 +1160,17 @@ export async function getChadGtmRunAction(runId: string) {
       recentActivity = recentActivity.slice(0, 20);
     }
 
+    const leadConversation = await loadRunConversationState(db, user.id, run.id).catch((err: unknown) => {
+      console.error("[chad-gtm-actions] lead conversation state error:", err);
+      return null;
+    });
+
     return {
       run,
       campaign,
       kpis,
       recentActivity,
+      leadConversation,
     };
   } catch (err) {
     console.error("[chad-gtm-actions] getChadGtmRun error:", err);
@@ -1054,28 +1198,14 @@ export async function toggleChadGtmStatusAction(
       )
       .limit(1);
     if (!run) return { ok: false, error: "Run not found." };
-    if (newStatus === "active") {
-      if (!run.campaignId) return { ok: false, error: "This campaign hasn't launched yet." };
-      await assertCanSend(user.id);
-    }
+    if (!run.campaignId) return { ok: false, error: "This campaign hasn't launched yet." };
 
-    await db
-      .update(schema.chadGtmRuns)
-      .set({ status: newStatus, updatedAt: nowIso() })
-      .where(and(eq(schema.chadGtmRuns.id, runId), eq(schema.chadGtmRuns.userId, user.id)));
-
-    if (run.campaignId) {
-      await db
-        .update(schema.campaigns)
-        .set({
-          status: newStatus === "active" ? "running" : "paused",
-          updatedAt: nowIso(),
-        })
-        .where(eq(schema.campaigns.id, run.campaignId));
-    }
-
+    // One on/off for the outreach: the same action (and the same start
+    // checks, lead snapshot and run write-through) as Campaigns & leads.
+    const res = await campaignAction(run.campaignId, newStatus === "active" ? "resume" : "pause");
+    revalidatePath("/chad-gtm");
     revalidatePath(`/chad-gtm/${runId}`);
-    return { ok: true };
+    return res.ok ? { ok: true } : { ok: false, error: res.error };
   } catch (err: any) {
     return { ok: false, error: err?.message || "Failed to update status." };
   }
@@ -1101,7 +1231,7 @@ export async function updateChadGtmVelocityAction(
       )
       .limit(1);
     if (!run) return { ok: false, error: "Run not found." };
-    const safeLimit = Math.min(500, Math.max(30, Math.round(Number(dailyLimit) || 30)));
+    const safeLimit = clampAutopilotDaily(dailyLimit);
 
     await db
       .update(schema.chadGtmRuns)
@@ -1119,5 +1249,166 @@ export async function updateChadGtmVelocityAction(
     return { ok: true };
   } catch (err: any) {
     return { ok: false, error: err?.message || "Failed to update daily velocity." };
+  }
+}
+
+/* ─── Pitch (what the agent tells leads) ─────────────────────────────── */
+
+// Not exported: a "use server" module may only export async functions.
+const PITCH_TITLE_ERROR = "Give the offer a short title.";
+const PITCH_VALUE_ERROR = "Describe what the lead gets in a sentence or two.";
+const PITCH_SUMMARY_ERROR = "Keep the company description under 1,200 characters.";
+
+/**
+ * Edit the pitch a run's agent works from: offers[0].title / valueProp and
+ * businessOverview.summary. Every other offer and overview field, the
+ * industries and the target profile are kept. Emails already in the
+ * sequence keep the pitch they launched with.
+ */
+export async function updateRunPitchAction(
+  runId: string,
+  input: { title: string; valueProp: string; summary: string }
+): Promise<{ ok: boolean; error?: string; message?: string }> {
+  try {
+    const user = await requireUser();
+    const title = String(input?.title ?? "").trim();
+    const valueProp = String(input?.valueProp ?? "").trim();
+    const summary = String(input?.summary ?? "").trim();
+    if (title.length < 1 || title.length > 120) return { ok: false, error: PITCH_TITLE_ERROR };
+    if (valueProp.length < 10 || valueProp.length > 600) return { ok: false, error: PITCH_VALUE_ERROR };
+    if (summary.length > 1200) return { ok: false, error: PITCH_SUMMARY_ERROR };
+
+    const db = getDb();
+    await ensureChadGtmTables(db);
+    const [run] = await db
+      .select({
+        offers: schema.chadGtmRuns.offers,
+        businessOverview: schema.chadGtmRuns.businessOverview,
+        // "What this campaign offers" wins over the pitch offer in agent replies.
+        campaignOffer: schema.campaigns.agentOffer,
+      })
+      .from(schema.chadGtmRuns)
+      .leftJoin(
+        schema.campaigns,
+        and(eq(schema.campaigns.id, schema.chadGtmRuns.campaignId), eq(schema.campaigns.userId, user.id))
+      )
+      .where(
+        and(
+          eq(schema.chadGtmRuns.id, runId),
+          eq(schema.chadGtmRuns.userId, user.id),
+          isNull(schema.chadGtmRuns.dismissedAt)
+        )
+      )
+      .limit(1);
+    if (!run) return { ok: false, error: "Run not found." };
+
+    const offers: any[] = Array.isArray(run.offers) ? [...(run.offers as any[])] : [];
+    const first = offers[0] && typeof offers[0] === "object" ? offers[0] : {};
+    offers[0] = { ...first, title, valueProp };
+    const overview =
+      run.businessOverview && typeof run.businessOverview === "object" ? (run.businessOverview as Record<string, unknown>) : {};
+
+    await db
+      .update(schema.chadGtmRuns)
+      .set({ offers, businessOverview: { ...overview, summary }, updatedAt: nowIso() })
+      .where(and(eq(schema.chadGtmRuns.id, runId), eq(schema.chadGtmRuns.userId, user.id)));
+
+    revalidatePath(`/chad-gtm/${runId}`);
+    revalidatePath("/dashboard");
+    if (String(run.campaignOffer ?? "").trim()) {
+      return {
+        ok: true,
+        message:
+          "Pitch saved. Replies still describe the offer from \"What this campaign offers\"; clear that field to use this one.",
+      };
+    }
+    return { ok: true, message: "Pitch saved. The agent uses it in replies from now on." };
+  } catch (err: any) {
+    if (err?.digest?.startsWith?.("NEXT_REDIRECT")) throw err;
+    return { ok: false, error: err?.message || "Couldn't save the pitch. Try again." };
+  }
+}
+
+/* ─── Delete an unlaunched run ───────────────────────────────────────── */
+
+const DISMISS_LAUNCHED_ERROR =
+  "This run has launched or is launching, so it can't be deleted. Pause it instead.";
+
+/**
+ * Remove a run that never launched (a guided draft, or an autopilot run stuck
+ * before launch). Soft delete: the row stays, so the research rate limit
+ * still counts it. Refused once the run has a campaign or holds a live
+ * launch claim.
+ */
+export async function dismissRunAction(runId: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const user = await requireUser();
+    const db = getDb();
+    await ensureChadGtmTables(db);
+    const now = nowIso();
+    const staleClaim = new Date(Date.now() - LAUNCH_CLAIM_TTL_MS).toISOString();
+    const dismissed: Array<{ id: string }> = await db
+      .update(schema.chadGtmRuns)
+      .set({ dismissedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(schema.chadGtmRuns.id, runId),
+          eq(schema.chadGtmRuns.userId, user.id),
+          isNull(schema.chadGtmRuns.campaignId),
+          isNull(schema.chadGtmRuns.dismissedAt),
+          or(isNull(schema.chadGtmRuns.launchStartedAt), lt(schema.chadGtmRuns.launchStartedAt, staleClaim))
+        )
+      )
+      .returning({ id: schema.chadGtmRuns.id });
+    if (dismissed.length === 0) return { ok: false, error: DISMISS_LAUNCHED_ERROR };
+
+    revalidatePath("/chad-gtm");
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (err: any) {
+    if (err?.digest?.startsWith?.("NEXT_REDIRECT")) throw err;
+    return { ok: false, error: err?.message || "Couldn't delete this run. Try again." };
+  }
+}
+
+/** CSV of every interested lead in the run (all replies, not just recent activity), one row per lead. */
+export async function exportInterestedLeadsAction(
+  runId: string
+): Promise<{ ok: true; csv: string; count: number } | { ok: false; error: string }> {
+  try {
+    const user = await requireUser();
+    const db = getDb();
+    await ensureChadGtmTables(db);
+    const [run] = await db
+      .select({ campaignId: schema.chadGtmRuns.campaignId })
+      .from(schema.chadGtmRuns)
+      .where(and(eq(schema.chadGtmRuns.id, runId), eq(schema.chadGtmRuns.userId, user.id)))
+      .limit(1);
+    if (!run) return { ok: false, error: "This run no longer exists." };
+    if (!run.campaignId) return { ok: true, csv: interestedLeadsToCsv([]), count: 0 };
+
+    const rows = await db
+      .select({
+        leadId: schema.replies.leadId,
+        fromEmail: schema.replies.fromEmail,
+        fromName: schema.replies.fromName,
+        tag: schema.replies.tag,
+        agentIntent: schema.replies.agentIntent,
+        receivedAt: schema.replies.receivedAt,
+        snippet: schema.replies.snippet,
+        firstName: schema.leads.firstName,
+        lastName: schema.leads.lastName,
+        company: schema.leads.company,
+        jobTitle: schema.leads.jobTitle,
+      })
+      .from(schema.replies)
+      .leftJoin(schema.leads, eq(schema.replies.leadId, schema.leads.id))
+      .where(and(eq(schema.replies.campaignId, run.campaignId), eq(schema.replies.userId, user.id)));
+
+    const leads = groupInterestedLeads(rows);
+    return { ok: true, csv: interestedLeadsToCsv(leads), count: leads.length };
+  } catch (err: any) {
+    if (err?.digest?.startsWith?.("NEXT_REDIRECT")) throw err;
+    return { ok: false, error: "Couldn't build the export. Try again." };
   }
 }

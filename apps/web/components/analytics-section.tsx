@@ -148,7 +148,7 @@ export function AnalyticsSection({
       return;
     }
     setAnnouncement(
-      `Leads contacted ${formatCount(summary.leadsContacted)}. Open rate ${formatAnalyticsRate(summary.openRate)}. Click rate ${formatAnalyticsRate(summary.clickRate)}. Reply rate ${formatAnalyticsRate(summary.replyRate)}, ${plural(summary.replyCount, "reply", "replies")}. Bounce rate ${formatAnalyticsRate(summary.bounceRate)}, ${plural(summary.bounceCount, "bounce", "bounces")}.`,
+      `Leads emailed ${formatCount(summary.leadsContacted)}. Open rate ${formatAnalyticsRate(summary.openRate)}. Click rate ${formatAnalyticsRate(summary.clickRate)}. Reply rate ${formatAnalyticsRate(summary.replyRate)}, ${plural(summary.replyCount, "reply", "replies")}. Bounce rate ${formatAnalyticsRate(summary.bounceRate)}, ${plural(summary.bounceCount, "bounce", "bounces")}.`,
     );
   }, [from, loading, noActivity, problem, rangeError, summary, to]);
 
@@ -324,7 +324,7 @@ export function AnalyticsSection({
                 <Card className="min-w-0">
                   <CardHeader>
                     <CardTitle>Sending volume</CardTitle>
-                    <CardDescription>Emails sent, including follow-ups, and unique leads contacted per day.</CardDescription>
+                    <CardDescription>Emails sent, including follow-ups, and leads emailed per day.</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <AnalyticsSeriesChart points={points} from={from} to={to} series={["sent", "contacted"]} />
@@ -355,7 +355,7 @@ function StatStrip({ summary, points }: { summary: AnalyticsSummaryView; points:
     <div className="@container">
       <Card className="grid grid-cols-2 gap-px overflow-hidden bg-border @lg:grid-cols-3 @4xl:grid-cols-6 [&>*]:bg-card">
       <Stat bare label="Emails sent" value={formatCount(sent)} hint="Including follow-ups" />
-      <Stat bare label="Leads contacted" value={formatCount(summary.leadsContacted)} hint="Unique leads emailed" />
+      <Stat bare label="Leads emailed" value={formatCount(summary.leadsContacted)} hint="Each lead counted once" />
       <Stat
         bare
         label="Replies"

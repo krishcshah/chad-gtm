@@ -12,13 +12,15 @@ import {
   buildUnsubscribeUrl,
   createUnsubscribeToken,
   listUnsubscribeHeaders,
+  loadWorkspaceProfile,
   schema,
 } from "@smartreach/database";
 import { addSeconds, randomBetween } from "@smartreach/shared";
-import { and, asc, eq, lte } from "drizzle-orm";
+import { and, asc, eq, inArray, lte, sql } from "drizzle-orm";
 import type { EngineDb, JobRow, SenderRow } from "./db-port";
 import { makeTransport } from "./mailer";
 import {
+  campaignDayKey,
   noteHourlySend,
   recordSend,
   releaseSendSlot,
@@ -33,6 +35,14 @@ import { loadUnapprovedOwners, OWNER_NOT_APPROVED_NOTE } from "./owner-approval"
 import { classifySmtpError, failureBlamesSender, isPolicyStatus } from "./smtp-errors";
 import { completeBodies } from "./body-format";
 import { flagSenderPolicyBlock, recordHardBounce } from "./bounces";
+import { isRepliedLeadStatus } from "./lead-outcomes";
+import { isInSendingWindow } from "./scheduler";
+import {
+  noteSenderSendSucceeded,
+  REPLIES_UNREADABLE_HOLD_REASON,
+  repliesUnreadable,
+  senderStatusAfterError,
+} from "./mailbox-health";
 
 const STUCK_AFTER_MS = 3 * 60_000;
 /** How long a job waits when it cannot legally go out yet (no postal address / APP_URL). */
@@ -102,6 +112,9 @@ export async function claimDueJobs(db: EngineDb, now = new Date(), limit = engin
         eq(schema.emailJobs.status, "pending"),
         lte(schema.emailJobs.scheduledFor, now.toISOString()),
         eq(schema.emailJobs.dryRun, dryRun),
+        // Only jobs of a sending campaign: a paused or archived campaign's
+        // jobs must never fill the batch and starve everyone else.
+        sql`EXISTS (SELECT 1 FROM ${schema.campaigns} WHERE ${schema.campaigns.id} = ${schema.emailJobs.campaignId} AND ${schema.campaigns.status} IN ('running','scheduled') AND ${schema.campaigns.deletedAt} IS NULL)`,
       ),
     )
     .orderBy(asc(schema.emailJobs.scheduledFor))
@@ -167,21 +180,18 @@ export function buildOutgoingBodies(input: {
   });
 }
 
-/** Sender identity for the footer: workspace settings, else the autopilot run. */
+/**
+ * Sender identity for the footer: the campaign's workspace (company name,
+ * postal address), else the autopilot run's company name. A workspace that
+ * can't be found gives a blank address, so the job is held.
+ */
 async function loadComplianceInfo(
   db: EngineDb,
-  campaign: { id: string; userId: string },
+  campaign: { id: string; userId: string; workspaceId?: string | null },
 ): Promise<{ companyName: string; postalAddress: string }> {
-  const settingsRows: { companyName?: string; postalAddress?: string }[] = await db
-    .select({
-      companyName: schema.workspaceSettings.companyName,
-      postalAddress: schema.workspaceSettings.postalAddress,
-    })
-    .from(schema.workspaceSettings)
-    .where(eq(schema.workspaceSettings.userId, campaign.userId))
-    .limit(1);
-  const postalAddress = String(settingsRows[0]?.postalAddress ?? "").trim();
-  let companyName = String(settingsRows[0]?.companyName ?? "").trim();
+  const profile = await loadWorkspaceProfile(db, { userId: campaign.userId, workspaceId: campaign.workspaceId ?? null });
+  const postalAddress = profile.postalAddress;
+  let companyName = profile.companyName;
   if (!companyName) {
     const runs: { companyName?: string }[] = await db
       .select({ companyName: schema.chadGtmRuns.companyName })
@@ -226,9 +236,72 @@ async function releaseToScheduler(db: EngineDb, job: JobRow, reason: string): Pr
     .where(and(eq(schema.campaignLeads.id, job.campaignLeadId), eq(schema.campaignLeads.status, "scheduled")));
 }
 
+/** Rows returned by a raw db.execute (node-postgres gives {rows}, neon an array). */
+function executedRowCount(res: unknown): number {
+  const r = res as { rows?: unknown[]; length?: number } | null | undefined;
+  return r?.rows?.length ?? r?.length ?? 0;
+}
+
+/**
+ * A campaign stopped sending (paused / archived): drop its unsent queued jobs
+ * and put those leads back in line, so the scheduler gives them fresh, paced
+ * times when it runs again. One statement, so a lead is never left
+ * "scheduled" with no job. Jobs being sent right now ('processing') are left
+ * alone. Rows are deleted, never cancelled: the (campaign_lead_id,
+ * step_position) unique index plus the scheduler's onConflictDoNothing would
+ * turn a re-enqueue of a cancelled row into a silent no-op.
+ */
+export async function releaseCampaignJobs(
+  db: EngineDb,
+  campaignId: string,
+  reason: string,
+  now: Date = new Date(),
+): Promise<number> {
+  const nowS = now.toISOString();
+  const res = await db.execute(sql`
+    WITH released AS (
+      DELETE FROM email_jobs
+      WHERE campaign_id = ${campaignId} AND status IN ('pending','retry')
+      RETURNING campaign_lead_id
+    )
+    UPDATE campaign_leads
+    SET status = 'queued', scheduled_for = ${nowS}, last_error = ${reason}, updated_at = ${nowS}
+    WHERE id IN (SELECT campaign_lead_id FROM released) AND status = 'scheduled'
+    RETURNING id`);
+  return executedRowCount(res);
+}
+
+/** Reason stored on leads released because their campaign stopped sending. */
+export const CAMPAIGN_NOT_RUNNING_REASON = "campaign-not-running";
+
+/**
+ * Self-healing sweep: the same release for every campaign that is not
+ * running/scheduled (or is deleted), whatever path stopped it.
+ */
+export async function releaseInactiveCampaignJobs(db: EngineDb, now: Date = new Date()): Promise<number> {
+  const nowS = now.toISOString();
+  const res = await db.execute(sql`
+    WITH released AS (
+      DELETE FROM email_jobs j
+      USING campaigns c
+      WHERE j.campaign_id = c.id
+        AND j.status IN ('pending','retry')
+        AND (c.status NOT IN ('running','scheduled') OR c.deleted_at IS NOT NULL)
+      RETURNING j.campaign_lead_id
+    )
+    UPDATE campaign_leads
+    SET status = 'queued', scheduled_for = ${nowS}, last_error = ${CAMPAIGN_NOT_RUNNING_REASON}, updated_at = ${nowS}
+    WHERE id IN (SELECT campaign_lead_id FROM released) AND status = 'scheduled'
+    RETURNING id`);
+  return executedRowCount(res);
+}
+
 const UNSENDABLE_LEAD_STATUSES = new Set(["bounced", "unsubscribed", "blocked"]);
 
-export async function processJob(db: EngineDb, job: JobRow): Promise<JobOutcome> {
+/** Lead statuses a send may move to 'contacted'; anything later is never downgraded. */
+export const CONTACTABLE_LEAD_STATUSES: ("new" | "contacted")[] = ["new", "contacted"];
+
+export async function processJob(db: EngineDb, job: JobRow, now: Date = new Date()): Promise<JobOutcome> {
   const nowS = new Date().toISOString();
 
   // Already delivered by this worker (bookkeeping failed earlier): finish the
@@ -249,12 +322,10 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<JobOutcome>
   const campaigns = await db.select().from(schema.campaigns).where(eq(schema.campaigns.id, job.campaignId)).limit(1);
   const campaign = campaigns[0];
 
-  // Campaign paused/archived mid-flight → put the job back
-  if (!campaign || !["running", "scheduled"].includes(campaign.status)) {
-    await db
-      .update(schema.emailJobs)
-      .set({ status: "pending", processingAt: null, updatedAt: nowS })
-      .where(eq(schema.emailJobs.id, job.id));
+  // Campaign paused/archived mid-flight → drop the job and hand the lead
+  // back to the scheduler (fresh, paced times when the campaign runs again).
+  if (!campaign || !["running", "scheduled"].includes(campaign.status) || campaign.deletedAt) {
+    await releaseToScheduler(db, job, CAMPAIGN_NOT_RUNNING_REASON);
     return "skipped";
   }
   // Owner's approval revoked since scheduling → hand the lead back to the
@@ -270,7 +341,7 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<JobOutcome>
     !lead ||
     lead.deletedAt ||
     UNSENDABLE_LEAD_STATUSES.has(String(lead.status)) ||
-    (campaign.stopOnReply && lead.status === "replied")
+    (campaign.stopOnReply && isRepliedLeadStatus(lead.status))
   ) {
     await cancelJobChain(db, job, "lead-no-longer-sendable");
     return "skipped";
@@ -289,6 +360,26 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<JobOutcome>
     return "skipped";
   }
 
+  // The mailbox's inbox can't be read, so a reply to it may be sitting
+  // unrecorded. Never send a follow-up blind: hold it on this mailbox. A
+  // step-1 email goes back to the scheduler, which picks a readable mailbox.
+  if (repliesUnreadable(sender)) {
+    if ((job.stepPosition ?? 1) > 1) {
+      await holdJob(db, job, REPLIES_UNREADABLE_HOLD_REASON);
+      return "held";
+    }
+    await releaseToScheduler(db, job, "sender-replies-unreadable");
+    return "skipped";
+  }
+
+  // Outside the campaign's sending hours (e.g. a backlog after Resume, or a
+  // job that waited past the window): never send it now. The scheduler
+  // re-creates it with fresh, paced times when the window opens.
+  if (!isInSendingWindow(campaign, now)) {
+    await releaseToScheduler(db, job, "outside-sending-window");
+    return "held";
+  }
+
   // Compliance: no postal address → nothing goes out.
   const compliance = await loadComplianceInfo(db, campaign);
   if (!compliance.postalAddress) {
@@ -304,6 +395,9 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<JobOutcome>
 
   let reserved = false;
   let delivered = false;
+  // The campaign's daily limit counts per local day in its timezone; the
+  // mailbox counter stays on the UTC day.
+  const campaignDate = campaignDayKey(campaign, now);
 
   try {
     // Links are built now (not at import time) from the configured APP_URL.
@@ -350,9 +444,14 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<JobOutcome>
       await db
         .update(schema.leads)
         .set({ status: "contacted", updatedAt: nowDry })
-        .where(eq(schema.leads.id, job.leadId));
+        .where(and(eq(schema.leads.id, job.leadId), inArray(schema.leads.status, CONTACTABLE_LEAD_STATUSES)));
       await recordSend(db, { userId: campaign.userId, entityType: "sender", entityId: sender.id });
-      await recordSend(db, { userId: campaign.userId, entityType: "campaign", entityId: campaign.id });
+      await recordSend(db, {
+        userId: campaign.userId,
+        entityType: "campaign",
+        entityId: campaign.id,
+        date: campaignDate,
+      });
       noteHourlySend(sender.id);
       return "sent";
     }
@@ -371,6 +470,7 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<JobOutcome>
       campaignId: campaign.id,
       senderCap,
       campaignCap: Math.max(1, campaign.dailyLimit),
+      campaignDate,
     });
     if (!reservation.ok) {
       const retryAt = addSeconds(new Date(), 3600).toISOString();
@@ -452,6 +552,12 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<JobOutcome>
     };
     unrecordedSends.set(job.id, record);
     await recordDelivered(db, record);
+    // A live send worked: reset the mailbox's error streak (best effort).
+    try {
+      await noteSenderSendSucceeded(db, sender.id);
+    } catch {
+      /* never affects the job outcome */
+    }
     // The atomic reservation already recorded this send for both sender and
     // campaign; do not increment the counters a second time.
     noteHourlySend(sender.id);
@@ -471,6 +577,7 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<JobOutcome>
           userId: campaign.userId,
           senderId: sender.id,
           campaignId: campaign.id,
+          campaignDate,
         });
       } catch (releaseErr) {
         console.error("[processor] failed to release send reservation:", releaseErr);
@@ -495,6 +602,7 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<JobOutcome>
           health: Math.max(0, (sender.health ?? 100) - 25),
           smtpStatus: "failed",
           status: "failed",
+          failedReason: message.slice(0, 300),
           updatedAt: nowS,
         })
         .where(eq(schema.senderAccounts.id, sender.id));
@@ -519,16 +627,35 @@ export async function processJob(db: EngineDb, job: JobRow): Promise<JobOutcome>
     // against the sender. Recipient- and content-level rejections never do.
     if (failureBlamesSender(failure)) {
       const definiteAuth = failure.kind === "auth" && failure.code !== 454;
+      // Health is display only; the status follows consecutive errors.
       const health = Math.max(0, (sender.health ?? 100) - (failure.kind === "auth" ? 25 : 10));
+      const failureCount = (sender.failureCount ?? 0) + 1;
+      const status = senderStatusAfterError({ currentStatus: sender.status, definiteAuth, failureCount });
       await db
         .update(schema.senderAccounts)
         .set({
           health,
           smtpStatus: "failed",
-          status: definiteAuth || health < 50 ? "failed" : sender.status,
+          status,
+          failureCount,
+          ...(status === "failed" ? { failedReason: message.slice(0, 300) } : {}),
           updatedAt: nowS,
         })
         .where(eq(schema.senderAccounts.id, sender.id));
+      // Only active mailboxes reach a send, so "failed" here is a transition.
+      if (status === "failed") {
+        await db
+          .insert(schema.activityLogs)
+          .values({
+            id: crypto.randomUUID(),
+            userId: sender.userId,
+            type: "sender.failed",
+            message: `${sender.email} was taken out of rotation after ${failureCount} ${failureCount === 1 ? "error" : "errors in a row"}: ${message.slice(0, 180)}`,
+            campaignId: null,
+            meta: { senderId: sender.id, reason: message.slice(0, 300) },
+          })
+          .catch((e: unknown) => console.error("[processor] could not log sender.failed:", e));
+      }
     }
 
     if (willRetry) {
@@ -663,10 +790,12 @@ async function recordDelivered(db: EngineDb, rec: DeliveredJob): Promise<void> {
     rec.stage = 2;
   }
   if (rec.stage < 3) {
+    // Never downgrade a reply, funnel stage, bounce or opt-out that landed
+    // while the email was in flight.
     await db
       .update(schema.leads)
       .set({ status: "contacted", updatedAt: rec.sentAt })
-      .where(eq(schema.leads.id, rec.leadId));
+      .where(and(eq(schema.leads.id, rec.leadId), inArray(schema.leads.status, CONTACTABLE_LEAD_STATUSES)));
     rec.stage = 3;
   }
   unrecordedSends.delete(rec.jobId);
@@ -701,11 +830,18 @@ async function cancelJobChain(db: EngineDb, job: JobRow, reason: string) {
 export async function processTick(db: EngineDb, now = new Date()): Promise<ProcessResult> {
   const result: ProcessResult = { sent: 0, failed: 0, retried: 0, recovered: 0, skipped: 0, held: 0 };
   await reconcileDeliveredJobs(db);
+  // Release queued jobs of campaigns that stopped sending (any path). A
+  // failure here must not break the tick: claimDueJobs skips those jobs anyway.
+  try {
+    await releaseInactiveCampaignJobs(db, now);
+  } catch (err) {
+    console.error("[processor] releasing jobs of stopped campaigns failed:", err);
+  }
   result.recovered = await recoverStuckJobs(db, now);
   const jobs = await claimDueJobs(db, now);
   for (const job of jobs) {
     try {
-      const r = await processJob(db, job);
+      const r = await processJob(db, job, now);
       if (r === "sent") result.sent++;
       else if (r === "retry") result.retried++;
       else if (r === "failed") result.failed++;

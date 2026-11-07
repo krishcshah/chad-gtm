@@ -52,6 +52,9 @@ export function statusVariant(status: string): BadgeProps["variant"] {
     case "healthy":
     case "approved":
     case "resolved":
+    case "interested":
+    case "meeting_booked":
+    case "won":
       return "success";
     case "scheduled":
     case "queued":

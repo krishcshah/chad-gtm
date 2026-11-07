@@ -1,9 +1,21 @@
 "use client";
 
-import { forwardRef, useId, useState } from "react";
+import { forwardRef, useId, useRef, useState } from "react";
 import { format } from "date-fns";
 import { ChevronDown, ChevronRight, PenLine, SendHorizonal } from "lucide-react";
-import { Badge, Button, Kbd, Textarea, cn } from "@smartreach/ui";
+import { Alert, Badge, Button, Checkbox, Kbd, Label, Textarea, cn } from "@smartreach/ui";
+
+/** The lead opted out ('global': never sent) or is on your blocklist ('own': needs "Send anyway"). */
+export interface ComposerRecipientBlock {
+  level: "global" | "own";
+  message: string;
+}
+
+/** A draft waiting for approval (Agent drafts mode, or one written from your answer). */
+export interface ComposerAgentDraft {
+  text: string;
+  source: "agent" | "you";
+}
 
 export interface ComposerQuote {
   fromName: string;
@@ -29,15 +41,53 @@ export const ReplyComposer = forwardRef<
     collapsed: boolean;
     onCollapsedChange: (collapsed: boolean) => void;
     quote: ComposerQuote;
+    /** Prefilled draft from a Needs you card; the box shows it with Approve and send / Edit / Discard. */
+    agentDraft?: ComposerAgentDraft | null;
+    /** Discard the prefilled draft (it is not prefilled again). */
+    onDiscardDraft?: () => void;
+    /** Opted out or on your blocklist (from getUniboxThread). */
+    recipientBlock?: ComposerRecipientBlock | null;
+    /** "Send anyway" ticked for an own-blocklist recipient. */
+    confirmBlocked?: boolean;
+    onConfirmBlockedChange?: (checked: boolean) => void;
   }
 >(function ReplyComposer(
-  { recipientName, recipientEmail, senderLabel, body, onBodyChange, onSend, sending, collapsed, onCollapsedChange, quote },
+  {
+    recipientName,
+    recipientEmail,
+    senderLabel,
+    body,
+    onBodyChange,
+    onSend,
+    sending,
+    collapsed,
+    onCollapsedChange,
+    quote,
+    agentDraft,
+    onDiscardDraft,
+    recipientBlock,
+    confirmBlocked = false,
+    onConfirmBlockedChange,
+  },
   ref,
 ) {
   const id = useId();
+  const sendAnywayId = useId();
+  const blockedForGood = recipientBlock?.level === "global";
+  const needsConfirm = recipientBlock?.level === "own" && !confirmBlocked;
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [showQuote, setShowQuote] = useState(false);
   const firstName = recipientName.split(" ")[0] || recipientName;
   const hasDraft = body.trim().length > 0;
+  const showsDraft = Boolean(agentDraft && agentDraft.text.trim());
+  // Unchanged draft: sending it approves it.
+  const unchangedDraft = showsDraft && body.trim() === agentDraft!.text.trim();
+  const draftLabel = agentDraft?.source === "you" ? "Draft from your answer" : "Agent draft";
+  const setRefs = (el: HTMLTextAreaElement | null) => {
+    textareaRef.current = el;
+    if (typeof ref === "function") ref(el);
+    else if (ref) ref.current = el;
+  };
   const when = (() => {
     const d = new Date(quote.receivedAt);
     return Number.isNaN(d.getTime()) ? "earlier" : format(d, "EEE, MMM d, yyyy 'at' h:mm a");
@@ -53,7 +103,11 @@ export const ReplyComposer = forwardRef<
         >
           <PenLine className="size-4 shrink-0" aria-hidden />
           <span className="truncate">Reply to {recipientName}</span>
-          {hasDraft ? (
+          {showsDraft ? (
+            <Badge variant="info" className="ml-auto">
+              {draftLabel}
+            </Badge>
+          ) : hasDraft ? (
             <Badge variant="neutral" className="ml-auto">
               Draft
             </Badge>
@@ -68,11 +122,17 @@ export const ReplyComposer = forwardRef<
       className="shrink-0 border-t border-border bg-card px-4 py-3 sm:px-6"
       onSubmit={(event) => {
         event.preventDefault();
+        if (blockedForGood || needsConfirm) return;
         onSend();
       }}
     >
       <div className="flex items-center justify-between gap-3">
-        <p className="min-w-0 truncate text-xs text-muted-foreground">
+        {showsDraft ? (
+          <Badge variant="info" className="shrink-0">
+            {draftLabel}
+          </Badge>
+        ) : null}
+        <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
           To <span className="font-medium text-foreground">{recipientName}</span>
           <span className="hidden sm:inline"> &lt;{recipientEmail}&gt;</span>
           {senderLabel ? (
@@ -94,11 +154,32 @@ export const ReplyComposer = forwardRef<
         </Button>
       </div>
 
+      {recipientBlock ? (
+        <Alert variant="warning" className="mt-2">
+          <p>
+            {recipientBlock.message}
+            {recipientBlock.level === "own" ? " Send only if you're answering something they asked." : ""}
+          </p>
+          {recipientBlock.level === "own" ? (
+            <div className="mt-2 flex items-center gap-2">
+              <Checkbox
+                id={sendAnywayId}
+                checked={confirmBlocked}
+                onCheckedChange={(v) => onConfirmBlockedChange?.(v === true)}
+              />
+              <Label htmlFor={sendAnywayId} className="font-normal">
+                Send anyway
+              </Label>
+            </div>
+          ) : null}
+        </Alert>
+      ) : null}
+
       <label htmlFor={id} className="sr-only">
         Reply to {recipientName}
       </label>
       <Textarea
-        ref={ref}
+        ref={setRefs}
         id={id}
         rows={3}
         value={body}
@@ -106,9 +187,11 @@ export const ReplyComposer = forwardRef<
         onKeyDown={(e) => {
           if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
             e.preventDefault();
+            if (blockedForGood || needsConfirm) return;
             onSend();
           }
         }}
+        disabled={blockedForGood}
         placeholder={`Write a reply to ${firstName}…`}
         className="mt-2 max-h-48 min-h-[84px] resize-y"
       />
@@ -137,14 +220,25 @@ export const ReplyComposer = forwardRef<
             <Kbd>⌘</Kbd>
             <Kbd>Enter</Kbd>
           </span>
-          {hasDraft ? (
-            <Button type="button" variant="ghost" size="sm" onClick={() => onBodyChange("")} disabled={sending}>
+          {showsDraft ? (
+            <Button type="button" variant="ghost" size="sm" onClick={() => textareaRef.current?.focus()} disabled={sending}>
+              Edit
+            </Button>
+          ) : null}
+          {hasDraft || showsDraft ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => (showsDraft && onDiscardDraft ? onDiscardDraft() : onBodyChange(""))}
+              disabled={sending}
+            >
               Discard
             </Button>
           ) : null}
-          <Button type="submit" size="sm" loading={sending} disabled={!hasDraft}>
+          <Button type="submit" size="sm" loading={sending} disabled={!hasDraft || blockedForGood || needsConfirm}>
             {sending ? null : <SendHorizonal aria-hidden />}
-            {sending ? "Sending" : "Send reply"}
+            {sending ? "Sending" : unchangedDraft ? "Approve and send" : "Send reply"}
           </Button>
         </div>
       </div>

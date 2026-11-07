@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   ArrowRight,
   CalendarClock,
-  Clock,
   Hourglass,
   Loader2,
   RefreshCw,
@@ -36,18 +35,19 @@ import {
   retryAutopilotResearchAction,
   type AutopilotOutcome,
 } from "@/lib/autopilot-actions";
-import type { RunPhase } from "@/lib/autopilot-policy";
-import type { PlanPreview } from "@/lib/autopilot-state";
-import { approvalCopy, awaitingApprovalText } from "@/lib/approval-copy";
+import { GUIDED_SETUP_HREF, LAUNCH_AUDIENCE_NOTE, guidedSetupHref, type RunPhase } from "@/lib/autopilot-policy";
+import type { PlanAudience, PlanPreview } from "@/lib/autopilot-state";
+import { bodyAboveSignature, stripWarmupMarker } from "@smartreach/shared/signature";
+import { awaitingApprovalText } from "@/lib/approval-copy";
 
 type Missing = NonNullable<AutopilotOutcome["missing"]>;
 
-/** Manual targeting: the client picks directory industries and titles themselves. */
-export const GUIDED_SETUP_HREF = "/chad-gtm?mode=guided";
+export { GUIDED_SETUP_HREF, guidedSetupHref };
 
 /** Label and badge variant per run phase (launcher list and mission control header). */
 export const PHASE_BADGE: Record<RunPhase, { label: string; variant: BadgeProps["variant"] }> = {
   live: { label: "Live", variant: "success" },
+  held: { label: "Held: needs postal address", variant: "warning" },
   paused: { label: "Paused", variant: "neutral" },
   completed: { label: "Completed", variant: "outline" },
   needs_research: { label: "Needs your input", variant: "warning" },
@@ -135,41 +135,59 @@ function FormRow({
 /* ─── Launch details ─────────────────────────────────────────────────── */
 
 /**
- * Booking link + CAN-SPAM identity in one step. Only the missing fields are
- * shown; the identity is saved to the workspace compliance settings.
+ * Booking link + CAN-SPAM identity in one step. The booking link is asked for
+ * only when missing. The sender identity of the run's workspace is always
+ * shown: read-only when complete (with "Change for this workspace"), editable
+ * when missing. It is saved for that workspace only (#73).
  */
 export function LaunchDetailsForm({
   runId,
   companyLabel,
   missing,
   identity,
+  workspaceName = "",
+  suggestedCompanyName,
   onOutcome,
 }: {
   runId: string;
   companyLabel: string;
   missing: Missing;
-  identity?: { companyName: string; postalAddress: string };
+  identity?: { companyName: string; postalAddress: string; workspaceName?: string };
+  /** The run's workspace: the footer identity belongs to it. */
+  workspaceName?: string;
+  /** The researched company name: a labelled prefill, only while the workspace has no company name. */
+  suggestedCompanyName?: string;
   onOutcome: (outcome: AutopilotOutcome, message?: string) => void;
 }) {
   const needsBooking = missing.includes("bookingUrl");
   const needsIdentity = missing.includes("companyName") || missing.includes("postalAddress");
+  const savedCompany = identity?.companyName ?? "";
+  const savedPostal = identity?.postalAddress ?? "";
+  const suggestion = !savedCompany.trim() ? (suggestedCompanyName ?? "").trim() : "";
+  const wsName = (workspaceName || identity?.workspaceName || "").trim();
+  const [editingIdentity, setEditingIdentity] = useState(needsIdentity);
   const [booking, setBooking] = useState("");
-  const [companyName, setCompanyName] = useState(identity?.companyName ?? "");
-  const [postalAddress, setPostalAddress] = useState(identity?.postalAddress ?? "");
+  const [companyName, setCompanyName] = useState(savedCompany || suggestion);
+  const [postalAddress, setPostalAddress] = useState(savedPostal);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const errorId = useId();
+  const sendingAsId = useId();
+
+  const identityEdited = companyName.trim() !== savedCompany.trim() || postalAddress.trim() !== savedPostal.trim();
+  // Only what the client was asked for or changed is saved.
+  const sendIdentity = needsIdentity || (editingIdentity && identityEdited);
 
   const canSubmit =
     (!needsBooking || booking.trim().length > 0) &&
-    (!needsIdentity || (companyName.trim().length > 0 && postalAddress.trim().length > 0));
+    (!editingIdentity || (companyName.trim().length > 0 && postalAddress.trim().length > 0));
 
   const submit = () =>
     start(async () => {
       setError(null);
       const res = await completeAutopilotSetupAction(runId, {
         ...(needsBooking ? { bookingUrl: booking } : {}),
-        ...(needsIdentity ? { companyName, postalAddress } : {}),
+        ...(sendIdentity ? { companyName, postalAddress } : {}),
       });
       if (!res.ok) return void setError(res.error);
       onOutcome(res.data!, res.message);
@@ -218,20 +236,59 @@ export function LaunchDetailsForm({
               />
             </FormRow>
           )}
-          {needsIdentity && (
+          <div role="group" aria-labelledby={sendingAsId} className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 id={sendingAsId} className="text-[13px] font-medium">
+                  Sending as
+                </h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {wsName ? `For workspace ${wsName}` : "For this workspace"}
+                </p>
+              </div>
+              {!editingIdentity && (
+                <Button type="button" variant="ghost" size="sm" onClick={() => setEditingIdentity(true)}>
+                  Change for this workspace
+                </Button>
+              )}
+            </div>
+            {!editingIdentity && (
+              <dl className="grid gap-4 rounded-lg border border-border bg-muted/40 p-4 text-[13px] sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Company name</dt>
+                  <dd className="mt-1 text-foreground">{savedCompany.trim() || "Not set"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Postal address</dt>
+                  <dd className="mt-1 whitespace-pre-line text-foreground">{savedPostal.trim() || "Not set"}</dd>
+                </div>
+              </dl>
+            )}
+          </div>
+          {editingIdentity && (
             <>
               <p className="text-[13px] leading-relaxed text-muted-foreground">
                 Anti-spam law (CAN-SPAM) requires every cold email to name the sender and include a physical postal
-                address. We add both to the footer and save them in Settings, under Compliance.
+                address. We add both to the footer of every email sent from {wsName || "this workspace"}, and save them
+                in Settings for this workspace only.
               </p>
-              <FormRow id="setup-company" label="Company name">
+              <FormRow
+                id="setup-company"
+                label="Company name"
+                hint={
+                  suggestion && companyName === suggestion
+                    ? "Filled in from your website research. Use your legal or trading name."
+                    : undefined
+                }
+              >
                 <Input
                   id="setup-company"
-                  autoFocus={!needsBooking}
+                  autoFocus={!needsBooking || !needsIdentity}
                   autoComplete="organization"
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
                   placeholder="Acme Inc."
+                  aria-describedby={suggestion && companyName === suggestion ? "setup-company-hint" : undefined}
                 />
               </FormRow>
               <FormRow id="setup-postal" label="Postal address" hint="A street address or PO box where you receive mail.">
@@ -276,10 +333,11 @@ export function LaunchStatePanel({
   reason,
   failureCode,
   approved,
-  emailOnApprove = false,
   companyLabel,
   missing,
   identity,
+  workspaceName,
+  suggestedCompanyName,
   onChanged,
 }: {
   runId: string;
@@ -287,11 +345,15 @@ export function LaunchStatePanel({
   reason?: string | null;
   failureCode?: string | null;
   approved: boolean;
-  /** False when no system mailer is configured: approval is then not emailed. */
+  /** Unused here: the global approval banner is the only place that mentions the approval email. */
   emailOnApprove?: boolean;
   companyLabel: string;
   missing?: Missing;
-  identity?: { companyName: string; postalAddress: string };
+  identity?: { companyName: string; postalAddress: string; workspaceName?: string };
+  /** The run's workspace, named in the "Sending as" block. */
+  workspaceName?: string;
+  /** The researched company name, offered while the workspace has none. */
+  suggestedCompanyName?: string;
   onChanged: (outcome: AutopilotOutcome, message?: string) => void;
 }) {
   const [notes, setNotes] = useState("");
@@ -315,6 +377,8 @@ export function LaunchStatePanel({
         companyLabel={companyLabel}
         missing={missing && missing.length > 0 ? missing : ["bookingUrl"]}
         identity={identity}
+        workspaceName={workspaceName}
+        suggestedCompanyName={suggestedCompanyName}
         onOutcome={onChanged}
       />
     );
@@ -354,7 +418,7 @@ export function LaunchStatePanel({
         <p className="mt-4 text-[13px]">
           If your site blocks automated visits, retrying won&apos;t help. You can{" "}
           <Link
-            href={GUIDED_SETUP_HREF}
+            href={guidedSetupHref(runId)}
             className="inline-flex items-center gap-1 font-medium text-foreground underline decoration-border-strong underline-offset-4 hover:decoration-foreground"
           >
             pick industries and titles yourself in guided setup
@@ -371,21 +435,13 @@ export function LaunchStatePanel({
         <p>
           {approved
             ? "Your account is approved. Check the plan below, then launch when you're ready."
-            : reason
-              ? approvalCopy(reason, emailOnApprove)
-              : awaitingApprovalText(emailOnApprove)}
+            : awaitingApprovalText()}
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Button variant="brand" onClick={retryLaunch} loading={pending} disabled={!approved}>
             {!pending && <Rocket />}
             Launch outreach
           </Button>
-          {!approved && (
-            <span className="inline-flex items-center gap-1.5 text-xs text-subtle-foreground">
-              <Clock className="size-3.5" aria-hidden />
-              Launch unlocks once your account is approved.
-            </span>
-          )}
         </div>
       </StateCard>
     );
@@ -415,9 +471,26 @@ export function LaunchStatePanel({
       <StateCard tone="info" icon={Loader2} spin title="Setting up your campaign">
         <p>This usually takes under a minute and this page updates on its own. If it seems stuck, retry.</p>
         <div className="mt-4">
-          <Button variant="outline" size="sm" onClick={retryLaunch} loading={pending}>
+          <Button variant="outline" size="sm" onClick={retryLaunch} loading={pending} disabled={pending}>
             {!pending && <RefreshCw />}
             Retry launch
+          </Button>
+        </div>
+      </StateCard>
+    );
+  }
+
+  if (phase === "draft") {
+    // A guided setup that was left before launch: continue it on this run, never a dead end.
+    return (
+      <StateCard tone="info" icon={Target} title="Setup isn't finished">
+        <p>Nothing has been sent. Pick up where you left off: choose who to target, then review and launch.</p>
+        <div className="mt-4">
+          <Button asChild>
+            <Link href={guidedSetupHref(runId)}>
+              Continue setup
+              <ArrowRight />
+            </Link>
           </Button>
         </div>
       </StateCard>
@@ -434,6 +507,9 @@ export function PlanPreviewCard({ preview }: { preview: PlanPreview }) {
   const [open, setOpen] = useState("0");
   const index = Number(open);
   const email = preview.sampleEmails[index];
+  // The signature the sending mailbox appends, joined the way the engine joins it.
+  const signature = stripWarmupMarker(preview.sender?.signature);
+  const signed = email && signature ? { ...bodyAboveSignature(email.body, signature), signature } : null;
 
   const options = preview.sampleEmails.map((_, i) => ({
     value: String(i),
@@ -452,11 +528,18 @@ export function PlanPreviewCard({ preview }: { preview: PlanPreview }) {
       <dl className="grid gap-x-6 gap-y-4 p-5 text-[13px] sm:grid-cols-2">
         <PlanRow label="Industries" values={preview.industries} />
         <PlanRow label="Job titles" values={preview.titles} />
+        <PlanRow label="Company size" values={preview.companySizes ?? []} />
         <PlanRow label="Countries" values={preview.countries} />
         <div>
           <dt className="text-xs text-muted-foreground">Sending window</dt>
           <dd className="mt-1.5 text-foreground">{preview.sendingWindow}</dd>
         </div>
+        {preview.audience && (
+          <div className="sm:col-span-2">
+            <dt className="text-xs text-muted-foreground">Audience</dt>
+            <dd className="mt-1.5 leading-relaxed text-foreground">{audienceText(preview.audience)}</dd>
+          </div>
+        )}
         {preview.offer?.valueProp && (
           <div className="sm:col-span-2">
             <dt className="text-xs text-muted-foreground">Pitch</dt>
@@ -476,6 +559,13 @@ export function PlanPreviewCard({ preview }: { preview: PlanPreview }) {
             )}
           </div>
           <article className="rounded-lg border border-border bg-muted/40 p-4">
+            {preview.sender && (
+              <p data-testid="plan-sample-from" className="text-xs text-subtle-foreground">
+                {preview.sender.name
+                  ? `From ${preview.sender.name} · one of ${preview.sender.poolSize} AutoGTM ${preview.sender.poolSize === 1 ? "mailbox" : "mailboxes"}`
+                  : "From an AutoGTM mailbox"}
+              </p>
+            )}
             {email.recipient && (
               <p className="mb-2 text-xs text-subtle-foreground">
                 To {email.recipient.firstName || "a prospect"}
@@ -484,15 +574,39 @@ export function PlanPreviewCard({ preview }: { preview: PlanPreview }) {
               </p>
             )}
             <p className="text-sm font-medium">{email.subject}</p>
-            <p className="mt-2 whitespace-pre-line text-[13px] leading-relaxed text-muted-foreground">{email.body}</p>
+            <p className="mt-2 whitespace-pre-line text-[13px] leading-relaxed text-muted-foreground">
+              {signed ? signed.body : email.body}
+              {signed ? (
+                <span data-testid="plan-sample-signature">
+                  {signed.separator}
+                  <span className="sr-only">Signature added by the sending mailbox: </span>
+                  {signed.signature}
+                </span>
+              ) : null}
+            </p>
           </article>
           <p className="mt-2 text-xs text-subtle-foreground">
             Written for a real prospect that matches your plan. Every live email is personalized for its recipient.
+            {preview.sender && preview.sender.poolSize > 1
+              ? " Each lead hears from one mailbox, under its own name and signature."
+              : ""}
           </p>
         </div>
       )}
     </Card>
   );
+}
+
+/** How many people a launch picks, from how many, and who is skipped. */
+export function audienceText(a: PlanAudience): string {
+  const total = a.roleMatches + (a.strictRoles ? 0 : a.otherRoles);
+  if (total === 0) {
+    return "No contacts match this plan, so the launch would fail. Retry the research with a note about who you sell to.";
+  }
+  const order = a.strictRoles
+    ? "only people with your job titles"
+    : `${a.roleMatches.toLocaleString()} with your job titles${a.bySize ? " and company size" : ""} first, then ${a.otherRoles.toLocaleString()} other decision-makers and people in your industries`;
+  return `All ${total.toLocaleString()} matching contacts, in priority order: ${order}. Each gets three emails over five days. ${LAUNCH_AUDIENCE_NOTE}`;
 }
 
 function PlanRow({ label, values }: { label: string; values: string[] }) {

@@ -59,9 +59,8 @@ export function PublicRemoveMyInfoForm() {
             Request received
           </h2>
           <p className="mt-1.5 max-w-md text-sm leading-relaxed text-muted-foreground">
-            We recorded your request to remove data for{" "}
-            <span className="font-medium text-foreground">{contactEmail}</span>. All matching records will be removed
-            within 72 hours.
+            <span className="font-medium text-foreground">{contactEmail}</span> is now blocked from all AutoGTM
+            outreach. We&apos;ll delete matching records within 72 hours.
           </p>
           <Button
             type="button"

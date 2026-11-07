@@ -2,9 +2,7 @@
  * Web application AI integration helpers.
  * Re-exports core AI engine methods and resolves user/workspace AI preferences.
  */
-import { getDb, ensureAiColumns } from "./db";
-import { decryptSecret, schema } from "@smartreach/database";
-import { eq } from "drizzle-orm";
+import { systemAiOptions } from "@smartreach/email-engine/ai-options";
 import { SUPPORTED_AI_MODELS, type AiModelDefinition } from "@smartreach/shared";
 import {
   generateEmailScriptOnTheFly,
@@ -162,62 +160,9 @@ export const DIVERSE_SAMPLE_LEADS: LeadProfile[] = [
 ];
 
 /**
- * Fetch and decrypt AI credentials configured in workspace settings.
+ * The AI options for a user's calls. AutoGTM manages the model (Settings says
+ * so): stored per-user keys and models are ignored. Shared with the engine.
  */
-export async function getWorkspaceAiOptions(userId: string): Promise<AiEngineOptions> {
-  try {
-    const db = getDb();
-    await ensureAiColumns(db);
-    const rows: any[] = await db
-      .select({
-        aiApiKeyEnc: schema.workspaceSettings.aiApiKeyEnc,
-        aiProvider: schema.workspaceSettings.aiProvider,
-        aiModel: schema.workspaceSettings.aiModel,
-      })
-      .from(schema.workspaceSettings)
-      .where(eq(schema.workspaceSettings.userId, userId))
-      .limit(1);
-
-    const setting = rows[0];
-    let apiKey: string | null = null;
-    if (setting?.aiApiKeyEnc) {
-      try {
-        apiKey = decryptSecret(setting.aiApiKeyEnc);
-      } catch {}
-    }
-
-    const requestedProvider = (setting?.aiProvider || "google").toLowerCase();
-    const systemGeminiKey =
-      process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || null;
-    const systemOpenAiKey = process.env.OPENAI_API_KEY || null;
-
-    const provider: "google" | "openai" =
-      requestedProvider === "openai" ? "openai" : "google";
-    const fallbackKey = provider === "openai" ? systemOpenAiKey : systemGeminiKey;
-    const resolvedKey = apiKey || fallbackKey;
-
-    // If the workspace selected OpenAI but no OpenAI key exists, fall back to
-    // Google rather than silently failing every generation call.
-    if (provider === "openai" && !resolvedKey && systemGeminiKey) {
-      return {
-        apiKey: systemGeminiKey,
-        provider: "google" as const,
-        model: "gemini-3.8-flash",
-      };
-    }
-
-    return {
-      apiKey: resolvedKey,
-      provider,
-      model:
-        setting?.aiModel ||
-        (provider === "openai" ? "gpt-5-mini" : "gemini-3.8-flash"),
-    };
-  } catch {
-    return {
-      apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || null,
-      provider: "google" as const,
-      model: "gemini-3.8-flash",
-    };
-  }
+export async function getWorkspaceAiOptions(_userId: string): Promise<AiEngineOptions> {
+  return systemAiOptions();
 }

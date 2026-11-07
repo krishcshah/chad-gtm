@@ -19,6 +19,12 @@ import {
   Textarea,
 } from "@smartreach/ui";
 import { addSuppression, importSuppressions, removeSuppression } from "@/lib/actions";
+import { isProtectedOptOut, unblockDescription } from "@/lib/suppression-rules";
+
+export { isProtectedOptOut };
+
+/** Shown instead of Unblock on opt-outs only an admin may remove. */
+export const PROTECTED_OPT_OUT_LABEL = "Opt-outs can't be removed";
 
 export type BlocklistEntryKind = "email" | "domain";
 
@@ -29,6 +35,8 @@ export type BlocklistItem = {
   reason: string;
   source: string;
   createdAt: string;
+  /** The workspace it was added in (the blocklist itself applies to every workspace). */
+  workspaceName?: string | null;
 };
 
 export function kindLabel(kind: string) {
@@ -48,7 +56,11 @@ export function sourceLabel(source: string) {
     case "bounce":
       return "Bounced";
     case "complaint":
-      return "Opted out";
+      return "Spam complaint";
+    case "erasure":
+      return "Removal request";
+    case "not_interested":
+      return "Replied: not interested";
     default:
       return source || "Unknown";
   }
@@ -366,7 +378,7 @@ export function RemoveFromBlocklistDialog({
         if (!open) onClose();
       }}
       title={target ? `Unblock ${target.value}?` : "Unblock address?"}
-      description="Campaigns will be able to send to it again. You can block it again at any time."
+      description={unblockDescription(target?.value, target && "source" in target ? target.source : null)}
       confirmLabel="Unblock"
       destructive
       onConfirm={async () => {

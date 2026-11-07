@@ -158,6 +158,19 @@ export function parseAiPromptPayload(raw: string): ParsedAiPromptPayload {
   };
 }
 
+/** Emails already sent to one campaign lead, oldest first (subject and plain body). */
+export async function loadSentThread(
+  db: EngineDb,
+  campaignLeadId: string,
+): Promise<Array<{ step: number; subject: string; body: string }>> {
+  const rows: Array<{ step: number; subject: string; bodyText: string }> = await db
+    .select({ step: schema.emailJobs.stepPosition, subject: schema.emailJobs.subject, bodyText: schema.emailJobs.bodyText })
+    .from(schema.emailJobs)
+    .where(and(eq(schema.emailJobs.campaignLeadId, campaignLeadId), eq(schema.emailJobs.status, "sent")))
+    .orderBy(asc(schema.emailJobs.stepPosition));
+  return rows.map((r) => ({ step: Number(r.step) || 1, subject: r.subject || "", body: r.bodyText || "" }));
+}
+
 /**
  * Resolve content for a campaign_lead at its current stepPosition.
  * Prefers sequence step+variant when steps exist; else falls back to template.
@@ -172,6 +185,8 @@ export async function resolveStepContent(
     steps: SequenceStepRow[];
     lead?: any;
     senderName?: string;
+    /** The campaign_leads row, so follow-ups can see what was already sent. */
+    campaignLeadId?: string;
     aiOptions?: {
       apiKey?: string | null;
       provider?: string;
@@ -189,6 +204,10 @@ export async function resolveStepContent(
     if (!picked) return { error: "sequence-variant-missing" };
 
     let finalSubject = renderWithVarsAndSpintax(picked.subject, vars);
+    // Follow-ups reply in email 1's thread: same subject as what was actually sent.
+    const prior = stepPosition > 1 && opts.campaignLeadId ? await loadSentThread(db, opts.campaignLeadId) : [];
+    const firstSubject = prior.find((p) => p.step === 1)?.subject?.trim();
+    if (firstSubject) finalSubject = /^re:/i.test(firstSubject) ? firstSubject : `Re: ${firstSubject}`;
     let finalBodyText = renderWithVarsAndSpintax(picked.bodyText, vars);
     let finalBodyHtml = renderWithVarsAndSpintax(picked.bodyHtml, vars);
     let format: "text" | "html" = picked.bodyHtml.trim() ? "html" : "text";
@@ -217,6 +236,9 @@ export async function resolveStepContent(
           negativeConstraints: payload.negativeConstraints,
           requireSpintax: payload.requireSpintax,
           senderName,
+          stepPosition,
+          priorEmails: prior,
+          threadSubject: firstSubject,
           fallbackSubject: finalSubject,
           fallbackBody: finalBodyText,
           vars,
@@ -228,7 +250,8 @@ export async function resolveStepContent(
           onFailure: "throw",
         });
 
-        if (generated.subject) {
+        // A follow-up never changes the thread's subject.
+        if (generated.subject && !(stepPosition > 1 && firstSubject)) {
           finalSubject = renderWithVarsAndSpintax(generated.subject, vars);
         }
         if (generated.bodyText) {
@@ -298,6 +321,13 @@ export async function advanceSequenceAfterSend(
 ): Promise<"completed" | "requeued"> {
   const { campaignId, campaignLeadId, stepPosition, sentAt, steps } = opts;
   const next = steps.find((s) => s.position === stepPosition + 1);
+  // Only a lead still 'scheduled' (this send's claim) moves on. A reply,
+  // unsubscribe or cancel that landed while the email was in flight already
+  // changed the status; it wins, and no follow-up is queued.
+  const stillScheduled = and(
+    eq(schema.campaignLeads.id, campaignLeadId),
+    eq(schema.campaignLeads.status, "scheduled"),
+  );
   if (!next || steps.length === 0) {
     await db
       .update(schema.campaignLeads)
@@ -308,12 +338,12 @@ export async function advanceSequenceAfterSend(
         lastError: null,
         updatedAt: sentAt,
       })
-      .where(eq(schema.campaignLeads.id, campaignLeadId));
+      .where(stillScheduled);
     return "completed";
   }
 
   const due = addCalendarDays(new Date(sentAt), next.delayDays).toISOString();
-  await db
+  const requeued: { id: string }[] = await db
     .update(schema.campaignLeads)
     .set({
       status: "queued",
@@ -324,8 +354,9 @@ export async function advanceSequenceAfterSend(
       lastError: null,
       updatedAt: sentAt,
     })
-    .where(eq(schema.campaignLeads.id, campaignLeadId));
-  return "requeued";
+    .where(stillScheduled)
+    .returning({ id: schema.campaignLeads.id });
+  return requeued.length > 0 ? "requeued" : "completed";
 }
 
 export { pickVariantEqualWeight, addCalendarDays };

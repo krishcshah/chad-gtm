@@ -7,7 +7,33 @@ import {
   prepareReplyBodies,
   stripLeakageFromBody,
   hasQpSoftBreaks,
+  resolveInboundClassification,
 } from "../sync-replies";
+
+describe("resolveInboundClassification", () => {
+  it("lets an opt-out win over 'on leave' in a message a person wrote", () => {
+    expect(
+      resolveInboundClassification({
+        auto: false,
+        subject: "",
+        body: "I'm on leave until Monday, please remove me from your list",
+      }),
+    ).toEqual({ tag: "not_interested", optOut: "unsubscribe" });
+  });
+
+  it("never opts anyone out from an autoresponder", () => {
+    expect(resolveInboundClassification({ auto: true, subject: "Re: hi", body: "please remove me" })).toEqual({
+      tag: "out_of_office",
+      optOut: null,
+    });
+  });
+
+  it("keeps a plain vacation note as out_of_office", () => {
+    expect(
+      resolveInboundClassification({ auto: false, subject: "", body: "I am on vacation until the 5th" }),
+    ).toEqual({ tag: "out_of_office", optOut: null });
+  });
+});
 
 describe("decodeQuotedPrintable (UTF-8)", () => {
   it("decodes em-dash UTF-8 octets without latin1 mojibake", () => {

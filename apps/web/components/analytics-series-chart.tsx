@@ -24,7 +24,7 @@ export type AnalyticsSeriesKey = "sent" | "contacted" | "replies" | "bounces";
 /** Colour follows the metric, never its position, so a metric looks the same on every chart. */
 export const ANALYTICS_SERIES: Record<AnalyticsSeriesKey, { label: string; color: string; dash?: string }> = {
   sent: { label: "Emails sent", color: "var(--chart-1)" },
-  contacted: { label: "Leads contacted", color: "var(--chart-2)", dash: "5 4" },
+  contacted: { label: "Leads emailed", color: "var(--chart-2)", dash: "5 4" },
   replies: { label: "Replies", color: "var(--chart-3)" },
   bounces: { label: "Bounces", color: "var(--chart-4)", dash: "5 4" },
 };

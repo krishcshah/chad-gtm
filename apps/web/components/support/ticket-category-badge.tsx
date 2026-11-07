@@ -1,4 +1,4 @@
-import { Bug, HelpCircle, Lightbulb, Mail, Sparkles, type LucideIcon } from "lucide-react";
+import { Bug, HelpCircle, Lightbulb, Mail, Scale, Sparkles, type LucideIcon } from "lucide-react";
 import { Badge } from "@smartreach/ui";
 import type { TicketCategory } from "@/lib/support-types";
 
@@ -31,6 +31,11 @@ export const TICKET_CATEGORY_META: Record<
     label: "Other",
     description: "Questions and anything else.",
     icon: HelpCircle,
+  },
+  legal: {
+    label: "Legal / DPA",
+    description: "Data processing, privacy and legal questions.",
+    icon: Scale,
   },
 };
 

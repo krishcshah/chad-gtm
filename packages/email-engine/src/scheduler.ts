@@ -16,16 +16,19 @@ import { loadEngineAiOptions } from "./ai-options";
 import {
   buildUnsubscribeUrl,
   createUnsubscribeToken,
+  loadWorkspaceProfile,
   matchesSuppression,
   schema,
 } from "@smartreach/database";
 import {
   addSeconds,
+  effectiveGapRange,
   isBusinessDay,
   minutesSinceMidnight,
+  MAX_GAP_SEC,
   nowIso,
+  PACING_HORIZON_SEC,
   parseTimeToMinutes,
-  randomBetween,
 } from "@smartreach/shared";
 import { and, asc, desc, eq, exists, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { CampaignRow, EngineDb, SenderRow } from "./db-port";
@@ -36,6 +39,7 @@ import {
   resolveStepContent,
 } from "./sequence";
 import {
+  campaignDayKey,
   campaignSentToday,
   loadDailyUsage,
   pickSenderIndex,
@@ -46,8 +50,10 @@ import { isEngineDryRun } from "./queue-mode";
 import { appUrl, engineBatchSize } from "./env";
 import { loadApplicableSuppressions } from "./suppression";
 import { buildPoolPlans, isPoolSender, withinPoolShare, type CampaignPoolPlan } from "./pool-allocation";
-import { stripWarmupMarker } from "./signature";
+import { htmlAboveSignature, joinSignature, stripWarmupMarker } from "./signature";
 import { loadUnapprovedOwners, OWNER_NOT_APPROVED_NOTE } from "./owner-approval";
+import { createMailboxPacer, nextFreeFromQueued } from "./pacing";
+import { repliesUnreadable, STICKY_MAILBOX_UNAVAILABLE_NOTE } from "./mailbox-health";
 
 /** Shown on the campaign when it cannot send because the postal address is missing. */
 export const MISSING_POSTAL_ADDRESS_NOTE = "missing-postal-address";
@@ -60,9 +66,62 @@ const BLOCKED_NOTE_EVERY_MS = 24 * 3_600_000;
 /** Follow-ups wait this long for their step-1 mailbox to have capacity again. */
 const STICKY_DEFER_SEC = 3600;
 const RESCHEDULE_PAD_MIN = 5;
-/** Deliverability band for shared mailboxes; campaign values are clamped into it. */
-const MIN_JITTER_SEC = 45;
-const MAX_JITTER_SEC = 120;
+/** scheduleCampaign note: every mailbox is booked to the pacing horizon (normal sending, not a block). */
+export const PACED_NOTE = "paced";
+
+/**
+ * Notes from scheduleCampaign / schedulerTick that explain why a running
+ * campaign is not sending. Stored on campaigns.send_block_reason (only when
+ * it changes) so the web app can say it in one line.
+ */
+export const SEND_BLOCK_REASONS = [
+  "outside-window",
+  "daily-limit",
+  "pool-share-used",
+  "senders-exhausted",
+  "all-paused",
+  "no-senders",
+  "owner-not-approved",
+  "missing-postal-address",
+  "missing-list",
+  "missing-list-or-template",
+] as const;
+export type SendBlockReason = (typeof SEND_BLOCK_REASONS)[number];
+
+/**
+ * The block reason a scheduleCampaign result implies: null when it sent (or
+ * has nothing to explain), the note when it is a known reason, undefined when
+ * nothing should change (a lost claim race says nothing about the campaign).
+ */
+export function sendBlockFor(r: { enqueued: number; note?: string }): string | null | undefined {
+  if (r.enqueued > 0) return null;
+  if (r.note === "claim-race") return undefined;
+  if (r.note && (SEND_BLOCK_REASONS as readonly string[]).includes(r.note)) return r.note;
+  return null;
+}
+
+/**
+ * Store the campaign's block reason when it changed (undefined = leave it).
+ * Never throws: a bookkeeping problem must not break scheduling.
+ */
+export async function recordSendBlock(
+  db: EngineDb,
+  campaign: Pick<CampaignRow, "id" | "sendBlockReason">,
+  reason: string | null | undefined,
+  now: Date = new Date(),
+): Promise<void> {
+  if (reason === undefined) return;
+  if (reason === (campaign.sendBlockReason ?? null)) return;
+  try {
+    await db
+      .update(schema.campaigns)
+      .set({ sendBlockReason: reason, sendBlockSince: reason ? now.toISOString() : null })
+      .where(eq(schema.campaigns.id, campaign.id));
+    campaign.sendBlockReason = reason;
+  } catch (err) {
+    console.error(`[scheduler] could not record send block for campaign ${campaign.id}:`, err);
+  }
+}
 
 export interface TickResult {
   started: number;
@@ -122,19 +181,22 @@ export async function campaignSenders(db: EngineDb, campaignId: string): Promise
     .then((rows: any[]) => rows.map((r) => r.sender as SenderRow));
 
   const directSenders = attached.filter((s) => !(s as SenderRow & { deletedAt?: string | null }).deletedAt);
-  if (directSenders.length > 0) {
+  // Live pool: only for campaigns launched on pool mailboxes (at least one
+  // attached row, retired or not, is a pool mailbox). Anything else keeps
+  // exactly its attached mailboxes.
+  if (!attached.some((s) => (s as SenderRow & { isSystemPool?: boolean }).isSystemPool === true)) {
     return directSenders;
   }
-  if (!onlyRetiredPoolSenders(attached)) return [];
 
-  // Fallback for autopilot campaigns only: the pool mailboxes this campaign
-  // was launched with were all retired, and it belongs to an ACTIVE
-  // chad_gtm_runs row of the same owner → use the current active pool.
-  // Manual campaigns, paused/finished runs, campaigns with nothing attached
-  // (e.g. a user detached the pool senders) never fall back.
-  const runRows: { runStatus: string; runUserId: string; campaignUserId: string }[] = await db
+  // RUNNING autopilot campaigns (a chad_gtm_runs row of the same owner) send
+  // from the live pool, so mailboxes imported after launch help running
+  // campaigns and a run whose launch mailboxes were paused or retired keeps
+  // sending. Manual campaigns, paused/finished campaigns and campaigns with
+  // nothing attached (e.g. a user detached the pool senders) never do. The
+  // campaign's own status decides, the same field the scheduler sends by.
+  const runRows: { campaignStatus: string; runUserId: string; campaignUserId: string }[] = await db
     .select({
-      runStatus: schema.chadGtmRuns.status,
+      campaignStatus: schema.campaigns.status,
       runUserId: schema.chadGtmRuns.userId,
       campaignUserId: schema.campaigns.userId,
     })
@@ -142,20 +204,25 @@ export async function campaignSenders(db: EngineDb, campaignId: string): Promise
     .innerJoin(schema.campaigns, eq(schema.campaigns.id, schema.chadGtmRuns.campaignId))
     .where(eq(schema.chadGtmRuns.campaignId, campaignId))
     .limit(1);
-  if (!poolFallbackAllowed(runRows[0])) return [];
+  if (!poolFallbackAllowed(runRows[0])) return directSenders;
 
-  const poolSenders = await db
+  // Every status: a paused or failed step-1 mailbox must still be found by
+  // resolveStickySender so its follow-ups defer instead of switching
+  // mailbox. New step-1 picks stay gated on status 'active' (senderHasCapacity).
+  const poolSenders: SenderRow[] = await db
     .select()
     .from(schema.senderAccounts)
-    .where(
-      and(
-        eq(schema.senderAccounts.isSystemPool, true),
-        eq(schema.senderAccounts.status, "active"),
-        isNull(schema.senderAccounts.deletedAt),
-      ),
-    )
+    .where(and(eq(schema.senderAccounts.isSystemPool, true), isNull(schema.senderAccounts.deletedAt)))
     .orderBy(asc(schema.senderAccounts.createdAt));
-  return poolSenders as SenderRow[];
+  return mergeSendersById(directSenders, poolSenders);
+}
+
+/** Union of two sender lists, deduplicated by id, ordered by createdAt (stable). */
+export function mergeSendersById(a: readonly SenderRow[], b: readonly SenderRow[]): SenderRow[] {
+  const byId = new Map<string, SenderRow>();
+  for (const s of [...a, ...b]) if (!byId.has(s.id)) byId.set(s.id, s);
+  const created = (s: SenderRow) => String((s as SenderRow & { createdAt?: string | null }).createdAt ?? "");
+  return [...byId.values()].sort((x, y) => created(x).localeCompare(created(y)));
 }
 
 /**
@@ -175,14 +242,15 @@ export function onlyRetiredPoolSenders(attached: readonly SenderRow[]): boolean 
 
 /**
  * May a campaign whose pool mailboxes were retired fall back to the current
- * system pool? Only when it belongs to an ACTIVE autopilot run of the same
- * owner; manual campaigns (no run) never do.
+ * system pool? Only when it is a RUNNING campaign of an autopilot run of the
+ * same owner; manual campaigns (no run) never do. Keyed on the campaign's
+ * status, not the run's, so the two can never disagree in the engine.
  */
 export function poolFallbackAllowed(
-  run: { runStatus: string; runUserId: string; campaignUserId: string } | undefined | null,
+  run: { campaignStatus: string; runUserId: string; campaignUserId: string } | undefined | null,
 ): boolean {
   if (!run) return false; // manual campaign
-  if (run.runStatus !== "active") return false;
+  if (run.campaignStatus !== "running") return false;
   return Boolean(run.runUserId) && run.runUserId === run.campaignUserId;
 }
 
@@ -206,13 +274,16 @@ export async function scheduleCampaign(
   if (!isInSendingWindow(campaign, now)) return { enqueued: 0, note: "outside-window" };
 
   // Daily campaign cap
-  const sentToday = await campaignSentToday(db, campaign.id);
+  // Counted per day in the campaign's own timezone.
+  const sentToday = await campaignSentToday(db, campaign.id, campaignDayKey(campaign, now));
   if (sentToday >= campaign.dailyLimit) return { enqueued: 0, note: "daily-limit" };
   let budget = Math.min(engineBatchSize(), campaign.dailyLimit - sentToday);
 
   const senders = ctx.senders ?? (await campaignSenders(db, campaign.id));
   if (senders.length === 0) return { enqueued: 0, note: "no-senders" };
-  const activeSenders = senders.filter((s) => s.status !== "paused");
+  // Failed mailboxes count as paused here too (pickSenderIndex never used
+  // them), so "every mailbox is paused/failed" reads as a warning.
+  const activeSenders = senders.filter((s) => s.status === "active");
   if (activeSenders.length === 0) return { enqueued: 0, note: "all-paused" };
   const pool = ctx.pool;
   // Drafts may omit list/template; scheduler only runs scheduled/running but guard anyway.
@@ -227,21 +298,26 @@ export async function scheduleCampaign(
   // Every cold email carries the sender's postal address (CAN-SPAM). The
   // processor adds the footer at send time; without an address nothing is
   // enqueued, so the client sees a clear reason instead of silent sends.
-  const settingsRows: any[] = await db
-    .select()
-    .from(schema.workspaceSettings)
-    .where(eq(schema.workspaceSettings.userId, campaign.userId))
-    .limit(1);
-  const settings = settingsRows[0] as
-    | { unsubscribeBaseUrl?: string; postalAddress?: string }
-    | undefined;
-  if (!(settings?.postalAddress ?? "").trim()) {
+  // The address is the campaign's workspace's (an unknown workspace reads blank and holds).
+  const profile = await loadWorkspaceProfile(db, { userId: campaign.userId, workspaceId: campaign.workspaceId ?? null });
+  if (!profile.postalAddress.trim()) {
     await noteCampaignBlocked(db, campaign, MISSING_POSTAL_ADDRESS_NOTE, MISSING_POSTAL_ADDRESS_MESSAGE, now);
     return { enqueued: 0, note: MISSING_POSTAL_ADDRESS_NOTE };
   }
-  // Base for {{unsubscribe_url}} when a template references it.
-  const unsubBase = (settings?.unsubscribeBaseUrl ?? "").trim() || appUrl();
+  // Base for {{unsubscribe_url}} when a template references it. Always
+  // AutoGTM's page (a stored workspace_settings.unsubscribe_base_url is
+  // ignored) so every opt-out is recorded and suppressed across campaigns.
+  const unsubBase = appUrl();
   const dryRun = isEngineDryRun();
+
+  // Each mailbox waits gap.min..gap.max seconds between two of its emails
+  // (across ticks and campaigns), so claim only what the mailboxes can take
+  // inside the pacing horizon; the rest stays queued for later ticks.
+  const gap = effectiveGapRange(campaign.minDelaySec, campaign.maxDelaySec);
+  const claimLimit = Math.max(
+    1,
+    Math.min(budget, activeSenders.length * Math.ceil(PACING_HORIZON_SEC / gap.min)),
+  );
 
   // Skip leads that already replied anywhere in this campaign (stopOnReply)
   // and any campaign_leads already scheduled/sent — atomic claim does the rest.
@@ -262,17 +338,48 @@ export async function scheduleCampaign(
           : sql`1=1`,
       ),
     )
-    .orderBy(asc(schema.campaignLeads.createdAt))
-    .limit(budget);
+    // Due follow-ups first so every lead gets all three emails on time, then
+    // Autopilot's priority tiers (1 target titles, 2 other decision-makers,
+    // 3 everyone else; null last), then oldest first.
+    .orderBy(
+      desc(schema.campaignLeads.stepPosition),
+      sql`${schema.campaignLeads.priority} asc nulls last`,
+      asc(schema.campaignLeads.createdAt),
+    )
+    .limit(claimLimit);
 
   if (claimable.length === 0) {
+    // Queued rows of people who replied are never claimed (Stop on reply
+    // turned on after the reply, a lead set to Won/Lost by hand, a reply
+    // stop cut short): cancel them so the campaign can finish.
+    if (campaign.stopOnReply) await cancelRepliedQueuedLeads(db, campaign.id, nowIsoS);
     // Nothing queued → maybe complete
     const remaining = await pendingWork(db, campaign.id);
+    // An Autopilot campaign with contacts still to load is between batches,
+    // not finished: the audience top-up adds the next tier shortly.
+    if (remaining === 0 && (campaign as { audienceOpen?: boolean }).audienceOpen) {
+      return { enqueued: 0, note: "waiting-for-leads" };
+    }
     if (remaining === 0) {
       await db
         .update(schema.campaigns)
         .set({ status: "completed", completedAt: nowIsoS, updatedAt: nowIsoS })
         .where(eq(schema.campaigns.id, campaign.id));
+      // Mirror it on the linked Autopilot run (display only): a failure here
+      // never affects sending.
+      try {
+        await db
+          .update(schema.chadGtmRuns)
+          .set({ status: "completed", updatedAt: nowIsoS })
+          .where(
+            and(
+              eq(schema.chadGtmRuns.campaignId, campaign.id),
+              inArray(schema.chadGtmRuns.status, ["active", "paused"]),
+            ),
+          );
+      } catch (err) {
+        console.error("[scheduler] could not mark the Autopilot run completed", campaign.id, err);
+      }
       // Lead funnel status is owned by send/reply/bounce/unsub (F03d).
       // Do not stamp "completed" here — that value is outside the lead enum
       // and would clobber contacted/replied/bounced.
@@ -286,7 +393,15 @@ export async function scheduleCampaign(
   // does not claim and unclaim leads every tick).
   const daily = await loadDailyUsage(db, activeSenders.map((s) => s.id));
   const hourly = takeHourlySnapshot();
-  const allowSender = (s: SenderRow) => withinPoolShare(pool, s);
+  // No new lead goes to a mailbox whose inbox can't be read (its replies
+  // would go unseen); follow-ups already there wait for it (resolveStickySender).
+  const allowSender = (s: SenderRow) => withinPoolShare(pool, s) && !repliesUnreadable(s);
+  // Pacing: the latest email booked (or just sent) on each mailbox, from any campaign.
+  const pacer = createMailboxPacer({
+    now,
+    nextFreeAt: nextFreeFromQueued(await loadMailboxLastSends(db, activeSenders.map((s) => s.id), now), gap.min),
+    gap,
+  });
   // Follow-ups bypass the fair share (they must use their step-1 mailbox).
   const hasFollowUps = claimable.some((r) => (r.stepPosition ?? 1) > 1);
   const anyCapacity = activeSenders.some(
@@ -302,6 +417,15 @@ export async function scheduleCampaign(
       .where(eq(schema.campaigns.id, campaign.id));
     return { enqueued: 0, note: pool ? "pool-share-used" : "senders-exhausted" };
   }
+  // Every usable mailbox is already booked to the pacing horizon: claim
+  // nothing and try again next tick (follow-ups are not horizon-gated).
+  const anyPaceRoom = activeSenders.some(
+    (s) =>
+      senderHasCapacity(s, daily, hourly, campaign.maxEmailsPerSenderPerDay, now) &&
+      allowSender(s) &&
+      pacer.canTake(s.id),
+  );
+  if (!hasFollowUps && !anyPaceRoom) return { enqueued: 0, note: PACED_NOTE };
 
   // Atomically claim (skip if another worker beat us)
   const ids = claimable.map((r) => r.id);
@@ -343,18 +467,16 @@ export async function scheduleCampaign(
     claimedRows.filter((r) => (r.stepPosition ?? 1) > 1).map((r) => r.id),
   );
 
-  // Rolling cursor so consecutive jobs land on different senders, and a
-  // growing schedule so delays accumulate across the batch.
+  // Rolling cursor so consecutive jobs land on different senders; the pacer
+  // spaces each mailbox's emails by the campaign's gap.
   let cursor = campaign.lastSenderIdx;
-  let scheduleAt = new Date(now.getTime() + randomBetween(0, 5) * 1000);
-  const minJitter = Math.min(MAX_JITTER_SEC, Math.max(MIN_JITTER_SEC, campaign.minDelaySec));
-  const maxJitter = Math.min(MAX_JITTER_SEC, Math.max(minJitter, campaign.maxDelaySec));
   let enqueued = 0;
   // Track rows we finished (enqueued or cancelled) so senders-exhausted
   // unclaim does not reset already-handled leads (slice(enqueued) was wrong
   // when suppressions/missing leads appeared mid-batch).
   const handledIds = new Set<string>();
   let exhausted = false;
+  let paced = false;
 
   for (const cl of claimedRows) {
     // A follow-up must go from its step-1 mailbox, so the fair share does
@@ -367,13 +489,14 @@ export async function scheduleCampaign(
       hasCapacity: (s) => senderHasCapacity(s, daily, hourly, campaign.maxEmailsPerSenderPerDay, now),
     });
     if (sticky.kind === "defer") {
-      // Same mailbox is busy today: wait for it rather than switching persona.
+      // Same mailbox is busy today, paused, or its replies can't be read:
+      // wait for it rather than switching persona or sending blind.
       await db
         .update(schema.campaignLeads)
         .set({
           status: "queued",
           scheduledFor: addSeconds(now, STICKY_DEFER_SEC).toISOString(),
-          lastError: "waiting-for-step-1-mailbox",
+          lastError: sticky.reason === "unavailable" ? STICKY_MAILBOX_UNAVAILABLE_NOTE : "waiting-for-step-1-mailbox",
           updatedAt: nowIsoS,
         })
         .where(eq(schema.campaignLeads.id, cl.id));
@@ -385,13 +508,18 @@ export async function scheduleCampaign(
         ? { sender: sticky.sender, index: cursor }
         : pickSenderIndex(activeSenders, daily, hourly, cursor, campaign.maxEmailsPerSenderPerDay, {
             now,
-            allow: allowSender,
+            allow: (s) => allowSender(s) && pacer.canTake(s.id),
           });
     if (!pick) {
       // No mailbox (or fair share) left for a new lead. Leave it queued and
       // keep going: follow-ups later in the batch may still use their
-      // step-1 mailbox. Without any, stop here.
-      exhausted = true;
+      // step-1 mailbox. Without any, stop here. A mailbox that only waits
+      // for its pacing gap is not exhausted: the next tick books it.
+      const roomLeft = activeSenders.some(
+        (s) => senderHasCapacity(s, daily, hourly, campaign.maxEmailsPerSenderPerDay, now) && allowSender(s),
+      );
+      if (roomLeft) paced = true;
+      else exhausted = true;
       if (!hasFollowUps) break;
       continue;
     }
@@ -434,6 +562,7 @@ export async function scheduleCampaign(
       steps: sequenceSteps,
       lead,
       senderName: senderFirstName,
+      campaignLeadId: cl.id,
       aiOptions: await loadEngineAiOptions(db, campaign.userId),
     });
     if ("error" in content) {
@@ -452,6 +581,8 @@ export async function scheduleCampaign(
         ? appendSignatureHtml(content.bodyHtml, pick.sender)
         : "";
 
+    // Book this mailbox's next slot (sticky follow-ups skip the horizon gate).
+    const scheduleAt = pacer.take(pick.sender.id);
     try {
       await db
         .insert(schema.emailJobs)
@@ -489,10 +620,6 @@ export async function scheduleCampaign(
       if (pool && isPoolSender(pick.sender)) {
         pool.used.set(pick.sender.id, (pool.used.get(pick.sender.id) ?? 0) + 1);
       }
-      scheduleAt = addSeconds(
-        scheduleAt,
-        randomBetween(minJitter, maxJitter),
-      );
       handledIds.add(cl.id);
       enqueued++;
       if (--budget <= 0) break;
@@ -529,17 +656,50 @@ export async function scheduleCampaign(
     .update(schema.campaigns)
     .set({ lastSenderIdx: cursor, updatedAt: nowIsoS })
     .where(eq(schema.campaigns.id, campaign.id));
-  return { enqueued };
+  return enqueued === 0 && paced ? { enqueued, note: PACED_NOTE } : { enqueued };
 }
 
-function appendSignature(body: string, sender: SenderRow): string {
-  const sig = stripWarmupMarker(sender.signature);
-  return sig ? `${body}\n\n${sig}` : body;
+/**
+ * Latest email booked on each mailbox (pending, processing or retry jobs, from
+ * any campaign) or sent in the last MAX_GAP_SEC, so the gap holds across
+ * ticks and campaigns.
+ */
+async function loadMailboxLastSends(
+  db: EngineDb,
+  senderIds: string[],
+  now: Date,
+): Promise<Array<{ senderId: string; lastAt: string | null }>> {
+  if (senderIds.length === 0) return [];
+  const recent = addSeconds(now, -MAX_GAP_SEC).toISOString();
+  const rows: Array<{ senderId: string; lastAt: string | null }> = await db
+    .select({
+      senderId: schema.emailJobs.senderId,
+      lastAt: sql<string | null>`max(case when ${schema.emailJobs.status} = 'sent' then ${schema.emailJobs.sentAt} else ${schema.emailJobs.scheduledFor} end)`,
+    })
+    .from(schema.emailJobs)
+    .where(
+      and(
+        inArray(schema.emailJobs.senderId, senderIds),
+        or(
+          inArray(schema.emailJobs.status, ["pending", "processing", "retry"]),
+          and(eq(schema.emailJobs.status, "sent"), gte(schema.emailJobs.sentAt, recent)),
+        ),
+      ),
+    )
+    .groupBy(schema.emailJobs.senderId);
+  return Array.isArray(rows) ? rows : [];
 }
 
-function appendSignatureHtml(html: string, sender: SenderRow): string {
+// Exported for tests. One sign-off: a bare "{{sender_name}}" line before a
+// signature that starts with that name is dropped (shared joinSignature).
+export function appendSignature(body: string, sender: SenderRow): string {
+  return joinSignature(body, sender.signature);
+}
+
+export function appendSignatureHtml(html: string, sender: SenderRow): string {
   const sig = stripWarmupMarker(sender.signature);
   if (!sig) return html;
+  html = htmlAboveSignature(html, sig);
   const block = /<[a-z][\s\S]*>/i.test(sig)
     ? sig
     : sig
@@ -554,13 +714,16 @@ function appendSignatureHtml(html: string, sender: SenderRow): string {
 
 export type StickyDecision =
   | { kind: "use"; sender: SenderRow }
-  | { kind: "defer" }
+  | { kind: "defer"; reason: "unavailable" | "capacity" }
   | { kind: "rotate" };
 
 /**
  * Follow-ups (step > 1) reuse the mailbox that sent step 1 so the lead sees
  * one person in one thread. Switch only when that mailbox is gone from the
- * campaign or disabled (paused/failed); when it is merely at capacity, wait.
+ * campaign (retired by an admin, or detached). When it is paused, failed or
+ * its replies can't be read, wait for it ('unavailable'): a follow-up from
+ * another persona, or one sent while a reply may be sitting unread, is worse
+ * than a late one. When it is merely at capacity, wait too ('capacity').
  */
 export function resolveStickySender(input: {
   stepPosition: number;
@@ -570,8 +733,9 @@ export function resolveStickySender(input: {
 }): StickyDecision {
   if (input.stepPosition <= 1 || !input.stickySenderId) return { kind: "rotate" };
   const s = input.senders.find((x) => x.id === input.stickySenderId);
-  if (!s || s.status !== "active") return { kind: "rotate" };
-  return input.hasCapacity(s) ? { kind: "use", sender: s } : { kind: "defer" };
+  if (!s || (s as SenderRow & { deletedAt?: string | null }).deletedAt) return { kind: "rotate" };
+  if (s.status !== "active" || repliesUnreadable(s)) return { kind: "defer", reason: "unavailable" };
+  return input.hasCapacity(s) ? { kind: "use", sender: s } : { kind: "defer", reason: "capacity" };
 }
 
 /** campaign_lead id → sender of its earliest sent step. */
@@ -623,8 +787,31 @@ function normalizeKeys(cf: Record<string, string>): Record<string, string> {
 }
 
 function notExistsReplied(db: EngineDb, campaignId: string) {
-  // campaign_leads.lead_id NOT IN (select lead_id from campaign_leads where campaign & replied)
-  return sql`NOT EXISTS (SELECT 1 FROM campaign_leads cr WHERE cr.campaign_id = ${campaignId} AND cr.lead_id = campaign_leads.lead_id AND cr.status = 'replied')`;
+  // The person replied to any of the owner's campaigns: a reply marks every
+  // lead row of theirs (lead-outcomes.stopLeadAfterReply), so the lead status
+  // covers other campaigns too.
+  return sql`NOT EXISTS (SELECT 1 FROM leads l WHERE l.id = campaign_leads.lead_id AND l.status IN ('replied','interested','meeting_booked','won','lost'))`;
+}
+
+/** campaign_leads.last_error of a queued row cancelled because the person replied. */
+export const REPLIED_QUEUED_CANCEL_REASON = "lead-replied";
+
+/**
+ * Cancel this campaign's queued rows whose person replied (the rows
+ * notExistsReplied keeps from being claimed), so pendingWork can reach 0.
+ * Only for campaigns with Stop on reply on.
+ */
+async function cancelRepliedQueuedLeads(db: EngineDb, campaignId: string, nowIsoS: string): Promise<void> {
+  await db
+    .update(schema.campaignLeads)
+    .set({ status: "cancelled", lastError: REPLIED_QUEUED_CANCEL_REASON, updatedAt: nowIsoS })
+    .where(
+      and(
+        eq(schema.campaignLeads.campaignId, campaignId),
+        eq(schema.campaignLeads.status, "queued"),
+        sql`EXISTS (SELECT 1 FROM leads l WHERE l.id = campaign_leads.lead_id AND l.status IN ('replied','interested','meeting_booked','won','lost'))`,
+      ),
+    );
 }
 
 async function pendingWork(db: EngineDb, campaignId: string): Promise<number> {
@@ -654,16 +841,22 @@ export async function schedulerTick(db: EngineDb, now = new Date()): Promise<Tic
   // is not approved (role <> 'admin' AND approved_at IS NULL), unless
   // SIGNUP_APPROVAL_REQUIRED="false". If the lookup fails, send nothing.
   let unapproved: Set<string>;
+  let approvalKnown = true;
   try {
     unapproved = await loadUnapprovedOwners(db, allRunning.map((c) => c.userId));
   } catch (err) {
     console.error("[scheduler] owner approval lookup failed:", err);
     unapproved = new Set(allRunning.map((c) => c.userId));
+    approvalKnown = false;
   }
   const running: CampaignRow[] = [];
   for (const c of allRunning) {
-    if (unapproved.has(c.userId)) result.skipped.push(`${c.name}: ${OWNER_NOT_APPROVED_NOTE}`);
-    else running.push(c);
+    if (unapproved.has(c.userId)) {
+      result.skipped.push(`${c.name}: ${OWNER_NOT_APPROVED_NOTE}`);
+      // Only a real lookup says the owner is not approved; a failed one
+      // must not show "Sending is paused by AutoGTM" to everyone.
+      if (approvalKnown) await recordSendBlock(db, c, "owner-not-approved", now);
+    } else running.push(c);
   }
 
   // Fair sharing: campaigns inside their window split the pool mailboxes'
@@ -675,7 +868,7 @@ export async function schedulerTick(db: EngineDb, now = new Date()): Promise<Tic
   for (const c of inWindow) {
     try {
       sendersByCampaign.set(c.id, await campaignSenders(db, c.id));
-      sentToday.set(c.id, await campaignSentToday(db, c.id));
+      sentToday.set(c.id, await campaignSentToday(db, c.id, campaignDayKey(c, now)));
     } catch (err) {
       console.error(`[scheduler] campaign ${c.id} senders failed:`, err);
     }
@@ -697,12 +890,14 @@ export async function schedulerTick(db: EngineDb, now = new Date()): Promise<Tic
       if (!isInSendingWindow(c, now)) {
         result.rescheduled++;
         result.skipped.push(`${c.name}: outside window`);
+        await recordSendBlock(db, c, "outside-window", now);
         continue;
       }
       const r = await scheduleCampaign(db, c, now, {
         senders: sendersByCampaign.get(c.id),
         pool: poolPlans.get(c.id),
       });
+      await recordSendBlock(db, c, sendBlockFor(r), now);
       if (r.note === "completed") result.completed++;
       result.enqueued += r.enqueued;
       if (r.note && r.enqueued === 0 && r.note !== "completed") result.skipped.push(`${c.name}: ${r.note}`);

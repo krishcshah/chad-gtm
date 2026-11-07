@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, ChevronDown, ListChecks } from "lucide-react";
 import {
@@ -19,7 +19,9 @@ import {
 } from "@smartreach/ui";
 import Link from "next/link";
 import { startAutopilotAction, type AutopilotOutcome } from "@/lib/autopilot-actions";
-import type { RunPhase } from "@/lib/autopilot-policy";
+import { AUTOPILOT_DAILY_DEFAULT } from "@/lib/autopilot-policy";
+import { DailyVolumeInput, VolumeForecast } from "@/components/chad-gtm/velocity-slider";
+import { hasCompliantIdentity, type RunPhase } from "@/lib/autopilot-policy";
 import { Page } from "@/components/layout/page";
 import { GUIDED_SETUP_HREF, LaunchDetailsForm } from "./launch-setup";
 import { RunList } from "./run-list";
@@ -49,7 +51,32 @@ const LAUNCH_STEPS = [
   "Assign warmed mailboxes from our pool",
 ];
 
-export function AutopilotLauncher({ runs }: { runs: RunSummary[] }) {
+/** The active workspace's sender identity: what a new run's footer will carry. */
+export interface LauncherSender {
+  workspaceName: string;
+  companyName: string;
+  postalAddress: string;
+}
+
+/** First line of a postal address (single-line addresses: up to the first comma). */
+function firstAddressLine(address: string): string {
+  const line = address.split(/\r?\n/).map((l) => l.trim()).find(Boolean) ?? "";
+  return address.includes("\n") ? line : line.split(",")[0]!.trim();
+}
+
+export function AutopilotLauncher({
+  runs,
+  defaultBookingUrl = null,
+  sender = null,
+}: {
+  runs: RunSummary[];
+  /** The workspace booking link (Settings › Lead conversations), used when this field is empty. */
+  defaultBookingUrl?: string | null;
+  /** The active workspace's sender identity (#73). */
+  sender?: LauncherSender | null;
+}) {
+  const senderComplete = Boolean(sender && hasCompliantIdentity(sender));
+  const senderWorkspace = sender?.workspaceName.trim() ?? "";
   const router = useRouter();
   const [url, setUrl] = useState("");
   // Pre-fill the website the visitor pasted on the landing page before signing up.
@@ -58,6 +85,9 @@ export function AutopilotLauncher({ runs }: { runs: RunSummary[] }) {
     if (pending) setUrl((current) => current || pending);
   }, []);
   const [booking, setBooking] = useState("");
+  // The one control the client sets: emails per day (follow-ups included).
+  const [dailyLimit, setDailyLimit] = useState(AUTOPILOT_DAILY_DEFAULT);
+  const volumeId = useId();
   const [notes, setNotes] = useState("");
   const [showMore, setShowMore] = useState(false);
   const [running, setRunning] = useState(false);
@@ -87,7 +117,7 @@ export function AutopilotLauncher({ runs }: { runs: RunSummary[] }) {
     setError(null);
     setRunning(true);
     start(async () => {
-      const res = await startAutopilotAction({ url, bookingUrl: booking, notes });
+      const res = await startAutopilotAction({ url, bookingUrl: booking, notes, dailyLimit });
       setRunning(false);
       if (!res.ok) {
         setError(res.error);
@@ -119,6 +149,8 @@ export function AutopilotLauncher({ runs }: { runs: RunSummary[] }) {
             companyLabel={needsDetails.companyName || "your company"}
             missing={needsDetails.missing ?? ["bookingUrl"]}
             identity={needsDetails.identity}
+            workspaceName={needsDetails.identity?.workspaceName || senderWorkspace}
+            suggestedCompanyName={needsDetails.suggestedCompanyName}
             onOutcome={handleOutcome}
           />
         </div>
@@ -160,6 +192,22 @@ export function AutopilotLauncher({ runs }: { runs: RunSummary[] }) {
               />
             </Field>
 
+            <div>
+              <div className="flex items-baseline justify-between gap-3">
+                <label htmlFor={volumeId} className="text-[13px] font-medium">
+                  Emails per day
+                </label>
+                <span className="tabular text-[22px] font-semibold leading-none tracking-[-0.03em]">
+                  {dailyLimit}
+                  <span className="ml-1 text-sm font-normal text-muted-foreground">a day</span>
+                </span>
+              </div>
+              <div className="mt-3">
+                <DailyVolumeInput id={volumeId} value={dailyLimit} onChange={setDailyLimit} disabled={running} />
+              </div>
+              <VolumeForecast perDay={dailyLimit} className="mt-3" />
+            </div>
+
             {error && (
               <Alert
                 variant="destructive"
@@ -183,14 +231,16 @@ export function AutopilotLauncher({ runs }: { runs: RunSummary[] }) {
               >
                 <ChevronDown className={cn("size-4 transition-transform", showMore && "rotate-180")} aria-hidden />
                 Booking link and notes
-                <span className="font-normal text-subtle-foreground">Optional</span>
               </button>
               {showMore && (
                 <div id="launcher-options" className="mt-4 grid gap-5 sm:grid-cols-2">
                   <Field
                     label="Booking link"
-                    optional
-                    hint="Where interested leads book a call. If empty, we look for one on your site."
+                    hint={
+                      defaultBookingUrl
+                        ? `Leave empty to use this workspace's booking link (${hostOf(defaultBookingUrl)}).`
+                        : "Needed to launch. Leave it empty and we look for one on your site; if we can't find one, we ask you before anything is sent."
+                    }
                   >
                     <Input
                       value={booking}
@@ -211,6 +261,25 @@ export function AutopilotLauncher({ runs }: { runs: RunSummary[] }) {
                 </div>
               )}
             </div>
+
+            {sender && (
+              <p data-testid="launcher-sending-as" className="text-[13px] leading-relaxed text-muted-foreground">
+                {senderComplete ? (
+                  <>
+                    Sending as {sender.companyName.trim()} · {firstAddressLine(sender.postalAddress)} ·{" "}
+                    {senderWorkspace ? `For workspace ${senderWorkspace}` : "For this workspace"}.{" "}
+                    <Link
+                      href="/settings#compliance"
+                      className="font-medium text-foreground underline decoration-border-strong underline-offset-4 hover:decoration-foreground"
+                    >
+                      Change for this workspace
+                    </Link>
+                  </>
+                ) : (
+                  "Before anything is sent we'll ask for this workspace's company name and postal address."
+                )}
+              </p>
+            )}
 
             <div className="flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-subtle-foreground">

@@ -163,11 +163,11 @@ describe("LeadImport column mapping", () => {
     mockImport
       .mockResolvedValueOnce({
         ok: true,
-        data: { imported: 1000, skipped: 0, invalid: 0, listId: "list-1" },
+        data: { imported: 1000, skipped: 0, blocked: 0, invalid: 0, listId: "list-1" },
       })
       .mockResolvedValueOnce({
         ok: true,
-        data: { imported: 450, skipped: 50, invalid: 0, listId: "list-1" },
+        data: { imported: 450, skipped: 50, blocked: 0, invalid: 0, listId: "list-1" },
       });
 
     const rows = Array.from({ length: 1500 }, (_, i) => `lead${i}@example.com,Company${i}`);
@@ -195,6 +195,34 @@ describe("LeadImport column mapping", () => {
 
     expect(host.textContent).toContain("1,450 imported");
     expect(host.textContent).toContain("50 duplicates skipped");
+    // Nothing blocked: no blocklist line.
+    expect(host.textContent).not.toContain("on your blocklist or opted out");
+
+    await unmount(root, host);
+  });
+
+  it("reports addresses on the blocklist or opted out that were not imported", async () => {
+    const mockImport = vi.mocked(importLeads);
+    mockImport.mockReset();
+    mockImport.mockResolvedValueOnce({
+      ok: true,
+      data: { imported: 450, skipped: 50, blocked: 5, invalid: 0, listId: "list-1" },
+    });
+
+    const rows = Array.from({ length: 505 }, (_, i) => `lead${i}@example.com,Company${i}`);
+    const csvContent = ["Email,Company", ...rows].join("\n");
+
+    const { host, root } = await renderImport();
+    await upload(host, csvContent, "blocked.csv");
+    await openMapping(host);
+
+    await act(async () => {
+      (buttonByText(host, "Confirm") as HTMLButtonElement).click();
+    });
+
+    expect(mockImport).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain("450 imported");
+    expect(host.textContent).toContain("5 on your blocklist or opted out");
 
     await unmount(root, host);
   });

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function SenderImportPage() {
   const user = await requireUser();
   if (isAdmin(user)) {
-    redirect("/admin");
+    redirect("/admin?tab=mailboxes");
   }
   redirect("/dashboard");
 }

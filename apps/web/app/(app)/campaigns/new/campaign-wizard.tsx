@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Rocket } from "lucide-react";
+import { effectiveGapRange, MAX_GAP_SEC, MIN_GAP_SEC } from "@smartreach/shared";
 import { Alert, AlertDescription, AlertTitle, Button, Card, CardContent, CardFooter, toast } from "@smartreach/ui";
 import { publishCampaign, saveCampaignDraft, saveCampaignSequence } from "@/lib/actions";
 import {
@@ -32,7 +33,7 @@ import {
   type SenderOpt,
   type TemplateOpt,
 } from "./wizard-types";
-import { bodyHtmlFromText, clampStep, isoToDatetimeLocal, sequenceToDraftSteps } from "./wizard-utils";
+import { bodyHtmlFromText, clampStep, datetimeLocalToIso, isoToDatetimeLocal, sequenceToDraftSteps } from "./wizard-utils";
 
 export type { CampaignDraftSeed } from "./wizard-types";
 
@@ -66,17 +67,21 @@ function isWhole(n: number, min: number, max: number) {
 }
 
 function initialSettings(d?: CampaignDraftSeed | null): ScheduleSettings {
+  // Stored gaps outside what the engine uses (45-3600 s) are shown as the engine uses them.
+  const gap = effectiveGapRange(d?.minDelaySec ?? 90, d?.maxDelaySec ?? 240);
   return {
     startMode: d?.startMode ?? "now",
-    scheduledAt: isoToDatetimeLocal(d?.scheduledAt ?? null),
+    // The start time is a wall time in the campaign's sending timezone.
+    scheduledAt: isoToDatetimeLocal(d?.scheduledAt ?? null, d?.sendingTimezone ?? "UTC"),
     businessDaysOnly: d?.businessDaysOnly ?? false,
     sendingTimezone: d?.sendingTimezone ?? "UTC",
     windowStart: d?.sendingWindowStart ?? "09:00",
     windowEnd: d?.sendingWindowEnd ?? "17:00",
-    dailyLimit: d?.dailyLimit ?? 500,
-    minDelay: d?.minDelaySec ?? 90,
-    maxDelay: d?.maxDelaySec ?? 240,
-    perSender: d?.maxEmailsPerSenderPerDay ?? 50,
+    dailyLimit: d?.dailyLimit ?? 100,
+    minDelay: gap.min,
+    maxDelay: gap.max,
+    // No mailbox sends more than 30 a day; older drafts stored 50.
+    perSender: Math.min(30, d?.maxEmailsPerSenderPerDay ?? 30),
     stopOnReply: d?.stopOnReply ?? true,
     retryFailed: d?.retryFailed ?? true,
     retryCount: d?.retryCount ?? 2,
@@ -93,6 +98,7 @@ export function CampaignWizard({
   initialSequenceTemplateId,
   initialLeadListId,
   initialSequence,
+  workspaceDefaultLabel,
 }: {
   leadLists: LeadListOpt[];
   senders: SenderOpt[];
@@ -105,6 +111,8 @@ export function CampaignWizard({
   initialLeadListId?: string | null;
   /** Steps already saved on the draft being resumed. */
   initialSequence?: StepSource[] | null;
+  /** "Lead conversations" workspace default label, for the review step before a draft exists. */
+  workspaceDefaultLabel?: string | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -124,6 +132,8 @@ export function CampaignWizard({
     initialDraft?.leadListId ??
       (initialLeadListId && leadLists.some((l) => l.id === initialLeadListId) ? initialLeadListId : ""),
   );
+  // "Email them again": also email leads your other campaigns already emailed (off by default).
+  const [reengageContacted, setReengageContacted] = useState(false);
   const [senderIds, setSenderIds] = useState<Set<string>>(() => new Set(initialDraft?.senderIds ?? []));
   const [templateId, setTemplateId] = useState(initialDraft?.templateId ?? "");
   const [settings, setSettings] = useState<ScheduleSettings>(() => initialSettings(initialDraft));
@@ -198,9 +208,11 @@ export function CampaignWizard({
         const v = settings;
         if (v.startMode === "later" && !v.scheduledAt) fe.scheduledAt = ["Pick a start date and time."];
         if (!isWhole(v.dailyLimit, 1, 100_000)) fe.dailyLimit = ["Enter a whole number from 1 to 100,000."];
-        if (!isWhole(v.perSender, 1, 5000)) fe.maxEmailsPerSenderPerDay = ["Enter a whole number from 1 to 5,000."];
-        if (!isWhole(v.minDelay, 5, 86_400)) fe.minDelaySec = ["Enter a whole number from 5 to 86,400 seconds."];
-        if (!isWhole(v.maxDelay, 5, 86_400)) fe.maxDelaySec = ["Enter a whole number from 5 to 86,400 seconds."];
+        if (!isWhole(v.perSender, 1, 30)) fe.maxEmailsPerSenderPerDay = ["Enter a whole number from 1 to 30."];
+        if (!isWhole(v.minDelay, MIN_GAP_SEC, MAX_GAP_SEC))
+          fe.minDelaySec = ["Enter a whole number from 45 to 3,600 seconds."];
+        if (!isWhole(v.maxDelay, MIN_GAP_SEC, MAX_GAP_SEC))
+          fe.maxDelaySec = ["Enter a whole number from 45 to 3,600 seconds."];
         else if (Number.isFinite(v.minDelay) && v.maxDelay < v.minDelay)
           fe.maxDelaySec = ["Must be at least the shortest gap."];
         if (v.retryFailed && !isWhole(v.retryCount, 0, 10)) fe.retryCount = ["Use a number from 0 to 10."];
@@ -278,9 +290,8 @@ export function CampaignWizard({
 
   const scheduledIso = () => {
     if (settings.startMode !== "later" || !settings.scheduledAt) return null;
-    const d = new Date(settings.scheduledAt);
-    if (Number.isNaN(d.getTime())) return null;
-    return d.toISOString();
+    // Read in the sending timezone chosen on the same step, not the browser's.
+    return datetimeLocalToIso(settings.scheduledAt, settings.sendingTimezone);
   };
 
   const rememberDraft = (id: string) => {
@@ -386,7 +397,7 @@ export function CampaignWizard({
       try {
         setError(null);
         setFieldErrors({});
-        const payload: Record<string, unknown> = { ...basePayload(), leadListId };
+        const payload: Record<string, unknown> = { ...basePayload(), leadListId, reengageContacted };
         if (draftId) payload.id = draftId;
         if (hasSequence()) payload.steps = toSavePayload("", steps).steps;
 
@@ -497,8 +508,11 @@ export function CampaignWizard({
               error={fieldError("leadListId")}
               onSelect={(id) => {
                 setLeadListId(id);
+                setReengageContacted(false);
                 clearFields(["leadListId"]);
               }}
+              reengageContacted={reengageContacted}
+              onReengageContactedChange={setReengageContacted}
             />
           )}
 
@@ -533,6 +547,11 @@ export function CampaignWizard({
               templates={localTemplates}
               onTemplateSaved={(tpl) => setLocalTemplates((prev) => [tpl, ...prev])}
               onTemplateApplied={setTemplateId}
+              onTemplateRenamed={(id, newName) =>
+                setLocalTemplates((prev) => prev.map((t) => (t.id === id ? { ...t, name: newName } : t)))
+              }
+              // templateId stays: the steps were already copied into the draft.
+              onTemplateDeleted={(id) => setLocalTemplates((prev) => prev.filter((t) => t.id !== id))}
               campaignName={name}
               leadListId={leadListId || undefined}
               error={fieldError("templateId") ?? fieldError("sequence") ?? fieldError("steps")}
@@ -542,6 +561,7 @@ export function CampaignWizard({
           {step === 5 && (
             <StepSchedule
               settings={settings}
+              mailboxCaps={selectedSenders.map((s) => s.dailyCap)}
               fieldError={fieldError}
               onChange={(patch, clear) => {
                 setSettings((prev) => ({ ...prev, ...patch }));
@@ -561,6 +581,8 @@ export function CampaignWizard({
                 setError(null);
                 setStep(s);
               }}
+              draftId={draftId}
+              workspaceDefaultLabel={workspaceDefaultLabel}
             />
           )}
         </CardContent>

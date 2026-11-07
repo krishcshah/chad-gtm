@@ -40,12 +40,24 @@ export async function ensureWorkspacesSchema(): Promise<void> {
       "updated_at" text DEFAULT to_char((now() AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS.MSZ') NOT NULL
     )`,
     sql`CREATE INDEX IF NOT EXISTS "workspaces_user_idx" ON "workspaces" ("user_id")`,
+    // Per-workspace sender profile and lead-conversation settings (migration 0014 parity).
+    sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "company_name" text DEFAULT '' NOT NULL`,
+    sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "postal_address" text DEFAULT '' NOT NULL`,
+    sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "booking_url" text`,
+    sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "notify_email" text DEFAULT '' NOT NULL`,
+    sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "notify_escalations" boolean DEFAULT true NOT NULL`,
+    sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "notify_reminders" boolean DEFAULT true NOT NULL`,
+    sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "lead_conversation_mode" text DEFAULT 'manual' NOT NULL`,
+    sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "agent_paused" boolean DEFAULT false NOT NULL`,
+    sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "company_summary" text DEFAULT '' NOT NULL`,
+    sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "main_offer" text DEFAULT '' NOT NULL`,
     sql`ALTER TABLE "lead_lists" ADD COLUMN IF NOT EXISTS "workspace_id" text REFERENCES "workspaces"("id") ON DELETE cascade`,
     sql`ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "workspace_id" text REFERENCES "workspaces"("id") ON DELETE cascade`,
     sql`ALTER TABLE "sender_accounts" ADD COLUMN IF NOT EXISTS "workspace_id" text REFERENCES "workspaces"("id") ON DELETE cascade`,
     sql`ALTER TABLE "campaigns" ADD COLUMN IF NOT EXISTS "workspace_id" text REFERENCES "workspaces"("id") ON DELETE cascade`,
     sql`ALTER TABLE "suppressions" ADD COLUMN IF NOT EXISTS "workspace_id" text REFERENCES "workspaces"("id") ON DELETE cascade`,
-    sql`ALTER TABLE "workspace_settings" ADD COLUMN IF NOT EXISTS "workspace_id" text REFERENCES "workspaces"("id") ON DELETE cascade`,
+    // Account settings must outlive any one workspace (migration 0014 fixes existing databases).
+    sql`ALTER TABLE "workspace_settings" ADD COLUMN IF NOT EXISTS "workspace_id" text REFERENCES "workspaces"("id") ON DELETE set null`,
     sql`ALTER TABLE "unibox_messages" ADD COLUMN IF NOT EXISTS "workspace_id" text REFERENCES "workspaces"("id") ON DELETE cascade`,
   ];
 
@@ -97,6 +109,19 @@ export async function ensureDefaultWorkspace(userId: string): Promise<WorkspaceI
       .limit(1);
 
     const targetWs = existing.length > 0 ? (existing[0] as WorkspaceItem) : null;
+    // A default created late starts with the account's legacy sender identity,
+    // so its campaigns are not held for a missing postal address.
+    const legacy = targetWs
+      ? []
+      : await db
+          .select({
+            companyName: schema.workspaceSettings.companyName,
+            postalAddress: schema.workspaceSettings.postalAddress,
+          })
+          .from(schema.workspaceSettings)
+          .where(eq(schema.workspaceSettings.userId, userId))
+          .limit(1)
+          .catch(() => []);
     const defaultWs = targetWs ?? ((await db
       .insert(schema.workspaces)
       .values({
@@ -104,6 +129,8 @@ export async function ensureDefaultWorkspace(userId: string): Promise<WorkspaceI
         name: "Primary Workspace",
         description: "Default workspace for your outreach and client operations",
         isDefault: true,
+        companyName: legacy[0]?.companyName ?? "",
+        postalAddress: legacy[0]?.postalAddress ?? "",
       })
       .returning())[0] as WorkspaceItem);
 
@@ -121,7 +148,14 @@ export async function ensureDefaultWorkspace(userId: string): Promise<WorkspaceI
         db
           .update(schema.senderAccounts)
           .set({ workspaceId: defaultWs.id })
-          .where(and(eq(schema.senderAccounts.userId, userId), isNull(schema.senderAccounts.workspaceId))),
+          .where(
+            and(
+              eq(schema.senderAccounts.userId, userId),
+              isNull(schema.senderAccounts.workspaceId),
+              // Shared pool mailboxes belong to no workspace.
+              eq(schema.senderAccounts.isSystemPool, false),
+            ),
+          ),
         db
           .update(schema.campaigns)
           .set({ workspaceId: defaultWs.id })
@@ -227,7 +261,8 @@ export async function listUserWorkspaces(userId: string): Promise<WorkspaceItem[
                   isDef
                     ? sql`(${schema.senderAccounts.workspaceId} = ${w.id} OR ${schema.senderAccounts.workspaceId} IS NULL)`
                     : eq(schema.senderAccounts.workspaceId, w.id),
-                  isNull(schema.senderAccounts.deletedAt)
+                  isNull(schema.senderAccounts.deletedAt),
+                  eq(schema.senderAccounts.isSystemPool, false)
                 )
               ),
             db

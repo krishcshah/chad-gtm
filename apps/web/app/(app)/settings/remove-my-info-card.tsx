@@ -80,8 +80,8 @@ export function RemoveMyInfoCard({ userEmail }: { userEmail?: string | null }) {
           >
             <AlertTitle>Request received</AlertTitle>
             <AlertDescription>
-              We will review it and remove matching records for <span className="text-foreground">{submittedFor}</span>{" "}
-              within 72 hours.
+              <span className="text-foreground">{submittedFor}</span> is now blocked from all AutoGTM outreach. We&apos;ll
+              delete matching records within 72 hours.
             </AlertDescription>
           </Alert>
         </CardContent>

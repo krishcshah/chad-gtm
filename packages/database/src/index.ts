@@ -4,3 +4,4 @@ export * from "./template";
 export * from "./compliance";
 export * from "./spintax";
 export * from "./sequence-pick";
+export * from "./workspace-profile";

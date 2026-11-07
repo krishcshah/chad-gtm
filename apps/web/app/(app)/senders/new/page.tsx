@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function NewSenderPage() {
   const user = await requireUser();
   if (isAdmin(user)) {
-    redirect("/admin");
+    redirect("/admin?tab=mailboxes");
   }
   redirect("/dashboard");
 }

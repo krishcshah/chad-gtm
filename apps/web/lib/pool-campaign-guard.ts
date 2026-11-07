@@ -26,7 +26,7 @@ import { schema } from "@smartreach/database";
 const { campaigns, campaignSenders, senderAccounts, leads, chadGtmRuns } = schema;
 
 export const POOL_CAMPAIGN_LOCKED_ERROR =
-  "This list or copy belongs to an AutoGTM autopilot campaign that sends from shared mailboxes, so it can't be edited here. You can still change the booking link and reply-agent settings. Create a separate campaign with your own mailbox to send your own leads or copy.";
+  "This list or copy belongs to an Autopilot campaign that sends from shared mailboxes, so it can't be edited here. Change its booking link and lead conversations on its Autopilot page. To send your own list or copy, create a manual campaign. It needs a mailbox assigned to your account; contact support to get one.";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = any;
@@ -126,7 +126,7 @@ export async function poolCampaignEditError(db: Db, actor: Actor, campaignId: st
 }
 
 export const POOL_CAMPAIGN_SENDERS_LOCKED_ERROR =
-  "This AutoGTM autopilot campaign sends from shared mailboxes picked by the launcher, so its mailboxes can't be changed here. Create a separate campaign to send from your own mailbox.";
+  "This AutoGTM autopilot campaign sends from shared mailboxes picked by the launcher, so its mailboxes can't be changed here. To send your own list or copy, create a manual campaign. It needs a mailbox assigned to your account; contact support to get one.";
 
 /**
  * Pure decision for a sender-list change on an existing campaign. On a pool

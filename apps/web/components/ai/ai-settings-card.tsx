@@ -1,16 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, DataList } from "@smartreach/ui";
 
-interface AiSettingsCardProps {
-  /** Kept for callers; the workspace always uses the managed model. */
-  initialProvider?: string;
-  initialModel?: string;
-  hasApiKey?: boolean;
-}
+const LINK = "underline decoration-border-strong underline-offset-2 hover:decoration-foreground";
 
-/** Settings → AI: explains the managed model. There is nothing to configure. */
-export function AiSettingsCard(_props: AiSettingsCardProps) {
+/** Settings → AI: explains the managed model. There is nothing to configure (stored keys are ignored). */
+export function AiSettingsCard() {
   return (
     <Card>
       <CardHeader>
@@ -28,7 +24,18 @@ export function AiSettingsCard(_props: AiSettingsCardProps) {
             { label: "Used for", value: "Website research, ICP and personas, email copy, and sorting replies" },
             {
               label: "Reply agent limits",
-              value: "Replies only use your booking link and your knowledge base",
+              value: (
+                <>
+                  Replies only use your{" "}
+                  <Link href="/settings#lead-conversations" className={LINK}>
+                    booking link
+                  </Link>{" "}
+                  and your{" "}
+                  <Link href="/requests#knowledge" className={LINK}>
+                    knowledge base
+                  </Link>
+                </>
+              ),
             },
             {
               label: "If AI is unavailable",

@@ -77,9 +77,28 @@ export function buildApprovalEmail(input: {
   name?: string | null;
   appUrl?: string | null;
   runId?: string | null;
+  /** Lead conversations held while the account was on hold; they open in Needs you. */
+  waitingCount?: number | null;
+  /** The account was approved before and put on hold; its campaigns already sent. */
+  reapproved?: boolean | null;
 }): BuiltEmail {
   const hi = `Hi ${firstNameOf(input.name)},`;
   const intro = "Your AutoGTM account is approved.";
+  const waiting = heldWaitingText(input.waitingCount);
+  // Held lead conversations mean campaigns already sent, so "nothing has been sent" would be false.
+  if (input.reapproved || waiting) {
+    const next = "Your running campaigns can send again.";
+    const base = String(input.appUrl ?? "").trim().replace(/\/+$/, "");
+    const url = base ? (waiting ? `${base}/requests` : `${base}/dashboard`) : "";
+    const label = waiting ? "Open Needs you" : "Open AutoGTM";
+    const cta = url ? `${label}: ${url}` : "Sign in to AutoGTM to see your campaigns.";
+    const body = waiting ? [intro, next, waiting] : [intro, next];
+    return {
+      subject: "Your AutoGTM account is approved",
+      text: `${hi}\n\n${body.join("\n\n")}\n\n${cta}\n\n— AutoGTM`,
+      html: url ? layout([hi, ...body], { label, url }) : layout([hi, ...body, cta]),
+    };
+  }
   const next = "Nothing has been sent yet. Open AutoGTM to review your plan and launch your campaign.";
   const url = approvalLaunchUrl(input.appUrl, input.runId);
   const cta = url ? `Launch your campaign: ${url}` : "Sign in to AutoGTM to launch your campaign.";
@@ -90,6 +109,13 @@ export function buildApprovalEmail(input: {
       ? layout([hi, intro, next], { label: "Open AutoGTM to launch", url })
       : layout([hi, intro, next, cta]),
   };
+}
+
+/** "3 lead conversations arrived while your account was on hold. …", or "" when none. */
+export function heldWaitingText(count?: number | null): string {
+  const n = Math.floor(Number(count ?? 0));
+  if (!Number.isFinite(n) || n <= 0) return "";
+  return `${n} lead ${n === 1 ? "conversation" : "conversations"} arrived while your account was on hold. They're waiting for you in Needs you.`;
 }
 
 /**

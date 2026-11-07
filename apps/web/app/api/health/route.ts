@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { evaluateHealth, firstValue, isStrictRequest } from "@/lib/health";
+import { startAudienceTopUp } from "@/lib/autopilot-topup";
 
 /**
  * Liveness for the deploy check and uptime monitors.
@@ -33,6 +34,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 export async function GET(req: Request) {
+  // The deploy's health check also starts the Autopilot audience top-up loop.
+  startAudienceTopUp();
   const strict = isStrictRequest(new URL(req.url).searchParams);
   let dbOk = false;
   let lastTickAt: unknown = null;
