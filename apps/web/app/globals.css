@@ -367,3 +367,159 @@
 .prose-doc a { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--border-strong); }
 .prose-doc a:hover { text-decoration-color: var(--foreground); }
 .prose-doc strong { color: var(--foreground); font-weight: 600; }
+
+/* ─── Marketing site (landing page) ───────────────────────────────────── */
+/* The landing page renders inside a `.dark` scope; everything here is built
+   from the same tokens so it stays in the design system. */
+
+@property --lp-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.lp-root {
+  color-scheme: dark;
+  background-color: var(--background);
+  overflow-x: clip;
+}
+
+/* Soft brand light that sits behind the hero and the closing CTA. */
+.lp-glow {
+  background:
+    radial-gradient(60% 55% at 50% 0%, color-mix(in oklab, var(--brand) 38%, transparent), transparent 70%),
+    radial-gradient(35% 40% at 15% 10%, color-mix(in oklab, var(--chart-4) 18%, transparent), transparent 70%),
+    radial-gradient(35% 40% at 85% 12%, color-mix(in oklab, var(--chart-2) 16%, transparent), transparent 70%);
+  filter: blur(8px);
+}
+.lp-glow-bottom {
+  background: radial-gradient(55% 60% at 50% 100%, color-mix(in oklab, var(--brand) 34%, transparent), transparent 72%);
+}
+
+/* Fine line grid that fades out towards the edges. */
+.lp-grid {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--foreground) 7%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--foreground) 7%, transparent) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black 30%, transparent 75%);
+}
+
+/* Headline text that fades from full to muted foreground. */
+.lp-text-fade {
+  background: linear-gradient(180deg, var(--foreground) 30%, color-mix(in oklab, var(--foreground) 55%, transparent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.lp-text-brand {
+  background: linear-gradient(100deg, var(--brand-text), var(--brand) 45%, color-mix(in oklab, var(--chart-5) 80%, var(--brand)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Glass panel used for product mock-ups. */
+.lp-panel {
+  background: linear-gradient(180deg, color-mix(in oklab, var(--card) 92%, var(--foreground) 8%), var(--card));
+  border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--background) 60%, transparent),
+    0 40px 120px -40px color-mix(in oklab, var(--brand) 35%, transparent),
+    var(--shadow-xl);
+}
+.lp-card {
+  background: linear-gradient(180deg, color-mix(in oklab, var(--card) 85%, var(--foreground) 4%), var(--card));
+  border: 1px solid color-mix(in oklab, var(--foreground) 9%, transparent);
+}
+.lp-card-hover {
+  transition: border-color 200ms ease, transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.lp-card-hover:hover {
+  border-color: color-mix(in oklab, var(--foreground) 18%, transparent);
+}
+
+/* Rotating light around a border (pricing card, hero frame). */
+.lp-beam {
+  position: relative;
+  isolation: isolate;
+}
+.lp-beam::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(from var(--lp-angle), transparent 0 70%, var(--brand) 82%, color-mix(in oklab, var(--chart-5) 70%, var(--brand)) 88%, transparent 96%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: lp-spin 6s linear infinite;
+}
+@keyframes lp-spin {
+  to { --lp-angle: 360deg; }
+}
+
+/* Top highlight line on cards. */
+.lp-sheen {
+  position: relative;
+}
+.lp-sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0 20% auto 20%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--foreground) 35%, transparent), transparent);
+  pointer-events: none;
+}
+
+/* Scroll reveal (components/landing/reveal.tsx). */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(18px);
+  filter: blur(4px);
+  transition:
+    opacity 700ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 700ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 700ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+[data-reveal][data-shown="true"] {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+/* Transform-only, so content is never left invisible if animations don't run. */
+@keyframes lp-rise {
+  from { transform: translateY(28px) scale(0.985); }
+  to { transform: none; }
+}
+.lp-rise {
+  animation: lp-rise 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--rise-delay, 0ms);
+}
+@keyframes lp-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.lp-float { animation: lp-float 6s ease-in-out infinite; }
+@keyframes lp-marquee {
+  to { transform: translateX(-50%); }
+}
+.lp-marquee { animation: lp-marquee 40s linear infinite; }
+@keyframes lp-pop {
+  0% { opacity: 0; transform: translateY(6px) scale(0.96); }
+  100% { opacity: 1; transform: none; }
+}
+.lp-pop { animation: lp-pop 500ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes lp-caret {
+  50% { opacity: 0; }
+}
+.lp-caret { animation: lp-caret 1s steps(1) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] { opacity: 1; transform: none; filter: none; }
+  .lp-beam::before { animation: none; }
+}
