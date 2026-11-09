@@ -8,6 +8,7 @@ import { resolveTrustedOrigins } from "./auth-trusted-origins";
 import { isSystemMailerConfigured, sendSystemEmail } from "@smartreach/email-engine/system-mailer";
 import { buildExistingAccountEmail, buildPasswordResetEmail, buildVerificationEmail } from "./system-emails";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "./password-rules";
+import { notifyAdminsOfSignupInBackground } from "./signup-notify";
 
 /**
  * Better Auth — email/password sessions. The adapter points at the same Neon
@@ -92,6 +93,13 @@ export const auth = betterAuth({
           expiresIn: 60 * 60 * 24, // 24 hours
           sendVerificationEmail: async ({ user, url }: { user: { email: string; name?: string | null }; url: string }) => {
             sendInBackground("verification", user.email, buildVerificationEmail({ name: user.name, url }));
+          },
+          // Tell the admins someone is waiting for approval, only once the
+          // address is verified (never for typos, bots or someone else's
+          // address). Fire-and-forget: never delays verification. Without a
+          // mailer there is no verification and no alert could be sent anyway.
+          afterEmailVerification: async (user: { email: string; name?: string | null; role?: unknown; approvedAt?: unknown }) => {
+            notifyAdminsOfSignupInBackground(user);
           },
         },
       }

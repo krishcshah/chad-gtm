@@ -17,7 +17,7 @@ import {
 import { getDirectoryAccessLevel } from "../b2b-access";
 import { getWorkspaceAiOptions } from "../ai";
 import { ensureChadGtmTables } from "../db";
-import { AUTOPILOT_DAILY_DEFAULT, autopilotCountries } from "../autopilot-policy";
+import { AUTOPILOT_DAILY_DEFAULT, autopilotCountries, clampAutopilotDaily } from "../autopilot-policy";
 import { initialRunReplyMode } from "../lead-conversations-server";
 import type { ToolDefinition } from "./types";
 
@@ -87,6 +87,8 @@ export const persistGtmRunTool: ToolDefinition<
     autopilot?: boolean;
     bookingUrl?: string | null;
     existingRunId?: string | null;
+    /** Emails per day chosen before the run existed (else the agent run's input, else the default). */
+    dailyEmailLimit?: number | null;
   },
   { chadGtmRunId: string }
 > = {
@@ -99,6 +101,7 @@ export const persistGtmRunTool: ToolDefinition<
     autopilot: z.boolean().optional(),
     bookingUrl: z.string().nullable().optional(),
     existingRunId: z.string().nullable().optional(),
+    dailyEmailLimit: z.number().nullable().optional(),
   }),
   outputSchema: z.object({ chadGtmRunId: z.string() }),
   timeoutMs: 30_000,
@@ -139,6 +142,8 @@ export const persistGtmRunTool: ToolDefinition<
       return { chadGtmRunId: input.existingRunId };
     }
     const runId = crypto.randomUUID();
+    // Saved in the insert itself: an approval launch may pick the run up at once.
+    const chosenDaily = input.dailyEmailLimit ?? ctx.run?.input?.dailyEmailLimit;
     await ctx.db.insert(schema.chadGtmRuns).values({
       id: runId,
       userId: ctx.userId,
@@ -150,7 +155,7 @@ export const persistGtmRunTool: ToolDefinition<
       icpProfile: strategy.icpProfile,
       offers: strategy.offers,
       selectedIndustries: strategy.icpProfile.industries || [],
-      dailyEmailLimit: AUTOPILOT_DAILY_DEFAULT,
+      dailyEmailLimit: chosenDaily != null ? clampAutopilotDaily(chosenDaily) : AUTOPILOT_DAILY_DEFAULT,
       approvedEmailSamples: [],
       agentRunId: ctx.run.id,
       bookingUrl: input.bookingUrl || strategy.scrapedData.bookingUrl || null,

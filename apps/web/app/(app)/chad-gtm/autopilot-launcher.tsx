@@ -20,7 +20,14 @@ import {
 import Link from "next/link";
 import { startAutopilotAction, type AutopilotOutcome } from "@/lib/autopilot-actions";
 import { AUTOPILOT_DAILY_DEFAULT } from "@/lib/autopilot-policy";
-import { DailyVolumeInput, VolumeForecast } from "@/components/chad-gtm/velocity-slider";
+import {
+  DailyVolumeInput,
+  PoolCapacityNote,
+  VolumeForecast,
+  expectedPerDay,
+} from "@/components/chad-gtm/velocity-slider";
+import type { CustomerPoolShare } from "@/lib/pool-capacity";
+import { awaitingApprovalText } from "@/lib/approval-copy";
 import { hasCompliantIdentity, type RunPhase } from "@/lib/autopilot-policy";
 import { Page } from "@/components/layout/page";
 import { GUIDED_SETUP_HREF, LaunchDetailsForm } from "./launch-setup";
@@ -64,16 +71,37 @@ function firstAddressLine(address: string): string {
   return address.includes("\n") ? line : line.split(",")[0]!.trim();
 }
 
+/**
+ * The waiting-for-approval note. Approval launches the run only when nothing
+ * else is missing (booking link, company name, postal address), so say what
+ * still has to be added rather than promise a launch that won't happen.
+ */
+export function approvalLaunchNote(input: { hasBooking: boolean; senderComplete: boolean }): string {
+  const missing = [
+    ...(input.hasBooking ? [] : ["your booking link"]),
+    ...(input.senderComplete ? [] : ["your company name and postal address"]),
+  ];
+  const start = "Your account is waiting for approval. Start now: we research and plan right away";
+  if (missing.length === 0) return `${start}, and outreach launches on its own as soon as you're approved.`;
+  return `${start}. Outreach launches on its own once you're approved and you've added ${missing.join(" and ")}.`;
+}
+
 export function AutopilotLauncher({
   runs,
   defaultBookingUrl = null,
   sender = null,
+  poolShare = null,
+  approved = true,
 }: {
   runs: RunSummary[];
   /** The workspace booking link (Settings › Lead conversations), used when this field is empty. */
   defaultBookingUrl?: string | null;
   /** The active workspace's sender identity (#73). */
   sender?: LauncherSender | null;
+  /** What the shared mailboxes can send for this customer right now (null when unknown). */
+  poolShare?: CustomerPoolShare | null;
+  /** False while the account waits for approval. */
+  approved?: boolean;
 }) {
   const senderComplete = Boolean(sender && hasCompliantIdentity(sender));
   const senderWorkspace = sender?.workspaceName.trim() ?? "";
@@ -104,6 +132,8 @@ export function AutopilotLauncher({
     }
     setNeedsDetails(null);
     if (outcome.phase === "live") toast.success(message || "Outreach is live");
+    // Approval launches the run by itself: say so, whatever the server's older wording.
+    else if (outcome.phase === "awaiting_approval") toast.info(awaitingApprovalText());
     else if (message) toast.info(message);
     router.push(`/chad-gtm/${outcome.runId}`);
   };
@@ -205,7 +235,8 @@ export function AutopilotLauncher({
               <div className="mt-3">
                 <DailyVolumeInput id={volumeId} value={dailyLimit} onChange={setDailyLimit} disabled={running} />
               </div>
-              <VolumeForecast perDay={dailyLimit} className="mt-3" />
+              <PoolCapacityNote share={poolShare} perDay={dailyLimit} className="mt-3" />
+              <VolumeForecast perDay={dailyLimit} expected={expectedPerDay(dailyLimit, poolShare)} className="mt-3" />
             </div>
 
             {error && (
@@ -278,6 +309,15 @@ export function AutopilotLauncher({
                 ) : (
                   "Before anything is sent we'll ask for this workspace's company name and postal address."
                 )}
+              </p>
+            )}
+
+            {!approved && (
+              <p data-testid="launcher-awaiting-approval" className="text-[13px] leading-relaxed text-muted-foreground">
+                {approvalLaunchNote({
+                  hasBooking: Boolean(booking.trim() || defaultBookingUrl?.trim()),
+                  senderComplete,
+                })}
               </p>
             )}
 

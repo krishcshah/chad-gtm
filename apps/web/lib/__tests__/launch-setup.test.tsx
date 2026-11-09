@@ -15,7 +15,7 @@ vi.mock("@/lib/autopilot-actions", () => ({
   retryAutopilotResearchAction: vi.fn(),
 }));
 
-import { LaunchDetailsForm, LaunchStatePanel, PlanPreviewCard } from "../../app/(app)/chad-gtm/launch-setup";
+import { LaunchDetailsForm, LaunchStatePanel, PlanPreviewCard, audienceText } from "../../app/(app)/chad-gtm/launch-setup";
 
 async function render(node: React.ReactNode) {
   const host = document.createElement("div");
@@ -51,7 +51,9 @@ describe("LaunchStatePanel", () => {
     const off = await render(
       <LaunchStatePanel runId="r1" phase="awaiting_approval" approved={false} companyLabel="Acme" onChanged={noop} />,
     );
-    expect(off.host.textContent).toContain("Launch unlocks as soon as your account is approved.");
+    // Approval launches only the newest plan: the line says so (any other plan needs Launch).
+    expect(off.host.textContent).toContain("Once your account is approved, your newest plan launches on its own.");
+    expect(off.host.textContent).toContain("Any other plan waits for you to press Launch.");
     expect(off.host.textContent).not.toMatch(/email/i);
     expect(off.host.textContent).not.toMatch(/Check back/i);
     await off.unmount();
@@ -68,8 +70,8 @@ describe("LaunchStatePanel", () => {
       />,
     );
     expect(withReason.host.textContent).not.toMatch(/email/i);
-    expect(withReason.host.textContent).toContain("Launch unlocks");
-    expect(withReason.host.textContent?.match(/Launch unlocks/g)).toHaveLength(1);
+    expect(withReason.host.textContent).toContain("launches on its own");
+    expect(withReason.host.textContent?.match(/launches on its own/g)).toHaveLength(1);
     await withReason.unmount();
   });
 
@@ -305,8 +307,9 @@ describe("PlanPreviewCard", () => {
         preview={{ ...basePreview, audience: { roleMatches: 300, otherRoles: 700, perRun: 500, strictRoles: false } }}
       />,
     );
-    expect(host.textContent).toContain("All 1,000 matching contacts, in priority order");
+    expect(host.textContent).toContain("All 1,000 matching contacts in the countries we send to (United States), in priority order");
     expect(host.textContent).toContain("300 with your job titles first, then 700 other decision-makers and people in your industries");
+    expect(host.textContent).not.toContain("People at your company size go first");
     expect(host.textContent).toContain("Each gets three emails over five days.");
     expect(host.textContent).toContain("People anyone contacted in the last 90 days and opted-out addresses are skipped.");
     await unmount();
@@ -318,8 +321,26 @@ describe("PlanPreviewCard", () => {
         preview={{ ...basePreview, audience: { roleMatches: 300, otherRoles: 700, perRun: 500, strictRoles: true } }}
       />,
     );
-    expect(strict.host.textContent).toContain("All 300 matching contacts, in priority order: only people with your job titles.");
+    expect(strict.host.textContent).toContain(
+      "All 300 matching contacts in the countries we send to (United States), in priority order: only people with your job titles.",
+    );
     await strict.unmount();
+
+    // Company size orders the list; the counts are never narrowed by it.
+    const sized = await render(
+      <PlanPreviewCard
+        preview={{
+          ...basePreview,
+          companySizes: ["11-50"],
+          audience: { roleMatches: 300, otherRoles: 700, perRun: 500, strictRoles: false, bySize: true },
+        }}
+      />,
+    );
+    expect(sized.host.textContent).toContain("All 1,000 matching contacts");
+    expect(sized.host.textContent).toContain("People at your company size go first in each group.");
+    expect(sized.host.textContent).toContain("Company size (contacted first)");
+    expect(sized.host.textContent).not.toContain("and company size");
+    await sized.unmount();
 
     const none = await render(
       <PlanPreviewCard preview={{ ...basePreview, audience: { roleMatches: 0, otherRoles: 0, perRun: 500, strictRoles: false } }} />,
@@ -338,5 +359,14 @@ describe("LaunchStatePanel while launching (#50)", () => {
     const button = Array.from(host.querySelectorAll("button")).find((b) => b.textContent?.includes("Retry launch"));
     expect(button?.disabled).toBe(false);
     await unmount();
+  });
+});
+
+describe("audienceText", () => {
+  it("never says the launch would fail when the count itself failed", () => {
+    const text = audienceText({ roleMatches: 0, otherRoles: 0, perRun: 0, strictRoles: false, unavailable: true }, ["United States"]);
+    expect(text).toContain("We couldn't count the matching contacts just now.");
+    expect(text).not.toMatch(/would fail/);
+    expect(audienceText({ roleMatches: 0, otherRoles: 0, perRun: 0, strictRoles: false })).toMatch(/would fail/);
   });
 });

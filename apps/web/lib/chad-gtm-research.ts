@@ -6,6 +6,7 @@
  */
 
 import { getDirectoryFacets } from "./leads-directory";
+import { directoryIndustriesAsync } from "./directory-search-async";
 import type { AiEngineOptions } from "./ai";
 import { crawlCompanyDomain, type CrawledCompanyProfile, type PricingTier } from "./gtm-crawler";
 import { matchIndustriesInText, RESEARCH_BLOCKED_MESSAGE, type TargetingSource } from "./autopilot-policy";
@@ -136,7 +137,7 @@ export async function scrapeCompanyWebsite(rawUrl: string): Promise<ScrapedCompa
 function buildResearchPrompt(
   scraped: ScrapedCompanyData,
   optionalNotes: string | undefined,
-  topIndustries: string[]
+  directoryIndustries: string[]
 ): string {
   return `You are the best B2B positioning strategist in the world. You have one job: turn a company's website into outbound campaigns that a busy operator would actually reply to.
 
@@ -149,7 +150,8 @@ ${scraped.combinedCorpus || `URL: ${scraped.url}\nTitle: ${scraped.title}\nDescr
 ${optionalNotes || "None provided"}
 
 === AVAILABLE B2B DIRECTORY TARGET INDUSTRIES (CHOOSE 3-5 EXACT MATCHING STRINGS) ===
-${JSON.stringify(topIndustries)}
+${JSON.stringify(directoryIndustries)}
+(Largest first. If the best market is not listed, name it as a standard LinkedIn industry; it is matched against every industry in the directory.)
 
 === WHAT "GOOD" LOOKS LIKE ===
 - Specific beats clever. Name the actual workflow, cost, or failure mode.
@@ -391,8 +393,16 @@ export async function synthesizeGtmStrategy(
   aiOptions?: AiEngineOptions
 ): Promise<SynthesizedGtmStrategy> {
   const facets = getDirectoryFacets();
-  const topIndustries = facets.industries.slice(0, 40).map((i) => i.value);
-  const allIndustries = facets.industries.map((i) => i.value);
+  // Every distinct directory industry (read in the directory worker) is
+  // accepted from the model, not only the facet cache's largest ones. The
+  // prompt lists the largest first; the biggest few are only the fallback
+  // when nothing better is known.
+  const allIndustries = researchIndustries(
+    facets.industries.map((i) => i.value),
+    await directoryIndustriesAsync()
+  );
+  const topIndustries = allIndustries.slice(0, 40);
+  const promptIndustries = allIndustries.slice(0, PROMPT_INDUSTRY_LIMIT);
 
   const explicitProvider = (aiOptions?.provider || "").toLowerCase();
   const openAiKey = process.env.OPENAI_API_KEY;
@@ -407,7 +417,7 @@ export async function synthesizeGtmStrategy(
     return simulateGtmStrategy(scraped, optionalNotes, topIndustries, allIndustries);
   }
 
-  const prompt = buildResearchPrompt(scraped, optionalNotes, topIndustries);
+  const prompt = buildResearchPrompt(scraped, optionalNotes, promptIndustries);
 
   try {
     const rawJson =
@@ -417,9 +427,7 @@ export async function synthesizeGtmStrategy(
 
     const parsed = parseJsonObject(rawJson);
 
-    const industries = Array.isArray(parsed.icpProfile?.industries)
-      ? parsed.icpProfile.industries.filter((ind: string) => topIndustries.includes(ind))
-      : [];
+    const industries = matchDirectoryIndustries(parsed.icpProfile?.industries, allIndustries);
     const modelTitles = Array.isArray(parsed.icpProfile?.targetTitles)
       ? parsed.icpProfile.targetTitles.map((t: unknown) => String(t ?? "").trim()).filter(Boolean)
       : [];
@@ -500,6 +508,53 @@ export async function synthesizeGtmStrategy(
     console.error("[chad-gtm-research] AI synthesis failed, using grounded fallback:", err);
     return simulateGtmStrategy(scraped, optionalNotes, topIndustries, allIndustries);
   }
+}
+
+/** Industries listed in the research prompt; the model may name any other directory industry. */
+export const PROMPT_INDUSTRY_LIMIT = 250;
+
+/**
+ * Industries research may choose: the facet cache's largest first (it keeps
+ * about 200), then every other distinct directory value. Without the
+ * distinct list (directory unreadable) only the facet values.
+ */
+export function researchIndustries(ranked: string[], every: string[] | null): string[] {
+  const out = [...new Set(ranked)];
+  const known = new Set(out);
+  for (const v of every ?? []) {
+    if (!known.has(v)) {
+      known.add(v);
+      out.push(v);
+    }
+  }
+  return out;
+}
+
+/**
+ * The model's industries as exact directory values: exact strings first, then
+ * the same name ignoring case, "&"/"and" and punctuation. Unknown names are
+ * dropped; at most `max`, no repeats.
+ */
+export function matchDirectoryIndustries(chosen: unknown, directory: string[], max = 5): string[] {
+  if (!Array.isArray(chosen)) return [];
+  const key = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/&/g, " and ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  const exact = new Set(directory);
+  const byKey = new Map<string, string>();
+  for (const d of directory) if (!byKey.has(key(d))) byKey.set(key(d), d);
+  const out: string[] = [];
+  for (const raw of chosen) {
+    const name = String(raw ?? "").trim();
+    if (!name) continue;
+    const hit = exact.has(name) ? name : byKey.get(key(name));
+    if (hit && !out.includes(hit)) out.push(hit);
+    if (out.length >= max) break;
+  }
+  return out;
 }
 
 /** Decision makers to target when we only know the industry, not the buyer function. */

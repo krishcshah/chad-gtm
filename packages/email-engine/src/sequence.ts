@@ -9,9 +9,9 @@ import {
   schema,
 } from "@smartreach/database";
 import { addCalendarDays } from "@smartreach/shared";
-import { and, asc, eq, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, like, lte, notInArray, or, sql } from "drizzle-orm";
 import type { EngineDb } from "./db-port";
-import { generateEmailScriptOnTheFly, type CampaignResearchContext, type LeadProfile } from "./ai";
+import type { CampaignResearchContext } from "./ai";
 
 export type SequenceStepRow = {
   id: string;
@@ -171,9 +171,115 @@ export async function loadSentThread(
   return rows.map((r) => ({ step: Number(r.step) || 1, subject: r.subject || "", body: r.bodyText || "" }));
 }
 
+/* ─── Drafts written ahead of sending (drafter.ts) ─────────────────────── */
+
+/** A variant whose email the AI writes per lead. */
+export function isAiVariant(v: Pick<SequenceVariantRow, "aiGenerateOnTheFly" | "aiPrompt">): boolean {
+  return Boolean(v.aiGenerateOnTheFly && v.aiPrompt?.trim());
+}
+
+/** Active (not paused) variants of a step. */
+export function activeVariants<T extends { pausedAt?: string | null }>(variants: readonly T[]): T[] {
+  return variants.filter((v) => !v.pausedAt);
+}
+
+/** A step needs a draft written ahead when any active variant is AI-written. */
+export function isAiStep(variants: readonly SequenceVariantRow[]): boolean {
+  return activeVariants(variants).some(isAiVariant);
+}
+
+/** What the scheduler needs to know about a campaign's AI-written steps. */
+export interface AiStepPlan {
+  /** Step positions that need a ready draft before they can be claimed. */
+  positions: number[];
+  /** Active variant ids of those steps (a draft for a paused/removed variant is stale). */
+  variantIds: string[];
+}
+
+export async function loadAiStepPlan(
+  db: EngineDb,
+  steps: SequenceStepRow[],
+): Promise<{ plan: AiStepPlan; variantsByStep: Map<string, SequenceVariantRow[]> }> {
+  const variantsByStep = new Map<string, SequenceVariantRow[]>();
+  const plan: AiStepPlan = { positions: [], variantIds: [] };
+  for (const step of steps) {
+    const variants = await loadStepVariants(db, step.id);
+    variantsByStep.set(step.id, variants);
+    if (isAiStep(variants)) {
+      plan.positions.push(step.position);
+      plan.variantIds.push(...activeVariants(variants).map((v) => v.id));
+    }
+  }
+  return { plan, variantsByStep };
+}
+
+/** SQL: this row's draft is ready, for its current step, from an active variant. */
+export function readyDraftFilter(variantIds: string[]) {
+  return and(
+    eq(schema.campaignLeads.draftStatus, "ready"),
+    eq(schema.campaignLeads.draftStep, schema.campaignLeads.stepPosition),
+    variantIds.length > 0 ? inArray(schema.campaignLeads.draftVariantId, variantIds) : sql`1=0`,
+  );
+}
+
+/** SQL: the row may be claimed (manual step, or an AI step with a ready draft). */
+export function claimableDraftFilter(plan: AiStepPlan) {
+  if (plan.positions.length === 0) return sql`1=1`;
+  return or(notInArray(schema.campaignLeads.stepPosition, plan.positions), readyDraftFilter(plan.variantIds));
+}
+
+/** draft_error prefix when the model itself is unavailable (no key, provider down). */
+export const WRITING_UNAVAILABLE_PREFIX = "writing-unavailable";
+/** campaign_leads.last_error when the AI could not write a lead's email after every retry. */
+export const COULD_NOT_WRITE_NOTE = "could-not-write";
+
+/** True when queued leads of this campaign are waiting because the model is unavailable. */
+export async function writingUnavailable(db: EngineDb, campaignId: string): Promise<boolean> {
+  const rows: Array<{ id: string }> = await db
+    .select({ id: schema.campaignLeads.id })
+    .from(schema.campaignLeads)
+    .where(
+      and(
+        eq(schema.campaignLeads.campaignId, campaignId),
+        eq(schema.campaignLeads.status, "queued"),
+        eq(schema.campaignLeads.draftStatus, "failed"),
+        like(schema.campaignLeads.draftError, `${WRITING_UNAVAILABLE_PREFIX}%`),
+      ),
+    )
+    .limit(1);
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+/** Draft columns of a campaign_leads row. */
+export interface StoredDraft {
+  draftStep: number | null;
+  draftVariantId: string | null;
+  draftSubject: string | null;
+  draftBodyText: string | null;
+  draftBodyHtml: string | null;
+  draftStatus: string | null;
+}
+
+/** Columns that clear a lead's draft (the lead moved on to another step). */
+export function clearedDraft() {
+  return {
+    draftStep: null,
+    draftVariantId: null,
+    draftSubject: null,
+    draftBodyText: null,
+    draftBodyHtml: null,
+    draftStatus: null,
+    draftAttempts: 0,
+    draftRetryAt: null,
+    draftError: null,
+    draftedAt: null,
+  };
+}
+
 /**
  * Resolve content for a campaign_lead at its current stepPosition.
  * Prefers sequence step+variant when steps exist; else falls back to template.
+ * Never calls the AI: an AI-written step uses the lead's ready draft.
  */
 export async function resolveStepContent(
   db: EngineDb,
@@ -183,97 +289,54 @@ export async function resolveStepContent(
     templateId: string | null;
     vars: Record<string, string | null | undefined>;
     steps: SequenceStepRow[];
-    lead?: any;
-    senderName?: string;
     /** The campaign_leads row, so follow-ups can see what was already sent. */
     campaignLeadId?: string;
-    aiOptions?: {
-      apiKey?: string | null;
-      provider?: string;
-      model?: string;
-    };
+    /** The lead's stored draft (required for AI-written steps). */
+    draft?: StoredDraft | null;
+    /** Variants already loaded for this step (else loaded here). */
+    variants?: SequenceVariantRow[];
   },
 ): Promise<StepContent | { error: string }> {
-  const { steps, stepPosition, templateId, vars, lead, senderName, aiOptions } = opts;
+  const { steps, stepPosition, templateId, vars } = opts;
 
   if (steps.length > 0) {
     const step = steps.find((s) => s.position === stepPosition);
     if (!step) return { error: "sequence-step-missing" };
-    const variants = await loadStepVariants(db, step.id);
-    const picked = pickVariantEqualWeight(variants);
-    if (!picked) return { error: "sequence-variant-missing" };
-
-    let finalSubject = renderWithVarsAndSpintax(picked.subject, vars);
+    const variants = opts.variants ?? (await loadStepVariants(db, step.id));
     // Follow-ups reply in email 1's thread: same subject as what was actually sent.
     const prior = stepPosition > 1 && opts.campaignLeadId ? await loadSentThread(db, opts.campaignLeadId) : [];
     const firstSubject = prior.find((p) => p.step === 1)?.subject?.trim();
-    if (firstSubject) finalSubject = /^re:/i.test(firstSubject) ? firstSubject : `Re: ${firstSubject}`;
-    let finalBodyText = renderWithVarsAndSpintax(picked.bodyText, vars);
-    let finalBodyHtml = renderWithVarsAndSpintax(picked.bodyHtml, vars);
-    let format: "text" | "html" = picked.bodyHtml.trim() ? "html" : "text";
+    const threadSubject = firstSubject ? (/^re:/i.test(firstSubject) ? firstSubject : `Re: ${firstSubject}`) : null;
 
-    if (picked.aiGenerateOnTheFly && picked.aiPrompt?.trim()) {
-      try {
-        const leadProfile: LeadProfile = {
-          email: vars.email || lead?.email || "",
-          firstName: vars.first_name || lead?.firstName || null,
-          lastName: vars.last_name || lead?.lastName || null,
-          company: vars.company || lead?.company || null,
-          jobTitle: vars.job_title || lead?.jobTitle || null,
-          website: vars.website || lead?.website || null,
-          industry: vars.industry || lead?.industry || null,
-          location: vars.location || lead?.location || null,
-          customFields: lead?.customFields || null,
-        };
-
-        const payload = parseAiPromptPayload(picked.aiPrompt);
-
-        const generated = await generateEmailScriptOnTheFly({
-          lead: leadProfile,
-          customInstruction: payload.instruction,
-          campaignContext: payload.campaignContext,
-          styleExamples: payload.styleExamples,
-          negativeConstraints: payload.negativeConstraints,
-          requireSpintax: payload.requireSpintax,
-          senderName,
-          stepPosition,
-          priorEmails: prior,
-          threadSubject: firstSubject,
-          fallbackSubject: finalSubject,
-          fallbackBody: finalBodyText,
-          vars,
-          apiKey: aiOptions?.apiKey,
-          provider: aiOptions?.provider,
-          model: aiOptions?.model,
-          // Real sends never ship heuristic copy: without a working model the
-          // approved baseline variant below is sent instead.
-          onFailure: "throw",
-        });
-
-        // A follow-up never changes the thread's subject.
-        if (generated.subject && !(stepPosition > 1 && firstSubject)) {
-          finalSubject = renderWithVarsAndSpintax(generated.subject, vars);
-        }
-        if (generated.bodyText) {
-          finalBodyText = renderWithVarsAndSpintax(generated.bodyText, vars);
-          finalBodyHtml = generated.bodyHtml
-            ? renderWithVarsAndSpintax(generated.bodyHtml, vars)
-            : `<p>${finalBodyText.replace(/\n/g, "<br>")}</p>`;
-          format = "html";
-        }
-      } catch (aiErr) {
-        console.warn("[scheduler] AI script generation error, falling back to baseline template:", aiErr);
+    if (isAiStep(variants)) {
+      const d = opts.draft;
+      const variant = d ? activeVariants(variants).find((v) => v.id === d.draftVariantId) : undefined;
+      if (!d || d.draftStatus !== "ready" || d.draftStep !== stepPosition || !variant || !d.draftBodyText?.trim()) {
+        return { error: "draft-missing" };
       }
+      const bodyHtml = d.draftBodyHtml?.trim() ? renderWithVarsAndSpintax(d.draftBodyHtml, vars) : "";
+      return {
+        // A follow-up never changes the thread's subject.
+        subject: threadSubject ?? renderWithVarsAndSpintax(d.draftSubject || variant.subject, vars),
+        bodyText: renderWithVarsAndSpintax(d.draftBodyText, vars),
+        bodyHtml,
+        stepPosition,
+        sequenceStepId: step.id,
+        variantId: variant.id,
+        format: bodyHtml.trim() ? "html" : "text",
+      };
     }
 
+    const picked = pickVariantEqualWeight(variants);
+    if (!picked) return { error: "sequence-variant-missing" };
     return {
-      subject: finalSubject,
-      bodyText: finalBodyText,
-      bodyHtml: finalBodyHtml,
+      subject: threadSubject ?? renderWithVarsAndSpintax(picked.subject, vars),
+      bodyText: renderWithVarsAndSpintax(picked.bodyText, vars),
+      bodyHtml: renderWithVarsAndSpintax(picked.bodyHtml, vars),
       stepPosition,
       sequenceStepId: step.id,
       variantId: picked.id,
-      format,
+      format: picked.bodyHtml.trim() ? "html" : "text",
     };
   }
 
@@ -336,6 +399,7 @@ export async function advanceSequenceAfterSend(
         sentAt,
         attempts: sql`${schema.campaignLeads.attempts} + 1`,
         lastError: null,
+        ...clearedDraft(),
         updatedAt: sentAt,
       })
       .where(stillScheduled);
@@ -352,6 +416,8 @@ export async function advanceSequenceAfterSend(
       sentAt,
       attempts: sql`${schema.campaignLeads.attempts} + 1`,
       lastError: null,
+      // The draft was for the step just sent; the drafter writes the next one.
+      ...clearedDraft(),
       updatedAt: sentAt,
     })
     .where(stillScheduled)

@@ -16,6 +16,9 @@ vi.mock("../leads-directory", () => ({
     }),
   }),
   buildDirectoryWhereClause: () => ({ whereSql: "", bindings: [] }),
+  isDirectoryFtsReady: () => false,
+  directoryFingerprint: () => "dir-1",
+  DIRECTORY_ALIVE_SQL: "directory_alive()",
   mapDirectoryRow: (r: any) => r,
   getMatchingDirectoryLeadsForExport: vi.fn(() => dir.leads),
 }));

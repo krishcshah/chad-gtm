@@ -21,6 +21,7 @@ import {
 import { CampaignStatusBadge } from "../campaign-status-badge";
 import { CampaignActions } from "./campaign-actions";
 import { formatPercent } from "./format";
+import { campaignTotalLabel } from "@/lib/audience-summary";
 import { LeadListsSection, type LeadListItem } from "./lead-lists-section";
 
 export interface CampaignListItem {
@@ -32,7 +33,10 @@ export interface CampaignListItem {
   /** Pre-formatted start date, only for scheduled campaigns. */
   scheduledLabel: string | null;
   leadListName: string | null;
+  /** Leads, or an Autopilot run's whole matching audience (lib/audience-summary.ts). */
   total: number;
+  wholeAudience?: boolean;
+  audienceCounting?: boolean;
   sent: number;
   replied: number;
   failed: number;
@@ -230,7 +234,9 @@ export function CampaignTable({
                         <span className="font-medium text-foreground">
                           {c.sent.toLocaleString()}
                         </span>{" "}
-                        of {c.total.toLocaleString()} emailed
+                        {c.audienceCounting
+                          ? "emailed · counting matching contacts"
+                          : `of ${c.total.toLocaleString()} emailed`}
                       </span>
                       <span>
                         <span className="font-medium text-foreground">
@@ -284,9 +290,7 @@ export function CampaignTable({
                             ) : null}
                           </div>
                           <span className="block truncate text-xs text-subtle-foreground">
-                            {c.leadListName ?? "No lead list"} ·{" "}
-                            {c.total.toLocaleString()}{" "}
-                            {c.total === 1 ? "lead" : "leads"}
+                            {c.leadListName ?? "No lead list"} · {campaignTotalLabel(c)}
                           </span>
                         </TableCell>
                         <TableCell>
@@ -318,10 +322,12 @@ export function CampaignTable({
                           <span className="font-medium">
                             {c.sent.toLocaleString()}
                           </span>
-                          <span className="text-muted-foreground">
-                            {" "}
-                            / {c.total.toLocaleString()}
-                          </span>
+                          {c.audienceCounting ? null : (
+                            <span className="text-muted-foreground">
+                              {" "}
+                              / {c.total.toLocaleString()}
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell className="tabular text-right">
                           <span className="font-medium">

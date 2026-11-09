@@ -12,9 +12,9 @@ import { isPostalAddressMissing } from "./postal-hold-policy";
 import {
   LEADS_PER_CAMPAIGN,
   buildRunSequence,
-  fetchTargetedLeads,
+  fetchTargetedLeadsAsync,
   getTargetTitles,
-  launchAudienceCounts,
+  launchAudienceCountsAsync,
   loadComplianceIdentity,
   runStrictRoles,
   runTeamSizes,
@@ -185,6 +185,8 @@ export interface PlanAudience {
   strictRoles: boolean;
   /** Company size narrowed the counts too. */
   bySize?: boolean;
+  /** The directory count failed or timed out: show no numbers, never a zero. */
+  unavailable?: boolean;
 }
 
 function windowLabel(): string {
@@ -196,11 +198,11 @@ function windowLabel(): string {
  * The plan and the baseline emails, rendered for a real matching prospect.
  * Every live email is additionally personalized per lead at send time.
  */
-export function buildPlanPreview(
+export async function buildPlanPreview(
   run: RunRow,
   senderCompany?: string,
   persona?: { name: string; firstName: string; signature: string; poolSize: number } | null
-): PlanPreview {
+): Promise<PlanPreview> {
   const industries = ((run.selectedIndustries as string[]) || []).filter(Boolean);
   const titles = getTargetTitles(run);
   const countries = autopilotCountries();
@@ -212,7 +214,8 @@ export function buildPlanPreview(
   const strictRoles = runStrictRoles(run);
   let sample: { firstName: string; jobTitle: string; companyName: string; industry: string } | null = null;
   try {
-    const leads = fetchTargetedLeads(industries, titles, 1, stableHash(run.id) % 500, {
+    // Read in the directory worker, like the counts below.
+    const leads = await fetchTargetedLeadsAsync(industries, titles, 1, stableHash(run.id) % 500, {
       countries,
       teamSizes,
       strictRoles,
@@ -222,7 +225,8 @@ export function buildPlanPreview(
     sample = null;
   }
 
-  const counts = launchAudienceCounts({ industries, titles, teamSizes, countries });
+  // Counts run in the directory worker: a count over millions of rows never freezes the page.
+  const counts = await launchAudienceCountsAsync({ industries, titles, teamSizes, countries });
   const audience: PlanAudience = {
     ...counts,
     perRun: LEADS_PER_CAMPAIGN,

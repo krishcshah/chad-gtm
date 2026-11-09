@@ -67,6 +67,8 @@ export default async function CampaignsPage() {
     scheduledLabel: c.scheduledAt ? formatDate(c.scheduledAt) : null,
     leadListName: listNames.get(c.id)?.listName ?? null,
     total: Number(c.total || 0),
+    wholeAudience: c.wholeAudience ?? false,
+    audienceCounting: c.audienceCounting ?? false,
     sent: Number(c.sent || 0),
     replied: Number(c.replied || 0),
     failed: Number(c.failed || 0),

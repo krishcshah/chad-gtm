@@ -12,13 +12,18 @@ import { replyAgentTick } from "./reply-agent";
 import { retestFailedSenders } from "./mailbox-health";
 import type { EngineDb } from "./db-port";
 import { heartbeatStats, writeHeartbeat } from "./heartbeat";
+import { kickDrafter, startDrafterLoop, takeDrafterStats } from "./drafter";
 
 export interface EngineTickOptions {
   withSync?: boolean;
+  /** Start a drafter pass if none is running (default true). Never awaited. */
+  draft?: boolean;
 }
 
 export async function engineTick(db: EngineDb, opts: EngineTickOptions = {}) {
   const startedAt = new Date().toISOString();
+  // Emails are written by the drafter on its own: kick a pass, never wait for it.
+  if (opts.draft !== false) kickDrafter(db);
   const sched = await schedulerTick(db);
   const proc = await processTick(db);
   const sync = opts.withSync ? await syncTick(db) : null;
@@ -35,20 +40,26 @@ export async function engineTick(db: EngineDb, opts: EngineTickOptions = {}) {
     console.error("[worker] reply agent tick failed:", err);
     return null;
   });
-  return { startedAt, sched, proc, sync, agent, retest };
+  return { startedAt, sched, proc, sync, agent, retest, draft: takeDrafterStats() };
 }
 
 export interface WorkerLoopOptions {
   intervalMs?: number;
   syncEveryTicks?: number;
+  /** Drafter loop interval (default ENGINE_DRAFT_INTERVAL_MS or 20 s). */
+  draftIntervalMs?: number;
   onTick?: (r: Awaited<ReturnType<typeof engineTick>>) => void;
 }
 
 let running = false;
 let ticks = 0;
 
-/** Plain setInterval loop for Node (long-running). Idempotent. */
+/**
+ * Plain setInterval loop for Node (long-running). Idempotent. The drafter
+ * runs its own loop alongside, so writing never holds up sends or replies.
+ */
 export function startWorkerLoop(db: EngineDb, options: WorkerLoopOptions = {}): () => void {
+  const stopDrafter = startDrafterLoop(db, { intervalMs: options.draftIntervalMs });
   const intervalMs = options.intervalMs ?? Number(process.env.ENGINE_INTERVAL_MS ?? 30_000);
   const syncEvery = options.syncEveryTicks ?? 4;
   const timer = setInterval(async () => {
@@ -66,5 +77,8 @@ export function startWorkerLoop(db: EngineDb, options: WorkerLoopOptions = {}): 
       running = false;
     }
   }, intervalMs);
-  return () => clearInterval(timer);
+  return () => {
+    clearInterval(timer);
+    stopDrafter();
+  };
 }

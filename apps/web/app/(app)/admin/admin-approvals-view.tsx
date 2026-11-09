@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, UserCheck, UserX, UsersRound } from "lucide-react";
 import { formatDate, formatDateTime, timeAgo } from "@smartreach/shared";
 import {
@@ -21,10 +21,33 @@ import {
   toast,
 } from "@smartreach/ui";
 import type { AccountApprovalRow, AccountApprovalsPayload } from "@/lib/account-approvals";
-import { approveUserAction, revokeUserApprovalAction } from "@/lib/admin-actions";
+import type { ApprovalLaunchView } from "@/lib/approval-copy";
+import { approveUserAction, listAccountApprovalsAction, revokeUserApprovalAction } from "@/lib/admin-actions";
 import { NoMatches, SearchField } from "./admin-ui";
 
 type Pending = { kind: "approve" | "revoke"; row: AccountApprovalRow } | null;
+
+/** While a launch runs in the background, re-read the list this often, this many times. */
+const LAUNCH_POLL_MS = 5_000;
+const LAUNCH_POLL_MAX = 36;
+
+const LAUNCH_BADGE: Record<ApprovalLaunchView["status"], "success" | "info" | "warning" | "destructive" | "neutral"> = {
+  live: "success",
+  launching: "info",
+  retrying: "warning",
+  waiting: "warning",
+  paused: "neutral",
+  failed: "destructive",
+};
+
+function LaunchStatus({ launch }: { launch?: ApprovalLaunchView | null }) {
+  if (!launch) return <span className="text-subtle-foreground">None</span>;
+  return (
+    <Badge variant={LAUNCH_BADGE[launch.status]} dot title={launch.detail}>
+      {launch.label}
+    </Badge>
+  );
+}
 
 function websiteHref(url: string): string {
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
@@ -58,6 +81,28 @@ export function AdminApprovalsView({
     onPendingCountChange?.(pending.length);
   }, [pending.length, onPendingCountChange]);
 
+  // Approving launches in the background: re-read the list until no launch is in progress.
+  const polls = useRef(0);
+  const launching = approved.some((r) => r.launch?.status === "launching");
+  useEffect(() => {
+    if (!launching) {
+      polls.current = 0;
+      return;
+    }
+    if (polls.current >= LAUNCH_POLL_MAX) return;
+    const timer = setTimeout(async () => {
+      polls.current += 1;
+      try {
+        const next = await listAccountApprovalsAction();
+        setApproved(next.recentlyApproved);
+        setPending(next.pending);
+      } catch {
+        // Keep what is shown; the next approval or a reload refreshes it.
+      }
+    }, LAUNCH_POLL_MS);
+    return () => clearTimeout(timer);
+  }, [launching, approved]);
+
   const q = search.trim().toLowerCase();
   const visiblePending = useMemo(() => pending.filter((r) => matches(r, q)), [pending, q]);
   const visibleApproved = useMemo(() => approved.filter((r) => matches(r, q)), [approved, q]);
@@ -70,9 +115,14 @@ export function AdminApprovalsView({
         return;
       }
       setPending((prev) => prev.filter((r) => r.userId !== row.userId));
-      setApproved((prev) => [{ ...row, approvedAt: new Date().toISOString(), revokedAt: null }, ...prev]);
+      setApproved((prev) => [
+        { ...row, approvedAt: new Date().toISOString(), revokedAt: null, launch: res.launchView ?? null },
+        ...prev.filter((r) => r.userId !== row.userId),
+      ]);
+      const emailNote = res.emailQueued ? " We'll email them." : "";
       if (res.warning) toast.warning(`${row.email}: ${res.warning}`);
-      else toast.success(`Approved ${row.email}${res.emailed ? " and emailed them." : "."}`);
+      else if (res.launch === "failed") toast.warning(`${row.email}: ${res.outcome}${emailNote}`);
+      else toast.success(`${row.email}: ${res.outcome ?? "Approved."}${emailNote}`);
     } catch {
       toast.error("Could not approve. Try again.");
     }
@@ -99,9 +149,10 @@ export function AdminApprovalsView({
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
-          New accounts can set everything up, but nothing sends until you approve them.{" "}
+          New accounts can set everything up, but nothing sends until you approve them. Approving launches their
+          latest plan that was only waiting on approval.{" "}
           {initial.emailOnApprove
-            ? "Approving emails the user."
+            ? "We email the user what happened."
             : "No system mailer is configured, so approvals are not emailed."}
         </p>
         {pending.length + approved.length > 0 ? (
@@ -145,7 +196,9 @@ export function AdminApprovalsView({
       <Card>
         <CardHeader>
           <CardTitle>Recently approved</CardTitle>
-          <CardDescription>Most recent approvals first. Revoke one to stop that account sending.</CardDescription>
+          <CardDescription>
+            Most recent approvals first, with how their campaign launch went. Revoke one to stop that account sending.
+          </CardDescription>
         </CardHeader>
         {approved.length === 0 ? (
           <EmptyState compact icon={UsersRound} title="No approvals yet" description="Accounts you approve are listed here." />
@@ -156,6 +209,7 @@ export function AdminApprovalsView({
             rows={visibleApproved}
             dateLabel="Approved"
             date={(r) => r.approvedAt}
+            showLaunch
             action={(row) => (
               <Button variant="destructive-outline" size="sm" onClick={() => ask({ kind: "revoke", row })}>
                 <UserX />
@@ -178,8 +232,8 @@ export function AdminApprovalsView({
           confirm?.kind === "revoke"
             ? "Their campaigns stop sending until you approve them again. Their data is kept."
             : initial.emailOnApprove
-              ? "They can start sending right away. We email them to say they are approved."
-              : "They can start sending right away. No email is sent because no system mailer is configured."
+              ? "Their latest plan that was only waiting on approval launches right away. We email them to say what happened."
+              : "Their latest plan that was only waiting on approval launches right away. No email is sent because no system mailer is configured."
         }
         confirmLabel={confirm?.kind === "revoke" ? "Revoke approval" : "Approve account"}
         destructive={confirm?.kind === "revoke"}
@@ -198,11 +252,14 @@ function AccountTable({
   dateLabel,
   date,
   action,
+  showLaunch = false,
 }: {
   rows: AccountApprovalRow[];
   dateLabel: string;
   date: (row: AccountApprovalRow) => string | null;
   action: (row: AccountApprovalRow) => React.ReactNode;
+  /** Add the "Campaign" column: how the approval launch went. */
+  showLaunch?: boolean;
 }) {
   return (
     <div className="mt-4 border-t border-border">
@@ -211,6 +268,7 @@ function AccountTable({
           <TableRow className="hover:bg-transparent">
             <TableHead>Account</TableHead>
             <TableHead>Website</TableHead>
+            {showLaunch ? <TableHead>Campaign</TableHead> : null}
             <TableHead>{dateLabel}</TableHead>
             <TableHead className="text-right">
               <span className="sr-only">Actions</span>
@@ -250,6 +308,11 @@ function AccountTable({
                     <span className="text-subtle-foreground">No run yet</span>
                   )}
                 </TableCell>
+                {showLaunch ? (
+                  <TableCell className="whitespace-nowrap">
+                    <LaunchStatus launch={row.launch} />
+                  </TableCell>
+                ) : null}
                 <TableCell className="whitespace-nowrap text-muted-foreground">
                   <time suppressHydrationWarning dateTime={when ?? undefined} title={formatDateTime(when)}>
                     {timeAgo(when)}

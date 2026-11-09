@@ -83,6 +83,13 @@ describe("describeSendBlock", () => {
     );
   });
 
+  it("writing-unavailable is a warning that says nothing generic is sent", () => {
+    const v = describeSendBlock(campaign({ sendBlockReason: "writing-unavailable" }));
+    expect(v?.tone).toBe("warning");
+    expect(v?.href).toBe("/support");
+    expect(v?.message).toMatch(/No generic emails go out/);
+  });
+
   it("has copy for every reason the engine records", () => {
     for (const reason of SEND_BLOCK_REASONS) {
       const v = describeSendBlock(campaign({ sendBlockReason: reason }), WED_MORNING);

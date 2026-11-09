@@ -8,6 +8,7 @@ import { getDirectoryFacets } from "@/lib/leads-directory";
 import { loadLaunchContext, runLaunchState } from "@/lib/autopilot-state";
 import { Page } from "@/components/layout/page";
 import { guidedResumeStep } from "@/lib/autopilot-policy";
+import { loadCustomerPoolShareSafe } from "@/lib/pool-share";
 import { ChadGtmWizard, type WizardResume } from "./chad-gtm-wizard";
 import { AutopilotLauncher, type RunSummary } from "./autopilot-launcher";
 
@@ -63,9 +64,10 @@ export default async function ChadGtmPage({
         step: guidedResumeStep(draft),
       };
     }
+    const poolShare = await loadCustomerPoolShareSafe(getDb(), user.id);
     return (
       <Page width="narrow">
-        <ChadGtmWizard allIndustries={facets.industries.map((i) => i.value)} resume={resume} />
+        <ChadGtmWizard allIndustries={facets.industries.map((i) => i.value)} resume={resume} poolShare={poolShare} />
       </Page>
     );
   }
@@ -118,9 +120,13 @@ export default async function ChadGtmPage({
     }),
   );
 
+  const poolShare = await loadCustomerPoolShareSafe(db, user.id);
+
   return (
     <AutopilotLauncher
       runs={runs}
+      poolShare={poolShare}
+      approved={ctx.approved}
       defaultBookingUrl={ctx.defaultBookingUrl ?? null}
       // A new run goes in the active workspace, so its footer carries this identity (#73).
       sender={{

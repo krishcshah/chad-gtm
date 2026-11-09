@@ -75,7 +75,12 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_leads_company ON leads(company_name);
   CREATE INDEX IF NOT EXISTS idx_leads_job_title ON leads(job_title);
   CREATE INDEX IF NOT EXISTS idx_leads_email ON leads(email);
+  CREATE TABLE IF NOT EXISTS directory_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '');
 `);
+// A fresh file is a new directory: its own version makes Autopilot audiences
+// walk it from the start after a swap (docs/directory-swap.md).
+db.prepare("INSERT INTO directory_meta(key, value) VALUES('directory_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+  .run(`build-${new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14)}-${Math.random().toString(36).slice(2, 8)}`);
 
 const insertStmt = db.prepare(`
   INSERT INTO leads (

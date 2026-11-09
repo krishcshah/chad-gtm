@@ -9,11 +9,13 @@ import { isAdmin } from "./admin";
 import { getUserDetailedActivity } from "./admin-analytics";
 import {
   isValidUserId,
+  latestApprovalLaunchByUser,
   latestWebsiteByUser,
   toApprovalRows,
   type AccountApprovalsPayload,
 } from "./account-approvals";
-import { buildApprovalEmail } from "./system-emails";
+import { after } from "next/server";
+import { approvalLaunchView, approvalOutcomeText, type ApprovalLaunchNote, type ApprovalLaunchView } from "./approval-copy";
 
 export async function fetchUserDetailAction(targetUserId: string) {
   const user = await requireUser();
@@ -84,34 +86,75 @@ export async function listAccountApprovalsAction(): Promise<AccountApprovalsPayl
     : [];
   const websites = latestWebsiteByUser(runs);
 
+  // How each recent approval's launch went (calibration_profile.approvalLaunch on the run).
+  const approvedIds = approvedUsers.map((u) => u.id);
+  const cp = schema.chadGtmRuns.calibrationProfile;
+  const launchRows = approvedIds.length
+    ? await db
+        .select({
+          id: schema.chadGtmRuns.id,
+          userId: schema.chadGtmRuns.userId,
+          campaignId: schema.chadGtmRuns.campaignId,
+          record: sql<unknown>`${cp}->'approvalLaunch'`,
+        })
+        .from(schema.chadGtmRuns)
+        .where(and(inArray(schema.chadGtmRuns.userId, approvedIds), sql`(${cp}->'approvalLaunch') is not null`))
+        .catch((err) => {
+          console.error("[listAccountApprovalsAction] launch status lookup failed:", err instanceof Error ? err.message : err);
+          return [] as Array<{ id: string; userId: string; campaignId: string | null; record: unknown }>;
+        })
+    : [];
+  const launches = latestApprovalLaunchByUser(launchRows);
+
   const { isSystemMailerConfigured } = await import("@smartreach/email-engine/system-mailer");
   return {
     pending: toApprovalRows(pendingUsers, websites),
-    recentlyApproved: toApprovalRows(approvedUsers, websites),
+    recentlyApproved: toApprovalRows(approvedUsers, websites, launches),
     emailOnApprove: isSystemMailerConfigured(),
   };
 }
 
 export type ApprovalActionResult =
-  | { ok: true; emailed: boolean; warning?: string }
+  | {
+      ok: true;
+      /** An email to the user is queued (it goes out after the launch is tried). */
+      emailQueued: boolean;
+      warning?: string;
+      /** What approving does (approve only): "launching" runs in the background. */
+      launch?: ApprovalLaunchNote["kind"];
+      /** Admin-facing result, e.g. "Approved. Launching their campaign now." */
+      outcome?: string;
+      /** The approvals-list badge for this account right after approving. */
+      launchView?: ApprovalLaunchView | null;
+    }
   | { ok: false; error: string };
 
-/** Lead conversations held while the account was on hold (one per lead, or address, per campaign). */
-async function countHeldConversations(db: ReturnType<typeof getDb>, userId: string): Promise<number> {
+/**
+ * Run `task` after the response is sent (next/server after()), so the admin's
+ * request never waits on a launch. Outside a request (scripts, tests) it runs
+ * as a fire-and-forget promise; the web process is long-running. Never throws.
+ */
+function runAfterResponse(label: string, task: () => Promise<void>): void {
+  const safe = async () => {
+    try {
+      await task();
+    } catch (err) {
+      console.error(`[${label}] background task failed:`, err instanceof Error ? err.message : err);
+    }
+  };
   try {
-    const [row] = await db
-      .select({
-        n: sql<number>`count(distinct coalesce(${schema.replies.leadId}, lower(${schema.replies.fromEmail})) || '|' || coalesce(${schema.replies.campaignId}, ''))`,
-      })
-      .from(schema.replies)
-      .where(and(eq(schema.replies.userId, userId), eq(schema.replies.agentStatus, "held")));
-    return Number(row?.n || 0);
+    after(safe);
   } catch {
-    return 0;
+    void safe();
   }
 }
 
-/** Approve an account to send from the shared pool; emails the user when possible. */
+/**
+ * Approve an account to send from the shared pool. Returns at once: the one
+ * run that was only waiting on approval launches in the background, then the
+ * user is emailed what happened; the approvals list shows how it went.
+ * Temporary launch failures retry on their own (lib/autopilot-advance.ts).
+ */
 export async function approveUserAction(targetUserId: string): Promise<ApprovalActionResult> {
   try {
     await requireAdminUser();
@@ -130,36 +173,46 @@ export async function approveUserAction(targetUserId: string): Promise<ApprovalA
       .where(and(eq(schema.users.id, targetUserId), isNull(schema.users.approvedAt)))
       .returning({ email: schema.users.email, name: schema.users.name });
     revalidatePath("/admin");
-    if (!row) return { ok: true, emailed: false, warning: "Account was already approved (or no longer exists)." };
+    if (!row) return { ok: true, emailQueued: false, warning: "Account was already approved (or no longer exists)." };
 
-    const { isSystemMailerConfigured, sendSystemEmail } = await import("@smartreach/email-engine/system-mailer");
-    if (!isSystemMailerConfigured()) {
-      return { ok: true, emailed: false, warning: "Approved. No system mailer configured, so no email was sent." };
-    }
-    try {
-      // Approval does not launch anything: link the client to their latest run to launch it.
-      const [latestRun] = await db
-        .select({ id: schema.chadGtmRuns.id })
-        .from(schema.chadGtmRuns)
-        .where(eq(schema.chadGtmRuns.userId, targetUserId))
-        .orderBy(desc(schema.chadGtmRuns.createdAt))
-        .limit(1)
-        .catch(() => [] as Array<{ id: string }>);
-      // Approval never sends to leads: the reply agent's next tick opens Needs you cards for these.
-      const waitingCount = await countHeldConversations(db, targetUserId);
-      const email = buildApprovalEmail({
-        name: row.name,
-        appUrl: process.env.APP_URL,
-        runId: latestRun?.id,
-        waitingCount,
-        reapproved,
-      });
-      await sendSystemEmail({ to: row.email, ...email });
-      return { ok: true, emailed: true };
-    } catch (err) {
-      console.error("[approveUserAction] approval email failed:", err instanceof Error ? err.message : err);
-      return { ok: true, emailed: false, warning: "Approved, but the approval email could not be sent." };
-    }
+    const advance = await import("./autopilot-advance");
+    // Quick: picks the run and records the queued launch. Never fails the approval.
+    const plan = await advance.beginApprovalLaunch(targetUserId, { reapproved }).catch((err) => {
+      console.error("[approveUserAction] could not plan the launch:", err instanceof Error ? err.message : err);
+      return null;
+    });
+    runAfterResponse("approveUserAction", () => advance.finishApprovalLaunch(targetUserId, plan));
+
+    const note: ApprovalLaunchNote = plan?.note ?? { kind: "failed" };
+    const outcome = approvalOutcomeText(note, reapproved, Boolean(plan?.latestRunId));
+    const runId = "runId" in note ? note.runId : undefined;
+    const launchView =
+      plan && runId
+        ? approvalLaunchView(
+            {
+              state: note.kind === "launching" ? "launching" : "done",
+              note,
+              approvedAt: new Date().toISOString(),
+              attempts: 0,
+              nextAttemptAt: null,
+              emailPending: false,
+              reapproved,
+              notStarted: plan.notStarted,
+              updatedAt: new Date().toISOString(),
+            },
+            { id: runId, campaignId: null },
+          )
+        : null;
+    const { isSystemMailerConfigured } = await import("@smartreach/email-engine/system-mailer");
+    const mailer = isSystemMailerConfigured();
+    return {
+      ok: true,
+      emailQueued: mailer,
+      launch: note.kind,
+      outcome,
+      launchView,
+      ...(mailer ? {} : { warning: `${outcome} No system mailer configured, so no email will be sent.` }),
+    };
   } catch (err) {
     rethrowIfNavigation(err);
     return { ok: false, error: err instanceof Error ? err.message : "Could not approve account." };
@@ -180,7 +233,7 @@ export async function revokeUserApprovalAction(targetUserId: string): Promise<Ap
       .returning({ id: schema.users.id });
     revalidatePath("/admin");
     if (rows.length === 0) return { ok: false, error: "Account not found, or it is an admin." };
-    return { ok: true, emailed: false };
+    return { ok: true, emailQueued: false };
   } catch (err) {
     rethrowIfNavigation(err);
     return { ok: false, error: err instanceof Error ? err.message : "Could not revoke approval." };

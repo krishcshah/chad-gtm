@@ -4,6 +4,7 @@ import { getDb } from "./db";
 import { summarizeUniboxThreads } from "./unibox-conversations";
 import { isUsablePostalAddress } from "./campaign-start-guard";
 import { leadsEmailedSql, repliedLeadsSql } from "./analytics";
+import { campaignListTotal } from "./audience-summary";
 import {
   contactCooldownSince,
   listSendabilityCounts,
@@ -278,6 +279,8 @@ export async function getActiveCampaigns(userId: string, workspaceId?: string, i
         // Leads emailed and leads who replied (lib/analytics.ts).
         sent: leadsEmailedSql(campaigns.id),
         replied: repliedLeadsSql(campaigns.id),
+        // Autopilot: the whole audience, not the batch loaded so far.
+        audience: runAudienceSql(campaigns.id),
       })
       .from(campaigns)
       .leftJoin(campaignLeads, eq(campaignLeads.campaignId, campaigns.id))
@@ -293,12 +296,17 @@ export async function getActiveCampaigns(userId: string, workspaceId?: string, i
       )
       .orderBy(desc(campaigns.createdAt))
       .limit(20)
-  ).map((r) => ({
-    ...r,
-    total: Number(r.total ?? 0),
-    sent: Number(r.sent ?? 0),
-    replied: Number(r.replied ?? 0),
-  }));
+  ).map(({ audience, ...r }) => {
+    const t = campaignListTotal(audience, Number(r.total ?? 0));
+    return {
+      ...r,
+      total: t.total,
+      wholeAudience: t.wholeAudience,
+      audienceCounting: t.counting,
+      sent: Number(r.sent ?? 0),
+      replied: Number(r.replied ?? 0),
+    };
+  });
 }
 
 export async function listLeadLists(
@@ -525,7 +533,12 @@ export interface CampaignRow {
   status: string;
   createdAt: string | null;
   scheduledAt: string | null;
+  /** Leads in the campaign; for an Autopilot run, its whole matching audience (campaignListTotal). */
   total: number;
+  /** Autopilot: `total` is the whole matching audience, not the contacts loaded so far. */
+  wholeAudience?: boolean;
+  /** Autopilot: the audience is still being counted (`total` is what is loaded so far). */
+  audienceCounting?: boolean;
   /** Leads emailed (each lead once, non-dry-run sends), not emails. */
   sent: number;
   /** Leads who replied, not reply messages. */
@@ -534,6 +547,11 @@ export interface CampaignRow {
   bounced: number;
   /** The Autopilot run that manages this campaign, or null for a manual campaign. */
   autopilotRunId: string | null;
+}
+
+/** An Autopilot run's stored audience for the campaign in `campaignIdCol` (null for manual campaigns). */
+function runAudienceSql(campaignIdCol: unknown) {
+  return sql<unknown>`(select r.audience from chad_gtm_runs r where r.campaign_id = ${campaignIdCol} order by r.created_at desc limit 1)`;
 }
 
 export async function listCampaigns(userId: string, workspaceId?: string, isDefault = false): Promise<CampaignRow[]> {
@@ -559,21 +577,27 @@ export async function listCampaigns(userId: string, workspaceId?: string, isDefa
         where ej.campaign_id = ${campaigns.id} and ej.status = 'bounced'
       ), 0)`,
       autopilotRunId: sql<string | null>`(select r.id from chad_gtm_runs r where r.campaign_id = ${campaigns.id} limit 1)`,
+      audience: runAudienceSql(campaigns.id),
     })
     .from(campaigns)
     .leftJoin(campaignLeads, eq(campaignLeads.campaignId, campaigns.id))
     .where(and(...conds))
     .groupBy(campaigns.id)
     .orderBy(desc(campaigns.createdAt));
-  return rows.map((r) => ({
-    ...r,
-    total: Number(r.total ?? 0),
-    sent: Number(r.sent ?? 0),
-    replied: Number(r.replied ?? 0),
-    failed: Number(r.failed ?? 0),
-    bounced: Number(r.bounced ?? 0),
-    autopilotRunId: r.autopilotRunId ?? null,
-  })) as CampaignRow[];
+  return rows.map(({ audience, ...r }) => {
+    const t = campaignListTotal(audience, Number(r.total ?? 0));
+    return {
+      ...r,
+      total: t.total,
+      wholeAudience: t.wholeAudience,
+      audienceCounting: t.counting,
+      sent: Number(r.sent ?? 0),
+      replied: Number(r.replied ?? 0),
+      failed: Number(r.failed ?? 0),
+      bounced: Number(r.bounced ?? 0),
+      autopilotRunId: r.autopilotRunId ?? null,
+    };
+  }) as CampaignRow[];
 }
 
 export async function getCampaign(userId: string, id: string, workspaceId?: string, isDefault = false) {

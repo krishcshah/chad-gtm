@@ -7,6 +7,7 @@ vi.mock("../approval", () => ({ isApprovedToSend: vi.fn(async () => true) }));
 vi.mock("../gtm-launch", () => ({
   buildRunSequence: vi.fn(),
   fetchTargetedLeads: vi.fn(() => []),
+  fetchTargetedLeadsAsync: vi.fn(async () => []),
   getTargetTitles: vi.fn(() => []),
   loadComplianceIdentity: vi.fn(async () => ({ companyName: "Legal Co Ltd", postalAddress: "1 Main St, Springfield, IL 62701" })),
   stableHash: vi.fn(() => 0),

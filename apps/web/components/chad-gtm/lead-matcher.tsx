@@ -52,6 +52,7 @@ export function LeadMatcher({
   const strictId = useId();
   const [industrySearch, setIndustrySearch] = useState("");
   const [totalLeads, setTotalLeads] = useState<number | null>(null);
+  const [countUnavailable, setCountUnavailable] = useState(false);
   const [sampleLeads, setSampleLeads] = useState<DirectoryLead[]>([]);
   const [audience, setAudience] = useState<{
     roleMatches: number;
@@ -73,6 +74,7 @@ export function LeadMatcher({
       if (id !== requestId.current) return; // A newer selection is already loading.
       if (res.ok) {
         setTotalLeads(res.total);
+        setCountUnavailable(Boolean(res.countUnavailable));
         setSampleLeads(res.leads);
         setAudience({
           roleMatches: res.roleMatches ?? res.total,
@@ -143,7 +145,9 @@ export function LeadMatcher({
               <p className="text-[13px] text-muted-foreground" aria-live="polite">
                 {loadingFirst ? (
                   "Counting contacts…"
-                ) : totalLeads === null ? null : (
+                ) : totalLeads === null ? null : countUnavailable ? (
+                  <>Couldn&apos;t count contacts right now{isPending ? ", updating…" : ""}</>
+                ) : (
                   <>
                     All{" "}
                     <span className="tabular font-semibold text-foreground">{totalLeads.toLocaleString()}</span>{" "}
@@ -152,20 +156,21 @@ export function LeadMatcher({
                 )}
               </p>
             </div>
-            {audience && totalLeads !== null && totalLeads > 0 && (
+            {audience && totalLeads !== null && totalLeads > 0 && !countUnavailable && (
               <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
                 {strictRoles ? (
                   <>
-                    {audience.roleMatches.toLocaleString()} match your job titles{audience.bySize ? " and company size" : ""}.
-                    Others in your industries are not contacted.
+                    {audience.roleMatches.toLocaleString()} match your job titles. Others in your industries are not
+                    contacted.
                   </>
                 ) : (
                   <>
-                    {audience.roleMatches.toLocaleString()} match your job titles{audience.bySize ? " and company size" : ""},{" "}
+                    {audience.roleMatches.toLocaleString()} match your job titles,{" "}
                     {audience.otherRoles.toLocaleString()} are others in your industries.
                   </>
                 )}{" "}
-                {LAUNCH_AUDIENCE_NOTE}
+                All are in the countries we send to.
+                {audience.bySize ? " People at your company size go first." : ""} {LAUNCH_AUDIENCE_NOTE}
               </p>
             )}
             <div className="mt-3 flex items-start justify-between gap-4 rounded-lg border border-border px-4 py-3">
@@ -174,7 +179,7 @@ export function LeadMatcher({
                   Only contact people with these job titles
                 </label>
                 <p id={`${strictId}-hint`} className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  Off: if too few people match your job titles, we fill the run with others in your industries.
+                  Off: after people with your job titles, we also contact other decision-makers and everyone else in your industries.
                 </p>
               </div>
               <Switch

@@ -113,6 +113,14 @@ export function describeSendBlock(
         href: `/campaigns/${c.id}?tab=sequence`,
         actionLabel: "Open sequence",
       };
+    case "writing-unavailable":
+      return {
+        tone: "warning",
+        message:
+          "Emails are on hold: AutoGTM can't write them right now. No generic emails go out. Sending picks up on its own; contact support if this lasts.",
+        href: SUPPORT_HREF,
+        actionLabel: "Contact support",
+      };
     default:
       return null;
   }

@@ -30,6 +30,11 @@ const requireUser = vi.fn();
 vi.mock("../session", () => ({ requireUser: () => requireUser() }));
 vi.mock("../admin-analytics", () => ({ getUserDetailedActivity: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("../autopilot-advance", () => ({
+  beginApprovalLaunch: async () => ({ note: { kind: "none" }, holdUntil: null, notStarted: [], latestRunId: null, reapproved: false }),
+  finishApprovalLaunch: async () => {},
+}));
+vi.mock("next/server", () => ({ after: (task: () => Promise<void>) => void task() }));
 vi.mock("@smartreach/email-engine/system-mailer", () => ({
   isSystemMailerConfigured: () => false,
   sendSystemEmail: vi.fn(),
