@@ -45,7 +45,11 @@ async function main(): Promise<void> {
   const { db } = createDb(url);
   const intervalMs = Number(process.env.ENGINE_INTERVAL_MS ?? 30_000);
 
+  const { draftConcurrency, draftIntervalMs } = await import("./drafter");
   console.log(`[engine] AutoGTM sending engine online — tick every ${intervalMs}ms`);
+  console.log(
+    `[engine] drafter writes emails ahead of sending — ${draftConcurrency()} at a time, pass every ${draftIntervalMs()}ms`,
+  );
 
   // Never let a stray async failure take down the dispatch loop. PM2 restarts
   // are acceptable for a hard crash, but a single bad IMAP socket should not

@@ -75,8 +75,12 @@ const EXTRA_PAGES = 3;
 
 const cache = new Map<string, { at: number; value: CompanyResearch }>();
 
+/** Lookups in progress, so parallel drafts for one domain share one fetch. */
+const inflight = new Map<string, Promise<CompanyResearch>>();
+
 export function clearCompanyResearchCache() {
   cache.clear();
+  inflight.clear();
 }
 
 /** Domain from a website or a work email; "" unless it is a valid public hostname. */
@@ -462,7 +466,21 @@ export async function researchCompany(
   const key = `${domain}|${focusKey(focus)}`;
   const hit = cache.get(key);
   if (hit && now - hit.at < (hit.value.fetched ? OK_TTL_MS : FAIL_TTL_MS)) return hit.value;
+  const pending = inflight.get(key);
+  if (pending) return pending;
+  const run = lookUpCompany(domain, key, input, deps, focus, now).finally(() => inflight.delete(key));
+  inflight.set(key, run);
+  return run;
+}
 
+async function lookUpCompany(
+  domain: string,
+  key: string,
+  input: { company?: string | null },
+  deps: ResearchDeps,
+  focus: ResearchFocus,
+  now: number,
+): Promise<CompanyResearch> {
   let result: CompanyResearch = {
     domain,
     fetched: false,

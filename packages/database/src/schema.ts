@@ -411,6 +411,24 @@ export const campaignLeads = pgTable(
     scheduledFor: text("scheduled_for"),
     sentAt: text("sent_at"),
     lastError: text("last_error"),
+    /*
+     * AI-written email for the current step, written ahead of sending by the
+     * drafter (packages/email-engine/src/drafter.ts). Valid only while
+     * draftStep = stepPosition; cleared when the lead moves to the next step.
+     * Bodies hold {{sender_name}} and other {{vars}}, filled in at schedule time.
+     */
+    draftStep: integer("draft_step"),
+    draftVariantId: text("draft_variant_id"),
+    draftSubject: text("draft_subject"),
+    draftBodyText: text("draft_body_text"),
+    draftBodyHtml: text("draft_body_html"),
+    /** drafting (being written) | ready | failed (waiting to retry). */
+    draftStatus: text("draft_status", { enum: ["drafting", "ready", "failed"] }),
+    draftAttempts: integer("draft_attempts").notNull().default(0),
+    /** Next try after a failure; while drafting, when the claim expires. */
+    draftRetryAt: text("draft_retry_at"),
+    draftError: text("draft_error"),
+    draftedAt: text("drafted_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -419,6 +437,7 @@ export const campaignLeads = pgTable(
     index("campaign_leads_sched_idx").on(t.campaignId, t.status, t.scheduledFor),
     index("campaign_leads_lead_idx").on(t.leadId),
     index("campaign_leads_queue_order_idx").on(t.campaignId, t.status, t.stepPosition, t.priority),
+    index("campaign_leads_draft_idx").on(t.campaignId, t.status, t.draftStatus).where(sql`${t.draftStatus} is not null`),
   ],
 );
 

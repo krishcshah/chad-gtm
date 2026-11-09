@@ -16,12 +16,16 @@ import {
   TableRow,
 } from "@smartreach/ui";
 import { describeSendBlock, type SendBlockCampaign } from "@/lib/send-block";
+import { campaignTotalLabel } from "@/lib/audience-summary";
 import { CampaignStatusBadge } from "../campaign-status-badge";
 import { CampaignSendStatus } from "../campaign-send-status";
 
 interface CampaignItem extends SendBlockCampaign {
   name: string;
+  /** Leads, or an Autopilot run's whole matching audience (lib/audience-summary.ts). */
   total: number;
+  wholeAudience?: boolean;
+  audienceCounting?: boolean;
   sent: number;
   replied: number;
 }
@@ -78,19 +82,23 @@ export function PerformanceBreakdown({
                       <Link href={`/campaigns/${c.id}`} className="block truncate font-medium hover:underline">
                         {c.name}
                       </Link>
-                      <span className="text-xs text-subtle-foreground">{c.total.toLocaleString()} leads</span>
+                      <span className="text-xs text-subtle-foreground">{campaignTotalLabel(c)}</span>
                       <CampaignSendStatus view={describeSendBlock(c, now)} compact className="mt-1" />
                     </TableCell>
                     <TableCell>
                       <CampaignStatusBadge status={c.status} held={postalHeld} />
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Progress value={pct} className="h-1.5 flex-1" aria-label={`${pct}% of leads emailed`} />
-                        <span className="tabular w-16 shrink-0 text-right text-xs text-muted-foreground">
-                          {c.sent.toLocaleString()} / {c.total.toLocaleString()}
-                        </span>
-                      </div>
+                      {c.audienceCounting ? (
+                        <span className="tabular text-xs text-muted-foreground">{c.sent.toLocaleString()} emailed so far</span>
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          <Progress value={pct} className="h-1.5 flex-1" aria-label={`${pct}% of leads emailed`} />
+                          <span className="tabular w-16 shrink-0 text-right text-xs text-muted-foreground">
+                            {c.sent.toLocaleString()} / {c.total.toLocaleString()}
+                          </span>
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="tabular text-right font-medium">{c.replied.toLocaleString()}</TableCell>
                   </TableRow>

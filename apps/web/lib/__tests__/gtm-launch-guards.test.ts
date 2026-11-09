@@ -15,18 +15,25 @@ const dir = vi.hoisted(() => ({
   previewTotals: { withTitles: 0, withoutTitles: 0 },
   previewThrows: false,
   previewCalls: [] as any[],
+  sqls: [] as string[],
 }));
 
 vi.mock("../leads-directory", () => ({
   getMatchingDirectoryLeadsForExport: vi.fn(() => dir.leads),
   getDirectoryDb: () => ({
     // Keyset pages over the fixture rows (the audience reads the directory this way).
-    prepare: () => ({
-      all: (...args: any[]) => (dir.leads).filter((l: any) => Number(l.id) > Number(args[args.length - 2])).slice(0, Number(args[args.length - 1])),
-      get: () => ({ c: (dir.leads).length }),
-    }),
+    prepare: (sql: string) => {
+      dir.sqls.push(sql);
+      return {
+        all: (...args: any[]) => (dir.leads).filter((l: any) => Number(l.id) > Number(args[args.length - 2])).slice(0, Number(args[args.length - 1])),
+        get: () => ({ c: (dir.leads).length }),
+      };
+    },
   }),
   buildDirectoryWhereClause: () => ({ whereSql: "", bindings: [] }),
+  isDirectoryFtsReady: () => false,
+  directoryFingerprint: () => "dir-1",
+  DIRECTORY_ALIVE_SQL: "directory_alive()",
   mapDirectoryRow: (r: any) => r,
     searchLeadMatcherPreview: vi.fn((industries: string[], countries: string[], page: number, pageSize: number, filters: any = {}) => {
     dir.previewCalls.push({ industries, countries, page, pageSize, filters });
@@ -147,17 +154,31 @@ describe("fetchTargetedLeadsWithSplit (#57)", () => {
         : [lead({ email: "a@acme.com", workEmail: "a@acme.com" }), lead({ email: "c@beta.com", workEmail: "c@beta.com" })],
     );
 
-  it("passes team sizes to both the title query and the fallback query", () => {
-    const q = query();
-    fetchTargetedLeadsWithSplit(["Restaurants"], ["Owner"], 5, 0, {
+  it("puts people at the team sizes first without leaving anyone else out", () => {
+    const q = vi.fn<DirectoryQuery>((params) => {
+      const sized = Boolean(params.teamSizes);
+      if (params.jobTitles) return [lead({ email: sized ? "a@acme.com" : "b@acme.com", workEmail: sized ? "a@acme.com" : "b@acme.com" })];
+      return [lead({ email: sized ? "c@beta.com" : "d@beta.com", workEmail: sized ? "c@beta.com" : "d@beta.com" })];
+    });
+    const out = fetchTargetedLeadsWithSplit(["Restaurants"], ["Owner"], 5, 0, {
       countries: ["United States"],
       query: q,
       teamSizes: ["11-50", "51"],
     });
-    expect(q).toHaveBeenCalledTimes(2);
-    expect(q.mock.calls[0]![0]).toMatchObject({ jobTitles: ["Owner"], teamSizes: ["11-50", "51"] });
-    expect(q.mock.calls[1]![0]).toMatchObject({ teamSizes: ["11-50", "51"] });
-    expect(q.mock.calls[1]![0].jobTitles).toBeUndefined();
+    expect(out.leads.map((l) => l.email)).toEqual(["a@acme.com", "b@acme.com", "c@beta.com", "d@beta.com"]);
+    expect(out.roleMatches).toBe(2);
+    expect(q.mock.calls.map((c) => [Boolean(c[0].jobTitles), c[0].teamSizes ?? null])).toEqual([
+      [true, ["11-50", "51"]],
+      [true, null],
+      [false, ["11-50", "51"]],
+      [false, null],
+    ]);
+  });
+
+  it("stops at the sized query when it already fills the request", () => {
+    const q = query();
+    fetchTargetedLeadsWithSplit(["Restaurants"], ["Owner"], 1, 0, { countries: ["United States"], query: q, teamSizes: ["11-50"] });
+    expect(q).toHaveBeenCalledTimes(1);
   });
 
   it("with strictRoles makes exactly one query (no industry-only top-up)", () => {
@@ -312,6 +333,28 @@ describe("launchRunCampaign guards", () => {
     expect(inserts).toEqual([]);
   });
 
+  it("fails with no_leads when the only matches have personal or ISP addresses", async () => {
+    // Matched rows, but none is contactable: nobody to email, not "already contacted".
+    dir.leads = [lead({ email: "ana@yahoo.com", workEmail: "" }), lead({ id: 2, email: "bo@gmail.com", workEmail: "bo@gmail.com" })];
+    const { db, inserts } = fakeDb([goodIdentity, [{ id: "s1" }], [], []]);
+    const err = await launchRunCampaign(db, { run, userId: "u1", workspaceId: null, dailyLimit: 60, approvedSamples: [] }).catch(
+      (e) => e,
+    );
+    expect(err.code).toBe("no_leads");
+    expect(inserts).not.toContain(schema.campaigns);
+  });
+
+  it("fails with all_contacted when contactable people match but every one is blocked", async () => {
+    dir.leads = [lead({ email: "ana@acme.com", workEmail: "ana@acme.com" })];
+    // identity, pool, recently contacted (by anyone, within 90 days), suppressions.
+    const { db, inserts } = fakeDb([goodIdentity, [{ id: "s1" }], [{ email: "ana@acme.com" }], []]);
+    const err = await launchRunCampaign(db, { run, userId: "u1", workspaceId: null, dailyLimit: 60, approvedSamples: [] }).catch(
+      (e) => e,
+    );
+    expect(err.code).toBe("all_contacted");
+    expect(inserts).not.toContain(schema.campaigns);
+  });
+
   it("fails with no_leads when nobody matches", async () => {
     const { db, inserts } = fakeDb([goodIdentity, [{ id: "s1" }]]);
     const err = await launchRunCampaign(db, { run, userId: "u1", workspaceId: null, dailyLimit: 60, approvedSamples: [] }).catch(
@@ -403,11 +446,55 @@ describe("launchRunCampaign launch claim and cleanup", () => {
     expect(prompt.instruction).toContain("Email 1 of 3");
   });
 
+  it("reads only the first batch: totals are counted later, off the request", async () => {
+    dir.sqls = [];
+    const { db, ops } = fakeDb(selects());
+    await launchRunCampaign(db, input);
+    expect(dir.sqls.some((q) => /count\(/i.test(q))).toBe(false);
+    const link = ops.find((o) => o.op === "update" && o.table === schema.chadGtmRuns && o.set?.campaignId);
+    expect(link!.set.audience).toMatchObject({ version: 2, countedAt: null, fingerprint: "dir-1", added: 1 });
+    // One contact in the directory: everything was used, so the audience is closed, and says why.
+    expect(link!.set.audience).toMatchObject({ exhausted: true, closedReason: "exhausted" });
+    const campaign = ops.find((o) => o.op === "insert" && o.table === schema.campaigns);
+    expect(campaign!.values.audienceOpen).toBe(false);
+  });
+
+  it("starts with the audience open (not all_contacted) when the search budget runs out with rows unread", async () => {
+    // 600 people (one full page), every one recently contacted; more pages would follow.
+    dir.leads = Array.from({ length: 600 }, (_, i) => lead({ id: i + 1, email: `p${i}@co${i}.com`, workEmail: `p${i}@co${i}.com` }));
+    const contacted = dir.leads.map((l: any) => ({ email: l.email }));
+    // Each Date.now() call moves 25 s on: the 20 s launch budget is spent after the first page.
+    let t = Date.UTC(2026, 10, 9);
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => (t += 25_000));
+    try {
+      const { db, ops } = fakeDb([goodIdentity, [{ id: "s1" }], contacted, []]);
+      const out = await launchRunCampaign(db, input);
+      expect(out.leadCount).toBe(0);
+      const campaign = ops.find((o) => o.op === "insert" && o.table === schema.campaigns);
+      expect(campaign!.values.audienceOpen).toBe(true);
+      const link = ops.find((o) => o.op === "update" && o.table === schema.chadGtmRuns && o.set?.campaignId);
+      // No target titles: owners are Priority 2. The top-up continues from where launch stopped,
+      // and Priority 3 waits until Priority 2 is used up.
+      expect(link!.set.audience.tiers["2"]).toMatchObject({ cursor: 600, exhausted: false });
+      expect(link!.set.audience.tiers["3"]).toMatchObject({ cursor: 0, exhausted: false });
+      expect(link!.set.audience.closedReason).toBeUndefined();
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it("stores how many launched leads match the target roles (#57)", async () => {
     const { db, ops } = fakeDb(selects());
     await launchRunCampaign(db, input);
     const link = ops.find((o) => o.op === "update" && o.table === schema.chadGtmRuns && o.set?.campaignId);
-    expect(link!.set.calibrationProfile.launchAudience).toMatchObject({ roleMatches: 1, otherRoles: 0 });
+    // Merged into the stored profile (a key written meanwhile, like approvalLaunch, stays).
+    const { PgDialect } = await import("drizzle-orm/pg-core");
+    const q = new PgDialect().sqlToQuery(link!.set.calibrationProfile);
+    expect(q.sql).toMatch(/coalesce\(.*'\{\}'::jsonb\) \|\| \$1::jsonb\) - 'launchFailure'/);
+    const merged = JSON.parse(q.params[0] as string);
+    expect(merged.launchAudience).toMatchObject({ roleMatches: 1, otherRoles: 0 });
+    expect(merged).not.toHaveProperty("approvalLaunch");
+    expect(merged).not.toHaveProperty("launchFailure");
   });
 
   it("leaves the linked draft in place (shown as Paused) when the final flip fails", async () => {
@@ -470,7 +557,7 @@ describe("launchAudienceCounts", () => {
     dir.previewTotals = { withTitles: 300, withoutTitles: 1000 };
   });
 
-  it("splits role matches from others in the industries", () => {
+  it("splits role matches from others in the industries, over every company size", () => {
     const counts = launchAudienceCounts({
       industries: ["Restaurants"],
       titles: ["Owner"],
@@ -478,9 +565,8 @@ describe("launchAudienceCounts", () => {
       countries: ["United States"],
     });
     expect(counts).toEqual({ roleMatches: 300, otherRoles: 700 });
-    expect(dir.previewCalls.map((c) => c.filters)).toEqual(
-      expect.arrayContaining([{ jobTitles: ["Owner"], teamSizes: ["11-50"] }, { teamSizes: ["11-50"] }]),
-    );
+    expect(dir.previewCalls.map((c) => c.filters)).toEqual(expect.arrayContaining([{ jobTitles: ["Owner"] }, {}]));
+    expect(dir.previewCalls.some((c) => c.filters?.teamSizes)).toBe(false);
     expect(dir.previewCalls.every((c) => c.pageSize === 1)).toBe(true);
   });
 

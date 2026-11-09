@@ -23,6 +23,15 @@ export function heartbeatStats(r: {
     retried?: number;
     gaveUp?: number;
   } | null;
+  draft?: {
+    drafted?: number;
+    failed?: number;
+    gaveUp?: number;
+    fellBack?: number;
+    ready?: number;
+    waiting?: number;
+    running?: number;
+  } | null;
 }): Record<string, number> {
   const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
   const stats: Record<string, number> = {
@@ -43,6 +52,16 @@ export function heartbeatStats(r: {
     agentRetried: n(r.agent?.retried),
     agentGaveUp: n(r.agent?.gaveUp),
   };
+  if (r.draft) {
+    // Drafter (written ahead of sending): counts since the last tick, then gauges.
+    stats.drafted = n(r.draft.drafted);
+    stats.draftFailed = n(r.draft.failed);
+    stats.draftGaveUp = n(r.draft.gaveUp);
+    stats.draftFellBack = n(r.draft.fellBack);
+    stats.draftsReady = n(r.draft.ready);
+    stats.draftsWaiting = n(r.draft.waiting);
+    stats.drafterRunning = n(r.draft.running);
+  }
   if (r.sync) {
     stats.mailboxesSynced = n(r.sync.checked);
     stats.repliesFound = n(r.sync.repliesFound);

@@ -12,6 +12,7 @@
     "./processor": "./src/processor.ts",
     "./sync-replies": "./src/sync-replies.ts",
     "./worker": "./src/worker.ts",
+    "./drafter": "./src/drafter.ts",
     "./ai": "./src/ai.ts",
     "./ai-options": "./src/ai-options.ts",
     "./reply-agent": "./src/reply-agent.ts",

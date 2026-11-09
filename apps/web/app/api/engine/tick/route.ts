@@ -17,7 +17,9 @@ export async function GET(req: Request) {
   try {
     const { engineTick } = await import("@smartreach/email-engine");
     const db = getDb();
-    const result = await engineTick(db as any, { withSync: true });
+    // No drafter pass here: the PM2 worker's own drafter loop writes emails.
+    // A pass started in this request would be cut off at maxDuration.
+    const result = await engineTick(db as any, { withSync: true, draft: false });
     // Counts only: never echo mailbox addresses, error text or campaign names.
     return NextResponse.json({ ok: true, data: summarizeCounts(result) });
   } catch (err) {

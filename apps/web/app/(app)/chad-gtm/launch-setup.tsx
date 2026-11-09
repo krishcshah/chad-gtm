@@ -528,7 +528,7 @@ export function PlanPreviewCard({ preview }: { preview: PlanPreview }) {
       <dl className="grid gap-x-6 gap-y-4 p-5 text-[13px] sm:grid-cols-2">
         <PlanRow label="Industries" values={preview.industries} />
         <PlanRow label="Job titles" values={preview.titles} />
-        <PlanRow label="Company size" values={preview.companySizes ?? []} />
+        <PlanRow label="Company size (contacted first)" values={preview.companySizes ?? []} />
         <PlanRow label="Countries" values={preview.countries} />
         <div>
           <dt className="text-xs text-muted-foreground">Sending window</dt>
@@ -537,7 +537,7 @@ export function PlanPreviewCard({ preview }: { preview: PlanPreview }) {
         {preview.audience && (
           <div className="sm:col-span-2">
             <dt className="text-xs text-muted-foreground">Audience</dt>
-            <dd className="mt-1.5 leading-relaxed text-foreground">{audienceText(preview.audience)}</dd>
+            <dd className="mt-1.5 leading-relaxed text-foreground">{audienceText(preview.audience, preview.countries)}</dd>
           </div>
         )}
         {preview.offer?.valueProp && (
@@ -597,16 +597,22 @@ export function PlanPreviewCard({ preview }: { preview: PlanPreview }) {
   );
 }
 
-/** How many people a launch picks, from how many, and who is skipped. */
-export function audienceText(a: PlanAudience): string {
+/** How many people a launch works through, where, in what order, and who is skipped. */
+export function audienceText(a: PlanAudience, countries: string[] = []): string {
   const total = a.roleMatches + (a.strictRoles ? 0 : a.otherRoles);
+  if (a.unavailable) {
+    return `We couldn't count the matching contacts just now. Launch still contacts all of them in priority order: your job titles first${a.strictRoles ? "" : ", then other decision-makers and people in your industries"}. Each gets three emails over five days.`;
+  }
   if (total === 0) {
     return "No contacts match this plan, so the launch would fail. Retry the research with a note about who you sell to.";
   }
+  const where = countries.length > 0 ? ` in the countries we send to (${countries.join(", ")})` : " in the countries we send to";
   const order = a.strictRoles
     ? "only people with your job titles"
-    : `${a.roleMatches.toLocaleString()} with your job titles${a.bySize ? " and company size" : ""} first, then ${a.otherRoles.toLocaleString()} other decision-makers and people in your industries`;
-  return `All ${total.toLocaleString()} matching contacts, in priority order: ${order}. Each gets three emails over five days. ${LAUNCH_AUDIENCE_NOTE}`;
+    : `${a.roleMatches.toLocaleString()} with your job titles first, then ${a.otherRoles.toLocaleString()} other decision-makers and people in your industries`;
+  // Company size orders the list; it never leaves anyone out.
+  const size = a.bySize ? " People at your company size go first in each group." : "";
+  return `All ${total.toLocaleString()} matching contacts${where}, in priority order: ${order}.${size} Each gets three emails over five days. ${LAUNCH_AUDIENCE_NOTE}`;
 }
 
 function PlanRow({ label, values }: { label: string; values: string[] }) {

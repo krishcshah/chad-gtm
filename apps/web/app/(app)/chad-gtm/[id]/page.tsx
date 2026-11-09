@@ -7,6 +7,7 @@ import { getPostalHold, NO_POSTAL_HOLD } from "@/lib/postal-hold";
 import { listUserWorkspaces } from "@/lib/workspaces";
 import { loadSendingPersona } from "@/lib/sending-personas";
 import { countHeldFollowUps } from "@/lib/pool-mailbox-status";
+import { loadCustomerPoolShareSafe } from "@/lib/pool-share";
 import { WorkspaceMismatchNotice } from "@/components/workspace-mismatch-notice";
 import { MissionControlView, type LaunchView } from "./mission-control-view";
 
@@ -73,7 +74,7 @@ export default async function ChadGtmRunPage({
     preview:
       data.run.campaignId || state.phase === "needs_research"
         ? null
-        : buildPlanPreview(data.run, ctx.identity.companyName, persona),
+        : await buildPlanPreview(data.run, ctx.identity.companyName, persona),
     // What every email and agent reply is signed with (the workspace sender details).
     sender: {
       companyName: ctx.identity.companyName,
@@ -89,6 +90,9 @@ export default async function ChadGtmRunPage({
     heldFollowUps: data.run.campaignId
       ? await countHeldFollowUps(getDb(), data.run.campaignId).catch(() => 0)
       : 0,
+    // What the shared mailboxes can send for this run's campaign right now
+    // (the customer's share, split across their running campaigns).
+    poolShare: await loadCustomerPoolShareSafe(getDb(), user.id, { campaignId: data.run.campaignId }),
   };
 
   return (

@@ -12,10 +12,8 @@ import {
   synthesizeGtmStrategy,
   type SynthesizedGtmStrategy,
 } from "./chad-gtm-research";
-import {
-  searchLeadMatcherPreview,
-  getMatchingDirectoryLeadsForExport,
-} from "./leads-directory";
+import { getMatchingDirectoryLeadsForExport } from "./leads-directory";
+import { searchLeadMatcherPreviewAsync } from "./directory-search-async";
 import {
   generateEmailScriptOnTheFly,
   getWorkspaceAiOptions,
@@ -52,16 +50,19 @@ import {
   leadKey,
 } from "./interested-export";
 import { groupUniboxConversations } from "./unibox-conversations";
+import { summarizeAudience, type AudienceSummary, type PriorityLeadCounts } from "./audience-summary";
+import { APPROVAL_REQUIRED_ERROR, assertCanSend } from "./approval";
+import { awaitingApprovalText } from "./approval-copy";
 import { AUTOPILOT_DAILY_DEFAULT, autopilotCountries, clampAutopilotDaily } from "./autopilot-policy";
 import { LAUNCH_CLAIM_TTL_MS, withChosenOfferFirst } from "./autopilot-policy";
 import {
   buildCampaignContext,
   compactCustomFields,
-  fetchTargetedLeads,
+  fetchTargetedLeadsAsync,
   getTargetTitles,
   LEADS_PER_CAMPAIGN,
   LaunchInProgressError,
-  launchAudienceCounts,
+  launchAudienceCountsAsync,
   launchRunCampaign,
   runStrictRoles,
   runTeamSizes,
@@ -167,7 +168,13 @@ async function mapWithConcurrency<T, R>(
 export async function analyzeWebsiteAction(
   rawUrl: string,
   optionalNotes?: string,
-  options: { autopilot?: boolean; bookingUrl?: string | null; existingRunId?: string | null } = {}
+  options: {
+    autopilot?: boolean;
+    bookingUrl?: string | null;
+    existingRunId?: string | null;
+    /** Emails per day chosen before the run exists: saved in the insert itself (an approval launch may pick the run up at once). */
+    dailyEmailLimit?: number | null;
+  } = {}
 ): Promise<{
   ok: boolean;
   runId?: string;
@@ -230,6 +237,8 @@ export async function analyzeWebsiteAction(
             autopilot: Boolean(options.autopilot),
             bookingUrl: options.bookingUrl ?? null,
             existingRunId,
+            // persist_gtm_run writes it in the insert (see lib/agent/tools.ts).
+            dailyEmailLimit: options.dailyEmailLimit ?? null,
           },
           budgetCents: 200,
         });
@@ -297,7 +306,8 @@ export async function analyzeWebsiteAction(
       icpProfile: strategy.icpProfile,
       offers: strategy.offers,
       selectedIndustries: strategy.icpProfile.industries || [],
-      dailyEmailLimit: AUTOPILOT_DAILY_DEFAULT,
+      dailyEmailLimit:
+        options.dailyEmailLimit != null ? clampAutopilotDaily(options.dailyEmailLimit) : AUTOPILOT_DAILY_DEFAULT,
       approvedEmailSamples: [],
       bookingUrl: options.bookingUrl || (workspaceBookingUrl ? null : scraped.bookingUrl) || null,
       autopilot: Boolean(options.autopilot),
@@ -361,7 +371,7 @@ export async function searchMatchingLeadsAction(
   pageSize = 10,
   opts: { strictRoles?: boolean } = {}
 ) {
-  const empty = { total: 0, roleMatches: 0, otherRoles: 0, perRun: LEADS_PER_CAMPAIGN, bySize: false, sampleMatchesTitles: false, leads: [] as any[] };
+  const empty = { total: 0, roleMatches: 0, otherRoles: 0, perRun: LEADS_PER_CAMPAIGN, bySize: false, sampleMatchesTitles: false, countUnavailable: false, leads: [] as any[] };
   try {
     const user = await requireUser();
     const db = getDb();
@@ -382,13 +392,17 @@ export async function searchMatchingLeadsAction(
     // Company size narrows these the same way launch does (#57).
     const teamSizes = runTeamSizes(run);
     const strictRoles = opts.strictRoles ?? runStrictRoles(run);
-    const { roleMatches, otherRoles } = launchAudienceCounts({ industries: cleanIndustries, titles, teamSizes, countries });
+    // Directory counts and pages run in the directory worker (never freeze the server).
+    const [{ roleMatches, otherRoles, unavailable }, firstPage] = await Promise.all([
+      launchAudienceCountsAsync({ industries: cleanIndustries, titles, teamSizes, countries }),
+      searchLeadMatcherPreviewAsync(cleanIndustries, countries, page, pageSize, { jobTitles: titles, teamSizes }),
+    ]);
 
-    let result = searchLeadMatcherPreview(cleanIndustries, countries, page, pageSize, { jobTitles: titles, teamSizes });
+    let result = firstPage;
     let sampleMatchesTitles = titles.length > 0;
     if (result.leads.length === 0 && titles.length > 0 && !strictRoles) {
       // Nobody has the titles: launch fills the run from the industries, so show those.
-      result = searchLeadMatcherPreview(cleanIndustries, countries, page, pageSize, { teamSizes });
+      result = await searchLeadMatcherPreviewAsync(cleanIndustries, countries, page, pageSize, { teamSizes });
       sampleMatchesTitles = false;
     }
     return {
@@ -399,6 +413,8 @@ export async function searchMatchingLeadsAction(
       perRun: LEADS_PER_CAMPAIGN,
       bySize: teamSizes.length > 0,
       sampleMatchesTitles,
+      // A count that failed or timed out: the UI says so instead of showing 0.
+      countUnavailable: Boolean(unavailable),
       leads: result.leads,
     };
   } catch (err: any) {
@@ -448,7 +464,8 @@ export async function generateCalibrationEmailsAction(
 
     // Pull verified leads from the SQLite directory. Offset lets adaptive
     // re-generation show new prospects instead of repeating the same deck.
-    const matchingLeads = fetchTargetedLeads(
+    // Read in the directory worker thread (never freezes the server).
+    const matchingLeads = await fetchTargetedLeadsAsync(
       industries,
       getTargetTitles(run),
       count,
@@ -891,9 +908,40 @@ export async function launchChadGtmCampaignAction(
   dailyLimit: number,
   approvedSamples: any[],
   selectedOfferIndex = 0
-): Promise<{ ok: boolean; campaignId?: string; error?: string }> {
+): Promise<{ ok: boolean; campaignId?: string; error?: string; awaitingApproval?: boolean }> {
   try {
     const user = await requireUser();
+    try {
+      await assertCanSend(user.id);
+    } catch (accessErr: any) {
+      if (accessErr?.message !== APPROVAL_REQUIRED_ERROR) throw accessErr;
+      // Not approved yet: keep the choices so approval can launch this run on
+      // its own (planApprovalLaunch in autopilot-advance.ts picks the newest
+      // ready autopilot run with no campaign).
+      const db = getDb();
+      await ensureChadGtmTables(db);
+      const [run] = await db
+        .select()
+        .from(schema.chadGtmRuns)
+        .where(and(eq(schema.chadGtmRuns.id, runId), eq(schema.chadGtmRuns.userId, user.id)))
+        .limit(1);
+      if (!run || run.dismissedAt) throw new Error("AutoGTM run not found.");
+      if (run.campaignId) return { ok: true, campaignId: run.campaignId };
+      await db
+        .update(schema.chadGtmRuns)
+        .set({
+          autopilot: true,
+          status: "ready",
+          dailyEmailLimit: clampAutopilotDaily(dailyLimit),
+          approvedEmailSamples: Array.isArray(approvedSamples) ? approvedSamples : [],
+          offers: withChosenOfferFirst(((run.offers as any[]) ?? []) as any[], selectedOfferIndex),
+          updatedAt: nowIso(),
+        })
+        .where(and(eq(schema.chadGtmRuns.id, run.id), isNull(schema.chadGtmRuns.campaignId)));
+      revalidatePath("/chad-gtm");
+      revalidatePath(`/chad-gtm/${runId}`);
+      return { ok: false, awaitingApproval: true, error: awaitingApprovalText() };
+    }
     const db = getDb();
     await ensureChadGtmTables(db);
 
@@ -970,7 +1018,10 @@ export async function getChadGtmRunAction(runId: string) {
 
     let campaign = null;
     let kpis = {
+      /** Leads loaded into the campaign so far (one batch at a time). */
       queuedProspects: 0,
+      /** The whole matching audience with emailed / still to come, or null before launch. */
+      audience: null as AudienceSummary | null,
       sentToday: 0,
       sentLifetime: 0,
       /** Each lead counted once. */
@@ -1006,12 +1057,43 @@ export async function getChadGtmRunAction(runId: string) {
         .limit(1);
       campaign = campRow || null;
 
-      // Calculate Telemetry
-      const [totalLeadsRow] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(schema.campaignLeads)
-        .where(eq(schema.campaignLeads.campaignId, run.campaignId));
-      kpis.queuedProspects = Number(totalLeadsRow?.count || 0);
+      // Calculate Telemetry. Leads by priority: loaded, emailed (a real email
+      // was sent, the same rule as "Emails sent ... leads" in lib/analytics.ts),
+      // waiting (first email still to send).
+      const cl = schema.campaignLeads;
+      const ej = schema.emailJobs;
+      const [priorityRows, emailedRows] = await Promise.all([
+        db
+          .select({
+            priority: cl.priority,
+            loaded: sql<number>`count(*)`,
+            waiting: sql<number>`count(*) filter (where ${cl.status} in ('queued', 'scheduled') and ${cl.stepPosition} = 1)`,
+          })
+          .from(cl)
+          .where(eq(cl.campaignId, run.campaignId))
+          .groupBy(cl.priority),
+        db
+          .select({ priority: cl.priority, emailed: sql<number>`count(distinct ${ej.leadId})` })
+          .from(ej)
+          .innerJoin(cl, eq(cl.id, ej.campaignLeadId))
+          .where(and(eq(ej.campaignId, run.campaignId), eq(ej.status, "sent"), eq(ej.dryRun, false)))
+          .groupBy(cl.priority),
+      ]);
+      const emailedBy = new Map<number | null, number>(
+        emailedRows.map((r) => [r.priority === null ? null : Number(r.priority), Number(r.emailed || 0)]),
+      );
+      const leadCounts: PriorityLeadCounts[] = priorityRows.map((r) => {
+        const priority = r.priority === null ? null : Number(r.priority);
+        return {
+          priority,
+          loaded: Number(r.loaded || 0),
+          emailed: emailedBy.get(priority) ?? 0,
+          waiting: Number(r.waiting || 0),
+        };
+      });
+      kpis.queuedProspects = leadCounts.reduce((n, r) => n + r.loaded, 0);
+      // The whole audience (counted at launch), not just the batch loaded so far.
+      kpis.audience = summarizeAudience((run as { audience?: unknown }).audience, leadCounts);
 
       // Sent Today: the campaign counter is keyed by its local day.
       const today = localDateKey(new Date(), campRow?.sendingTimezone || "UTC");

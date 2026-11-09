@@ -152,7 +152,7 @@ describe("advanceAutopilotRun after a launch error", () => {
     expect(res.data?.campaignId).toBe("c-1");
     expect(res.message).toMatch(/Resume outreach/);
     const runWrites = st.writes.filter((w) => w.table === schema.chadGtmRuns);
-    expect(runWrites.some((w) => w.set?.status === "needs_input" || w.set?.calibrationProfile?.launchFailure)).toBe(false);
+    expect(runWrites.some((w) => w.set?.status === "needs_input" || w.set?.calibrationProfile)).toBe(false);
   });
 
   it("records the failure on a run with no campaign, and only while it has none", async () => {
@@ -165,7 +165,10 @@ describe("advanceAutopilotRun after a launch error", () => {
     if (!res.ok) return;
     expect(res.message).toMatch(/Nothing was sent/);
     const failed = st.writes.find((w) => w.table === schema.chadGtmRuns && w.set?.status === "needs_input");
-    expect(failed?.set.calibrationProfile.launchFailure).toMatchObject({ code: "no_leads" });
+    // Merged into the stored profile, never replacing it (approvalLaunch written meanwhile stays).
+    const cpq = dialect.sqlToQuery(failed!.set.calibrationProfile);
+    expect(cpq.sql).toContain("jsonb_build_object('launchFailure'");
+    expect(JSON.parse(cpq.params.find((p: unknown) => typeof p === "string" && p.startsWith("{")) as string)).toMatchObject({ code: "no_leads" });
     // Guarded: the write can't mark a run that a launch linked in the meantime.
     expect(dialect.sqlToQuery(failed!.where).sql).toContain('"campaign_id" is null');
   });

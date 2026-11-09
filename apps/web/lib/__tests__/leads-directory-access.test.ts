@@ -126,7 +126,7 @@ describe("lead matcher preview params", () => {
     expect(leadMatcherSearchParams([], ["US"], 0, 0).page).toBe(1);
   });
 
-  it("adds job titles and team sizes only when given", async () => {
+  it("adds job titles only when given; company size is never a filter", async () => {
     const { leadMatcherSearchParams } = await import("../leads-directory");
     const base = leadMatcherSearchParams(["Software"], ["United States"], 1, 1);
     expect(base).not.toHaveProperty("jobTitles");
@@ -135,6 +135,32 @@ describe("lead matcher preview params", () => {
     expect(leadMatcherSearchParams(["Software"], ["United States"], 1, 1, { jobTitles: [], teamSizes: [] })).toEqual(base);
     expect(
       leadMatcherSearchParams(["Software"], ["United States"], 1, 1, { jobTitles: ["Owner"], teamSizes: ["11-50"] })
-    ).toEqual({ ...base, jobTitles: ["Owner"], teamSizes: ["11-50"] });
+    ).toEqual({ ...base, jobTitles: ["Owner"], jobTitleMatch: "phrase" });
+  });
+
+  it("shows people at the run's company sizes first, counting everyone", async () => {
+    const { searchLeadMatcherPreview } = await import("../leads-directory");
+    const calls: any[] = [];
+    const row = (id: number) => ({ ...lead(id), id });
+    const search = (p: any) => {
+      calls.push(p);
+      return p.teamSizes
+        ? { leads: [row(7)], total: 1, page: 1, pageSize: 3, totalPages: 1 }
+        : { leads: [row(1), row(7), row(2), row(3)].slice(0, 3), total: 50, page: 1, pageSize: 3, totalPages: 17 };
+    };
+    const opts: any[] = [];
+    const out = searchLeadMatcherPreview(["Software"], ["United States"], 1, 3, { teamSizes: ["11-50"] }, ((p: any, o: any) => {
+      opts.push(o);
+      return search(p);
+    }) as any);
+    expect(out.total).toBe(50);
+    expect(out.leads.map((l) => l.id)).toEqual([7, 1, 2]);
+    expect(calls).toHaveLength(2);
+    // The sized search only fetches rows: no second COUNT.
+    expect(opts).toEqual([{}, { count: false }]);
+    // No sizes: one plain search.
+    calls.length = 0;
+    searchLeadMatcherPreview(["Software"], ["United States"], 1, 3, {}, search as any);
+    expect(calls).toHaveLength(1);
   });
 });

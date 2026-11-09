@@ -10,7 +10,7 @@ describe("pending-approval copy", () => {
 
   it("keeps the launch card from repeating the banner's approval explanation", () => {
     const text = awaitingApprovalText();
-    expect(text).toContain("Launch unlocks");
+    expect(text).toContain("launches on its own");
     expect(text).not.toMatch(/email/i);
     expect(text).not.toMatch(/Check back/i);
   });

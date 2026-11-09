@@ -70,6 +70,10 @@ import { PostalHoldNotice } from "../../postal-hold-notice";
 import { CampaignSendStatus } from "../../campaign-send-status";
 import { RunActivity, type RunActivityItem } from "./run-activity";
 import { PitchCard, ReplyAgentCard, VolumeCard } from "./run-controls";
+import { AudienceCard, prospectsStat } from "./audience-card";
+import type { AudienceSummary } from "@/lib/audience-summary";
+import { poolCapacityMessage, type CustomerPoolShare } from "@/lib/pool-capacity";
+import { expectedPerDay } from "@/components/chad-gtm/velocity-slider";
 
 /** Launch state for a run that may not be live yet (computed on the server). */
 export interface LaunchView {
@@ -101,6 +105,8 @@ export interface LaunchView {
   workspaceName?: string;
   /** Follow-ups waiting for their own mailbox (paused, or its replies can't be read) (#60). */
   heldFollowUps?: number;
+  /** What the shared mailboxes can send for this customer right now (null when unknown). */
+  poolShare?: CustomerPoolShare | null;
 }
 
 /** Read-only "Sending as" line: the workspace sender details on every email and agent reply. */
@@ -289,7 +295,16 @@ export function MissionControlView({
   const commitVelocity = (v: number) =>
     startTransition(async () => {
       const res = await updateChadGtmVelocityAction(runId, v);
-      if (res.ok) toast.success(`Now sending up to ${v} emails a day`);
+      // Saved as chosen; say plainly when the shared mailboxes can't send that many yet.
+      const expected = expectedPerDay(v, launch.poolShare);
+      if (res.ok)
+        toast.success(
+          expected >= v
+            ? `Now sending up to ${v} emails a day`
+            : expected === 0 && launch.poolShare
+              ? `Saved: up to ${v} emails a day. ${poolCapacityMessage(launch.poolShare, v).text}`
+              : `Saved: up to ${v} emails a day. Expect about ${expected} a day until more mailboxes are added.`,
+        );
       else toast.error(res.error || "Couldn't change the daily volume. Try again.");
     });
 
@@ -373,9 +388,15 @@ export function MissionControlView({
   const name = run?.companyName || host;
   const offer = (run?.offers as Array<{ title?: string; valueProp?: string }> | undefined)?.[0];
   const overviewSummary = String((run?.businessOverview as { summary?: string } | null)?.summary ?? "");
-  // #57: how many launched leads match the target job titles.
+  // #57: how many launched leads match the target job titles (older runs only).
   const launchAudience = (run?.calibrationProfile as { launchAudience?: { roleMatches?: number } } | null)
     ?.launchAudience;
+  const audience: AudienceSummary | null = kpis.audience ?? null;
+  const prospects = prospectsStat(audience, {
+    loaded: Number(kpis.queuedProspects) || 0,
+    roleMatches: launchAudience?.roleMatches ?? null,
+  });
+  const dailyVolume: number = campaign?.dailyLimit ?? run?.dailyEmailLimit ?? AUTOPILOT_DAILY_DEFAULT;
   const heldFollowUps = Number(launch.heldFollowUps) || 0;
 
   return (
@@ -548,16 +569,7 @@ export function MissionControlView({
 
       {!needsLaunch && (
         <Card className="grid grid-cols-2 gap-px overflow-hidden bg-border lg:grid-cols-4 [&>*]:bg-card">
-          <Stat
-            bare
-            label="Prospects"
-            value={Number(kpis.queuedProspects).toLocaleString()}
-            hint={
-              launchAudience && typeof launchAudience.roleMatches === "number"
-                ? `${launchAudience.roleMatches.toLocaleString()} match your roles`
-                : "Matched leads"
-            }
-          />
+          <Stat bare label="Prospects" value={prospects.value} hint={prospects.hint} />
           <Stat
             bare
             label="Emails sent"
@@ -600,6 +612,9 @@ export function MissionControlView({
               campaignId={run?.campaignId ?? null}
             />
           )}
+          {!needsLaunch ? (
+            <AudienceCard audience={audience} perDay={expectedPerDay(dailyVolume, launch.poolShare)} />
+          ) : null}
         </div>
 
         <div className="flex min-w-0 flex-col gap-6">
@@ -635,10 +650,11 @@ export function MissionControlView({
           <SendingAsCard sender={launch.sender ?? null} />
           <VolumeCard
             // After launch the campaign's daily limit is the one the engine uses.
-            initial={campaign?.dailyLimit ?? run?.dailyEmailLimit ?? AUTOPILOT_DAILY_DEFAULT}
+            initial={dailyVolume}
             onCommit={commitVelocity}
             disabled={completed}
             schedule={scheduleLine}
+            poolShare={launch.poolShare ?? null}
           />
           {!needsLaunch ? (
             <PitchCard

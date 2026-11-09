@@ -15,28 +15,15 @@ import { revalidatePath } from "next/cache";
 import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { schema } from "@smartreach/database";
 import { nowIso } from "@smartreach/shared";
-import { getDb, ensureChadGtmTables } from "./db";
+import { getDb } from "./db";
 import { requireUser } from "./session";
 import { ensureDefaultWorkspace, getActiveWorkspace } from "./workspaces";
 import { wsCondition } from "./queries";
 import { analyzeWebsiteAction } from "./chad-gtm-actions";
-import {
-  COMPLIANCE_REQUIRED_ERROR,
-  LaunchError,
-  LaunchInProgressError,
-  launchRunCampaign,
-  loadComplianceIdentity,
-} from "./gtm-launch";
-import { APPROVAL_REQUIRED_ERROR, assertCanSend, isSendAccessError } from "./approval";
-import {
-  LAUNCH_FAILURE_MESSAGES,
-  clampAutopilotDaily,
-  complianceProblems,
-  launchClaimActive,
-  type LaunchFailure,
-  type RunPhase,
-} from "./autopilot-policy";
-import { loadLaunchContext, runBlockers, runLaunchState, type LaunchContext, type RunLaunchState } from "./autopilot-state";
+import { loadComplianceIdentity } from "./gtm-launch";
+import { APPROVAL_REQUIRED_ERROR, assertCanSend } from "./approval";
+import { clampAutopilotDaily, complianceProblems, type RunPhase } from "./autopilot-policy";
+import { advanceRunForUser, loadOwnedRun } from "./autopilot-advance";
 import { normalizeClientBookingUrl } from "./booking-links";
 import { loadOwnedWorkspace, saveWorkspaceBookingUrl } from "./workspace-booking";
 import { writeWorkspaceIdentity } from "./workspace-profile";
@@ -58,31 +45,13 @@ import {
 import { setCampaignConversationModeAction, setRunConversationModeAction } from "./lead-conversation-actions";
 import { REQUEST_ALREADY_HANDLED, modeFromRun } from "./lead-conversations";
 import { createLeadForUser } from "./leads";
+import { launchSuccessMessage } from "./audience-summary";
+import { AWAITING_APPROVAL_SHORT, LINKED_NOT_STARTED_MESSAGE } from "./approval-copy";
 
 /** Needs you cards that still wait on the client ('sending' = a send is in flight). */
 const OPEN_STATUSES = ["open", "sending"] as const;
 
-type RunRow = typeof schema.chadGtmRuns.$inferSelect;
-
 type Result<T = undefined> = { ok: true; data?: T; message?: string } | { ok: false; error: string };
-
-async function loadOwnedRun(runId: string, userId: string) {
-  const db = getDb();
-  await ensureChadGtmTables(db);
-  const [run] = await db
-    .select()
-    .from(schema.chadGtmRuns)
-    .where(
-      and(
-        eq(schema.chadGtmRuns.id, runId),
-        eq(schema.chadGtmRuns.userId, userId),
-        // A deleted draft can't be brought back by any action (#55).
-        isNull(schema.chadGtmRuns.dismissedAt),
-      ),
-    )
-    .limit(1);
-  return run ?? null;
-}
 
 /* ─── Autopilot launch ────────────────────────────────────────────────── */
 
@@ -124,16 +93,15 @@ export async function startAutopilotAction(input: {
     if (!bookingUrl) return { ok: false, error: "That booking link doesn't look like a valid URL." };
   }
 
-  const analysis = await analyzeWebsiteAction(url, input.notes, { autopilot: true, bookingUrl });
+  // The chosen volume is saved in the insert that creates the run: an approval
+  // launch can pick the run up at any moment and must never see the default.
+  const dailyEmailLimit =
+    input.dailyLimit !== undefined && Number.isFinite(Number(input.dailyLimit))
+      ? clampAutopilotDaily(Number(input.dailyLimit))
+      : undefined;
+  const analysis = await analyzeWebsiteAction(url, input.notes, { autopilot: true, bookingUrl, dailyEmailLimit });
   if (!analysis.ok || !analysis.runId) {
     return { ok: false, error: analysis.error || "We couldn't analyze that website. Check the address and try again." };
-  }
-  if (input.dailyLimit !== undefined && Number.isFinite(Number(input.dailyLimit))) {
-    // Saved on the run before launch; launch reads it from there.
-    await getDb()
-      .update(schema.chadGtmRuns)
-      .set({ dailyEmailLimit: clampAutopilotDaily(Number(input.dailyLimit)), updatedAt: new Date().toISOString() })
-      .where(and(eq(schema.chadGtmRuns.id, analysis.runId), eq(schema.chadGtmRuns.userId, user.id)));
   }
   return advanceAutopilotRun(analysis.runId, user.id);
 }
@@ -200,160 +168,43 @@ export async function retryAutopilotResearchAction(
   return advanceAutopilotRun(run.id, user.id);
 }
 
-function outcomeFor(run: RunRow, state: RunLaunchState, ctx: LaunchContext): AutopilotOutcome {
-  const details = state.blockers.find((b) => b.kind === "details");
-  const reason =
-    state.phase === "launch_failed"
-      ? state.launchFailure?.message || LAUNCH_FAILURE_MESSAGES.error
-      : state.phase === "needs_research" || state.phase === "needs_details" || state.phase === "awaiting_approval"
-        ? state.blockers[0]?.message
-        : undefined;
-  return {
-    runId: run.id,
-    phase: state.phase,
-    companyName: run.companyName,
-    campaignId: run.campaignId ?? undefined,
-    missing: details && details.kind === "details" ? details.missing : undefined,
-    // Exactly what the footer will carry: never the researched name as if it were the sender's.
-    identity: {
-      companyName: ctx.identity.companyName,
-      postalAddress: ctx.identity.postalAddress,
-      workspaceName: ctx.workspaceName ?? "",
-    },
-    suggestedCompanyName: !ctx.identity.companyName.trim() && run.companyName ? run.companyName : undefined,
-    bookingUrl: run.bookingUrl,
-    reason,
-  };
-}
-
 const PHASE_MESSAGES: Partial<Record<RunPhase, string>> = {
   needs_research: "We couldn't pin down your audience, so nothing was sent.",
   needs_details: "Almost there. We need a couple of details before we send.",
-  awaiting_approval: "Your plan is ready. Launch unlocks as soon as your account is approved.",
+  awaiting_approval: AWAITING_APPROVAL_SHORT,
   launch_failed: "Nothing was sent. Your plan is saved, so you can retry.",
 };
 
 const STILL_LAUNCHING_MESSAGE = "Still launching. This page updates when it's live.";
 
-const LINKED_NOT_STARTED_MESSAGE =
-  "Your campaign is set up but hasn't started. Press Resume outreach to start sending.";
-
 /**
- * Move an autopilot run as far as it can go: record what blocks it, or launch.
- * Never leaves a run looking live without a running campaign.
+ * Move an autopilot run as far as it can go (lib/autopilot-advance.ts, the
+ * session-free launcher), then word the result for the client. Callers pass
+ * the signed-in owner's id.
  */
 async function advanceAutopilotRun(runId: string, userId: string): Promise<Result<AutopilotOutcome>> {
-  const db = getDb();
-  let run = await loadOwnedRun(runId, userId);
-  if (!run) return { ok: false, error: "Run not found." };
-  if (!run.autopilot) {
-    await db.update(schema.chadGtmRuns).set({ autopilot: true, updatedAt: nowIso() }).where(eq(schema.chadGtmRuns.id, run.id));
-    run = { ...run, autopilot: true };
-  }
-
-  const ctx = await loadLaunchContext(db, userId, { workspaceId: run.workspaceId });
-  if (run.campaignId) {
-    return { ok: true, data: outcomeFor(run, runLaunchState(run, ctx), ctx) };
-  }
-  // Another request is launching this run right now: report it, don't start a second launch.
-  if (launchClaimActive(run.launchStartedAt)) {
-    return { ok: true, data: outcomeFor(run, runLaunchState(run, ctx), ctx), message: STILL_LAUNCHING_MESSAGE };
-  }
-
-  const blockers = runBlockers(run, ctx);
-  if (blockers.length > 0) {
-    // Approval is the only blocker: the plan is ready, so show it as such.
-    const status = blockers[0]!.kind === "approval" ? "ready" : "needs_input";
-    run = { ...run, status };
-    await db.update(schema.chadGtmRuns).set({ status, updatedAt: nowIso() }).where(eq(schema.chadGtmRuns.id, run.id));
-    revalidateRun(run.id);
-    const outcome = outcomeFor(run, runLaunchState(run, ctx), ctx);
-    return { ok: true, data: outcome, message: PHASE_MESSAGES[outcome.phase] };
-  }
-
-  try {
-    const launched = await launchAutopilotRun(run, userId);
-    const fresh = (await loadOwnedRun(run.id, userId)) ?? run;
-    revalidateRun(run.id);
+  const res = await advanceRunForUser(runId, userId);
+  if (!res.ok) return res;
+  if (res.event === "launched") {
+    const fresh = res.run;
     return {
       ok: true,
-      data: { ...outcomeFor(fresh, runLaunchState(fresh, ctx), ctx), campaignId: launched.campaignId, leadCount: launched.leadCount },
-      message: `Outreach is live: ${launched.leadCount} prospects queued for the next sending window.`,
+      data: res.data,
+      // The whole audience, never the first batch (which only looks like a cap).
+      message: launchSuccessMessage((fresh as { audience?: unknown }).audience),
     };
-  } catch (err) {
-    if (err instanceof LaunchInProgressError) {
-      // Lost the launch claim to a concurrent request. Not a failure: show its progress.
-      const fresh = (await loadOwnedRun(run.id, userId)) ?? run;
-      return { ok: true, data: outcomeFor(fresh, runLaunchState(fresh, ctx), ctx), message: STILL_LAUNCHING_MESSAGE };
-    }
-    const message = err instanceof Error ? err.message : "";
-    if (isSendAccessError(message) || message === COMPLIANCE_REQUIRED_ERROR) {
-      // Approval or identity changed between the check and the launch: re-evaluate.
-      const ctxNow = await loadLaunchContext(db, userId, { workspaceId: run.workspaceId });
-      const status = runBlockers(run, ctxNow)[0]?.kind === "approval" ? "ready" : "needs_input";
-      run = { ...run, status };
-      await db.update(schema.chadGtmRuns).set({ status, updatedAt: nowIso() }).where(eq(schema.chadGtmRuns.id, run.id));
-      revalidateRun(run.id);
-      const outcome = outcomeFor(run, runLaunchState(run, ctxNow), ctxNow);
-      return { ok: true, data: outcome, message: PHASE_MESSAGES[outcome.phase] };
-    }
-    console.error("[autopilot] launch failed", { runId: run.id, error: err });
-    // The run was linked to its draft campaign before the error (the final
-    // switch to running failed). The plan is set up and nothing sends: show it
-    // as Paused, never as a failed launch.
-    const linked = await loadOwnedRun(run.id, userId).catch(() => null);
-    if (linked?.campaignId) {
-      const [campaign] = await db
-        .select({ status: schema.campaigns.status, deletedAt: schema.campaigns.deletedAt })
-        .from(schema.campaigns)
-        .where(eq(schema.campaigns.id, linked.campaignId))
-        .limit(1)
-        .catch(() => []);
-      revalidateRun(run.id);
-      return {
-        ok: true,
-        data: outcomeFor(linked, runLaunchState(linked, ctx, campaign ?? { status: "draft", deletedAt: null }), ctx),
-        message: LINKED_NOT_STARTED_MESSAGE,
-      };
-    }
-    const failure: LaunchFailure = {
-      code: err instanceof LaunchError ? err.code : "error",
-      message: err instanceof LaunchError ? err.message : LAUNCH_FAILURE_MESSAGES.error,
-      at: nowIso(),
-    };
-    const calibrationProfile = { ...((run.calibrationProfile as any) || {}), launchFailure: failure };
-    run = { ...run, status: "needs_input", calibrationProfile };
-    await db
-      .update(schema.chadGtmRuns)
-      .set({ status: "needs_input", calibrationProfile, updatedAt: nowIso() })
-      // Never mark a run that is linked to a campaign as failed.
-      .where(and(eq(schema.chadGtmRuns.id, run.id), isNull(schema.chadGtmRuns.campaignId)));
-    revalidateRun(run.id);
-    return { ok: true, data: outcomeFor(run, runLaunchState(run, ctx), ctx), message: PHASE_MESSAGES.launch_failed };
   }
-}
-
-function revalidateRun(runId: string) {
-  revalidatePath("/chad-gtm");
-  revalidatePath(`/chad-gtm/${runId}`);
-  revalidatePath("/dashboard");
-}
-
-async function launchAutopilotRun(run: RunRow, userId: string) {
-  const db = getDb();
-  // Server-side gate, independent of any UI state.
-  await assertCanSend(userId);
-  return launchRunCampaign(db, {
-    run,
-    userId,
-    // The workspace the run is listed under (none = the default one), never
-    // the active one: its campaign and footer identity come from there (#73).
-    workspaceId: run.workspaceId ?? (await ensureDefaultWorkspace(userId)).id,
-    // The run's chosen volume (a chosen 30 stays 30); the default only when unset.
-    dailyLimit: clampAutopilotDaily(run.dailyEmailLimit),
-    approvedSamples: [],
-    selectedOfferIndex: 0,
-  });
+  const message =
+    res.event === "still_launching"
+      ? STILL_LAUNCHING_MESSAGE
+      : res.event === "linked_not_started"
+        ? LINKED_NOT_STARTED_MESSAGE
+        : res.event === "launch_failed"
+          ? PHASE_MESSAGES.launch_failed
+          : res.event === "blocked"
+            ? PHASE_MESSAGES[res.data.phase]
+            : undefined;
+  return message === undefined ? { ok: true, data: res.data } : { ok: true, data: res.data, message };
 }
 
 export async function setBookingUrlAction(

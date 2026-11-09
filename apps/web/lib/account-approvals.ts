@@ -2,6 +2,8 @@
  * Pure helpers for the admin "Pending approval" list (see admin-actions.ts).
  */
 
+import { approvalLaunchView, readApprovalLaunch, type ApprovalLaunchView } from "./approval-copy";
+
 export interface AccountApprovalRow {
   userId: string;
   name: string;
@@ -15,6 +17,8 @@ export interface AccountApprovalRow {
   revokedAt: string | null;
   /** Website from the user's most recent autopilot run, if they started one. */
   website: string | null;
+  /** How approving went for this account's campaign (approved rows only). */
+  launch?: ApprovalLaunchView | null;
 }
 
 export interface AccountApprovalsPayload {
@@ -45,6 +49,25 @@ export function latestWebsiteByUser(
   return new Map(Array.from(best, ([userId, v]) => [userId, v.url]));
 }
 
+/**
+ * Per user, the latest approval launch (calibration_profile.approvalLaunch on
+ * a run), as the approvals list shows it. A linked campaign reads as live.
+ */
+export function latestApprovalLaunchByUser(
+  rows: Array<{ id: string; userId: string; campaignId: string | null; record: unknown }>,
+): Map<string, ApprovalLaunchView> {
+  const best = new Map<string, { at: string; view: ApprovalLaunchView }>();
+  for (const row of rows) {
+    const record = readApprovalLaunch(row.record);
+    const view = approvalLaunchView(record, { id: row.id, campaignId: row.campaignId });
+    if (!record || !view) continue;
+    const at = `${record.approvedAt}|${record.updatedAt}`;
+    const current = best.get(row.userId);
+    if (!current || at > current.at) best.set(row.userId, { at, view });
+  }
+  return new Map(Array.from(best, ([userId, v]) => [userId, v.view]));
+}
+
 export function toApprovalRows(
   users: Array<{
     id: string;
@@ -56,6 +79,7 @@ export function toApprovalRows(
     approvalRevokedAt?: Date | string | null;
   }>,
   websites: Map<string, string>,
+  launches?: Map<string, ApprovalLaunchView>,
 ): AccountApprovalRow[] {
   return users.map((u) => ({
     userId: u.id,
@@ -66,6 +90,7 @@ export function toApprovalRows(
     approvedAt: toIso(u.approvedAt),
     revokedAt: toIso(u.approvalRevokedAt),
     website: websites.get(u.id) ?? null,
+    ...(launches ? { launch: launches.get(u.id) ?? null } : {}),
   }));
 }
 

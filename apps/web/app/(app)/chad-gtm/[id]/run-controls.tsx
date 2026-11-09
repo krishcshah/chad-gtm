@@ -17,7 +17,13 @@ import {
   Label,
   Textarea,
 } from "@smartreach/ui";
-import { DailyVolumeInput, VolumeForecast } from "@/components/chad-gtm/velocity-slider";
+import {
+  DailyVolumeInput,
+  PoolCapacityNote,
+  VolumeForecast,
+  expectedPerDay,
+} from "@/components/chad-gtm/velocity-slider";
+import type { CustomerPoolShare } from "@/lib/pool-capacity";
 import { LeadConversationsControl } from "@/components/lead-conversations/lead-conversations-control";
 import { LEAD_CONVERSATIONS_LABEL, type LeadConversationState } from "@/lib/lead-conversations";
 
@@ -365,12 +371,15 @@ export function VolumeCard({
   disabled,
   onCommit,
   schedule,
+  poolShare = null,
 }: {
   initial: number;
   disabled?: boolean;
   onCommit: (v: number) => void;
   /** The campaign's effective schedule, e.g. "Monday–Friday, 09:00–17:00 (America/New York)". */
   schedule?: string;
+  /** What the shared mailboxes can send for this customer right now (null when unknown). */
+  poolShare?: CustomerPoolShare | null;
 }) {
   const [value, setValue] = useState(initial);
   const [committed, setCommitted] = useState(initial);
@@ -406,7 +415,8 @@ export function VolumeCard({
             onCommit(v);
           }}
         />
-        <VolumeForecast perDay={value} />
+        <PoolCapacityNote share={poolShare} perDay={value} />
+        <VolumeForecast perDay={value} expected={expectedPerDay(value, poolShare)} />
         <p className="text-xs leading-relaxed text-muted-foreground">
           This is your ceiling. Each mailbox sends at most 30 cold emails a day and the shared pool is split fairly
           between customers, so busy days can send fewer.

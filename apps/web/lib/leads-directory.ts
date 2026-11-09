@@ -65,6 +65,13 @@ export interface DirectorySearchParams {
   jobTitles?: string[];
   companyName?: string;
   teamSizes?: string[];
+  /** Rows whose team size is NOT one of these (or is empty). */
+  excludeTeamSizes?: string[];
+  /**
+   * "phrase": a job title matches only as a whole phrase (titleMatchExpression),
+   * the rule the Autopilot tiers use. Default: every word as a prefix.
+   */
+  jobTitleMatch?: "phrase";
   revenueRanges?: string[];
   hasEmail?: boolean;
   hasWorkEmail?: boolean;
@@ -90,9 +97,17 @@ export interface DirectorySearchResult {
   page: number;
   pageSize: number;
   totalPages: number;
+  /** The count could not be run (timed out or failed): total is not a real zero. */
+  countUnavailable?: boolean;
 }
 
 let cachedDb: DatabaseSync | null = null;
+/** Path and file identity (device:inode) of the open directory file. */
+let cachedDbPath: string | null = null;
+let cachedDbIdentity: string | null = null;
+let lastIdentityCheckAt = 0;
+let replacedWarned = false;
+const IDENTITY_CHECK_INTERVAL_MS = 30_000;
 let cachedFacets: DirectoryFacets | null = null;
 let cachedFacetsAt = 0;
 let cachedStats: DirectoryStats | null = null;
@@ -196,8 +211,105 @@ function resolveDbPath(): string {
   );
 }
 
+function fileIdentity(file: string): string | null {
+  try {
+    const s = fs.statSync(file);
+    return `${s.dev}:${s.ino}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The open directory file and its identity. Background workers open the same
+ * file read-only and refuse a different one (see directory-worker.ts).
+ */
+export function directoryDbFile(): { path: string; identity: string | null } {
+  getDirectoryDb();
+  return { path: cachedDbPath as string, identity: cachedDbIdentity };
+}
+
+/**
+ * True when the file at the directory path is no longer the one this process
+ * opened (it was swapped). The open handle keeps reading the old file, which
+ * is safe; swapping a WAL database under a running process is not, so the web
+ * app must be restarted after a swap (docs/directory-swap.md).
+ */
+export function directoryFileReplaced(): boolean {
+  if (!cachedDb || !cachedDbPath || !cachedDbIdentity) return false;
+  const now = fileIdentity(cachedDbPath);
+  const replaced = now !== null && now !== cachedDbIdentity;
+  if (replaced && !replacedWarned) {
+    replacedWarned = true;
+    console.error(
+      "[leads-directory] The directory file was replaced while the app was running. Still reading the old file; restart the web app to use the new one (docs/directory-swap.md)."
+    );
+  }
+  return replaced;
+}
+
+/**
+ * A cheap marker of the directory's content, "highId|userVersion|version":
+ * the highest row id ever used (sqlite_sequence for the AUTOINCREMENT leads
+ * table, the erasure high-water mark in directory_meta, or max(id); deletes
+ * never lower it), PRAGMA user_version and directory_meta 'directory_version'
+ * (each an O(log n) lookup). Rows appended in place only raise highId; a new
+ * build must carry a new directory_version (docs/directory-swap.md). Copying
+ * or restoring the same file gives the same fingerprint: the file's identity
+ * (device:inode) is only used to warn that a restart is needed
+ * (directoryFileReplaced).
+ */
+export function directoryFingerprint(db: DatabaseSync = getDirectoryDb()): string {
+  const one = (sql: string): unknown => {
+    try {
+      return (db.prepare(sql).get() as { v?: unknown } | undefined)?.v;
+    } catch {
+      return undefined; // table missing (no AUTOINCREMENT table, no meta table)
+    }
+  };
+  const highId = Math.max(
+    Number(one("SELECT seq AS v FROM sqlite_sequence WHERE name = 'leads'") ?? 0) || 0,
+    Number(one("SELECT value AS v FROM directory_meta WHERE key = 'id_high_water'") ?? 0) || 0,
+    Number(one("SELECT max(id) AS v FROM leads") ?? 0) || 0
+  );
+  const uv = Number(one("SELECT user_version AS v FROM pragma_user_version") ?? 0) || 0;
+  const ver = String(one("SELECT value AS v FROM directory_meta WHERE key = 'directory_version'") ?? "").replace(/\|/g, "/");
+  return `${highId}|${uv}|${ver}`;
+}
+
+function leadsTableExists(db: DatabaseSync): boolean {
+  try {
+    return Boolean(db.prepare("SELECT 1 AS v FROM sqlite_master WHERE type = 'table' AND name = 'leads'").get());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Give a directory file that was just created its own directory_version, so a
+ * fresh build swapped in for an older file reads as "new" even when nobody
+ * stamps it by hand (scripts/ingest-leads.mjs and build-leads-db.cjs do the
+ * same). Never changes an existing version.
+ */
+export function stampNewDirectoryVersion(db: DatabaseSync, now = new Date()): string {
+  const version = `build-${now.toISOString().replace(/[^0-9]/g, "").slice(0, 14)}-${Math.random().toString(36).slice(2, 8)}`;
+  db.exec("CREATE TABLE IF NOT EXISTS directory_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')");
+  db.prepare("INSERT INTO directory_meta(key, value) VALUES('directory_version', ?) ON CONFLICT(key) DO NOTHING").run(version);
+  const row = db.prepare("SELECT value AS v FROM directory_meta WHERE key = 'directory_version'").get() as { v?: string } | undefined;
+  return String(row?.v ?? version);
+}
+
+/** SQL every worker-run directory query calls per row, so a timed-out query can be stopped (directory-worker.ts). */
+export const DIRECTORY_ALIVE_SQL = "directory_alive()";
+
 export function getDirectoryDb(): DatabaseSync {
-  if (cachedDb) return cachedDb;
+  if (cachedDb) {
+    if (Date.now() - lastIdentityCheckAt > IDENTITY_CHECK_INTERVAL_MS) {
+      lastIdentityCheckAt = Date.now();
+      directoryFileReplaced();
+    }
+    return cachedDb;
+  }
 
   const dbPath = resolveDbPath();
   const dir = path.dirname(dbPath);
@@ -206,6 +318,7 @@ export function getDirectoryDb(): DatabaseSync {
   }
 
   const db = new DatabaseSync(dbPath);
+  const hadLeads = leadsTableExists(db);
 
   // Initialize schema if newly created
   db.exec(`
@@ -270,7 +383,19 @@ export function getDirectoryDb(): DatabaseSync {
     db.exec(`ALTER TABLE leads ADD COLUMN department TEXT;`);
   } catch {}
 
+  // A directory created here is a new build: give it its own version so
+  // audiences walked on another file start over (directoryFingerprint).
+  if (!hadLeads) stampNewDirectoryVersion(db);
+
+  try {
+    // Worker SQL calls directory_alive() (stops a timed-out query there); here it is always true.
+    db.function("directory_alive", { deterministic: false }, () => 1);
+  } catch {}
+
   cachedDb = db;
+  cachedDbPath = path.resolve(dbPath);
+  cachedDbIdentity = fileIdentity(cachedDbPath);
+  lastIdentityCheckAt = Date.now();
   return db;
 }
 
@@ -300,6 +425,49 @@ export function toFtsMatchExpression(query: string): string {
     .map((token) => `"${token.replace(/"/g, '""')}"*`)
     .join(" AND ");
 }
+
+/** Lowercase words, punctuation as spaces ("Head of Ops, EMEA" → "head of ops emea"). */
+export function normalizePhrase(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function ftsPhrases(values: string[]): string[] {
+  return [...new Set(values.map(normalizePhrase).filter(Boolean))].map((p) => `"${p}"`);
+}
+
+/**
+ * FTS5 query for whole-phrase job titles ("head of operations" matches
+ * "Head of Operations, EMEA"), the rule the Autopilot tiers and classifyTier
+ * use. Exact phrases, not prefixes: fewer rows to read and no prefix expansion.
+ */
+export function titleMatchExpression(titles: string[]): string | null {
+  const phrases = ftsPhrases(titles);
+  return phrases.length ? `job_title : (${phrases.join(" OR ")})` : null;
+}
+
+/**
+ * FTS5 query that narrows to rows whose industry contains one of these names
+ * as a phrase (a superset: the SQL still checks industry IN (...) exactly).
+ * Null when a name has characters the phrase can't carry (non-ASCII letters
+ * are folded differently by the FTS tokenizer), so the caller drops the term.
+ */
+export function industryMatchExpression(industries: string[]): string | null {
+  if (industries.length === 0 || industries.some((i) => /[^\x00-\x7f]/.test(i) || !normalizePhrase(i))) return null;
+  return `industry : (${ftsPhrases(industries).join(" OR ")})`;
+}
+
+/**
+ * Every distinct industry value, one index seek per value (a skip scan of
+ * idx_leads_industry), so it stays fast at 100M rows. Run it in the
+ * directory worker (directory-search-async.ts directoryIndustriesAsync).
+ */
+export const DISTINCT_INDUSTRIES_SQL = `
+  WITH RECURSIVE d(v) AS (
+    SELECT (SELECT min(industry) FROM leads WHERE industry > '')
+    UNION ALL
+    SELECT (SELECT min(industry) FROM leads WHERE industry > d.v) FROM d WHERE d.v IS NOT NULL
+  )
+  SELECT v AS industry FROM d WHERE v IS NOT NULL AND ${DIRECTORY_ALIVE_SQL}`;
 
 /**
  * Create the FTS5 table and sync triggers. This is cheap; it does not backfill.
@@ -426,8 +594,11 @@ export function getDirectoryFacets(): DirectoryFacets {
       cachedRows = db.prepare(`SELECT facet_type, facet_value, facet_count FROM directory_facets_cache`).all() as any[];
     } catch {}
 
-    const totalRow = db.prepare("SELECT COUNT(*) as cnt FROM leads").get() as { cnt: number };
-    const totalLeads = totalRow?.cnt || 0;
+    // The total written by the index build when present: COUNT(*) over millions
+    // of rows would stall the web server.
+    const totalLeads = readDirectoryStatsFromMeta(db)?.totalLeads ||
+      (db.prepare("SELECT COUNT(*) as cnt FROM leads").get() as { cnt: number } | undefined)?.cnt ||
+      0;
 
     let industries: DirectoryFacetItem[] = [];
     let countries: DirectoryFacetItem[] = [];
@@ -523,9 +694,14 @@ export function getDirectoryFacets(): DirectoryFacets {
 /**
  * Build reusable SQL WHERE clause and bindings for directory leads.
  */
-export function buildDirectoryWhereClause(params: DirectorySearchParams): { whereSql: string; bindings: any[] } {
+export function buildDirectoryWhereClause(
+  params: DirectorySearchParams,
+  opts: { qualify?: boolean } = {}
+): { whereSql: string; bindings: any[] } {
   const whereClauses: string[] = [];
   const bindings: any[] = [];
+  // qualify: prefix columns with "leads." (needed when joined with leads_fts).
+  const col = (name: string) => (opts.qualify ? `leads.${name}` : name);
 
   // General text search
   if (params.query && params.query.trim()) {
@@ -540,7 +716,7 @@ export function buildDirectoryWhereClause(params: DirectorySearchParams): { wher
       const columns = includeEmail
         ? ["full_name", "job_title", "company_name", "email", "location"]
         : ["full_name", "job_title", "company_name", "location"];
-      whereClauses.push(`(${columns.map((c) => `LOWER(${c}) LIKE ?`).join(" OR ")})`);
+      whereClauses.push(`(${columns.map((c) => `LOWER(${col(c)}) LIKE ?`).join(" OR ")})`);
       columns.forEach(() => bindings.push(q));
     }
   }
@@ -551,7 +727,7 @@ export function buildDirectoryWhereClause(params: DirectorySearchParams): { wher
       whereClauses.push(`leads.id IN (SELECT rowid FROM leads_fts WHERE leads_fts MATCH ?)`);
       bindings.push(`company_name : (${toFtsMatchExpression(params.companyName.trim())})`);
     } else {
-      whereClauses.push(`LOWER(company_name) LIKE ?`);
+      whereClauses.push(`LOWER(${col("company_name")}) LIKE ?`);
       bindings.push(`%${params.companyName.trim().toLowerCase()}%`);
     }
   }
@@ -559,27 +735,32 @@ export function buildDirectoryWhereClause(params: DirectorySearchParams): { wher
   // Industries filter
   if (params.industries && params.industries.length > 0) {
     const placeholders = params.industries.map(() => "?").join(",");
-    whereClauses.push(`industry IN (${placeholders})`);
+    whereClauses.push(`${col("industry")} IN (${placeholders})`);
     bindings.push(...params.industries);
   }
 
   // Countries filter
   if (params.countries && params.countries.length > 0) {
     const placeholders = params.countries.map(() => "?").join(",");
-    whereClauses.push(`country IN (${placeholders})`);
+    whereClauses.push(`${col("country")} IN (${placeholders})`);
     bindings.push(...params.countries);
   }
 
   // Job Titles filter
   if (params.jobTitles && params.jobTitles.length > 0) {
     if (isDirectoryFtsReady()) {
-      const expression = params.jobTitles
-        .map((title) => `job_title : (${toFtsMatchExpression(title)})`)
-        .join(" OR ");
-      whereClauses.push(`leads.id IN (SELECT rowid FROM leads_fts WHERE leads_fts MATCH ?)`);
-      bindings.push(expression);
+      const expression =
+        params.jobTitleMatch === "phrase"
+          ? titleMatchExpression(params.jobTitles)
+          : params.jobTitles.map((title) => `job_title : (${toFtsMatchExpression(title)})`).join(" OR ");
+      if (expression) {
+        whereClauses.push(`leads.id IN (SELECT rowid FROM leads_fts WHERE leads_fts MATCH ?)`);
+        bindings.push(expression);
+      } else {
+        whereClauses.push("0"); // no usable title: nobody matches
+      }
     } else {
-      const titleClauses = params.jobTitles.map(() => `LOWER(job_title) LIKE ?`).join(" OR ");
+      const titleClauses = params.jobTitles.map(() => `LOWER(${col("job_title")}) LIKE ?`).join(" OR ");
       whereClauses.push(`(${titleClauses})`);
       params.jobTitles.forEach((t) => bindings.push(`%${t.trim().toLowerCase()}%`));
     }
@@ -588,32 +769,39 @@ export function buildDirectoryWhereClause(params: DirectorySearchParams): { wher
   // Team sizes filter
   if (params.teamSizes && params.teamSizes.length > 0) {
     const placeholders = params.teamSizes.map(() => "?").join(",");
-    whereClauses.push(`team_size IN (${placeholders})`);
+    whereClauses.push(`${col("team_size")} IN (${placeholders})`);
     bindings.push(...params.teamSizes);
+  }
+
+  // Everyone except those team sizes (rows with no size included)
+  if (params.excludeTeamSizes && params.excludeTeamSizes.length > 0) {
+    const placeholders = params.excludeTeamSizes.map(() => "?").join(",");
+    whereClauses.push(`(${col("team_size")} IS NULL OR ${col("team_size")} NOT IN (${placeholders}))`);
+    bindings.push(...params.excludeTeamSizes);
   }
 
   // Revenue ranges filter
   if (params.revenueRanges && params.revenueRanges.length > 0) {
     const placeholders = params.revenueRanges.map(() => "?").join(",");
-    whereClauses.push(`revenue_range IN (${placeholders})`);
+    whereClauses.push(`${col("revenue_range")} IN (${placeholders})`);
     bindings.push(...params.revenueRanges);
   }
 
   // Quality switches
   if (params.hasEmail) {
-    whereClauses.push(`email IS NOT NULL AND email != ''`);
+    whereClauses.push(`${col("email")} IS NOT NULL AND ${col("email")} != ''`);
   }
   if (params.hasWorkEmail) {
-    whereClauses.push(`work_email IS NOT NULL AND work_email != ''`);
+    whereClauses.push(`${col("work_email")} IS NOT NULL AND ${col("work_email")} != ''`);
   }
   if (params.hasPersonalEmail) {
-    whereClauses.push(`personal_email IS NOT NULL AND personal_email != ''`);
+    whereClauses.push(`${col("personal_email")} IS NOT NULL AND ${col("personal_email")} != ''`);
   }
   if (params.hasPhone) {
-    whereClauses.push(`phone IS NOT NULL AND phone != ''`);
+    whereClauses.push(`${col("phone")} IS NOT NULL AND ${col("phone")} != ''`);
   }
   if (params.hasLinkedin) {
-    whereClauses.push(`linkedin_url IS NOT NULL AND linkedin_url != ''`);
+    whereClauses.push(`${col("linkedin_url")} IS NOT NULL AND ${col("linkedin_url")} != ''`);
   }
 
   const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
@@ -623,93 +811,79 @@ export function buildDirectoryWhereClause(params: DirectorySearchParams): { wher
 /**
  * Filter & paginate leads from the directory.
  */
-export function searchLeadsDirectory(params: DirectorySearchParams): DirectorySearchResult {
+/**
+ * The SQL a directory search runs (shared by the sync search and the worker
+ * search). alive: call DIRECTORY_ALIVE_SQL per row, so the worker can stop it.
+ */
+export function directorySearchPlan(params: DirectorySearchParams, opts: { alive?: boolean } = {}) {
+  const page = Math.max(1, params.page || 1);
+  const pageSize = Math.min(100, Math.max(5, params.pageSize || 10));
+  const offset = (page - 1) * pageSize;
+  const plain = buildDirectoryWhereClause(params);
+  const { bindings } = plain;
+  // The stop check on about one row in 64 (a JS call per row would cost more).
+  const alive = `(id % 64 <> 0 OR ${DIRECTORY_ALIVE_SQL})`;
+  const whereSql = opts.alive ? (plain.whereSql ? `${plain.whereSql} AND ${alive}` : `WHERE ${alive}`) : plain.whereSql;
+  let orderSql = "ORDER BY id ASC";
+  if (params.sortBy === "name") {
+    orderSql = `ORDER BY full_name ${params.sortOrder === "desc" ? "DESC" : "ASC"}`;
+  } else if (params.sortBy === "company") {
+    orderSql = `ORDER BY company_name ${params.sortOrder === "desc" ? "DESC" : "ASC"}`;
+  } else if (params.sortBy === "team_size") {
+    orderSql = `ORDER BY CAST(team_size AS INTEGER) ${params.sortOrder === "desc" ? "DESC" : "ASC"}`;
+  }
+  return {
+    page,
+    pageSize,
+    offset,
+    bindings,
+    countKey: `${plain.whereSql}::${JSON.stringify(bindings)}`,
+    countSql: `SELECT COUNT(*) as total FROM leads ${whereSql}`,
+    dataSql: `
+      SELECT * FROM leads
+      ${whereSql}
+      ${orderSql}
+      LIMIT ? OFFSET ?
+    `,
+  };
+}
+
+/** A recent directory count for this search, or null (count(*) over millions of rows is costly). */
+export function cachedDirectoryCount(key: string): number | null {
+  const c = countCache.get(key);
+  return c && Date.now() - c.at < COUNT_CACHE_TTL_MS ? c.total : null;
+}
+
+export function rememberDirectoryCount(key: string, total: number): void {
+  countCache.set(key, { total, at: Date.now() });
+  if (countCache.size > 200) {
+    const oldest = countCache.keys().next().value;
+    if (oldest) countCache.delete(oldest);
+  }
+}
+
+/** count: false skips the COUNT (total is then 0 unless cached): only the rows are needed. */
+export interface DirectorySearchOptions {
+  count?: boolean;
+}
+
+export function searchLeadsDirectory(params: DirectorySearchParams, opts: DirectorySearchOptions = {}): DirectorySearchResult {
   try {
     const db = getDirectoryDb();
-    const page = Math.max(1, params.page || 1);
-    const pageSize = Math.min(100, Math.max(5, params.pageSize || 10));
-    const offset = (page - 1) * pageSize;
-
-    const { whereSql, bindings } = buildDirectoryWhereClause(params);
+    const { page, pageSize, offset, bindings, countKey, countSql, dataSql } = directorySearchPlan(params);
 
     // Count query (cached briefly: count(*) over millions of rows is the
     // single most expensive part of pagination).
-    const countKey = `${whereSql}::${JSON.stringify(bindings)}`;
-    const cachedCount = countCache.get(countKey);
-    let total: number;
-    if (cachedCount && Date.now() - cachedCount.at < COUNT_CACHE_TTL_MS) {
-      total = cachedCount.total;
-    } else {
-      const countRow = prepare(db, `SELECT COUNT(*) as total FROM leads ${whereSql}`).get(
-        ...bindings
-      ) as { total: number };
+    let total = cachedDirectoryCount(countKey);
+    if (total === null && opts.count === false) total = 0;
+    if (total === null) {
+      const countRow = prepare(db, countSql).get(...bindings) as { total: number };
       total = countRow?.total || 0;
-      countCache.set(countKey, { total, at: Date.now() });
-      if (countCache.size > 200) {
-        const oldest = countCache.keys().next().value;
-        if (oldest) countCache.delete(oldest);
-      }
+      rememberDirectoryCount(countKey, total);
     }
-
-    // Sorting
-    let orderSql = "ORDER BY id ASC";
-    if (params.sortBy === "name") {
-      orderSql = `ORDER BY full_name ${params.sortOrder === "desc" ? "DESC" : "ASC"}`;
-    } else if (params.sortBy === "company") {
-      orderSql = `ORDER BY company_name ${params.sortOrder === "desc" ? "DESC" : "ASC"}`;
-    } else if (params.sortBy === "team_size") {
-      orderSql = `ORDER BY CAST(team_size AS INTEGER) ${params.sortOrder === "desc" ? "DESC" : "ASC"}`;
-    }
-
-    // Data query
-    const dataSql = `
-      SELECT * FROM leads 
-      ${whereSql} 
-      ${orderSql} 
-      LIMIT ? OFFSET ?
-    `;
 
     const rawRows = prepare(db, dataSql).all(...bindings, pageSize, offset) as any[];
-
-    const leads: DirectoryLead[] = rawRows.map((r) => {
-      let rawAttrs: Record<string, string> = {};
-      try {
-        if (r.raw_data) {
-          rawAttrs = JSON.parse(r.raw_data);
-        }
-      } catch {}
-
-      return {
-        id: r.id,
-        leadId: r.lead_id || String(r.id),
-        firstName: r.first_name || "",
-        lastName: r.last_name || "",
-        fullName: r.full_name || `${r.first_name || ""} ${r.last_name || ""}`.trim(),
-        jobTitle: r.job_title || "",
-        companyName: r.company_name || "",
-        companyWebsite: r.company_website || "",
-        linkedinUrl: r.linkedin_url || "",
-        location: r.location || "",
-        city: r.city || "",
-        state: r.state || "",
-        country: r.country || "",
-        industry: r.industry || "",
-        teamSize: r.team_size || "",
-        revenueRange: r.revenue_range || "",
-        email: r.email || "",
-        emailStatus: r.email_status || "",
-        phone: r.phone || "",
-        emailCount: r.email_count || 0,
-        phoneCount: r.phone_count || 0,
-        sourceFile: r.source_file || "",
-        rawAttributes: rawAttrs,
-        workEmail: r.work_email || "",
-        personalEmail: r.personal_email || "",
-        seniority: r.seniority || rawAttrs.seniority || "",
-        department: r.department || rawAttrs.department || "",
-      };
-    });
-
+    const leads: DirectoryLead[] = rawRows.map(mapSearchRow);
     const totalPages = Math.ceil(total / pageSize);
 
     return {
@@ -729,6 +903,46 @@ export function searchLeadsDirectory(params: DirectorySearchParams): DirectorySe
       totalPages: 0,
     };
   }
+}
+
+/** One directory row as a search result lead. */
+export function mapSearchRow(r: any): DirectoryLead {
+  let rawAttrs: Record<string, string> = {};
+  try {
+    if (r.raw_data) {
+      rawAttrs = JSON.parse(r.raw_data);
+    }
+  } catch {}
+
+  return {
+    id: r.id,
+    leadId: r.lead_id || String(r.id),
+    firstName: r.first_name || "",
+    lastName: r.last_name || "",
+    fullName: r.full_name || `${r.first_name || ""} ${r.last_name || ""}`.trim(),
+    jobTitle: r.job_title || "",
+    companyName: r.company_name || "",
+    companyWebsite: r.company_website || "",
+    linkedinUrl: r.linkedin_url || "",
+    location: r.location || "",
+    city: r.city || "",
+    state: r.state || "",
+    country: r.country || "",
+    industry: r.industry || "",
+    teamSize: r.team_size || "",
+    revenueRange: r.revenue_range || "",
+    email: r.email || "",
+    emailStatus: r.email_status || "",
+    phone: r.phone || "",
+    emailCount: r.email_count || 0,
+    phoneCount: r.phone_count || 0,
+    sourceFile: r.source_file || "",
+    rawAttributes: rawAttrs,
+    workEmail: r.work_email || "",
+    personalEmail: r.personal_email || "",
+    seniority: r.seniority || rawAttrs.seniority || "",
+    department: r.department || rawAttrs.department || "",
+  };
 }
 
 /* ─── Directory entitlement (server-side paywall) ──────────────────────────
@@ -810,24 +1024,29 @@ export function applyDirectoryAccess(
 /** Search with the paywall applied for this access level. */
 export function searchLeadsDirectoryForAccess(
   params: DirectorySearchParams,
-  level: DirectoryAccessLevel
+  level: DirectoryAccessLevel,
+  opts: DirectorySearchOptions = {}
 ): DirectorySearchResult {
-  return applyDirectoryAccess(searchLeadsDirectory(clampDirectorySearchParams(params, level)), level);
+  return applyDirectoryAccess(searchLeadsDirectory(clampDirectorySearchParams(params, level), opts), level);
 }
 
 /** Max rows the autopilot lead matcher preview returns per call. */
 export const LEAD_MATCHER_MAX_PAGE_SIZE = 10;
 
-/** Launch targeting the lead matcher can narrow by (same filters launch uses). */
+/** Launch targeting the lead matcher previews (same rules launch uses). */
 export interface LeadMatcherFilters {
   jobTitles?: string[];
+  /** Company sizes: an order, never a filter. People at these sizes are shown first. */
   teamSizes?: string[];
 }
 
 /**
  * Search params for the autopilot lead matcher preview: the launch audience
- * (work addresses in the given countries), page size capped. Job titles and
- * team sizes are added only when given, so the preview matches launch.
+ * (work addresses in the given countries), page size capped. Job titles are
+ * added only when given, matched as whole phrases like the Priority 1 tier,
+ * so setup and the run page count the same people. Company size never
+ * narrows the audience, so it is not a filter here
+ * (searchLeadMatcherPreview shows those people first).
  */
 export function leadMatcherSearchParams(
   industries: string[],
@@ -845,24 +1064,43 @@ export function leadMatcherSearchParams(
     page: Math.max(1, Math.floor(Number(page)) || 1),
     pageSize: size,
   };
-  if (filters.jobTitles && filters.jobTitles.length > 0) params.jobTitles = filters.jobTitles;
-  if (filters.teamSizes && filters.teamSizes.length > 0) params.teamSizes = filters.teamSizes;
+  if (filters.jobTitles && filters.jobTitles.length > 0) {
+    params.jobTitles = filters.jobTitles;
+    params.jobTitleMatch = "phrase";
+  }
   return params;
+}
+
+/** A directory search for the preview; count: false when only the rows are needed. */
+export type PreviewSearch<R> = (params: DirectorySearchParams, opts: DirectorySearchOptions) => R;
+
+/** Page 1 of the preview: people at the run's sizes first, then everyone; the total counts everyone. */
+export function mergeSizedFirst(everyone: DirectorySearchResult, sized: DirectorySearchResult): DirectorySearchResult {
+  const seen = new Set(sized.leads.map((l) => l.id));
+  const leads = [...sized.leads, ...everyone.leads.filter((l) => !seen.has(l.id))].slice(0, everyone.pageSize);
+  return { ...everyone, leads };
 }
 
 /**
  * Lead matcher preview. The UI only shows name, title, company and location,
  * so contact details are always masked (preview level), whatever the
- * caller's directory access.
+ * caller's directory access. The total counts every company size; on page 1
+ * people at the run's company sizes come first, as they do at launch.
  */
 export function searchLeadMatcherPreview(
   industries: string[],
   countries: string[],
   page = 1,
   pageSize = LEAD_MATCHER_MAX_PAGE_SIZE,
-  filters: LeadMatcherFilters = {}
+  filters: LeadMatcherFilters = {},
+  search: PreviewSearch<DirectorySearchResult> = (p, o) => searchLeadsDirectoryForAccess(p, "none", o)
 ): DirectorySearchResult {
-  return searchLeadsDirectoryForAccess(leadMatcherSearchParams(industries, countries, page, pageSize, filters), "none");
+  const params = leadMatcherSearchParams(industries, countries, page, pageSize, filters);
+  const everyone = search(params, {});
+  const sizes = filters.teamSizes ?? [];
+  if (sizes.length === 0 || (params.page ?? 1) > 1) return everyone;
+  // Rows only: the total is everyone's.
+  return mergeSizedFirst(everyone, search({ ...params, teamSizes: sizes }, { count: false }));
 }
 
 /** Max rows per CSV export for this level; 0 means exports are blocked. */
@@ -1169,6 +1407,14 @@ export function directoryCountByEmail(email: string, db: DatabaseSync = getDirec
 export function deleteDirectoryLeadsByEmail(email: string, db: DatabaseSync = getDirectoryDb()): number {
   const e = email.trim().toLowerCase();
   if (!e) return 0;
+  // Keep the highest id ever used, so deleting the newest row never looks
+  // like a different directory (directoryFingerprint).
+  try {
+    db.exec(
+      "INSERT INTO directory_meta(key, value) SELECT 'id_high_water', CAST(m AS TEXT) FROM (SELECT max(id) AS m FROM leads) WHERE m IS NOT NULL " +
+        "ON CONFLICT(key) DO UPDATE SET value = CAST(max(CAST(value AS INTEGER), CAST(excluded.value AS INTEGER)) AS TEXT)"
+    );
+  } catch {}
   const result = db.prepare(`DELETE FROM leads WHERE ${DIRECTORY_EMAIL_MATCH}`).run(e, e, e);
   const deleted = Number(result.changes ?? 0);
   if (deleted > 0) invalidateDirectoryFacetsCache();

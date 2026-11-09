@@ -2,9 +2,10 @@
 
 import { useId, useState } from "react";
 import { ArrowLeft, Rocket } from "lucide-react";
-import { Button, Card, CardDescription, CardHeader, CardTitle } from "@smartreach/ui";
+import { Button, Card, CardDescription, CardHeader, CardTitle, cn } from "@smartreach/ui";
 import { AUTOPILOT_DAILY_DEFAULT, AUTOPILOT_DAILY_MAX, AUTOPILOT_DAILY_MIN } from "@/lib/autopilot-policy";
 import { EMAILS_PER_LEAD, PRICE_CENTS_PER_EMAIL, forecastFromDailyVolume, formatCost } from "@/lib/pricing";
+import { poolCapacityMessage, type CustomerPoolShare } from "@/lib/pool-capacity";
 
 export const MIN_DAILY = AUTOPILOT_DAILY_MIN;
 export const MAX_DAILY = AUTOPILOT_DAILY_MAX;
@@ -51,13 +52,65 @@ export function DailyVolumeInput({
 }
 
 /**
- * What a daily volume means: every email counts (follow-ups included), each
- * lead gets three, and the cost at the published price.
+ * What the shared mailboxes can send for this customer right now, next to the
+ * emails-per-day control. Renders nothing when the estimate is unavailable.
  */
-export function VolumeForecast({ perDay, className }: { perDay: number; className?: string }) {
-  const f = forecastFromDailyVolume(perDay);
+export function PoolCapacityNote({
+  share,
+  perDay,
+  className,
+}: {
+  share: CustomerPoolShare | null | undefined;
+  perDay: number;
+  className?: string;
+}) {
+  if (!share) return null;
+  const m = poolCapacityMessage(share, perDay);
+  return (
+    <div data-testid="pool-capacity-note" className={cn("text-[13px] leading-relaxed", className)}>
+      <p className="font-medium text-foreground">{m.text}</p>
+      {m.expect ? (
+        <p className={m.tone === "warning" ? "text-warning-text" : "text-muted-foreground"}>{m.expect}</p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Emails a day the forecast should assume: the choice, or what the pool can send when that is lower. */
+export function expectedPerDay(perDay: number, share: CustomerPoolShare | null | undefined): number {
+  return share ? poolCapacityMessage(share, perDay).expectedPerDay : perDay;
+}
+
+/**
+ * What a daily volume means: every email counts (follow-ups included), each
+ * lead gets three, and the cost at the published price. With `expected` below
+ * `perDay` (the pool can't send that many yet) the numbers use `expected`.
+ */
+export function VolumeForecast({
+  perDay,
+  expected,
+  className,
+}: {
+  perDay: number;
+  /** What can actually go out a day, when lower than perDay. */
+  expected?: number;
+  className?: string;
+}) {
+  const limited = typeof expected === "number" && expected < perDay;
+  // Nothing can go out right now: show what the chosen number means once it can.
+  const waiting = limited && expected <= 0;
+  const f = forecastFromDailyVolume(limited && !waiting ? expected : perDay);
   return (
     <div className={className}>
+      {waiting ? (
+        <p className="mb-2 text-xs text-muted-foreground">
+          Nothing can go out right now. Once it can, here is what {perDay.toLocaleString()} a day means.
+        </p>
+      ) : limited ? (
+        <p className="mb-2 text-xs text-muted-foreground">
+          Based on about {expected.toLocaleString()} a day, what can go out right now.
+        </p>
+      ) : null}
       <dl className="grid grid-cols-3 gap-3 rounded-lg bg-muted/60 p-4 text-[13px]">
         <div>
           <dt className="text-xs text-muted-foreground">New leads a day</dt>
@@ -88,6 +141,7 @@ export function VelocitySlider({
   isLaunching = false,
   onBack,
   sendingFrom,
+  poolShare = null,
 }: {
   initialLimit?: number;
   onLaunch: (dailyLimit: number) => void;
@@ -95,6 +149,8 @@ export function VelocitySlider({
   onBack?: () => void;
   /** The shared pool the emails go out from, with one persona as an example. */
   sendingFrom?: { poolSize: number; exampleName: string };
+  /** What the pool can send for this customer right now (null when unknown). */
+  poolShare?: CustomerPoolShare | null;
 }) {
   const [dailyLimit, setDailyLimit] = useState(initialLimit);
   const inputId = useId();
@@ -124,9 +180,10 @@ export function VelocitySlider({
           <div className="mt-4">
             <DailyVolumeInput id={inputId} value={dailyLimit} onChange={setDailyLimit} disabled={isLaunching} />
           </div>
+          <PoolCapacityNote share={poolShare} perDay={dailyLimit} className="mt-3" />
         </div>
 
-        <VolumeForecast perDay={dailyLimit} />
+        <VolumeForecast perDay={dailyLimit} expected={expectedPerDay(dailyLimit, poolShare)} />
         <dl className="grid grid-cols-1 gap-3 rounded-lg bg-muted/60 p-4 text-[13px]">
           {sendingFrom ? (
             <div>

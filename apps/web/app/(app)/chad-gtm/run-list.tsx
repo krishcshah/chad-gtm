@@ -57,6 +57,11 @@ export function RunList({ runs }: { runs: RunSummary[] }) {
                       {host} · {r.dailyEmailLimit.toLocaleString()} a day ·{" "}
                       {REPLY_MODE[r.replyAgentMode] ?? MODE_LABEL.agent} · {timeAgo(r.createdAt)}
                     </span>
+                    {r.phase === "awaiting_approval" ? (
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        Launches on its own once your account is approved
+                      </span>
+                    ) : null}
                   </span>
                   <ChevronRight
                     className="size-4 shrink-0 text-subtle-foreground transition-transform group-hover:translate-x-0.5"

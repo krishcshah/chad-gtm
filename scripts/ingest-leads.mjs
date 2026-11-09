@@ -46,6 +46,7 @@ if (!fs.existsSync(path.dirname(dbPath))) {
 }
 
 const db = new DatabaseSync(dbPath);
+const hadLeads = Boolean(db.prepare("SELECT 1 AS v FROM sqlite_master WHERE type = 'table' AND name = 'leads'").get());
 db.exec(`
   PRAGMA journal_mode = WAL;
   PRAGMA synchronous = NORMAL;
@@ -66,6 +67,17 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_leads_job_title ON leads(job_title);
   CREATE INDEX IF NOT EXISTS idx_leads_email ON leads(email);
 `);
+
+// A new directory file gets its own version, so swapping it in for an older
+// file makes every Autopilot audience walk it from the start (the app's
+// directoryFingerprint; docs/directory-swap.md). Appending to an existing
+// file keeps its version: audiences only see the added rows.
+if (!hadLeads) {
+  const version = `build-${new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14)}-${Math.random().toString(36).slice(2, 8)}`;
+  db.exec("CREATE TABLE IF NOT EXISTS directory_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')");
+  db.prepare("INSERT INTO directory_meta(key, value) VALUES('directory_version', ?) ON CONFLICT(key) DO NOTHING").run(version);
+  console.log(`[ingest] new directory file, directory_version=${version}`);
+}
 
 const insertStmt = db.prepare(`
   INSERT INTO leads (

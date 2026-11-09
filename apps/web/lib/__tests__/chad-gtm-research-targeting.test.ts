@@ -18,6 +18,7 @@ vi.mock("../leads-directory", () => ({
   }),
 }));
 vi.mock("../gtm-crawler", () => ({ crawlCompanyDomain: vi.fn() }));
+vi.mock("../directory-search-async", () => ({ directoryIndustriesAsync: vi.fn(async () => null) }));
 
 import { matchIndustriesInNotes, synthesizeGtmStrategy, type ScrapedCompanyData } from "../chad-gtm-research";
 import { assessTargeting } from "../autopilot-policy";

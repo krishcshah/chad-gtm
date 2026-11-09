@@ -11,6 +11,7 @@ export * from "./pool-allocation";
 export * from "./mailer";
 export * from "./system-mailer";
 export * from "./worker";
+export * from "./drafter";
 export type { EngineDb, SenderRow, CampaignRow, JobRow } from "./db-port";
 export * from "./queue-mode";
 export * from "./sequence";

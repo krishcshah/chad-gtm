@@ -12,7 +12,6 @@
  * stuck-job recovery) picks them up. Emails are NEVER sent from HTTP
  * requests; they only flow through email_jobs → processor.
  */
-import { loadEngineAiOptions } from "./ai-options";
 import {
   buildUnsubscribeUrl,
   createUnsubscribeToken,
@@ -33,10 +32,15 @@ import {
 import { and, asc, desc, eq, exists, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { CampaignRow, EngineDb, SenderRow } from "./db-port";
 import {
+  claimableDraftFilter,
   dueQueuedLeadFilter,
   extractSenderFirstName,
+  loadAiStepPlan,
   loadCampaignSequenceSteps,
   resolveStepContent,
+  WRITING_UNAVAILABLE_PREFIX,
+  writingUnavailable,
+  type StoredDraft,
 } from "./sequence";
 import {
   campaignDayKey,
@@ -68,6 +72,8 @@ const STICKY_DEFER_SEC = 3600;
 const RESCHEDULE_PAD_MIN = 5;
 /** scheduleCampaign note: every mailbox is booked to the pacing horizon (normal sending, not a block). */
 export const PACED_NOTE = "paced";
+/** scheduleCampaign note: emails are waiting to be written because the AI model is unavailable. */
+export const WRITING_UNAVAILABLE_NOTE = WRITING_UNAVAILABLE_PREFIX;
 
 /**
  * Notes from scheduleCampaign / schedulerTick that explain why a running
@@ -85,6 +91,7 @@ export const SEND_BLOCK_REASONS = [
   "missing-postal-address",
   "missing-list",
   "missing-list-or-template",
+  "writing-unavailable",
 ] as const;
 export type SendBlockReason = (typeof SEND_BLOCK_REASONS)[number];
 
@@ -294,6 +301,9 @@ export async function scheduleCampaign(
   if (!campaign.templateId && sequenceSteps.length === 0) {
     return { enqueued: 0, note: "missing-list-or-template" };
   }
+  // AI-written steps are drafted ahead (drafter.ts): only leads with a ready
+  // draft for their step are claimed, and nothing here calls the AI.
+  const { plan: aiPlan, variantsByStep } = await loadAiStepPlan(db, sequenceSteps);
 
   // Every cold email carries the sender's postal address (CAN-SPAM). The
   // processor adds the footer at send time; without an address nothing is
@@ -332,6 +342,7 @@ export async function scheduleCampaign(
       and(
         eq(schema.campaignLeads.campaignId, campaign.id),
         dueQueuedLeadFilter(nowIsoS),
+        claimableDraftFilter(aiPlan),
         // stop-after-reply is enforced at claim time and again at send time
         campaign.stopOnReply
           ? notExistsReplied(db, campaign.id)
@@ -386,6 +397,10 @@ export async function scheduleCampaign(
       await log(db, campaign.userId, "campaign_completed", `Campaign "${campaign.name}" finished`, campaign.id);
       return { enqueued: 0, note: "completed" };
     }
+    // Emails are waiting to be written and the model is down: say so.
+    if (aiPlan.positions.length > 0 && (await writingUnavailable(db, campaign.id))) {
+      return { enqueued: 0, note: WRITING_UNAVAILABLE_NOTE };
+    }
     return { enqueued: 0, note: "waiting-retry" };
   }
 
@@ -437,12 +452,18 @@ export async function scheduleCampaign(
   if (claimed.length === 0) return { enqueued: 0, note: "claim-race" };
   budget = Math.min(budget, claimed.length);
 
-  // Load lead + template data for rendering
-  const claimedRows: { id: string; leadId: string; stepPosition: number }[] = await db
+  // Load lead + draft data for rendering
+  const claimedRows: Array<{ id: string; leadId: string; stepPosition: number } & Partial<StoredDraft>> = await db
     .select({
       id: schema.campaignLeads.id,
       leadId: schema.campaignLeads.leadId,
       stepPosition: schema.campaignLeads.stepPosition,
+      draftStep: schema.campaignLeads.draftStep,
+      draftVariantId: schema.campaignLeads.draftVariantId,
+      draftSubject: schema.campaignLeads.draftSubject,
+      draftBodyText: schema.campaignLeads.draftBodyText,
+      draftBodyHtml: schema.campaignLeads.draftBodyHtml,
+      draftStatus: schema.campaignLeads.draftStatus,
     })
     .from(schema.campaignLeads)
     .where(inArray(schema.campaignLeads.id, claimed.map((c) => c.id)));
@@ -554,16 +575,17 @@ export async function scheduleCampaign(
       sender_name: senderFirstName,
       senderName: senderFirstName,
     };
+    // The draft's {{sender_name}} becomes this mailbox's first name (follow-ups: the step-1 mailbox).
+    const stepRow = sequenceSteps.find((s) => s.position === (cl.stepPosition ?? 1));
     const content = await resolveStepContent(db, {
       campaignId: campaign.id,
       stepPosition: cl.stepPosition ?? 1,
       templateId: campaign.templateId,
       vars,
       steps: sequenceSteps,
-      lead,
-      senderName: senderFirstName,
       campaignLeadId: cl.id,
-      aiOptions: await loadEngineAiOptions(db, campaign.userId),
+      draft: storedDraftOf(cl),
+      variants: stepRow ? variantsByStep.get(stepRow.id) : undefined,
     });
     if ("error" in content) {
       await db
@@ -657,6 +679,17 @@ export async function scheduleCampaign(
     .set({ lastSenderIdx: cursor, updatedAt: nowIsoS })
     .where(eq(schema.campaigns.id, campaign.id));
   return enqueued === 0 && paced ? { enqueued, note: PACED_NOTE } : { enqueued };
+}
+
+function storedDraftOf(row: Partial<StoredDraft>): StoredDraft {
+  return {
+    draftStep: row.draftStep ?? null,
+    draftVariantId: row.draftVariantId ?? null,
+    draftSubject: row.draftSubject ?? null,
+    draftBodyText: row.draftBodyText ?? null,
+    draftBodyHtml: row.draftBodyHtml ?? null,
+    draftStatus: row.draftStatus ?? null,
+  };
 }
 
 /**

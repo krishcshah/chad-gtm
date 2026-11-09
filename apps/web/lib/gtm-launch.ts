@@ -5,25 +5,27 @@
  * NOT a "use server" module: these helpers take a trusted user/workspace id and
  * must never be callable from the browser.
  */
-import { and, eq, isNull, lt, or } from "drizzle-orm";
+import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { ensureOutreachSpintax, loadWorkspaceProfile, normalizeEmail, schema } from "@smartreach/database";
 import { nowIso } from "@smartreach/shared";
 import type { Db } from "./db";
 import { CONTACT_COOLDOWN_DAYS, recentlyContactedEmails, suppressedEmailsFor } from "./contact-guards";
 import {
+  directoryFingerprint,
   getDirectoryFacets,
   getMatchingDirectoryLeadsForExport,
   searchLeadMatcherPreview,
   type DirectoryAccessLevel,
   type DirectoryLead,
 } from "./leads-directory";
+import { matchingDirectoryLeadsAsync, searchLeadMatcherPreviewAsync } from "./directory-search-async";
 import type { CampaignResearchContext } from "./ai";
 import { ensureCampaignLeadSnapshot } from "./campaign-drafts";
 import {
-  TIERS,
   applyPriorities,
   audienceGates,
   insertAudienceLeads,
+  directoryPage,
   newAudienceState,
   pickNextLeads,
   refillTarget,
@@ -138,21 +140,91 @@ export type DirectoryQuery = (
   offset: number
 ) => DirectoryLead[];
 
+/** DirectoryQuery run in the directory worker. */
+export type AsyncDirectoryQuery = (
+  params: Parameters<typeof getMatchingDirectoryLeadsForExport>[0],
+  maxRows: number,
+  offset: number
+) => Promise<DirectoryLead[]>;
+
 export interface TargetedLeadOptions {
   countries?: string[];
   query?: DirectoryQuery;
-  /** Directory team-size facet values (runTeamSizes); applies to every query. */
+  /** Directory team-size facet values (runTeamSizes): people at these sizes come first; never a filter. */
   teamSizes?: string[];
   /** Only people with the target job titles: no industry-only top-up. */
   strictRoles?: boolean;
 }
 
+type DirectoryRequest = { params: Parameters<typeof getMatchingDirectoryLeadsForExport>[0]; maxRows: number; offset: number };
+
 /**
  * Prefer leads whose titles match the ICP, then (unless strictRoles) top up
  * with industry-only matches. Prevents a campaign from starving when title
- * formats vary wildly. Only work addresses in the allowed countries are ever
- * returned. roleMatches is how many leads came from the job-title query.
+ * formats vary wildly. Within each, people at the run's company sizes come
+ * first, then everyone else (size orders, it never excludes). Only work
+ * addresses in the allowed countries are ever returned. roleMatches is how
+ * many leads came from the job-title queries. Yields each directory query and
+ * receives its rows, so the same steps run synchronously or in the worker.
  */
+function* targetedLeadSteps(
+  industries: string[],
+  targetTitles: string[],
+  desired: number,
+  offset: number,
+  options: Omit<TargetedLeadOptions, "query">
+): Generator<DirectoryRequest, { leads: DirectoryLead[]; roleMatches: number }, DirectoryLead[]> {
+  const countries = options.countries ?? autopilotCountries();
+  const teamSizes = options.teamSizes && options.teamSizes.length > 0 ? options.teamSizes : undefined;
+  const base = {
+    industries: industries.length > 0 ? industries : undefined,
+    countries,
+    hasEmail: true,
+    hasWorkEmail: true,
+  };
+  const passes: Array<{ teamSizes?: string[] }> = teamSizes ? [{ teamSizes }, {}] : [{}];
+  const leads: DirectoryLead[] = [];
+  const seen = new Set<string>();
+  const take = (rows: DirectoryLead[]) => {
+    for (const lead of rows) {
+      if (leads.length >= desired) break;
+      const key = lead.email.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      leads.push(lead);
+    }
+  };
+  // A small share of "work" addresses are ISP mailboxes; over-fetch to cover them.
+  const fetchSize = Math.ceil(desired * 1.25) + 5;
+  if (targetTitles.length === 0) {
+    for (const pass of passes) {
+      if (leads.length < desired) take(toContactableLeads(yield { params: { ...base, ...pass }, maxRows: fetchSize, offset }, countries));
+    }
+    return { leads, roleMatches: leads.length };
+  }
+
+  for (const pass of passes) {
+    if (leads.length < desired) {
+      const params = { ...base, ...pass, jobTitles: targetTitles, jobTitleMatch: "phrase" as const };
+      take(toContactableLeads(yield { params, maxRows: fetchSize, offset }, countries));
+    }
+  }
+  const roleMatches = leads.length;
+  if (leads.length >= desired || options.strictRoles) return { leads, roleMatches };
+
+  for (const pass of passes) {
+    if (leads.length >= desired) break;
+    let fallback = toContactableLeads(yield { params: { ...base, ...pass }, maxRows: desired * 3, offset }, countries);
+    if (fallback.length === 0 && offset > 0) {
+      // Niche industries can have fewer rows than the rotation offset.
+      fallback = toContactableLeads(yield { params: { ...base, ...pass }, maxRows: desired * 3, offset: 0 }, countries);
+    }
+    take(fallback);
+  }
+  return { leads, roleMatches };
+}
+
+/** targetedLeadSteps on this thread (tests, scripts). Pages use fetchTargetedLeadsAsync. */
 export function fetchTargetedLeadsWithSplit(
   industries: string[],
   targetTitles: string[],
@@ -160,44 +232,11 @@ export function fetchTargetedLeadsWithSplit(
   offset: number,
   options: TargetedLeadOptions = {}
 ): { leads: DirectoryLead[]; roleMatches: number } {
-  const countries = options.countries ?? autopilotCountries();
   const query: DirectoryQuery = options.query ?? getMatchingDirectoryLeadsForExport;
-  const teamSizes = options.teamSizes && options.teamSizes.length > 0 ? options.teamSizes : undefined;
-  const base = {
-    industries: industries.length > 0 ? industries : undefined,
-    countries,
-    hasEmail: true,
-    hasWorkEmail: true,
-    ...(teamSizes ? { teamSizes } : {}),
-  };
-  // A small share of "work" addresses are ISP mailboxes; over-fetch to cover them.
-  const fetchSize = Math.ceil(desired * 1.25) + 5;
-  if (targetTitles.length === 0) {
-    const leads = toContactableLeads(query(base, fetchSize, offset), countries).slice(0, desired);
-    return { leads, roleMatches: leads.length };
-  }
-
-  const targeted = toContactableLeads(query({ ...base, jobTitles: targetTitles }, fetchSize, offset), countries).slice(
-    0,
-    desired
-  );
-  const roleMatches = targeted.length;
-  if (targeted.length >= desired || options.strictRoles) return { leads: targeted, roleMatches };
-
-  const seen = new Set(targeted.map((lead) => lead.email.toLowerCase()));
-  let fallback = toContactableLeads(query(base, desired * 3, offset), countries);
-  if (fallback.length === 0 && offset > 0) {
-    // Niche industries can have fewer rows than the rotation offset.
-    fallback = toContactableLeads(query(base, desired * 3, 0), countries);
-  }
-  for (const lead of fallback) {
-    if (targeted.length >= desired) break;
-    const key = lead.email.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    targeted.push(lead);
-  }
-  return { leads: targeted, roleMatches };
+  const steps = targetedLeadSteps(industries, targetTitles, desired, offset, options);
+  let step = steps.next();
+  while (!step.done) step = steps.next(query(step.value.params, step.value.maxRows, step.value.offset));
+  return step.value;
 }
 
 /** fetchTargetedLeadsWithSplit, leads only. */
@@ -212,8 +251,27 @@ export function fetchTargetedLeads(
 }
 
 /**
+ * fetchTargetedLeads with the directory reads in the worker thread (plan
+ * sample lead, guided-setup leads): a slow read never freezes the server.
+ */
+export async function fetchTargetedLeadsAsync(
+  industries: string[],
+  targetTitles: string[],
+  desired: number,
+  offset: number,
+  options: Omit<TargetedLeadOptions, "query"> & { query?: AsyncDirectoryQuery } = {}
+): Promise<DirectoryLead[]> {
+  const query: AsyncDirectoryQuery = options.query ?? matchingDirectoryLeadsAsync;
+  const steps = targetedLeadSteps(industries, targetTitles, desired, offset, options);
+  let step = steps.next();
+  while (!step.done) step = steps.next(await query(step.value.params, step.value.maxRows, step.value.offset));
+  return step.value.leads;
+}
+
+/**
  * The run's company sizes ('11-50', ...) as the directory's team-size facet
- * values. [] (no size filter) when none parse or the facet list is unavailable.
+ * values: people at these sizes are contacted first in each priority tier.
+ * [] when none parse or the facet list is unavailable.
  */
 export function runTeamSizes(
   run: Pick<RunRow, "icpProfile">,
@@ -230,6 +288,18 @@ export function runTeamSizes(
   return teamSizeValuesForBrackets(brackets.map((b) => String(b ?? "")), available);
 }
 
+/** How long launch keeps reading the directory for its first batch before starting with an open audience. */
+export const LAUNCH_SEARCH_BUDGET_MS = 20_000;
+
+/** The directory the launch walks (stored with the audience); undefined if unreadable. */
+export function launchDirectoryFingerprint(): string | undefined {
+  try {
+    return directoryFingerprint();
+  } catch {
+    return undefined;
+  }
+}
+
 /** icpProfile.strictRoles: only contact people with the target job titles. */
 export function runStrictRoles(run: Pick<RunRow, "icpProfile">): boolean {
   return Boolean((run.icpProfile as { strictRoles?: unknown } | null)?.strictRoles);
@@ -238,16 +308,20 @@ export function runStrictRoles(run: Pick<RunRow, "icpProfile">): boolean {
 export { LAUNCH_AUDIENCE_NOTE };
 
 export interface LaunchAudienceCounts {
-  /** Matching contacts with one of the target job titles (and company size, when set). */
+  /** Matching contacts with one of the target job titles, every company size. */
   roleMatches: number;
   /** Others in the same industries that launch tops a run up with. */
   otherRoles: number;
+  /** A count failed or timed out: the numbers are not real zeros. */
+  unavailable?: boolean;
 }
 
 /**
  * How many directory contacts a launch picks from, split the way launch
- * picks them: title matches first, then others in the same industries.
- * Counts only; zero on any directory error.
+ * picks them: title matches first, then others in the same industries. Work
+ * addresses in the countries AutoGTM sends to. Company size only orders the
+ * audience, so it never narrows these counts (teamSizes is accepted and
+ * ignored). Counts only; zero on any directory error.
  */
 export function launchAudienceCounts(input: {
   industries: string[];
@@ -256,17 +330,33 @@ export function launchAudienceCounts(input: {
   countries: string[];
 }): LaunchAudienceCounts {
   try {
-    const teamSizes = input.teamSizes && input.teamSizes.length > 0 ? input.teamSizes : undefined;
-    const sizeFilter = teamSizes ? { teamSizes } : {};
-    const everyone = searchLeadMatcherPreview(input.industries, input.countries, 1, 1, sizeFilter).total;
+    const everyone = searchLeadMatcherPreview(input.industries, input.countries, 1, 1).total;
     if (input.titles.length === 0) return { roleMatches: everyone, otherRoles: 0 };
     const roleMatches = searchLeadMatcherPreview(input.industries, input.countries, 1, 1, {
       jobTitles: input.titles,
-      ...sizeFilter,
     }).total;
     return { roleMatches, otherRoles: Math.max(0, everyone - roleMatches) };
   } catch {
     return { roleMatches: 0, otherRoles: 0 };
+  }
+}
+
+/** launchAudienceCounts, with the counts run in the directory worker (pages never freeze). */
+export async function launchAudienceCountsAsync(
+  input: { industries: string[]; titles: string[]; teamSizes?: string[]; countries: string[] },
+  search: typeof searchLeadMatcherPreviewAsync = searchLeadMatcherPreviewAsync,
+): Promise<LaunchAudienceCounts> {
+  try {
+    const [everyone, roles] = await Promise.all([
+      search(input.industries, input.countries, 1, 1),
+      input.titles.length > 0 ? search(input.industries, input.countries, 1, 1, { jobTitles: input.titles }) : null,
+    ]);
+    const unavailable = Boolean(everyone.countUnavailable || roles?.countUnavailable);
+    const flag = unavailable ? { unavailable: true } : {};
+    if (!roles) return { roleMatches: everyone.total, otherRoles: 0, ...flag };
+    return { roleMatches: roles.total, otherRoles: Math.max(0, everyone.total - roles.total), ...flag };
+  } catch {
+    return { roleMatches: 0, otherRoles: 0, unavailable: true };
   }
 }
 
@@ -578,18 +668,33 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
   // other decision-makers, everyone else in the industries). Launch loads the
   // first batch; topUpAutopilotAudiences() keeps the queue filled after that.
   // Cooldown, suppression and work-address rules apply to every batch.
+  // Only the first batch is read here, in a worker thread; tier totals are
+  // counted by the top-up afterwards (slow on a large directory).
   const audienceStart = newAudienceState({
     industries,
     targetTitles: getTargetTitles(run),
     teamSizes: runTeamSizes(run),
     strictRoles: runStrictRoles(run),
+    fingerprint: launchDirectoryFingerprint(),
   });
   const gates = audienceGates(db, { userId, contactable: toContactableLeads });
-  const { picked, state: audience } = await pickNextLeads(audienceStart, refillTarget(dailyLimit).batch, gates);
-  if (picked.length === 0) {
-    const total = TIERS.reduce((n, t) => n + audienceStart.tiers[`${t}`].total, 0);
-    throw new LaunchError(total > 0 ? "all_contacted" : "no_leads");
+  // Keep reading (within a time budget) until someone is picked or the
+  // audience runs out: blocked rows at the start never fail a launch.
+  const first = await pickNextLeads(audienceStart, refillTarget(dailyLimit).batch, gates, directoryPage, {
+    untilPicked: true,
+    deadline: Date.now() + LAUNCH_SEARCH_BUDGET_MS,
+  });
+  const picked = first.picked;
+  let audience = first.state;
+  if (picked.length === 0 && audience.exhausted) {
+    // Contactable people existed but every one was skipped: all_contacted.
+    // Nobody contactable at all (no rows, or only personal or ISP addresses): no_leads.
+    throw new LaunchError(first.eligible > 0 ? "all_contacted" : "no_leads");
   }
+  // picked can be 0 here: the budget ran out with rows still unread. The
+  // campaign starts with its audience open and the top-up continues from
+  // the saved cursors within minutes.
+  if (audience.exhausted) audience = { ...audience, closedReason: "exhausted", closedAt: nowIso() };
   // With no target titles everyone counts as a role match (as before tiers existed).
   const roleMatched = audienceStart.targetTitles.length ? picked.filter((p) => p.tier === 1).length : picked.length;
   const launchAudience = {
@@ -740,11 +845,13 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
       .onConflictDoNothing();
 
     const snapshot = await ensureCampaignLeadSnapshot(db, campaignId, listId);
-    if (snapshot === 0) {
+    if (snapshot === 0 && audience.exhausted) {
       // Fail closed: the snapshot's #31 rules left everyone out. The 90-day
       // check above already covers the owner's recent campaigns, so the people
       // left out are queued in another of the owner's live campaigns (no two
       // sequences in parallel). Matches existed, so this is all_contacted.
+      // With rows still unread the audience stays open instead: the top-up
+      // keeps looking (people already in this list stay out).
       throw new LaunchError("all_contacted");
     }
     // Sending order: Priority 1 first, then 2, then 3.
@@ -752,7 +859,10 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
 
     // Link the run while the campaign is still a draft, and only if no other
     // launch linked one first. Releases the claim in the same write.
-    const { launchFailure: _cleared, ...profileWithoutFailure } = calibratedProfile;
+    // Merged into the stored profile, never replacing it: a key written while
+    // this launch ran (approvalLaunch, by an approval) stays; launchFailure goes.
+    const { launchFailure: _cleared, approvalLaunch: _kept, ...profileWithoutFailure } = calibratedProfile;
+    const cp = schema.chadGtmRuns.calibrationProfile;
     const linked: Array<{ id: string }> = await db
       .update(schema.chadGtmRuns)
       .set({
@@ -761,7 +871,7 @@ export async function launchRunCampaign(db: Db, input: LaunchRunInput): Promise<
         dailyEmailLimit: dailyLimit,
         approvedEmailSamples: approvedSamples,
         offers,
-        calibrationProfile: { ...profileWithoutFailure, launchAudience },
+        calibrationProfile: sql`(coalesce(${cp}, '{}'::jsonb) || ${JSON.stringify({ ...profileWithoutFailure, launchAudience })}::jsonb) - 'launchFailure'`,
         audience,
         launchStartedAt: null,
         updatedAt: nowIso(),

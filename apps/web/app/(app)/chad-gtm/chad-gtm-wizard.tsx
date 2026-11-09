@@ -36,6 +36,8 @@ import { LeadConversationsControl } from "@/components/lead-conversations/lead-c
 import { LEAD_CONVERSATIONS_LABEL } from "@/lib/lead-conversations";
 import { AUTOPILOT_DAILY_DEFAULT, clampAutopilotDaily, withChosenOfferFirst } from "@/lib/autopilot-policy";
 import type { SynthesizedGtmStrategy } from "@/lib/chad-gtm-research";
+import type { CustomerPoolShare } from "@/lib/pool-capacity";
+import { awaitingApprovalText } from "@/lib/approval-copy";
 import { WizardStepper } from "./wizard-stepper";
 import { WebsiteStep } from "./website-step";
 
@@ -59,7 +61,16 @@ export interface WizardResume {
  * Guided setup: website → strategy → audience → email voice → volume and
  * launch. One decision per step; every step saves before moving on.
  */
-export function ChadGtmWizard({ allIndustries, resume }: { allIndustries: string[]; resume?: WizardResume }) {
+export function ChadGtmWizard({
+  allIndustries,
+  resume,
+  poolShare = null,
+}: {
+  allIndustries: string[];
+  resume?: WizardResume;
+  /** What the shared mailboxes can send for this customer right now (null when unknown). */
+  poolShare?: CustomerPoolShare | null;
+}) {
   const router = useRouter();
   const stepRef = useRef<HTMLDivElement>(null);
   // Reviewed copy is resumed as reviewed: straight on to Launch.
@@ -241,6 +252,10 @@ export function ChadGtmWizard({ allIndustries, resume }: { allIndustries: string
       if (res.ok) {
         toast.success("Outreach is live");
         router.push(`/chad-gtm/${runId}`);
+      } else if (res.awaitingApproval) {
+        // Saved: approval launches it, nothing for the founder to do.
+        toast.info(res.error || awaitingApprovalText());
+        router.push(`/chad-gtm/${runId}`);
       } else {
         toast.error(res.error || "We couldn't launch the campaign. Nothing was sent.");
       }
@@ -394,6 +409,7 @@ export function ChadGtmWizard({ allIndustries, resume }: { allIndustries: string
               onLaunch={handleLaunchCampaign}
               isLaunching={isLaunching}
               onBack={() => setStep(4)}
+              poolShare={poolShare}
               sendingFrom={
                 calibrationDeck[0]?.sender && calibrationDeck[0].sender.poolSize > 0
                   ? { poolSize: calibrationDeck[0].sender.poolSize, exampleName: calibrationDeck[0].sender.name }

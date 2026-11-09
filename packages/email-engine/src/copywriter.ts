@@ -866,6 +866,10 @@ export async function writeEmail(
         verdict = null; // A failed review never blocks a draft that passed the gate.
       }
       problems = criticProblems(verdict);
+      // Other drafts for this campaign may have finished during the review:
+      // check repetition again right before remembering (no await between).
+      const repeated = problems.length === 0 ? repeatedAcrossLeads(req, draft.body) : null;
+      if (repeated) problems = [`This sentence is already going to other leads: "${repeated.slice(0, 70)}…". Make it specific to this person.`];
     }
     const result: WriteResult = { ...draft, problems, attempts: attempt, review: verdict };
     if (!best || problems.length < best.problems.length) best = result;
@@ -935,6 +939,17 @@ export function parseAnglePlan(raw: any, sender: SenderContext): Angle[] {
 export async function planAngles(sender: SenderContext, llm: LlmCall, key: string, now = Date.now()): Promise<Angle[]> {
   const hit = anglePlans.get(key);
   if (hit && now - hit.at < PLAN_TTL_MS) return hit.plan;
+  // Parallel drafts for one campaign share one plan call.
+  const pending = planning.get(key);
+  if (pending) return pending;
+  const run = buildAnglePlan(sender, llm, key, now).finally(() => planning.delete(key));
+  planning.set(key, run);
+  return run;
+}
+
+const planning = new Map<string, Promise<Angle[]>>();
+
+async function buildAnglePlan(sender: SenderContext, llm: LlmCall, key: string, now: number): Promise<Angle[]> {
   let plan: Angle[] = [];
   try {
     plan = parseAnglePlan(
@@ -950,4 +965,5 @@ export async function planAngles(sender: SenderContext, llm: LlmCall, key: strin
 
 export function clearAnglePlans() {
   anglePlans.clear();
+  planning.clear();
 }

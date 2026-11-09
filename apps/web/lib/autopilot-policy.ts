@@ -269,7 +269,7 @@ export interface ReadinessInput {
 }
 
 export const AWAITING_APPROVAL_MESSAGE =
-  "Your plan is ready. We review every new account before it can send from our mailboxes, and you can launch from this screen as soon as you're approved.";
+  "Your plan is ready. We review every new account before it can send from our mailboxes. Once you're approved, your newest plan launches on its own. Any other plan waits for you to press Launch.";
 
 /** Every reason a launch cannot happen yet, in the order the client resolves them. */
 export function launchBlockers(input: ReadinessInput): LaunchBlocker[] {
