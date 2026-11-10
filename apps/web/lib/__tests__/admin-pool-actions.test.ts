@@ -74,7 +74,12 @@ vi.mock("@smartreach/database", async (orig) => ({
   encryptSecret: (s: string) => (s ? `enc:${s}` : ""),
 }));
 
-import { importSystemMailboxesCsv, retireSystemMailbox, toggleSystemMailboxStatus } from "../admin-gtm-actions";
+import {
+  changeSystemMailboxPassword,
+  importSystemMailboxesCsv,
+  retireSystemMailbox,
+  toggleSystemMailboxStatus,
+} from "../admin-gtm-actions";
 
 const ADMIN = { id: "admin-1", email: "admin@autogtm.tech", role: "admin", emailVerified: true };
 const USER = { id: "u-1", email: "user@example.com", role: "user", emailVerified: true };
@@ -261,5 +266,101 @@ describe("toggleSystemMailboxStatus activation", () => {
     expect(set).toMatchObject({ status: "failed" });
     expect(set).not.toHaveProperty("failureCount");
     expect(set).not.toHaveProperty("failedReason");
+  });
+});
+
+describe("changeSystemMailboxPassword", () => {
+  const sender = (status: string) => ({
+    id: "s1",
+    email: "box@pool.example",
+    isSystemPool: true,
+    status,
+    smtpPasswordEnc: "enc:old",
+    imapPasswordEnc: "enc:old",
+    failureCount: 4,
+    failedReason: "535 Authentication failed",
+    imapFailCount: 3,
+  });
+  // First select: the mailbox; second: pool mailboxes for the domain cap.
+  const route = (row: unknown, pool: unknown[] = [{ id: "s1", email: "box@pool.example" }]) =>
+    new Map<unknown, Handler>([[schema.senderAccounts, (n) => (n === 0 ? (row ? [row] : []) : pool)]]);
+
+  it("refuses non-admins", async () => {
+    requireUser.mockResolvedValue(USER);
+    state.db = tableDb(route(sender("active"))).db;
+    await expect(changeSystemMailboxPassword("s1", { password: "new-pass" })).rejects.toThrow(/Admin/);
+  });
+
+  it("tests the new password before saving and saves it encrypted for SMTP and IMAP", async () => {
+    requireUser.mockResolvedValue(ADMIN);
+    const { db, writes } = tableDb(route(sender("failed")));
+    state.db = db;
+    expect(await changeSystemMailboxPassword("s1", { password: "new-pass" })).toEqual({ ok: true, outcome: "active" });
+    // The login test used the new password, not the stored one.
+    expect(testConnection.mock.calls[0]![0]).toMatchObject({ smtpPasswordEnc: "enc:new-pass", imapPasswordEnc: "enc:new-pass" });
+    expect(writes.find((w) => w.op === "update")?.set).toMatchObject({
+      smtpPasswordEnc: "enc:new-pass",
+      imapPasswordEnc: "enc:new-pass",
+      status: "active",
+      smtpStatus: "ok",
+      imapStatus: "ok",
+      failureCount: 0,
+      failedReason: null,
+      imapFailCount: 0,
+    });
+  });
+
+  it("uses a separate IMAP password when one is given", async () => {
+    requireUser.mockResolvedValue(ADMIN);
+    const { db, writes } = tableDb(route(sender("active")));
+    state.db = db;
+    await changeSystemMailboxPassword("s1", { password: "smtp-pass", imapPassword: "imap-pass" });
+    expect(writes.find((w) => w.op === "update")?.set).toMatchObject({
+      smtpPasswordEnc: "enc:smtp-pass",
+      imapPasswordEnc: "enc:imap-pass",
+    });
+  });
+
+  it("never saves a password whose login fails", async () => {
+    requireUser.mockResolvedValue(ADMIN);
+    testConnection.mockResolvedValue({ smtp: { ok: false, message: "535 Authentication failed" }, imap: { ok: true, message: "ok" } });
+    const { db, writes } = tableDb(route(sender("active")));
+    state.db = db;
+    const res = await changeSystemMailboxPassword("s1", { password: "typo" });
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/Not saved/);
+    expect(res.error).not.toContain("typo");
+    expect(writes.filter((w) => w.op === "update")).toHaveLength(0);
+  });
+
+  it("keeps a paused mailbox paused", async () => {
+    requireUser.mockResolvedValue(ADMIN);
+    const { db, writes } = tableDb(route(sender("paused")));
+    state.db = db;
+    expect(await changeSystemMailboxPassword("s1", { password: "new-pass" })).toEqual({ ok: true, outcome: "paused" });
+    expect(writes.find((w) => w.op === "update")?.set).toMatchObject({ status: "paused" });
+  });
+
+  it("does not re-activate a failing mailbox whose domain is over the cap", async () => {
+    requireUser.mockResolvedValue(ADMIN);
+    const pool = [
+      { id: "s1", email: "box@pool.example" },
+      { id: "s2", email: "a@pool.example" },
+      { id: "s3", email: "b@pool.example" },
+      { id: "s4", email: "c@pool.example" },
+    ];
+    const { db, writes } = tableDb(route(sender("failed"), pool));
+    state.db = db;
+    expect(await changeSystemMailboxPassword("s1", { password: "new-pass" })).toEqual({ ok: true, outcome: "domain_cap" });
+    expect(writes.find((w) => w.op === "update")?.set).toMatchObject({ status: "paused" });
+  });
+
+  it("rejects an empty password and unknown or retired mailboxes without testing", async () => {
+    requireUser.mockResolvedValue(ADMIN);
+    state.db = tableDb(route(sender("active"))).db;
+    expect((await changeSystemMailboxPassword("s1", { password: "   " })).error).toBe("Enter the new password.");
+    state.db = tableDb(route(null)).db;
+    expect((await changeSystemMailboxPassword("gone", { password: "new-pass" })).ok).toBe(false);
+    expect(testConnection).not.toHaveBeenCalled();
   });
 });

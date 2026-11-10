@@ -152,3 +152,26 @@ describe("pool helpers", () => {
     expect(patchChangesCredentials({ fromName: "Jane", dailyLimit: 20 })).toBe(false);
   });
 });
+
+describe("mailbox password change rules", () => {
+  it("validates the typed passwords", async () => {
+    const { mailboxPasswordInputError, MAX_MAILBOX_PASSWORD_LENGTH } = await import("../pool-mailbox-import");
+    expect(mailboxPasswordInputError({ password: "" })).toBe("Enter the new password.");
+    expect(mailboxPasswordInputError({ password: "  " })).toBe("Enter the new password.");
+    expect(mailboxPasswordInputError({ password: " pass with spaces " })).toBeNull();
+    expect(mailboxPasswordInputError({ password: "ok", imapPassword: "" })).toBeNull();
+    expect(mailboxPasswordInputError({ password: "ok", imapPassword: "  " })).toMatch(/IMAP/);
+    expect(mailboxPasswordInputError({ password: "x".repeat(MAX_MAILBOX_PASSWORD_LENGTH + 1) })).toMatch(/too long/);
+  });
+
+  it("keeps paused mailboxes paused and re-activates failing ones within the domain cap", async () => {
+    const { passwordChangeStatus, MAX_POOL_MAILBOXES_PER_DOMAIN } = await import("../pool-mailbox-import");
+    expect(passwordChangeStatus({ currentStatus: "active", sameDomainOthers: 0 })).toEqual({ status: "active", outcome: "active" });
+    expect(passwordChangeStatus({ currentStatus: "paused", sameDomainOthers: 0 })).toEqual({ status: "paused", outcome: "paused" });
+    expect(passwordChangeStatus({ currentStatus: "failed", sameDomainOthers: 0 })).toEqual({ status: "active", outcome: "active" });
+    expect(passwordChangeStatus({ currentStatus: "failed", sameDomainOthers: MAX_POOL_MAILBOXES_PER_DOMAIN })).toEqual({
+      status: "paused",
+      outcome: "domain_cap",
+    });
+  });
+});

@@ -185,3 +185,49 @@ export function patchChangesCredentials(patch: Record<string, unknown>): boolean
     "imapPasswordEnc",
   ].some((k) => k in patch);
 }
+
+/* ─── Changing a pool mailbox's password ─────────────────────────────── */
+
+/** Longest password accepted from the admin form. */
+export const MAX_MAILBOX_PASSWORD_LENGTH = 512;
+
+/**
+ * Check the passwords typed in the admin form. Passwords are used exactly as
+ * typed (no trimming: a space can be part of a password). An empty IMAP
+ * password means "same as SMTP", the usual cPanel setup.
+ */
+export function mailboxPasswordInputError(input: { password: string; imapPassword?: string }): string | null {
+  const values = [input.password, input.imapPassword ?? ""];
+  if (!input.password || !input.password.trim()) return "Enter the new password.";
+  if (input.imapPassword !== undefined && input.imapPassword !== "" && !input.imapPassword.trim()) {
+    return "The IMAP password can't be only spaces.";
+  }
+  if (values.some((v) => v.length > MAX_MAILBOX_PASSWORD_LENGTH)) return "That password is too long.";
+  return null;
+}
+
+export type PasswordChangeOutcome =
+  /** Saved; the mailbox sends (it was active, or was failing and is active again). */
+  | "active"
+  /** Saved; it stays paused because an admin paused it. */
+  | "paused"
+  /** Saved and the logins work, but its domain is over the pool cap, so it was not re-activated. */
+  | "domain_cap";
+
+/**
+ * What saving a tested new password does to the mailbox. Only called after
+ * both logins passed with the new password (a failing password is never
+ * saved). A mailbox an admin paused stays paused; one that was failing
+ * (usually because the password changed at the provider) goes back to active
+ * unless its domain is now over the per-domain cap.
+ */
+export function passwordChangeStatus(input: {
+  currentStatus: string;
+  /** Other non-retired pool mailboxes on the same domain. */
+  sameDomainOthers: number;
+}): { status: "active" | "paused" | "failed"; outcome: PasswordChangeOutcome } {
+  if (input.currentStatus === "paused") return { status: "paused", outcome: "paused" };
+  if (input.currentStatus === "active") return { status: "active", outcome: "active" };
+  if (input.sameDomainOthers >= MAX_POOL_MAILBOXES_PER_DOMAIN) return { status: "paused", outcome: "domain_cap" };
+  return { status: "active", outcome: "active" };
+}

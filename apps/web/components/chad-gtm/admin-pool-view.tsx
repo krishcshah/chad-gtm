@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Archive, Download, Mail, Pause, Play, Search, SearchX, Upload } from "lucide-react";
+import { Archive, Download, KeyRound, Mail, Pause, Play, Search, SearchX, Upload } from "lucide-react";
 import { timeAgo } from "@smartreach/shared";
 import {
   Alert,
@@ -11,6 +11,7 @@ import {
   Button,
   Card,
   CardDescription,
+  Checkbox,
   CardHeader,
   CardTitle,
   Dialog,
@@ -20,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
   EmptyState,
+  Field,
   Input,
   Progress,
   SegmentedControl,
@@ -34,7 +36,9 @@ import {
   toast,
 } from "@smartreach/ui";
 import { parseCsvText } from "@/lib/csv";
+import { PasswordInput } from "@/app/(app)/senders/password-input";
 import {
+  changeSystemMailboxPassword,
   getSystemMailboxPoolStats,
   importSystemMailboxesCsv,
   retireSystemMailbox,
@@ -101,6 +105,7 @@ export function AdminMailboxPoolView({ initialStats }: { initialStats: SystemMai
   const [takeOverOpen, setTakeOverOpen] = useState(false);
   const [takingOver, setTakingOver] = useState(false);
   const [retireTarget, setRetireTarget] = useState<Mailbox | null>(null);
+  const [passwordTarget, setPasswordTarget] = useState<Mailbox | null>(null);
   const [retiring, setRetiring] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -467,6 +472,16 @@ export function AdminMailboxPoolView({ initialStats }: { initialStats: SystemMai
                             variant="ghost"
                             size="xs"
                             disabled={busyId !== null}
+                            onClick={() => setPasswordTarget(m)}
+                            aria-label={`Change password for ${m.email}`}
+                          >
+                            <KeyRound />
+                            Password
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            disabled={busyId !== null}
                             onClick={() => setRetireTarget(m)}
                             aria-label={`Retire ${m.email}`}
                           >
@@ -491,6 +506,15 @@ export function AdminMailboxPoolView({ initialStats }: { initialStats: SystemMai
         onOpenChange={setImportOpen}
         onImported={async () => {
           setImportOpen(false);
+          await refreshStats();
+        }}
+      />
+
+      <ChangePasswordDialog
+        mailbox={passwordTarget}
+        onClose={() => setPasswordTarget(null)}
+        onSaved={async () => {
+          setPasswordTarget(null);
           await refreshStats();
         }}
       />
@@ -537,6 +561,139 @@ export function AdminMailboxPoolView({ initialStats }: { initialStats: SystemMai
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+const PASSWORD_SAVED: Record<string, string> = {
+  active: "New password saved. Both logins work and the mailbox is sending.",
+  paused: "New password saved. Both logins work. The mailbox is still paused: press Resume to send from it.",
+  domain_cap: "New password saved. Both logins work, but its domain already has the most shared mailboxes allowed, so it stays paused.",
+};
+
+/**
+ * Change a pool mailbox's password after changing it at the mail provider.
+ * The server tests SMTP and IMAP with the new password and saves it only if
+ * both logins work. The current password is never shown or sent to the browser.
+ */
+function ChangePasswordDialog({
+  mailbox,
+  onClose,
+  onSaved,
+}: {
+  mailbox: Mailbox | null;
+  onClose: () => void;
+  onSaved: () => void | Promise<void>;
+}) {
+  const [password, setPassword] = useState("");
+  const [separateImap, setSeparateImap] = useState(false);
+  const [imapPassword, setImapPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const reset = () => {
+    setPassword("");
+    setSeparateImap(false);
+    setImapPassword("");
+    setError(null);
+  };
+  const close = () => {
+    if (saving) return;
+    reset();
+    onClose();
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mailbox) return;
+    if (!password.trim()) {
+      setError("Enter the new password.");
+      return;
+    }
+    if (separateImap && !imapPassword.trim()) {
+      setError("Enter the IMAP password, or untick the box to use the same one.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await changeSystemMailboxPassword(mailbox.id, {
+        password,
+        imapPassword: separateImap ? imapPassword : undefined,
+      });
+      if (res.ok) {
+        toast.success(PASSWORD_SAVED[res.outcome ?? "active"] ?? PASSWORD_SAVED.active);
+        reset();
+        await onSaved();
+      } else {
+        setError(res.error || "The password could not be saved.");
+      }
+    } catch {
+      setError("The password could not be saved. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={mailbox !== null} onOpenChange={(o) => !o && close()}>
+      <DialogContent>
+        <form onSubmit={handleSave} className="flex flex-col gap-4">
+          <DialogHeader>
+            <DialogTitle>Change password for {mailbox?.email}</DialogTitle>
+            <DialogDescription>
+              Change it at your mail provider first, then enter the new one here. We log in with it over SMTP and IMAP
+              and only save it if both work, so a typo never replaces a working password.
+            </DialogDescription>
+          </DialogHeader>
+          <Field label="New password" error={!separateImap ? error : undefined}>
+            <PasswordInput
+              id="pool-mailbox-password"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setError(null);
+              }}
+              autoComplete="new-password"
+              disabled={saving}
+              autoFocus
+            />
+          </Field>
+          <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
+            <Checkbox
+              checked={separateImap}
+              onCheckedChange={(v) => {
+                setSeparateImap(v === true);
+                setError(null);
+              }}
+              disabled={saving}
+            />
+            IMAP uses a different password
+          </label>
+          {separateImap ? (
+            <Field label="IMAP password" error={error}>
+              <PasswordInput
+                id="pool-mailbox-imap-password"
+                value={imapPassword}
+                onChange={(e) => {
+                  setImapPassword(e.target.value);
+                  setError(null);
+                }}
+                autoComplete="new-password"
+                disabled={saving}
+              />
+            </Field>
+          ) : null}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={close} disabled={saving}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={saving}>
+              {saving ? "Testing the login…" : "Test and save"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
