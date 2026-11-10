@@ -12,9 +12,12 @@ import {
   MAX_POOL_MAILBOXES_PER_DOMAIN,
   countPoolMailboxesByDomain,
   emailDomain,
+  mailboxPasswordInputError,
+  passwordChangeStatus,
   planPoolMailboxImport,
   poolDomainCapError,
   testPoolMailbox,
+  type PasswordChangeOutcome,
   type PoolImportCandidate,
 } from "./pool-mailbox-import";
 import { stripWarmupMarker } from "./sender-warmup";
@@ -496,6 +499,87 @@ export async function toggleSystemMailboxStatus(
     return { ok: false, error: `Mailbox left inactive: ${verdict.error}` };
   }
   return { ok: true };
+}
+
+export interface MailboxPasswordResult {
+  ok: boolean;
+  error?: string;
+  /** Set when saved: what the mailbox does now. */
+  outcome?: PasswordChangeOutcome;
+}
+
+/**
+ * Change a shared pool mailbox's password after it was changed at the mail
+ * provider. The new password is tested with a real SMTP and IMAP login first
+ * and only saved when both pass, so a typo never replaces a working password.
+ * Stored encrypted with the current ENCRYPTION_KEY; never logged or returned.
+ */
+export async function changeSystemMailboxPassword(
+  senderId: string,
+  input: { password: string; imapPassword?: string },
+): Promise<MailboxPasswordResult> {
+  const user = await requireUser();
+  if (!isAdmin(user)) {
+    throw new Error("Unauthorized: Admin privileges required.");
+  }
+  const password = typeof input?.password === "string" ? input.password : "";
+  const imapInput = typeof input?.imapPassword === "string" ? input.imapPassword : undefined;
+  const inputError = mailboxPasswordInputError({ password, imapPassword: imapInput });
+  if (inputError) return { ok: false, error: inputError };
+  const imapPassword = imapInput ? imapInput : password;
+
+  const db = getDb();
+  await ensureChadGtmTables(db);
+
+  const [sender] = await db
+    .select()
+    .from(schema.senderAccounts)
+    .where(
+      and(
+        eq(schema.senderAccounts.id, senderId),
+        eq(schema.senderAccounts.isSystemPool, true),
+        isNull(schema.senderAccounts.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!sender) return { ok: false, error: "Mailbox not found in the shared pool" };
+
+  const smtpPasswordEnc = encryptSecret(password);
+  const imapPasswordEnc = encryptSecret(imapPassword);
+  const verdict = await testPoolMailbox({ ...sender, smtpPasswordEnc, imapPasswordEnc }, (s) =>
+    engineConnectionTester({ probe: s as never }),
+  );
+  if (!verdict.active) {
+    return { ok: false, error: `Not saved: the login failed with the new password. ${verdict.error ?? ""}`.trim() };
+  }
+
+  const domain = emailDomain(sender.email);
+  const poolMailboxes = await db
+    .select({ id: schema.senderAccounts.id, email: schema.senderAccounts.email })
+    .from(schema.senderAccounts)
+    .where(and(eq(schema.senderAccounts.isSystemPool, true), isNull(schema.senderAccounts.deletedAt)));
+  const sameDomainOthers = poolMailboxes.filter((r) => r.id !== senderId && emailDomain(r.email) === domain).length;
+  const next = passwordChangeStatus({ currentStatus: sender.status, sameDomainOthers });
+
+  await db
+    .update(schema.senderAccounts)
+    .set({
+      smtpPasswordEnc,
+      imapPasswordEnc,
+      status: next.status,
+      health: verdict.health,
+      smtpStatus: verdict.smtpStatus,
+      imapStatus: verdict.imapStatus,
+      // Both logins work now: start a clean error streak.
+      failureCount: 0,
+      failedReason: null,
+      imapFailCount: 0,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(and(eq(schema.senderAccounts.id, senderId), eq(schema.senderAccounts.isSystemPool, true)));
+
+  revalidatePath("/admin");
+  return { ok: true, outcome: next.outcome };
 }
 
 /**
